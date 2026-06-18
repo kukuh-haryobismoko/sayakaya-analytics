@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sayakaya Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Password gate (only shown if the server reports it's enabled) -->
+  <div id="gate" class="gate hidden">
+    <div class="gate-card">
+      <div class="gate-mark">SK</div>
+      <h1>Sayakaya Analytics</h1>
+      <p>Enter the access password to continue.</p>
+      <input id="gate-input" type="password" placeholder="Password" autocomplete="current-password" />
+      <button id="gate-btn">Unlock</button>
+      <div id="gate-err" class="gate-err"></div>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">SK</span>
+      <div>
+        <div class="brand-name">Sayakaya Analytics</div>
+        <div class="brand-sub">BigQuery · live</div>
+      </div>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="aum">AUM history</button>
+      <button class="tab" data-tab="predict">Predict</button>
+      <button class="tab" data-tab="ask">Ask</button>
+      <button class="tab" data-tab="explorer">Data explorer</button>
+      <button class="tab" data-tab="sql">SQL lab</button>
+    </nav>
+
+    <div class="range">
+      <label>From <input type="date" id="from" /></label>
+      <label>To <input type="date" id="to" /></label>
+      <button id="apply" class="btn-primary">Apply</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ===================== OVERVIEW ===================== -->
+    <section id="overview" class="view active">
+      <div id="kpis" class="kpi-grid"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Transaction volume</h2>
+          <div class="seg" id="gran">
+            <button data-g="day">Day</button>
+            <button data-g="week">Week</button>
+            <button class="on" data-g="month">Month</button>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><h2>By transaction type</h2></div>
+          <div class="chart-wrap sm"><canvas id="typeChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>By status</h2></div>
+          <div class="chart-wrap sm"><canvas id="statusChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><h2>User verification</h2></div>
+          <div class="chart-wrap sm"><canvas id="verifyChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>AUM by fund type</h2></div>
+          <div class="chart-wrap sm"><canvas id="fundTypeChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Largest funds by AUM</h2>
+          <div class="exp">
+            <button class="btn-ghost" data-export="topfunds" data-fmt="csv">CSV</button>
+            <button class="btn-ghost" data-export="topfunds" data-fmt="xlsx">Excel</button>
+          </div>
+        </div>
+        <div id="topFunds" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <!-- ===================== AUM HISTORY ===================== -->
+    <section id="aum" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>AUM &amp; revenue history</h2>
+          <div class="filters">
+            <div class="seg" id="aumGran">
+              <button data-g="day">Day</button>
+              <button class="on" data-g="month">Month</button>
+            </div>
+            <span class="divider"></span>
+            <button class="btn-ghost" id="aumCsv">CSV</button>
+            <button class="btn-ghost" id="aumXlsx">Excel</button>
+          </div>
+        </div>
+        <span class="hint">End-of-period AUM (point-in-time) and revenue (aperd_share, summed). Uses the date range above. Source: mi_fee_logs.mi_fee.</span>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="aumChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Detail</h2></div>
+        <div id="aumTable" class="table-wrap tall"></div>
+      </div>
+    </section>
+
+    <!-- ===================== PREDICT (ML) ===================== -->
+    <section id="predict" class="view">
+      <div id="mlBanner" class="panel hidden" style="border-color:var(--amber)">
+        <strong>Forecasts &amp; churn scoring need the models.</strong>
+        Run <code>setup/ml_models.sql</code> once in BigQuery (see PREDICTIVE-MODELS.md), then reload.
+        The retention and churn-rate sections below work without it.
+      </div>
+
+      <div class="grid-2">
+        <div class="panel" id="aumFcPanel">
+          <div class="panel-head wrap">
+            <h2>AUM forecast</h2>
+            <div class="seg" id="fcHorizon">
+              <button data-h="30" class="on">30d</button>
+              <button data-h="60">60d</button>
+              <button data-h="90">90d</button>
+            </div>
+          </div>
+          <div class="chart-wrap"><canvas id="aumFcChart"></canvas></div>
+        </div>
+        <div class="panel" id="txFcPanel">
+          <div class="panel-head"><h2>Transaction (buy volume) forecast</h2></div>
+          <div class="chart-wrap"><canvas id="txFcChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel" id="churnPanel">
+        <div class="panel-head wrap">
+          <h2>Churn risk (current holders)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="churnCsv">CSV</button>
+            <button class="btn-ghost" id="churnXlsx">Excel</button>
+          </div>
+        </div>
+        <div id="churnCards" class="kpi-grid" style="margin-bottom:16px"></div>
+        <div id="churnTable" class="table-wrap tall"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><h2>Churn rate by tenure</h2></div>
+          <div id="churnTenure" class="table-wrap"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Churn overview</h2></div>
+          <div id="churnOverviewCards" class="kpi-grid" style="grid-template-columns:1fr"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Retention cohorts</h2><span class="hint">% of each month's first-time investors still transacting in later months.</span></div>
+        <div id="retentionHeatmap" class="table-wrap tall"></div>
+      </div>
+    </section>
+
+    <section id="ask" class="view">
+      <div class="panel">
+        <div class="panel-head"><h2>Ask in plain English</h2><span class="hint" id="askHint">Ask a question about your data — it's turned into SQL and run on BigQuery.</span></div>
+
+        <div id="askDisabled" class="empty hidden">
+          The Ask feature is off because no Anthropic API key is set on the server.
+          Add an <code>ANTHROPIC_API_KEY</code> environment variable and restart to enable it.
+        </div>
+
+        <div id="askBox">
+          <div class="ask-bar">
+            <input id="askInput" type="text" autocomplete="off"
+              placeholder="e.g. top 10 funds by AUM, or total buy volume per month in 2025" />
+            <button id="askBtn" class="btn-primary">Ask</button>
+          </div>
+          <div class="ask-examples">
+            <button class="chip">Top 10 funds by AUM</button>
+            <button class="chip">How many verified users do we have?</button>
+            <button class="chip">Completed buy volume per month in 2025</button>
+            <button class="chip">Transaction count by status</button>
+            <button class="chip">Top 5 investment managers by fund count</button>
+          </div>
+
+          <div id="askSql" class="ask-sql hidden">
+            <div class="ask-sql-head">
+              <span>Generated SQL</span>
+              <div class="exp">
+                <button class="btn-ghost" id="askCsv" disabled>CSV</button>
+                <button class="btn-ghost" id="askXlsx" disabled>Excel</button>
+              </div>
+            </div>
+            <pre id="askSqlText" class="mono"></pre>
+          </div>
+
+          <div id="askMsg" class="sql-msg"></div>
+          <div id="askResult" class="table-wrap tall"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="explorer" class="view">
+      <div class="ex-tabs" id="exTabs"></div>
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 id="exTitle">Explorer</h2>
+          <div class="filters" id="exFilters"></div>
+        </div>
+        <div id="exTable" class="table-wrap tall"><div class="loading">Loading…</div></div>
+        <div class="pager">
+          <button id="exPrev" class="btn-ghost">← Prev</button>
+          <span id="exPageinfo" class="mono"></span>
+          <button id="exNext" class="btn-ghost">Next →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== SQL LAB ===================== -->
+    <section id="sql" class="view">
+      <div class="panel">
+        <div class="panel-head"><h2>SQL lab</h2><span class="hint">Read-only. SELECT / WITH only. Results capped to 5,000 rows.</span></div>
+        <textarea id="sqlInput" spellcheck="false" placeholder="SELECT type, COUNT(*) AS n
+FROM `sayakaya.main.transactions`
+WHERE status = 'completed'
+GROUP BY type
+ORDER BY n DESC"></textarea>
+        <div class="sql-bar">
+          <button id="sqlRun" class="btn-primary">Run</button>
+          <button id="sqlEst" class="btn-ghost">Estimate cost</button>
+          <span class="divider"></span>
+          <button id="sqlCsv" class="btn-ghost" disabled>CSV</button>
+          <button id="sqlXlsx" class="btn-ghost" disabled>Excel</button>
+          <span id="sqlMsg" class="sql-msg"></span>
+        </div>
+        <div id="sqlResult" class="table-wrap tall"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

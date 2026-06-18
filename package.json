@@ -1,0 +1,22 @@
+{
+  "name": "sayakaya-analytics",
+  "version": "1.0.0",
+  "description": "Live BigQuery analytics dashboard for the Sayakaya mutual-fund platform",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^7.9.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "serverless-http": "^3.2.0"
+  }
+}

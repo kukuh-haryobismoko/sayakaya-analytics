@@ -1,0 +1,28 @@
+# Netlify configuration for Sayakaya Analytics
+
+[build]
+  # The static frontend lives in /public and needs no build step.
+  publish = "public"
+  functions = "netlify/functions"
+  # Install all deps (incl. the function's) at build time.
+  command = "npm install"
+
+[functions]
+  # esbuild is fast; mark the heavier native-ish deps as external so they're
+  # bundled from node_modules rather than tree-shaken (avoids dynamic-require
+  # breakage in @google-cloud/bigquery and exceljs).
+  node_bundler = "esbuild"
+  external_node_modules = ["@google-cloud/bigquery", "exceljs"]
+
+# Send every API call to the Express function. status 200 = rewrite (URL stays /api/...).
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# SPA fallback: anything that isn't a real file or an API call serves the app.
+# (Netlify serves existing files first, so this only catches unknown paths.)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
