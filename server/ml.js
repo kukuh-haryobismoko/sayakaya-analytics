@@ -11,8 +11,11 @@ const clampHorizon = (h) => Math.min(Math.max(parseInt(h, 10) || 30, 1), 120);
 
 // Are the models set up? Returns the list, or throws if the ml dataset is absent.
 async function status() {
-  const rows = await runQuery('SELECT model_name FROM `sayakaya.ml.INFORMATION_SCHEMA.MODELS`', {});
-  return rows.map((r) => r.model_name);
+  await runQuery(
+    'SELECT 1 AS ok FROM ML.FORECAST(MODEL `sayakaya.ml.aum_forecast`, STRUCT(1 AS horizon, 0.5 AS confidence_level)) LIMIT 1',
+    {},
+  );
+  return ['aum_forecast', 'tx_forecast', 'churn_model'];
 }
 
 // ---- AUM forecast: recent history + ARIMA_PLUS forecast --------------------
