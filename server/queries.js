@@ -218,13 +218,14 @@ const aumHistory = (from, to, granularity = 'month') => {
   };
 };
 
-// ---- Product performance (NAV per fund, from external Apollo DB) -----------
+// ---- Product performance (NAV per fund, from native BigQuery tables) -------
 // snapshots.value is daily NAV per fund. % change per period = (latest NAV -
 // NAV as-of period start) / NAV as-of period start, averaged per fund type.
+const SNAPSHOTS = '`sayakaya.main.snapshots`';
 const NAV_SOURCE = `
     SELECT s.product_id, f.name, f.type, s.value, DATE(s.created_at) AS d
-    FROM EXTERNAL_QUERY("sayakaya.asia-southeast2.syky-apollo-db", "SELECT * FROM snapshots") s
-    LEFT JOIN EXTERNAL_QUERY("sayakaya.asia-southeast2.syky-apollo-db", "SELECT * FROM funds") f
+    FROM ${SNAPSHOTS} s
+    LEFT JOIN ${FUNDS} f
       ON s.product_id = f.id
     WHERE s.type = 'NAV'`;
 
