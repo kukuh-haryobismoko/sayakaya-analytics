@@ -82,7 +82,10 @@ function renderPfResults(rows) {
     selectPortfolioUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
 }
 
+let pfSelected = null; // { userId, sid, name } — used by the export buttons
+
 async function selectPortfolioUser(userId, sid, name, email) {
+  pfSelected = { userId, sid, name: name || sid };
   $('#pfDetail').classList.remove('hidden');
   $('#pfUserName').textContent = name || sid;
   $('#pfUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
@@ -90,11 +93,31 @@ async function selectPortfolioUser(userId, sid, name, email) {
   $('#pfHoldings').innerHTML = '';
   $('#pfPerformance').innerHTML = '';
   try {
-    const { holdings, performance } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}`);
+    const { holdings, performance, history } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}`);
     renderPfKpis(holdings);
     renderPfHoldings(holdings);
     renderPfPerformance(performance);
+    renderPfAumChart(history);
   } catch (e) { $('#pfKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPfAumChart(rows) {
+  if (!rows.length) { return; }
+  paint('pfAumChart', {
+    type: 'line',
+    data: {
+      labels: rows.map((d) => val(d.bucket)),
+      datasets: [{ label: 'AUM', data: rows.map((d) => Number(val(d.amount))),
+        borderColor: C.indigo, backgroundColor: 'rgba(30,42,74,.08)', fill: true, tension: .3, pointRadius: 0 }],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { y: { grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } },
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (c) => idrFull(c.raw) } } },
+    },
+  });
 }
 
 function renderPfKpis(holdings) {
@@ -776,6 +799,12 @@ function wire() {
   // portfolio
   $('#pfSearchBtn').addEventListener('click', searchPortfolioUsers);
   $('#pfSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPortfolioUsers(); });
+  $('#pfCsv').addEventListener('click', () => pfSelected && download(
+    { source: 'portfolio_full', format: 'csv', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
+    `portfolio_${pfSelected.sid}.csv`));
+  $('#pfXlsx').addEventListener('click', () => pfSelected && download(
+    { source: 'portfolio_full', format: 'xlsx', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
+    `portfolio_${pfSelected.sid}.xlsx`));
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); });
 
   // predict

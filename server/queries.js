@@ -322,6 +322,16 @@ const userHoldings = (userId) => ({
 // day from portfolio_with_code (one row per sid_code+fund per day; `amount`
 // is that holding's value on that day).
 const PORT_WITH_CODE = '`sayakaya.mi_fee_logs.portfolio_with_code`';
+
+// Daily total AUM time series for one user — for the AUM-over-time chart.
+const userAumHistory = (sid) => ({
+  sql: `SELECT FORMAT_DATE('%Y-%m-%d', DATE(created_at)) AS bucket, SUM(amount) AS amount
+    FROM ${PORT_WITH_CODE}
+    WHERE sid_code = @sid
+    GROUP BY bucket ORDER BY bucket`,
+  params: { sid },
+});
+
 const userPerformance = (sid) => ({
   sql: `WITH daily AS (
       SELECT DATE(created_at) AS d, SUM(amount) AS amount
@@ -351,5 +361,5 @@ module.exports = {
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail,
-  userSearch, userHoldings, userPerformance,
+  userSearch, userHoldings, userPerformance, userAumHistory,
 };

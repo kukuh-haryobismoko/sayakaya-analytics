@@ -38,6 +38,14 @@ function pivotPerformanceByType(rows) {
   }));
 }
 
+// Friendly column names for the "Portfolio" sheet in the combined export.
+function portfolioSheetRows(holdings) {
+  return holdings.map((h) => ({
+    Fund: h.fund, Type: h.fund_type, Source: h.source,
+    Units: h.unit, NAV: h.nav, Value: h.value, Opened: h.opened_at,
+  }));
+}
+
 /**
  * Build the Express app.
  * @param {object} opts
@@ -151,11 +159,13 @@ function createApp({ serveStatic = true } = {}) {
     if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
     const h = Q.userHoldings(userId);
     const p = Q.userPerformance(sid);
-    const [holdings, performance] = await Promise.all([
+    const a = Q.userAumHistory(sid);
+    const [holdings, performance, history] = await Promise.all([
       runQuery(h.sql, h.params),
       runQuery(p.sql, p.params),
+      runQuery(a.sql, a.params),
     ]);
-    res.json({ holdings, performance });
+    res.json({ holdings, performance, history });
   }));
 
   // ---- Product performance (NAV % change per fund type, external Apollo DB) --
@@ -274,6 +284,23 @@ function createApp({ serveStatic = true } = {}) {
         return res.send(Buffer.from(buf));
       }
       rows = detail;
+    } else if (source === 'portfolio_full') {
+      const { userId, sid } = req.body;
+      if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+      const h = Q.userHoldings(userId);
+      const pq = Q.productPerformanceDetail();
+      const [holdings, detail] = await Promise.all([
+        runQuery(h.sql, h.params),
+        runQuery(pq.sql, pq.params),
+      ]);
+      const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+      if (format === 'xlsx') {
+        const buf = await toXlsxMultiSheet(sheets);
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`);
+        return res.send(Buffer.from(buf));
+      }
+      rows = sheets[0].rows; // CSV has no sheets — holdings only
     } else if (source === 'explore') {
       const { dataset, filters } = req.body;
       const built = EX.buildExplore(dataset, { ...filters, limit: limit || 100000, offset: 0 });
