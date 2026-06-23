@@ -379,6 +379,87 @@ function renderAumTable(data) {
 }
 
 // ====================================================================
+//  PRODUCT PERFORMANCE (NAV % change per fund type, external Apollo DB)
+// ====================================================================
+const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
+let perfCache = [];
+
+async function loadPerformance() {
+  $('#perfTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
+  try {
+    perfCache = await api('/api/product-performance');
+    renderPerformance(perfCache);
+  } catch (e) { $('#perfTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPerformance(rows) {
+  if (!rows.length) { $('#perfTable').innerHTML = '<div class="empty">No NAV data.</div>'; return; }
+  const byType = {};
+  rows.forEach((r) => {
+    const type = val(r.type);
+    (byType[type] = byType[type] || {})[val(r.period)] = { pct: val(r.pct_change), funds: val(r.fund_count) };
+  });
+  const head = PERF_PERIODS.map((p) => `<th class="num">${p}</th>`).join('');
+  const body = Object.keys(byType).sort().map((type) => {
+    const cells = PERF_PERIODS.map((p) => {
+      const c = byType[type][p];
+      if (!c || c.pct == null) return '<td class="num">—</td>';
+      const pct = Number(c.pct);
+      return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</span></td>`;
+    }).join('');
+    return `<tr><td>${type}</td>${cells}</tr>`;
+  }).join('');
+  $('#perfTable').innerHTML = `<table><thead><tr><th>Fund type</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+let perfDetailCache = [];
+
+async function loadPerformanceDetail() {
+  $('#perfDetailTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
+  try {
+    perfDetailCache = await api('/api/product-performance/detail');
+    buildPerfTypeFilter(perfDetailCache);
+    renderPerformanceDetail();
+  } catch (e) { $('#perfDetailTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function buildPerfTypeFilter(rows) {
+  const sel = $('#perfTypeFilter');
+  if (sel.options.length > 1) return; // built once
+  const types = [...new Set(rows.map((r) => val(r.type)))].sort();
+  types.forEach((t) => sel.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+}
+
+// pivot flat (type, name, period, pct_change) rows into one row per fund
+function pivotByFund(rows) {
+  const byFund = {};
+  rows.forEach((r) => {
+    const name = val(r.name), type = val(r.type);
+    const key = type + '||' + name;
+    const f = (byFund[key] = byFund[key] || { name, type });
+    f[val(r.period)] = val(r.pct_change);
+  });
+  return Object.values(byFund);
+}
+
+function renderPerformanceDetail() {
+  const typeFilter = $('#perfTypeFilter').value;
+  const rows = typeFilter ? perfDetailCache.filter((r) => val(r.type) === typeFilter) : perfDetailCache;
+  const funds = pivotByFund(rows).sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+  if (!funds.length) { $('#perfDetailTable').innerHTML = '<div class="empty">No NAV data.</div>'; return; }
+  const head = PERF_PERIODS.map((p) => `<th class="num">${p}</th>`).join('');
+  const body = funds.map((f) => {
+    const cells = PERF_PERIODS.map((p) => {
+      const pct = f[p];
+      if (pct == null) return '<td class="num">—</td>';
+      return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
+    }).join('');
+    return `<tr><td>${f.name}</td><td><span class="tag other">${f.type}</span></td>${cells}</tr>`;
+  }).join('');
+  $('#perfDetailTable').innerHTML = `<table><thead><tr><th>Fund</th><th>Type</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// ====================================================================
 //  EXPLORER (multi-table)
 // ====================================================================
 function tagClass(v) {
@@ -606,6 +687,8 @@ function switchTab(name) {
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === name));
   if (name === 'explorer' && !ex.meta.length) loadExplorerMeta();
   if (name === 'aum' && !aumCache.length) loadAumHistory();
+  if (name === 'performance' && !perfCache.length) loadPerformance();
+  if (name === 'performance' && !perfDetailCache.length) loadPerformanceDetail();
   if (name === 'predict' && !predictLoaded) loadPredict();
 }
 
@@ -630,6 +713,13 @@ function wire() {
   });
   $('#aumCsv').addEventListener('click', () => { const r = currentRange(); download({ source: 'aum_history', format: 'csv', filename: 'aum_history', from: r.from, to: r.to, granularity: aumGran }, 'aum_history.csv'); });
   $('#aumXlsx').addEventListener('click', () => { const r = currentRange(); download({ source: 'aum_history', format: 'xlsx', filename: 'aum_history', from: r.from, to: r.to, granularity: aumGran }, 'aum_history.xlsx'); });
+
+  // product performance
+  $('#perfCsv').addEventListener('click', () => download({ source: 'product_performance', format: 'csv', filename: 'product_performance' }, 'product_performance.csv'));
+  $('#perfXlsx').addEventListener('click', () => download({ source: 'product_performance', format: 'xlsx', filename: 'product_performance' }, 'product_performance.xlsx'));
+  $('#perfTypeFilter').addEventListener('change', renderPerformanceDetail);
+  $('#perfDetailCsv').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'csv', filename: 'product_performance_detail' }, 'product_performance_detail.csv'));
+  $('#perfDetailXlsx').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'xlsx', filename: 'product_performance_detail' }, 'product_performance_detail.xlsx'));
 
   $('#gran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;

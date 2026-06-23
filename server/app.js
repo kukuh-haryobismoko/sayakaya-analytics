@@ -9,12 +9,34 @@ const {
   runQuery, dryRun, validateAdHoc, capRows, PROJECT_ID, MAX_BYTES_BILLED,
 } = require('./bigquery');
 const Q = require('./queries');
-const { toCsv, toXlsxBuffer } = require('./export');
+const { toCsv, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
 const { ask, askEnabled } = require('./ask');
 const EX = require('./explore');
 const ML = require('./ml');
 
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
+
+const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
+
+// Pivot flat (type, name, period, pct_change) rows into one fund-per-row
+// table per fund type — used for the per-type Excel sheets.
+function pivotPerformanceByType(rows) {
+  const byType = {};
+  for (const r of rows) {
+    const type = r.type || '(none)';
+    const byFund = (byType[type] = byType[type] || {});
+    const fund = (byFund[r.name] = byFund[r.name] || { Fund: r.name });
+    fund[r.period] = r.pct_change;
+  }
+  return Object.keys(byType).sort().map((type) => ({
+    name: type,
+    rows: Object.values(byType[type]).map((f) => {
+      const out = { Fund: f.Fund };
+      for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
+      return out;
+    }),
+  }));
+}
 
 /**
  * Build the Express app.
@@ -119,6 +141,16 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
+  // ---- Product performance (NAV % change per fund type, external Apollo DB) --
+  app.get('/api/product-performance', handler(async (_req, res) => {
+    const q = Q.productPerformance();
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/product-performance/detail', handler(async (_req, res) => {
+    const q = Q.productPerformanceDetail();
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
   // ---- Predictive models (BigQuery ML) --------------------------------------
   app.get('/api/ml/status', async (_req, res) => {
     try {
@@ -212,6 +244,19 @@ function createApp({ serveStatic = true } = {}) {
     } else if (source === 'aum_history') {
       const q = Q.aumHistory(req.body.from, req.body.to, req.body.granularity);
       rows = await runQuery(q.sql, q.params);
+    } else if (source === 'product_performance') {
+      const q = Q.productPerformance();
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'product_performance_detail') {
+      const q = Q.productPerformanceDetail();
+      const detail = await runQuery(q.sql, q.params);
+      if (format === 'xlsx') {
+        const buf = await toXlsxMultiSheet(pivotPerformanceByType(detail));
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`);
+        return res.send(Buffer.from(buf));
+      }
+      rows = detail;
     } else if (source === 'explore') {
       const { dataset, filters } = req.body;
       const built = EX.buildExplore(dataset, { ...filters, limit: limit || 100000, offset: 0 });

@@ -218,9 +218,85 @@ const aumHistory = (from, to, granularity = 'month') => {
   };
 };
 
+// ---- Product performance (NAV per fund, from external Apollo DB) -----------
+// snapshots.value is daily NAV per fund. % change per period = (latest NAV -
+// NAV as-of period start) / NAV as-of period start, averaged per fund type.
+const NAV_SOURCE = `
+    SELECT s.product_id, f.name, f.type, s.value, DATE(s.created_at) AS d
+    FROM EXTERNAL_QUERY("sayakaya.asia-southeast2.syky-apollo-db", "SELECT * FROM snapshots") s
+    LEFT JOIN EXTERNAL_QUERY("sayakaya.asia-southeast2.syky-apollo-db", "SELECT * FROM funds") f
+      ON s.product_id = f.id
+    WHERE s.type = 'NAV'`;
+
+const productPerformance = () => ({
+  sql: `WITH nav AS (${NAV_SOURCE}),
+    periods AS (
+      SELECT * FROM UNNEST([
+        STRUCT('1D' AS period, 1 AS ord, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) AS target),
+        STRUCT('1W', 2, DATE_SUB(CURRENT_DATE(), INTERVAL 1 WEEK)),
+        STRUCT('1M', 3, DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)),
+        STRUCT('3M', 4, DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)),
+        STRUCT('YTD', 5, DATE_TRUNC(CURRENT_DATE(), YEAR)),
+        STRUCT('1Y', 6, DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)),
+        STRUCT('3Y', 7, DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)),
+        STRUCT('5Y', 8, DATE_SUB(CURRENT_DATE(), INTERVAL 5 YEAR))
+      ])
+    ),
+    snaps AS (
+      SELECT n.product_id, ANY_VALUE(n.type) AS type, p.period, p.ord,
+        ARRAY_AGG(STRUCT(n.value AS v, n.d AS d) ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
+        ARRAY_AGG(IF(n.d <= p.target, STRUCT(n.value AS v, n.d AS d), NULL) IGNORE NULLS ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
+      FROM nav n CROSS JOIN periods p
+      WHERE n.type IS NOT NULL
+      GROUP BY n.product_id, p.period, p.ord
+    )
+    SELECT type, period, ord,
+      ROUND(AVG(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100), 2) AS pct_change,
+      COUNT(*) AS fund_count
+    FROM snaps
+    WHERE asof_snap IS NOT NULL
+    GROUP BY type, period, ord
+    ORDER BY type, ord`,
+  params: {},
+});
+
+// Per-fund detail behind productPerformance(): one row per fund per period,
+// for the drill-down table and the per-type export sheets.
+const productPerformanceDetail = () => ({
+  sql: `WITH nav AS (${NAV_SOURCE}),
+    periods AS (
+      SELECT * FROM UNNEST([
+        STRUCT('1D' AS period, 1 AS ord, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) AS target),
+        STRUCT('1W', 2, DATE_SUB(CURRENT_DATE(), INTERVAL 1 WEEK)),
+        STRUCT('1M', 3, DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)),
+        STRUCT('3M', 4, DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)),
+        STRUCT('YTD', 5, DATE_TRUNC(CURRENT_DATE(), YEAR)),
+        STRUCT('1Y', 6, DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)),
+        STRUCT('3Y', 7, DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)),
+        STRUCT('5Y', 8, DATE_SUB(CURRENT_DATE(), INTERVAL 5 YEAR))
+      ])
+    ),
+    snaps AS (
+      SELECT n.product_id, ANY_VALUE(n.name) AS name, ANY_VALUE(n.type) AS type, p.period, p.ord,
+        ARRAY_AGG(STRUCT(n.value AS v, n.d AS d) ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
+        ARRAY_AGG(IF(n.d <= p.target, STRUCT(n.value AS v, n.d AS d), NULL) IGNORE NULLS ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
+      FROM nav n CROSS JOIN periods p
+      WHERE n.type IS NOT NULL
+      GROUP BY n.product_id, p.period, p.ord
+    )
+    SELECT type, name, period, ord,
+      ROUND(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100, 2) AS pct_change,
+      latest_snap.v AS latest_nav, asof_snap.v AS base_nav
+    FROM snaps
+    WHERE asof_snap IS NOT NULL
+    ORDER BY type, name, ord`,
+  params: {},
+});
+
 module.exports = {
   overviewUsers, overviewAum, overviewTx, overviewFunds,
   trends, breakdownBy, topFunds, fundTypes, aumHistory,
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
+  productPerformance, productPerformanceDetail,
 };

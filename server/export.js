@@ -52,4 +52,28 @@ async function toXlsxBuffer(rows, sheetName = 'Data') {
   return wb.xlsx.writeBuffer();
 }
 
-module.exports = { toCsv, toXlsxBuffer };
+// sheets: [{ name, rows }] — one worksheet per entry, e.g. one per fund type.
+async function toXlsxMultiSheet(sheets) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Sayakaya Analytics';
+  wb.created = new Date();
+
+  for (const { name, rows } of sheets) {
+    const ws = wb.addWorksheet(String(name).slice(0, 31)); // Excel sheet name limit
+    const cols = inferColumns(rows);
+    ws.columns = cols.map((c) => ({ header: c, key: c, width: Math.min(40, Math.max(12, c.length + 4)) }));
+    ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E2A4A' } };
+    for (const r of rows) {
+      const out = {};
+      for (const c of cols) out[c] = cell(r[c]);
+      ws.addRow(out);
+    }
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    if (cols.length) ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+  }
+
+  return wb.xlsx.writeBuffer();
+}
+
+module.exports = { toCsv, toXlsxBuffer, toXlsxMultiSheet };
