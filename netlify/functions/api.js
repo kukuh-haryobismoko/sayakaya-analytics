@@ -8,7 +8,11 @@ const serverless = require('serverless-http');
 const { createApp } = require('../../server/app');
 
 const app = createApp({ serveStatic: false });
-const wrapped = serverless(app);
+// Excel exports are binary; without this, serverless-http treats the response
+// body as UTF-8 text and mangles the bytes, producing a corrupt .xlsx file.
+const wrapped = serverless(app, {
+  binary: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+});
 
 exports.handler = async (event, context) => {
   // Don't wait for the BigQuery client's idle sockets before returning.
