@@ -141,6 +141,23 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
+  // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
+  app.get('/api/users/search', handler(async (req, res) => {
+    const q = Q.userSearch(req.query.q);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/portfolio', handler(async (req, res) => {
+    const { userId, sid } = req.query;
+    if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+    const h = Q.userHoldings(userId);
+    const p = Q.userPerformance(sid);
+    const [holdings, performance] = await Promise.all([
+      runQuery(h.sql, h.params),
+      runQuery(p.sql, p.params),
+    ]);
+    res.json({ holdings, performance });
+  }));
+
   // ---- Product performance (NAV % change per fund type, external Apollo DB) --
   app.get('/api/product-performance', handler(async (_req, res) => {
     const q = Q.productPerformance();

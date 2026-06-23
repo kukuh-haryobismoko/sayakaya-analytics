@@ -33,7 +33,8 @@
     </div>
 
     <nav class="tabs">
-      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab active" data-tab="portfolio">Portfolio</button>
+      <button class="tab" data-tab="overview">Overview</button>
       <button class="tab" data-tab="aum">AUM history</button>
       <button class="tab" data-tab="performance">Performance</button>
       <button class="tab" data-tab="predict">Predict</button>
@@ -50,8 +51,40 @@
   </header>
 
   <main>
+    <!-- ===================== USER PORTFOLIO ===================== -->
+    <section id="portfolio" class="view active">
+      <div class="panel">
+        <div class="panel-head"><h2>Find investor</h2><span class="hint">Search by SID code, name, or email.</span></div>
+        <div class="ask-bar">
+          <input id="pfSearchInput" type="text" autocomplete="off" placeholder="e.g. SID code" />
+          <button id="pfSearchBtn" class="btn-primary">Search</button>
+        </div>
+        <div id="pfResults" class="table-wrap"></div>
+      </div>
+
+      <div id="pfDetail" class="hidden">
+        <div class="panel">
+          <div class="panel-head">
+            <h2 id="pfUserName">—</h2>
+            <span class="hint" id="pfUserSub"></span>
+          </div>
+          <div id="pfKpis" class="kpi-grid"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Holdings</h2></div>
+          <div id="pfHoldings" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>AUM performance</h2><span class="hint">% change in total portfolio value, from portfolios_with_code.</span></div>
+          <div id="pfPerformance" class="table-wrap"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ===================== OVERVIEW ===================== -->
-    <section id="overview" class="view active">
+    <section id="overview" class="view">
       <div id="kpis" class="kpi-grid"></div>
 
       <div class="panel">

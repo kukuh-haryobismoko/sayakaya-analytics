@@ -60,9 +60,86 @@ Chart.defaults.font.family = 'Inter, sans-serif';
 Chart.defaults.color = C.muted;
 
 // ====================================================================
+//  USER PORTFOLIO (search by SID, print one investor's holdings)
+// ====================================================================
+async function searchPortfolioUsers() {
+  const q = $('#pfSearchInput').value.trim();
+  if (!q) return;
+  $('#pfResults').innerHTML = '<div class="loading">Searching…</div>';
+  try {
+    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    renderPfResults(rows);
+  } catch (e) { $('#pfResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPfResults(rows) {
+  if (!rows.length) { $('#pfResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  const body = rows.map((r) => `<tr class="pf-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
+      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+    </tr>`).join('');
+  $('#pfResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $$('#pfResults .pf-row').forEach((tr) => tr.addEventListener('click', () =>
+    selectPortfolioUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+}
+
+async function selectPortfolioUser(userId, sid, name, email) {
+  $('#pfDetail').classList.remove('hidden');
+  $('#pfUserName').textContent = name || sid;
+  $('#pfUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
+  $('#pfKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
+  $('#pfHoldings').innerHTML = '';
+  $('#pfPerformance').innerHTML = '';
+  try {
+    const { holdings, performance } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}`);
+    renderPfKpis(holdings);
+    renderPfHoldings(holdings);
+    renderPfPerformance(performance);
+  } catch (e) { $('#pfKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPfKpis(holdings) {
+  const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  const regular = holdings.filter((h) => val(h.source) === 'regular').reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  const bonus = holdings.filter((h) => val(h.source) === 'bonus').reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  $('#pfKpis').innerHTML = [
+    kpi('Total AUM', idrFull(totalAum), `${holdings.length} holding${holdings.length === 1 ? '' : 's'}`, 'accent'),
+    kpi('Regular portfolio', idrFull(regular), 'portfolios'),
+    kpi('Bonus portfolio', idrFull(bonus), 'bonus_portfolios (on_going)'),
+  ].join('');
+}
+
+function renderPfHoldings(rows) {
+  if (!rows.length) { $('#pfHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  const body = rows.map((h) => `<tr>
+      <td>${val(h.fund)}</td>
+      <td><span class="tag other">${val(h.fund_type)}</span></td>
+      <td><span class="tag ${val(h.source) === 'bonus' ? 'other' : 'completed'}">${val(h.source)}</span></td>
+      <td class="num">${Number(val(h.unit)).toFixed(4)}</td>
+      <td class="num">${num(val(h.nav))}</td>
+      <td class="num">${idrFull(val(h.value))}</td>
+    </tr>`).join('');
+  $('#pfHoldings').innerHTML = `<table><thead><tr>
+      <th>Fund</th><th>Type</th><th>Source</th><th class="num">Units</th><th class="num">NAV</th><th class="num">Value</th>
+    </tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderPfPerformance(rows) {
+  if (!rows.length) { $('#pfPerformance').innerHTML = '<div class="empty">No AUM history for this SID.</div>'; return; }
+  const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
+  const cells = rows.map((r) => {
+    const pct = val(r.pct_change);
+    if (pct == null) return '<td class="num">—</td>';
+    return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
+  }).join('');
+  $('#pfPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
+}
+
+// ====================================================================
 //  OVERVIEW
 // ====================================================================
+let overviewLoaded = false;
 async function loadOverview() {
+  overviewLoaded = true;
   const r = currentRange();
   const qs = `?from=${r.from}&to=${r.to}`;
   $('#kpis').innerHTML = '<div class="loading">Loading metrics…</div>';
@@ -690,11 +767,16 @@ function switchTab(name) {
   if (name === 'performance' && !perfCache.length) loadPerformance();
   if (name === 'performance' && !perfDetailCache.length) loadPerformanceDetail();
   if (name === 'predict' && !predictLoaded) loadPredict();
+  if (name === 'overview' && !overviewLoaded) loadOverview();
 }
 
 function wire() {
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
-  $('#apply').addEventListener('click', () => { loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); });
+
+  // portfolio
+  $('#pfSearchBtn').addEventListener('click', searchPortfolioUsers);
+  $('#pfSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPortfolioUsers(); });
+  $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); });
 
   // predict
   $('#fcHorizon').addEventListener('click', (e) => {
@@ -778,7 +860,7 @@ function wireGate() {
 
 // ---------- boot ----------
 async function boot() {
-  loadOverview();
+  // Portfolio is the landing tab; nothing to query until a SID is searched.
 }
 
 async function init() {

@@ -229,9 +229,8 @@ const NAV_SOURCE = `
       ON s.product_id = f.id
     WHERE s.type = 'NAV'`;
 
-const productPerformance = () => ({
-  sql: `WITH nav AS (${NAV_SOURCE}),
-    periods AS (
+// Shared period list for every "% change vs N periods ago" report: 1D/1W/1M/3M/YTD/1Y/3Y/5Y.
+const PERIODS_CTE = `periods AS (
       SELECT * FROM UNNEST([
         STRUCT('1D' AS period, 1 AS ord, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) AS target),
         STRUCT('1W', 2, DATE_SUB(CURRENT_DATE(), INTERVAL 1 WEEK)),
@@ -242,7 +241,11 @@ const productPerformance = () => ({
         STRUCT('3Y', 7, DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)),
         STRUCT('5Y', 8, DATE_SUB(CURRENT_DATE(), INTERVAL 5 YEAR))
       ])
-    ),
+    )`;
+
+const productPerformance = () => ({
+  sql: `WITH nav AS (${NAV_SOURCE}),
+    ${PERIODS_CTE},
     snaps AS (
       SELECT n.product_id, ANY_VALUE(n.type) AS type, p.period, p.ord,
         ARRAY_AGG(STRUCT(n.value AS v, n.d AS d) ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
@@ -265,18 +268,7 @@ const productPerformance = () => ({
 // for the drill-down table and the per-type export sheets.
 const productPerformanceDetail = () => ({
   sql: `WITH nav AS (${NAV_SOURCE}),
-    periods AS (
-      SELECT * FROM UNNEST([
-        STRUCT('1D' AS period, 1 AS ord, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) AS target),
-        STRUCT('1W', 2, DATE_SUB(CURRENT_DATE(), INTERVAL 1 WEEK)),
-        STRUCT('1M', 3, DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)),
-        STRUCT('3M', 4, DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)),
-        STRUCT('YTD', 5, DATE_TRUNC(CURRENT_DATE(), YEAR)),
-        STRUCT('1Y', 6, DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)),
-        STRUCT('3Y', 7, DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)),
-        STRUCT('5Y', 8, DATE_SUB(CURRENT_DATE(), INTERVAL 5 YEAR))
-      ])
-    ),
+    ${PERIODS_CTE},
     snaps AS (
       SELECT n.product_id, ANY_VALUE(n.name) AS name, ANY_VALUE(n.type) AS type, p.period, p.ord,
         ARRAY_AGG(STRUCT(n.value AS v, n.d AS d) ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
@@ -294,10 +286,69 @@ const productPerformanceDetail = () => ({
   params: {},
 });
 
+// ---- User portfolio lookup (pick a user by SID code, print their holdings) -
+const BONUS_PORT = '`sayakaya.main.bonus_portfolios`';
+const USER_PROFILES = '`sayakaya.main.user_profiles`';
+
+// SID search box: type a SID code (or name/email) to find the user to print.
+const userSearch = (q) => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.ifua_code AS ifua,
+      up.name, u.email
+    FROM ${USERS} u
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+    WHERE LOWER(u.sid_code) LIKE @q OR LOWER(up.name) LIKE @q OR LOWER(u.email) LIKE @q
+    ORDER BY u.sid_code LIMIT 20`,
+  params: { q: `%${String(q || '').trim().toLowerCase()}%` },
+});
+
+// Current holdings (regular + bonus) for one user, with live value at the
+// fund's latest NAV — same "active holdings" definition as the AUM KPI.
+const userHoldings = (userId) => ({
+  sql: `WITH holdings AS (
+      SELECT p.fund_id, p.unit, p.created_at, 'regular' AS source
+      FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id = @userId
+      UNION ALL
+      SELECT bp.fund_id, bp.unit, bp.created_at, 'bonus' AS source
+      FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id = @userId
+    )
+    SELECT f.name AS fund, f.type AS fund_type, h.source, h.unit,
+      f.latest_nav_value AS nav, ROUND(h.unit * f.latest_nav_value) AS value, h.created_at AS opened_at
+    FROM holdings h JOIN ${FUNDS} f ON f.id = h.fund_id
+    ORDER BY value DESC`,
+  params: { userId },
+});
+
+// AUM performance for one user (by SID code), summed across their funds per
+// day from portfolios_with_code, % change per period vs the AUM history report.
+const PORT_WITH_CODE = '`sayakaya.mi_fee_logs.portfolios_with_code`';
+const userPerformance = (sid) => ({
+  sql: `WITH daily AS (
+      SELECT DATE(created_at) AS d, SUM(amount) AS amount
+      FROM ${PORT_WITH_CODE}
+      WHERE sid_code = @sid
+      GROUP BY d
+    ),
+    ${PERIODS_CTE},
+    snaps AS (
+      SELECT p.period, p.ord,
+        ARRAY_AGG(STRUCT(daily.amount AS v, daily.d AS d) ORDER BY daily.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
+        ARRAY_AGG(IF(daily.d <= p.target, STRUCT(daily.amount AS v, daily.d AS d), NULL) IGNORE NULLS ORDER BY daily.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
+      FROM daily CROSS JOIN periods p
+      GROUP BY p.period, p.ord
+    )
+    SELECT period, ord,
+      latest_snap.v AS latest_amount, asof_snap.v AS base_amount,
+      ROUND(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100, 2) AS pct_change
+    FROM snaps
+    ORDER BY ord`,
+  params: { sid },
+});
+
 module.exports = {
   overviewUsers, overviewAum, overviewTx, overviewFunds,
   trends, breakdownBy, topFunds, fundTypes, aumHistory,
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail,
+  userSearch, userHoldings, userPerformance,
 };
