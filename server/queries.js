@@ -319,8 +319,9 @@ const userHoldings = (userId) => ({
 });
 
 // AUM performance for one user (by SID code), summed across their funds per
-// day from portfolios_with_code, % change per period vs the AUM history report.
-const PORT_WITH_CODE = '`sayakaya.mi_fee_logs.portfolios_with_code`';
+// day from portfolio_with_code (one row per sid_code+fund per day; `amount`
+// is that holding's value on that day).
+const PORT_WITH_CODE = '`sayakaya.mi_fee_logs.portfolio_with_code`';
 const userPerformance = (sid) => ({
   sql: `WITH daily AS (
       SELECT DATE(created_at) AS d, SUM(amount) AS amount
