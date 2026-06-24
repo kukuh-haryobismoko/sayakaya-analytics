@@ -2,11 +2,15 @@
 
 const PDFDocument = require('pdfkit');
 
-// BigQuery returns some values as wrapper objects (e.g. BigQueryTimestamp,
-// NUMERIC). Unwrap to a plain primitive, same convention as export.js.
+// BigQuery returns some values as wrapper objects. Date/Timestamp/Datetime/Time
+// expose a `.value` string; NUMERIC/BIGNUMERIC come back as big.js instances
+// (no `.value`) — use their real .toString() instead. Same convention as export.js.
 function val(v) {
   if (v === null || v === undefined) return null;
-  if (typeof v === 'object' && 'value' in v) return v.value;
+  if (typeof v === 'object') {
+    if ('value' in v) return v.value;
+    if (typeof v.toString === 'function' && v.toString !== Object.prototype.toString) return v.toString();
+  }
   return v;
 }
 

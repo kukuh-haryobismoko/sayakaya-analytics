@@ -7,12 +7,18 @@ function inferColumns(rows) {
   return Object.keys(rows[0]);
 }
 
-// BigQuery returns some types as objects (e.g. BigQueryTimestamp, Big numbers).
-// Normalize them to plain primitives for export.
+// BigQuery returns some values as wrapper objects. Date/Timestamp/Datetime/Time
+// expose a `.value` string. NUMERIC/BIGNUMERIC come back as big.js instances
+// ({s, e, c} — no `.value`), so falling through to JSON.stringify() would wrap
+// them in literal quotes (Big.prototype.toJSON = toString) and break Number().
+// Use their real .toString() instead, which big.js provides correctly.
 function cell(value) {
   if (value === null || value === undefined) return '';
   if (typeof value === 'object') {
-    if ('value' in value) return value.value;     // BigQueryDate/Timestamp/Numeric
+    if ('value' in value) return value.value;
+    if (typeof value.toString === 'function' && value.toString !== Object.prototype.toString) {
+      return value.toString();
+    }
     return JSON.stringify(value);
   }
   return value;
