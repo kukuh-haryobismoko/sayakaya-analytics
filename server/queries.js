@@ -316,6 +316,17 @@ const userSearch = (q) => ({
   params: { q: `%${String(q || '').trim().toLowerCase()}%` },
 });
 
+// Contact card for the PDF export header — fetched server-side by userId so
+// the report shows authoritative data, not whatever the client last selected.
+const userContact = (userId) => ({
+  sql: `SELECT u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone
+    FROM ${USERS} u
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+    WHERE u.id = @userId
+    LIMIT 1`,
+  params: { userId },
+});
+
 // Current holdings (regular + bonus) for one user, with live value at the
 // fund's latest NAV — same "active holdings" definition as the AUM KPI.
 const userHoldings = (userId) => ({
@@ -523,7 +534,7 @@ module.exports = {
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail,
-  userSearch, userHoldings, userPerformance, userAumHistory,
+  userSearch, userContact, userHoldings, userPerformance, userAumHistory,
   campaignPerformance, switchingTopPairs, aumByManager,
   aumByRisk, aumByIncome, topReferrers, reconciliationDaily,
 };

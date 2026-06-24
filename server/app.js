@@ -13,6 +13,7 @@ const { toCsv, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
 const { ask, askEnabled } = require('./ask');
 const EX = require('./explore');
 const ML = require('./ml');
+const PDF = require('./pdf');
 
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
 
@@ -329,6 +330,14 @@ function createApp({ serveStatic = true } = {}) {
         runQuery(h.sql, h.params),
         runQuery(pq.sql, pq.params),
       ]);
+      if (format === 'pdf') {
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params);
+        const buf = await PDF.portfolioReport({ contact, holdings }, pivotPerformanceByType(detail));
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
+        return res.send(buf);
+      }
       const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') {
         const buf = await toXlsxMultiSheet(sheets);

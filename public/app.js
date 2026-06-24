@@ -875,6 +875,9 @@ function wire() {
   $('#pfXlsx').addEventListener('click', () => pfSelected && download(
     { source: 'portfolio_full', format: 'xlsx', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
     `portfolio_${pfSelected.sid}.xlsx`));
+  $('#pfPdf').addEventListener('click', () => pfSelected && download(
+    { source: 'portfolio_full', format: 'pdf', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
+    `portfolio_${pfSelected.sid}.pdf`));
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
 
   // predict
