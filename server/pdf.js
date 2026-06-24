@@ -1,6 +1,8 @@
 'use strict';
 
 const PDFDocument = require('pdfkit');
+const LOGO_BUFFER = Buffer.from(require('./logo'), 'base64');
+const LOGO_RATIO = 456 / 1856; // source PNG is 1856x456
 
 // BigQuery returns some values as wrapper objects. Date/Timestamp/Datetime/Time
 // expose a `.value` string; NUMERIC/BIGNUMERIC come back as big.js instances
@@ -46,6 +48,10 @@ function bufferDoc(doc) {
 }
 
 function pageHeader(doc, title, sub) {
+  const logoWidth = 120;
+  doc.image(LOGO_BUFFER, doc.page.margins.left, doc.y, { width: logoWidth });
+  doc.y += logoWidth * LOGO_RATIO + 14;
+
   doc.fillColor(INDIGO).font('Helvetica-Bold').fontSize(15).text(title);
   if (sub) doc.fillColor(MUTED).font('Helvetica').fontSize(9).text(sub);
   doc.moveDown(0.4);
@@ -122,7 +128,7 @@ function portfolioReport({ contact, holdings }, performanceSheets) {
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
   // ---- Page 1: investor card + holdings ----
-  pageHeader(doc, 'Investor Portfolio Report', `Sayakaya Analytics · generated ${new Date().toISOString().slice(0, 10)}`);
+  pageHeader(doc, 'Investor Portfolio Report', `Generated ${new Date().toISOString().slice(0, 10)}`);
 
   doc.font('Helvetica-Bold').fontSize(11).fillColor(INK).text(val(contact?.name) || '—');
   doc.font('Helvetica').fontSize(9).fillColor(MUTED);
