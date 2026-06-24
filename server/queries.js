@@ -230,29 +230,38 @@ const NAV_SOURCE = `
     WHERE s.type = 'NAV'`;
 
 // Shared period list for every "% change vs N periods ago" report: 1D/1W/1M/3M/YTD/1Y/3Y/5Y.
-const PERIODS_CTE = `periods AS (
-      SELECT * FROM UNNEST([
-        STRUCT('1D' AS period, 1 AS ord, DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) AS target),
-        STRUCT('1W', 2, DATE_SUB(CURRENT_DATE(), INTERVAL 1 WEEK)),
-        STRUCT('1M', 3, DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)),
-        STRUCT('3M', 4, DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)),
-        STRUCT('YTD', 5, DATE_TRUNC(CURRENT_DATE(), YEAR)),
-        STRUCT('1Y', 6, DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)),
-        STRUCT('3Y', 7, DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)),
-        STRUCT('5Y', 8, DATE_SUB(CURRENT_DATE(), INTERVAL 5 YEAR))
-      ])
-    )`;
+// Targets are computed relative to each entity's own *latest available* date
+// (not today) — if a fund's freshest NAV is from 2 days ago, "1D" compares
+// that NAV to the NAV as-of (latest - 1 day), nearest available on or before.
+function periodTargets(latestDateExpr) {
+  return `[
+        STRUCT('1D' AS period, 1 AS ord, DATE_SUB(${latestDateExpr}, INTERVAL 1 DAY) AS target),
+        STRUCT('1W', 2, DATE_SUB(${latestDateExpr}, INTERVAL 1 WEEK)),
+        STRUCT('1M', 3, DATE_SUB(${latestDateExpr}, INTERVAL 1 MONTH)),
+        STRUCT('3M', 4, DATE_SUB(${latestDateExpr}, INTERVAL 3 MONTH)),
+        STRUCT('YTD', 5, DATE_TRUNC(${latestDateExpr}, YEAR)),
+        STRUCT('1Y', 6, DATE_SUB(${latestDateExpr}, INTERVAL 1 YEAR)),
+        STRUCT('3Y', 7, DATE_SUB(${latestDateExpr}, INTERVAL 3 YEAR)),
+        STRUCT('5Y', 8, DATE_SUB(${latestDateExpr}, INTERVAL 5 YEAR))
+      ]`;
+}
 
 const productPerformance = () => ({
   sql: `WITH nav AS (${NAV_SOURCE}),
-    ${PERIODS_CTE},
+    latest AS (
+      SELECT product_id, ANY_VALUE(type) AS type,
+        ARRAY_AGG(STRUCT(value AS v, d AS d) ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_snap
+      FROM nav WHERE type IS NOT NULL GROUP BY product_id
+    ),
+    periods AS (
+      SELECT l.product_id, l.type, l.latest_snap, pr.period, pr.ord, pr.target
+      FROM latest l, UNNEST(${periodTargets('l.latest_snap.d')}) AS pr
+    ),
     snaps AS (
-      SELECT n.product_id, ANY_VALUE(n.type) AS type, p.period, p.ord,
-        ARRAY_AGG(STRUCT(n.value AS v, n.d AS d) ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
+      SELECT p.product_id, p.type, p.period, p.ord, p.latest_snap,
         ARRAY_AGG(IF(n.d <= p.target, STRUCT(n.value AS v, n.d AS d), NULL) IGNORE NULLS ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
-      FROM nav n CROSS JOIN periods p
-      WHERE n.type IS NOT NULL
-      GROUP BY n.product_id, p.period, p.ord
+      FROM periods p JOIN nav n ON n.product_id = p.product_id
+      GROUP BY p.product_id, p.type, p.period, p.ord, p.latest_snap
     )
     SELECT type, period, ord,
       ROUND(AVG(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100), 2) AS pct_change,
@@ -268,14 +277,20 @@ const productPerformance = () => ({
 // for the drill-down table and the per-type export sheets.
 const productPerformanceDetail = () => ({
   sql: `WITH nav AS (${NAV_SOURCE}),
-    ${PERIODS_CTE},
+    latest AS (
+      SELECT product_id, ANY_VALUE(name) AS name, ANY_VALUE(type) AS type,
+        ARRAY_AGG(STRUCT(value AS v, d AS d) ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_snap
+      FROM nav WHERE type IS NOT NULL GROUP BY product_id
+    ),
+    periods AS (
+      SELECT l.product_id, l.name, l.type, l.latest_snap, pr.period, pr.ord, pr.target
+      FROM latest l, UNNEST(${periodTargets('l.latest_snap.d')}) AS pr
+    ),
     snaps AS (
-      SELECT n.product_id, ANY_VALUE(n.name) AS name, ANY_VALUE(n.type) AS type, p.period, p.ord,
-        ARRAY_AGG(STRUCT(n.value AS v, n.d AS d) ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
+      SELECT p.product_id, p.name, p.type, p.period, p.ord, p.latest_snap,
         ARRAY_AGG(IF(n.d <= p.target, STRUCT(n.value AS v, n.d AS d), NULL) IGNORE NULLS ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
-      FROM nav n CROSS JOIN periods p
-      WHERE n.type IS NOT NULL
-      GROUP BY n.product_id, p.period, p.ord
+      FROM periods p JOIN nav n ON n.product_id = p.product_id
+      GROUP BY p.product_id, p.name, p.type, p.period, p.ord, p.latest_snap
     )
     SELECT type, name, period, ord,
       ROUND(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100, 2) AS pct_change,
@@ -339,13 +354,19 @@ const userPerformance = (sid) => ({
       WHERE sid_code = @sid
       GROUP BY d
     ),
-    ${PERIODS_CTE},
+    latest AS (
+      SELECT ARRAY_AGG(STRUCT(amount AS v, d AS d) ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_snap
+      FROM daily
+    ),
+    periods AS (
+      SELECT l.latest_snap, pr.period, pr.ord, pr.target
+      FROM latest l, UNNEST(${periodTargets('l.latest_snap.d')}) AS pr
+    ),
     snaps AS (
-      SELECT p.period, p.ord,
-        ARRAY_AGG(STRUCT(daily.amount AS v, daily.d AS d) ORDER BY daily.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
+      SELECT p.period, p.ord, p.latest_snap,
         ARRAY_AGG(IF(daily.d <= p.target, STRUCT(daily.amount AS v, daily.d AS d), NULL) IGNORE NULLS ORDER BY daily.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
-      FROM daily CROSS JOIN periods p
-      GROUP BY p.period, p.ord
+      FROM periods p CROSS JOIN daily
+      GROUP BY p.period, p.ord, p.latest_snap
     )
     SELECT period, ord,
       latest_snap.v AS latest_amount, asof_snap.v AS base_amount,

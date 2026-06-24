@@ -35,6 +35,7 @@ function pivotPerformanceByType(rows) {
       for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
       return out;
     }),
+    pctCols: PERF_PERIODS,
   }));
 }
 
@@ -281,8 +282,8 @@ function createApp({ serveStatic = true } = {}) {
     res.setHeader('Content-Disposition', `attachment; filename="${name}.csv"`);
     res.send('\uFEFF' + toCsv(rows));
   }
-  async function sendXlsx(res, rows, name) {
-    const buf = await toXlsxBuffer(rows, name);
+  async function sendXlsx(res, rows, name, pctCols = []) {
+    const buf = await toXlsxBuffer(rows, name, pctCols);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${name}.xlsx"`);
     res.send(Buffer.from(buf));
@@ -291,6 +292,7 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/export', handler(async (req, res) => {
     const { source, format = 'csv', filename = 'export', sql, limit } = req.body || {};
     let rows;
+    let pctCols = [];
     if (source === 'sql') {
       const v = validateAdHoc(sql);
       if (!v.ok) return res.status(400).json({ error: v.error });
@@ -307,6 +309,7 @@ function createApp({ serveStatic = true } = {}) {
     } else if (source === 'product_performance') {
       const q = Q.productPerformance();
       rows = await runQuery(q.sql, q.params);
+      pctCols = ['pct_change'];
     } else if (source === 'product_performance_detail') {
       const q = Q.productPerformanceDetail();
       const detail = await runQuery(q.sql, q.params);
@@ -341,6 +344,7 @@ function createApp({ serveStatic = true } = {}) {
     } else if (source === 'campaigns_performance') {
       const q = Q.campaignPerformance(limit || 1000);
       rows = await runQuery(q.sql, q.params);
+      pctCols = ['redemption_pct'];
     } else if (source === 'switching_pairs') {
       const q = Q.switchingTopPairs(limit || 1000);
       rows = await runQuery(q.sql, q.params);
@@ -353,7 +357,7 @@ function createApp({ serveStatic = true } = {}) {
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
     }
-    if (format === 'xlsx') return sendXlsx(res, rows, filename);
+    if (format === 'xlsx') return sendXlsx(res, rows, filename, pctCols);
     return sendCsv(res, rows, filename);
   }));
 

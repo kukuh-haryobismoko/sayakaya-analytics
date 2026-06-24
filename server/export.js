@@ -29,7 +29,12 @@ function toCsv(rows) {
   return header + '\n' + body;
 }
 
-async function toXlsxBuffer(rows, sheetName = 'Data') {
+// Values in pctCols are already percentages (e.g. -16.49 means -16.49%), not
+// fractions — so use a literal "%" suffix format rather than Excel's native
+// percentage format, which would multiply the value by 100 again.
+const PCT_FMT = '0.00"%"';
+
+async function toXlsxBuffer(rows, sheetName = 'Data', pctCols = []) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';
   wb.created = new Date();
@@ -46,19 +51,20 @@ async function toXlsxBuffer(rows, sheetName = 'Data') {
     for (const c of cols) out[c] = cell(r[c]);
     ws.addRow(out);
   }
+  for (const c of pctCols) if (cols.includes(c)) ws.getColumn(c).numFmt = PCT_FMT;
   ws.views = [{ state: 'frozen', ySplit: 1 }];
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length || 1 } };
 
   return wb.xlsx.writeBuffer();
 }
 
-// sheets: [{ name, rows }] — one worksheet per entry, e.g. one per fund type.
+// sheets: [{ name, rows, pctCols }] — one worksheet per entry, e.g. one per fund type.
 async function toXlsxMultiSheet(sheets) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';
   wb.created = new Date();
 
-  for (const { name, rows } of sheets) {
+  for (const { name, rows, pctCols = [] } of sheets) {
     const ws = wb.addWorksheet(String(name).slice(0, 31)); // Excel sheet name limit
     const cols = inferColumns(rows);
     ws.columns = cols.map((c) => ({ header: c, key: c, width: Math.min(40, Math.max(12, c.length + 4)) }));
@@ -69,6 +75,7 @@ async function toXlsxMultiSheet(sheets) {
       for (const c of cols) out[c] = cell(r[c]);
       ws.addRow(out);
     }
+    for (const c of pctCols) if (cols.includes(c)) ws.getColumn(c).numFmt = PCT_FMT;
     ws.views = [{ state: 'frozen', ySplit: 1 }];
     if (cols.length) ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
   }
