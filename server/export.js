@@ -34,6 +34,11 @@ function toCsv(rows) {
 // percentage format, which would multiply the value by 100 again.
 const PCT_FMT = '0.00"%"';
 
+// numFmt only renders on actual numeric cells — BigQuery NUMERIC/BIGNUMERIC
+// values arrive as { value: '0.20' } (a string, to keep precision), so pctCols
+// must be coerced to a real number or the percent format is silently ignored.
+function num(v) { return v === '' || v == null ? v : Number(v); }
+
 async function toXlsxBuffer(rows, sheetName = 'Data', pctCols = []) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';
@@ -48,7 +53,7 @@ async function toXlsxBuffer(rows, sheetName = 'Data', pctCols = []) {
 
   for (const r of rows) {
     const out = {};
-    for (const c of cols) out[c] = cell(r[c]);
+    for (const c of cols) out[c] = pctCols.includes(c) ? num(cell(r[c])) : cell(r[c]);
     ws.addRow(out);
   }
   for (const c of pctCols) if (cols.includes(c)) ws.getColumn(c).numFmt = PCT_FMT;
@@ -72,7 +77,7 @@ async function toXlsxMultiSheet(sheets) {
     ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E2A4A' } };
     for (const r of rows) {
       const out = {};
-      for (const c of cols) out[c] = cell(r[c]);
+      for (const c of cols) out[c] = pctCols.includes(c) ? num(cell(r[c])) : cell(r[c]);
       ws.addRow(out);
     }
     for (const c of pctCols) if (cols.includes(c)) ws.getColumn(c).numFmt = PCT_FMT;
