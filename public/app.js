@@ -560,6 +560,74 @@ function renderPerformanceDetail() {
 }
 
 // ====================================================================
+//  GROWTH (campaigns, referrals, switching, manager/demographic AUM)
+// ====================================================================
+let growthLoaded = false;
+function genTable(sel, rows, cols, emptyMsg) {
+  if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
+  const numTypes = ['idr', 'num', 'pct'];
+  const head = cols.map((c) => `<th class="${numTypes.includes(c.type) ? 'num' : ''}">${c.label}</th>`).join('');
+  const body = rows.map((r) => '<tr>' + cols.map((c) => {
+    const v = val(r[c.key]);
+    let out = v == null ? '—' : v;
+    if (c.type === 'idr') out = idrFull(v);
+    if (c.type === 'num') out = num(v);
+    if (c.type === 'pct') out = v == null ? '—' : `${Number(v).toFixed(1)}%`;
+    if (c.type === 'date') out = v == null ? '—' : String(v).slice(0, 10);
+    return `<td class="${numTypes.includes(c.type) ? 'num' : ''}">${out}</td>`;
+  }).join('') + '</tr>').join('');
+  $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+async function loadGrowth() {
+  growthLoaded = true;
+  api('/api/campaigns/performance').then((rows) => genTable('#campTable', rows, [
+    { key: 'name', label: 'Campaign' }, { key: 'campaign_type', label: 'Type' },
+    { key: 'promo_code', label: 'Promo' }, { key: 'quota', label: 'Quota', type: 'num' },
+    { key: 'used_quota', label: 'Used', type: 'num' }, { key: 'redemption_pct', label: 'Redemption', type: 'pct' },
+    { key: 'bonus_amount', label: 'Bonus/redemption', type: 'idr' }, { key: 'est_cost', label: 'Est. cost', type: 'idr' },
+  ], 'No campaigns.')).catch((e) => $('#campTable').innerHTML = `<div class="empty">${e.message}</div>`);
+
+  api('/api/referrals/top').then((rows) => genTable('#refTable', rows, [
+    { key: 'referral_code', label: 'Code' }, { key: 'referrer', label: 'Referrer' },
+    { key: 'referred_count', label: 'Referred', type: 'num' }, { key: 'referred_volume', label: 'Volume brought', type: 'idr' },
+  ], 'No referrals yet.')).catch((e) => $('#refTable').innerHTML = `<div class="empty">${e.message}</div>`);
+
+  api('/api/switching/top-pairs').then((rows) => genTable('#switchTable', rows, [
+    { key: 'from_fund', label: 'From fund' }, { key: 'to_fund', label: 'To fund' },
+    { key: 'switches', label: 'Switches', type: 'num' }, { key: 'amount', label: 'Amount', type: 'idr' },
+  ], 'No switching transactions.')).catch((e) => $('#switchTable').innerHTML = `<div class="empty">${e.message}</div>`);
+
+  api('/api/funds/by-manager').then((rows) => doughnut('managerChart', rows, 'label', 'aum', idrFull))
+    .catch(() => {});
+
+  api('/api/users/aum-by-risk').then((rows) => doughnut('riskChart', rows, 'label', 'aum', idrFull))
+    .catch(() => {});
+
+  api('/api/users/aum-by-income').then((rows) => genTable('#incomeTable', rows, [
+    { key: 'label', label: 'Income bracket' }, { key: 'investors', label: 'Investors', type: 'num' },
+    { key: 'aum', label: 'AUM', type: 'idr' },
+  ], 'No data.')).catch((e) => $('#incomeTable').innerHTML = `<div class="empty">${e.message}</div>`);
+}
+
+// ====================================================================
+//  RECONCILIATION (app ledger vs custodian feed)
+// ====================================================================
+async function loadReconciliation() {
+  const r = currentRange();
+  $('#recTable').innerHTML = '<div class="loading">Comparing ledgers…</div>';
+  try {
+    const rows = await api(`/api/reconciliation?from=${r.from}&to=${r.to}`);
+    genTable('#recTable', rows, [
+      { key: 'bucket', label: 'Date' },
+      { key: 'app_count', label: 'App tx', type: 'num' }, { key: 'app_amount', label: 'App amount', type: 'idr' },
+      { key: 'sinvest_count', label: 'Custodian tx', type: 'num' }, { key: 'sinvest_amount', label: 'Custodian amount', type: 'idr' },
+      { key: 'amount_diff', label: 'Diff', type: 'idr' },
+    ], 'No data in this range.');
+  } catch (e) { $('#recTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// ====================================================================
 //  EXPLORER (multi-table)
 // ====================================================================
 function tagClass(v) {
@@ -789,6 +857,8 @@ function switchTab(name) {
   if (name === 'aum' && !aumCache.length) loadAumHistory();
   if (name === 'performance' && !perfCache.length) loadPerformance();
   if (name === 'performance' && !perfDetailCache.length) loadPerformanceDetail();
+  if (name === 'growth' && !growthLoaded) loadGrowth();
+  if (name === 'reconciliation') loadReconciliation();
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
 }
@@ -805,7 +875,7 @@ function wire() {
   $('#pfXlsx').addEventListener('click', () => pfSelected && download(
     { source: 'portfolio_full', format: 'xlsx', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
     `portfolio_${pfSelected.sid}.xlsx`));
-  $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); });
+  $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
 
   // predict
   $('#fcHorizon').addEventListener('click', (e) => {
@@ -831,6 +901,18 @@ function wire() {
   $('#perfTypeFilter').addEventListener('change', renderPerformanceDetail);
   $('#perfDetailCsv').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'csv', filename: 'product_performance_detail' }, 'product_performance_detail.csv'));
   $('#perfDetailXlsx').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'xlsx', filename: 'product_performance_detail' }, 'product_performance_detail.xlsx'));
+
+  // growth
+  $('#campCsv').addEventListener('click', () => download({ source: 'campaigns_performance', format: 'csv', filename: 'campaign_performance' }, 'campaign_performance.csv'));
+  $('#campXlsx').addEventListener('click', () => download({ source: 'campaigns_performance', format: 'xlsx', filename: 'campaign_performance' }, 'campaign_performance.xlsx'));
+  $('#refCsv').addEventListener('click', () => download({ source: 'referrals_top', format: 'csv', filename: 'top_referrers' }, 'top_referrers.csv'));
+  $('#refXlsx').addEventListener('click', () => download({ source: 'referrals_top', format: 'xlsx', filename: 'top_referrers' }, 'top_referrers.xlsx'));
+  $('#switchCsv').addEventListener('click', () => download({ source: 'switching_pairs', format: 'csv', filename: 'switching_pairs' }, 'switching_pairs.csv'));
+  $('#switchXlsx').addEventListener('click', () => download({ source: 'switching_pairs', format: 'xlsx', filename: 'switching_pairs' }, 'switching_pairs.xlsx'));
+
+  // reconciliation
+  $('#recCsv').addEventListener('click', () => { const r = currentRange(); download({ source: 'reconciliation', format: 'csv', filename: 'reconciliation', from: r.from, to: r.to }, 'reconciliation.csv'); });
+  $('#recXlsx').addEventListener('click', () => { const r = currentRange(); download({ source: 'reconciliation', format: 'xlsx', filename: 'reconciliation', from: r.from, to: r.to }, 'reconciliation.xlsx'); });
 
   $('#gran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;

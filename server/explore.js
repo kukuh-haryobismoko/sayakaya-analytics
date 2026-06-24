@@ -248,6 +248,30 @@ const DATASETS = {
     search: ['im.common_name', 'im.name', 'im.ojk_code'],
     order: 'im.latest_aum_value DESC NULLS LAST',
   },
+  campaigns: {
+    label: 'Campaigns',
+    from: '`sayakaya.main.campaigns` c',
+    select: `
+      c.name, c.campaign_type, c.promo_code, c.quota, c.used_quota,
+      ROUND(SAFE_DIVIDE(c.used_quota, c.quota) * 100, 1) AS redemption_pct,
+      c.bonus_amount, c.start_date, c.end_date`,
+    columns: [
+      { key: 'name', label: 'Campaign' },
+      { key: 'campaign_type', label: 'Type', type: 'tag' },
+      { key: 'promo_code', label: 'Promo code' },
+      { key: 'quota', label: 'Quota', type: 'num' },
+      { key: 'used_quota', label: 'Used', type: 'num' },
+      { key: 'redemption_pct', label: 'Redemption %', type: 'num' },
+      { key: 'bonus_amount', label: 'Bonus', type: 'idr' },
+      { key: 'start_date', label: 'Start', type: 'date' },
+      { key: 'end_date', label: 'End', type: 'date' },
+    ],
+    dateCol: 'c.start_date',
+    baseWhere: 'c.deleted_at IS NULL',
+    filters: [{ key: 'campaign_type', col: 'c.campaign_type' }],
+    search: ['c.name', 'c.promo_code'],
+    order: 'c.used_quota DESC NULLS LAST',
+  },
 };
 
 function meta() {

@@ -355,6 +355,147 @@ const userPerformance = (sid) => ({
   params: { sid },
 });
 
+// ---- Growth: campaigns, referrals, switching, manager/demographic AUM splits --
+const CAMPAIGNS = '`sayakaya.main.campaigns`';
+const SWITCHING = '`sayakaya.main.switching_transactions`';
+const IM = '`sayakaya.main.investment_managers`';
+
+const campaignPerformance = (limit = 50) => ({
+  sql: `SELECT name, campaign_type, promo_code, quota, used_quota,
+      ROUND(SAFE_DIVIDE(used_quota, quota) * 100, 1) AS redemption_pct,
+      bonus_amount, ROUND(used_quota * bonus_amount) AS est_cost,
+      start_date, end_date
+    FROM ${CAMPAIGNS}
+    WHERE deleted_at IS NULL
+    ORDER BY used_quota DESC LIMIT @limit`,
+  params: { limit: parseInt(limit, 10) },
+});
+
+// Fund-to-fund switching flow: which funds bleed AUM to which.
+const switchingTopPairs = (limit = 15) => ({
+  sql: `SELECT fo.name AS from_fund, fd.name AS to_fund,
+      COUNT(*) AS switches, SUM(s.origin_amount) AS amount
+    FROM ${SWITCHING} s
+    JOIN ${FUNDS} fo ON fo.id = s.origin_fund_id
+    JOIN ${FUNDS} fd ON fd.id = s.destination_fund_id
+    WHERE s.status = 'completed'
+    GROUP BY from_fund, to_fund
+    ORDER BY amount DESC LIMIT @limit`,
+  params: { limit: parseInt(limit, 10) },
+});
+
+// Market AUM rolled up by investment manager (same source as the fund-type chart).
+const aumByManager = (limit = 15) => ({
+  sql: `SELECT COALESCE(im.common_name, im.name) AS label,
+      COUNT(*) AS fund_count, SUM(IFNULL(f.latest_aum_value, 0)) AS aum
+    FROM ${FUNDS} f
+    LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+    WHERE f.listing_status = 'ACTIVE'
+    GROUP BY label
+    ORDER BY aum DESC LIMIT @limit`,
+  params: { limit: parseInt(limit, 10) },
+});
+
+// Platform AUM (live holdings, same definition as the Overview KPI) split by
+// investor demographic — risk tolerance and income bracket.
+const ACTIVE_CTE = `active AS (
+      SELECT p.user_id, p.unit, p.fund_id FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0
+      UNION ALL
+      SELECT bp.user_id, bp.unit, bp.fund_id FROM \`sayakaya.main.bonus_portfolios\` bp WHERE bp.status = 'on_going'
+    )`;
+
+const aumByRisk = () => ({
+  sql: `WITH ${ACTIVE_CTE}
+    SELECT IFNULL(up.investment_risk_tolerance, '(unknown)') AS label,
+      COUNT(DISTINCT a.user_id) AS investors,
+      ROUND(SUM(a.unit * f.latest_nav_value)) AS aum
+    FROM active a
+    JOIN ${FUNDS} f ON f.id = a.fund_id
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = a.user_id
+    GROUP BY label ORDER BY aum DESC`,
+  params: {},
+});
+
+const aumByIncome = () => ({
+  sql: `WITH ${ACTIVE_CTE}
+    SELECT
+      CASE
+        WHEN up.monthly_income IS NULL THEN '(unknown)'
+        WHEN up.monthly_income < 5000000 THEN '< 5jt'
+        WHEN up.monthly_income < 10000000 THEN '5–10jt'
+        WHEN up.monthly_income < 25000000 THEN '10–25jt'
+        WHEN up.monthly_income < 50000000 THEN '25–50jt'
+        ELSE '50jt+'
+      END AS label,
+      CASE
+        WHEN up.monthly_income IS NULL THEN 0
+        WHEN up.monthly_income < 5000000 THEN 1
+        WHEN up.monthly_income < 10000000 THEN 2
+        WHEN up.monthly_income < 25000000 THEN 3
+        WHEN up.monthly_income < 50000000 THEN 4
+        ELSE 5
+      END AS ord,
+      COUNT(DISTINCT a.user_id) AS investors,
+      ROUND(SUM(a.unit * f.latest_nav_value)) AS aum
+    FROM active a
+    JOIN ${FUNDS} f ON f.id = a.fund_id
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = a.user_id
+    GROUP BY label, ord ORDER BY ord`,
+  params: {},
+});
+
+// Referral leaderboard: who brought in the most $ via referral_code/referrer_code.
+const topReferrers = (limit = 20) => ({
+  sql: `WITH vol AS (
+      SELECT user_id, SUM(final_amount) AS amt
+      FROM ${TX} WHERE type = 'buy' AND status = 'completed'
+      GROUP BY user_id
+    )
+    SELECT u.referral_code, COALESCE(up.name, u.email) AS referrer,
+      COUNT(r.id) AS referred_count,
+      ROUND(SUM(IFNULL(v.amt, 0))) AS referred_volume
+    FROM ${USERS} u
+    JOIN ${USERS} r ON r.referrer_code = u.referral_code
+    LEFT JOIN vol v ON v.user_id = r.id
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+    WHERE u.referral_code IS NOT NULL
+    GROUP BY u.referral_code, referrer
+    ORDER BY referred_volume DESC LIMIT @limit`,
+  params: { limit: parseInt(limit, 10) },
+});
+
+// ---- Reconciliation: app ledger (main.transactions) vs custodian feed (sinvest) -
+// Transaction_Date/amount columns in sinvest.trx_history are STRING ('YYYYMMDD',
+// formatted numbers) — the raw KSEI/SInvest export, never cleaned.
+const SINVEST = '`sayakaya.sinvest.trx_history`';
+
+const reconciliationDaily = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH sinvest AS (
+        SELECT PARSE_DATE('%Y%m%d', Transaction_Date) AS d,
+          SUM(SAFE_CAST(Net_Transaction_Amount AS NUMERIC)) AS amount,
+          COUNT(*) AS cnt
+        FROM ${SINVEST}
+        WHERE Transaction_Date IS NOT NULL
+        GROUP BY d
+      ),
+      app AS (
+        SELECT DATE(created_at) AS d, SUM(final_amount) AS amount, COUNT(*) AS cnt
+        FROM ${TX} WHERE status = 'completed'
+        GROUP BY d
+      )
+      SELECT FORMAT_DATE('%Y-%m-%d', COALESCE(s.d, a.d)) AS bucket,
+        IFNULL(s.amount, 0) AS sinvest_amount, IFNULL(s.cnt, 0) AS sinvest_count,
+        IFNULL(a.amount, 0) AS app_amount, IFNULL(a.cnt, 0) AS app_count,
+        ROUND(IFNULL(a.amount, 0) - IFNULL(s.amount, 0)) AS amount_diff
+      FROM sinvest s FULL OUTER JOIN app a ON s.d = a.d
+      WHERE COALESCE(s.d, a.d) BETWEEN @from AND @to
+      ORDER BY bucket DESC`,
+    params: r,
+  };
+};
+
 module.exports = {
   overviewUsers, overviewAum, overviewTx, overviewFunds,
   trends, breakdownBy, topFunds, fundTypes, aumHistory,
@@ -362,4 +503,6 @@ module.exports = {
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail,
   userSearch, userHoldings, userPerformance, userAumHistory,
+  campaignPerformance, switchingTopPairs, aumByManager,
+  aumByRisk, aumByIncome, topReferrers, reconciliationDaily,
 };

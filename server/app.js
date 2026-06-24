@@ -178,6 +178,39 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
+  // ---- Growth: campaigns, referrals, switching, manager/demographic AUM -----
+  app.get('/api/campaigns/performance', handler(async (req, res) => {
+    const q = Q.campaignPerformance(req.query.limit);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/switching/top-pairs', handler(async (req, res) => {
+    const q = Q.switchingTopPairs(req.query.limit);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/funds/by-manager', handler(async (req, res) => {
+    const q = Q.aumByManager(req.query.limit);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/users/aum-by-risk', handler(async (_req, res) => {
+    const q = Q.aumByRisk();
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/users/aum-by-income', handler(async (_req, res) => {
+    const q = Q.aumByIncome();
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/referrals/top', handler(async (req, res) => {
+    const q = Q.topReferrers(req.query.limit);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
+  // ---- Reconciliation: app ledger vs custodian (sinvest) feed ----------------
+  app.get('/api/reconciliation', handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.reconciliationDaily(from, to);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
   // ---- Predictive models (BigQuery ML) --------------------------------------
   app.get('/api/ml/status', async (_req, res) => {
     try {
@@ -305,6 +338,18 @@ function createApp({ serveStatic = true } = {}) {
       const { dataset, filters } = req.body;
       const built = EX.buildExplore(dataset, { ...filters, limit: limit || 100000, offset: 0 });
       rows = await runQuery(built.sql, built.params);
+    } else if (source === 'campaigns_performance') {
+      const q = Q.campaignPerformance(limit || 1000);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'switching_pairs') {
+      const q = Q.switchingTopPairs(limit || 1000);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'referrals_top') {
+      const q = Q.topReferrers(limit || 1000);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'reconciliation') {
+      const q = Q.reconciliationDaily(req.body.from, req.body.to);
+      rows = await runQuery(q.sql, q.params);
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
     }

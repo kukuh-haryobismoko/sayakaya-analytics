@@ -37,6 +37,8 @@
       <button class="tab" data-tab="overview">Overview</button>
       <button class="tab" data-tab="aum">AUM history</button>
       <button class="tab" data-tab="performance">Performance</button>
+      <button class="tab" data-tab="growth">Growth</button>
+      <button class="tab" data-tab="reconciliation">Reconciliation</button>
       <button class="tab" data-tab="predict">Predict</button>
       <button class="tab" data-tab="ask">Ask</button>
       <button class="tab" data-tab="explorer">Data explorer</button>
@@ -191,6 +193,76 @@
           </div>
         </div>
         <div id="perfDetailTable" class="table-wrap tall"></div>
+      </div>
+    </section>
+
+    <!-- ===================== GROWTH ===================== -->
+    <section id="growth" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Campaign performance</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="campCsv">CSV</button>
+            <button class="btn-ghost" id="campXlsx">Excel</button>
+          </div>
+        </div>
+        <span class="hint">Redemption % = used_quota / quota. Est. cost = used_quota × bonus_amount. Source: main.campaigns.</span>
+        <div id="campTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Top referrers</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="refCsv">CSV</button>
+            <button class="btn-ghost" id="refXlsx">Excel</button>
+          </div>
+        </div>
+        <span class="hint">Ranked by completed buy volume from the users they referred.</span>
+        <div id="refTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Fund switching flow</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="switchCsv">CSV</button>
+            <button class="btn-ghost" id="switchXlsx">Excel</button>
+          </div>
+        </div>
+        <span class="hint">Top origin → destination fund pairs by completed switching amount.</span>
+        <div id="switchTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><h2>AUM by investment manager</h2></div>
+          <div class="chart-wrap sm"><canvas id="managerChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Platform AUM by risk tolerance</h2></div>
+          <div class="chart-wrap sm"><canvas id="riskChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Platform AUM by income bracket</h2></div>
+        <div id="incomeTable" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <!-- ===================== RECONCILIATION ===================== -->
+    <section id="reconciliation" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>App ledger vs custodian feed</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="recCsv">CSV</button>
+            <button class="btn-ghost" id="recXlsx">Excel</button>
+          </div>
+        </div>
+        <span class="hint">Daily completed-transaction totals: main.transactions (app) vs sinvest.trx_history (custodian). Uses the date range above. A large amount_diff flags a day worth investigating.</span>
+        <div id="recTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
 
