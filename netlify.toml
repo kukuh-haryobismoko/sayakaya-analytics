@@ -10,9 +10,13 @@
 [functions]
   # esbuild is fast; mark the heavier native-ish deps as external so they're
   # bundled from node_modules rather than tree-shaken (avoids dynamic-require
-  # breakage in @google-cloud/bigquery and exceljs).
+  # breakage in @google-cloud/bigquery and exceljs). pdfkit needs the same
+  # treatment for a different reason: it loads its standard-font .afm metric
+  # files from disk at runtime (fs.readFileSync), and esbuild's bundling
+  # doesn't carry non-JS data files — without this, PDF export fails on
+  # Netlify with "ENOENT ... Helvetica.afm" even though it works locally.
   node_bundler = "esbuild"
-  external_node_modules = ["@google-cloud/bigquery", "exceljs"]
+  external_node_modules = ["@google-cloud/bigquery", "exceljs", "pdfkit"]
 
 # Send every API call to the Express function. status 200 = rewrite (URL stays /api/...).
 [[redirects]]

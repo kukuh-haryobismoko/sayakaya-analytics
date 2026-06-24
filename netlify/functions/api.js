@@ -8,10 +8,10 @@ const serverless = require('serverless-http');
 const { createApp } = require('../../server/app');
 
 const app = createApp({ serveStatic: false });
-// Excel exports are binary; without this, serverless-http treats the response
-// body as UTF-8 text and mangles the bytes, producing a corrupt .xlsx file.
+// Excel/PDF exports are binary; without this, serverless-http treats the
+// response body as UTF-8 text and mangles the bytes, producing a corrupt file.
 const wrapped = serverless(app, {
-  binary: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  binary: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/pdf'],
 });
 
 exports.handler = async (event, context) => {
