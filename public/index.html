@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sayakaya Analytics</title>
+  <!-- Set the theme attribute before CSS paints, so there's no flash of the wrong theme. -->
+  <script>
+    (function () {
+      var t = localStorage.getItem('sk_theme');
+      if (!t) t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -23,36 +31,59 @@
     </div>
   </div>
 
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark">SK</span>
-      <div>
-        <div class="brand-name">Sayakaya Analytics</div>
-        <div class="brand-sub">BigQuery · live</div>
+  <div class="app-shell" id="appShell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark">SK</span>
+        <div>
+          <div class="brand-name">Sayakaya Analytics</div>
+          <div class="brand-sub">BigQuery · live</div>
+        </div>
       </div>
-    </div>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="portfolio">Portfolio</button>
-      <button class="tab" data-tab="overview">Overview</button>
-      <button class="tab" data-tab="aum">AUM history</button>
-      <button class="tab" data-tab="performance">Performance</button>
-      <button class="tab" data-tab="growth">Growth</button>
-      <button class="tab" data-tab="reconciliation">Reconciliation</button>
-      <button class="tab" data-tab="predict">Predict</button>
-      <button class="tab" data-tab="ask">Ask</button>
-      <button class="tab" data-tab="explorer">Data explorer</button>
-      <button class="tab" data-tab="sql">SQL lab</button>
-    </nav>
+      <nav class="nav">
+        <div class="nav-group">
+          <div class="nav-label">Investor</div>
+          <button class="nav-link active" data-tab="portfolio">Portfolio</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">Dashboards</div>
+          <button class="nav-link" data-tab="overview">Overview</button>
+          <button class="nav-link" data-tab="aum">AUM history</button>
+          <button class="nav-link" data-tab="performance">Performance</button>
+          <button class="nav-link" data-tab="growth">Growth</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">Operations</div>
+          <button class="nav-link" data-tab="reconciliation">Reconciliation</button>
+          <button class="nav-link" data-tab="predict">Predict</button>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">Tools</div>
+          <button class="nav-link" data-tab="ask">Ask</button>
+          <button class="nav-link" data-tab="explorer">Data explorer</button>
+          <button class="nav-link" data-tab="sql">SQL lab</button>
+        </div>
+      </nav>
 
-    <div class="range">
-      <label>From <input type="date" id="from" /></label>
-      <label>To <input type="date" id="to" /></label>
-      <button id="apply" class="btn-primary">Apply</button>
-    </div>
-  </header>
+      <button id="themeToggle" class="theme-toggle" type="button">
+        <span class="theme-icon" id="themeIcon">🌙</span>
+        <span id="themeLabel">Dark mode</span>
+      </button>
+    </aside>
 
-  <main>
+    <div class="main-col">
+      <header class="topbar">
+        <button id="navToggle" class="nav-toggle" aria-label="Menu">☰</button>
+
+        <div class="range">
+          <label>From <input type="date" id="from" /></label>
+          <label>To <input type="date" id="to" /></label>
+          <button id="apply" class="btn-primary">Apply</button>
+        </div>
+      </header>
+
+      <main>
     <!-- ===================== USER PORTFOLIO ===================== -->
     <section id="portfolio" class="view active">
       <div class="panel">
@@ -398,7 +429,9 @@ ORDER BY n DESC"></textarea>
         <div id="sqlResult" class="table-wrap tall"></div>
       </div>
     </section>
-  </main>
+      </main>
+    </div>
+  </div>
 
   <div id="toast" class="toast"></div>
   <script src="app.js"></script>

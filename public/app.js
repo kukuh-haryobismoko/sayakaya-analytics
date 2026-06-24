@@ -47,17 +47,28 @@ function defaultRange() {
 }
 function currentRange() { return { from: $('#from').value, to: $('#to').value }; }
 
-// ---------- chart palette ----------
-const C = { indigo: '#1e2a4a', amber: '#e0a33e', teal: '#2f9e78', rose: '#d1495b',
-  soft: '#34406a', grid: '#ece9e1', muted: '#6b7280' };
-const PIE = [C.indigo, C.amber, C.teal, C.rose, C.soft, '#9aa3bd', '#c9a06a', '#7fbfa6'];
+// ---------- chart palette (theme-aware: read from CSS custom properties) ----------
+function readThemeColors() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (name) => cs.getPropertyValue(name).trim();
+  return {
+    indigo: v('--indigo'), soft: v('--indigo-soft'), amber: v('--amber'),
+    teal: v('--teal'), rose: v('--rose'), muted: v('--muted'),
+    grid: v('--line'), surface: v('--surface'), heatRgb: v('--heat-rgb'),
+  };
+}
+let C = readThemeColors();
+const pie = () => [C.indigo, C.amber, C.teal, C.rose, C.soft, '#9aa3bd', '#c9a06a', '#7fbfa6'];
 const charts = {};
 function paint(id, config) {
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart($('#' + id), config);
 }
-Chart.defaults.font.family = 'Inter, sans-serif';
-Chart.defaults.color = C.muted;
+function applyChartDefaults() {
+  Chart.defaults.font.family = 'Inter, sans-serif';
+  Chart.defaults.color = C.muted;
+}
+applyChartDefaults();
 
 // ====================================================================
 //  USER PORTFOLIO (search by SID, print one investor's holdings)
@@ -231,7 +242,7 @@ function doughnut(id, rows, labelKey, valueKey, fmt) {
   paint(id, {
     type: 'doughnut',
     data: { labels: rows.map((r) => val(r[labelKey])),
-      datasets: [{ data: rows.map((r) => Number(val(r[valueKey]))), backgroundColor: PIE, borderWidth: 2, borderColor: '#fff' }] },
+      datasets: [{ data: rows.map((r) => Number(val(r[valueKey]))), backgroundColor: pie(), borderWidth: 2, borderColor: C.surface }] },
     options: { maintainAspectRatio: false, cutout: '58%',
       plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10 } },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt ? fmt(c.raw) : num(c.raw)}` } } } },
@@ -403,7 +414,7 @@ async function loadRetention() {
         const u = cohorts[c][o];
         if (u == null || !size) { tds += '<td>·</td>'; continue; }
         const pctv = u / size;
-        const bg = `rgba(47,158,120,${(0.12 + pctv * 0.8).toFixed(2)})`;
+        const bg = `rgba(${C.heatRgb},${(0.12 + pctv * 0.8).toFixed(2)})`;
         tds += `<td class="heat" style="background:${bg}">${Math.round(pctv * 100)}%</td>`;
       }
       return `<tr>${tds}</tr>`;
@@ -851,8 +862,9 @@ async function runAsk(q) {
 //  WIRING
 // ====================================================================
 function switchTab(name) {
-  $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  $$('.nav-link').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === name));
+  $('#appShell').classList.remove('nav-open'); // close the mobile drawer after navigating
   if (name === 'explorer' && !ex.meta.length) loadExplorerMeta();
   if (name === 'aum' && !aumCache.length) loadAumHistory();
   if (name === 'performance' && !perfCache.length) loadPerformance();
@@ -863,8 +875,49 @@ function switchTab(name) {
   if (name === 'overview' && !overviewLoaded) loadOverview();
 }
 
+// Re-render whatever charts are on the currently visible tab with fresh theme
+// colors. Cheap dashboard queries only, scoped to the one tab the user is
+// looking at — not a full-page reload, and not every tab's data at once.
+function repaintActiveTab() {
+  const active = document.querySelector('.view.active');
+  if (!active) return;
+  switch (active.id) {
+    case 'overview': overviewLoaded = false; loadOverview(); break;
+    case 'aum': aumCache = []; loadAumHistory(); break;
+    case 'growth': growthLoaded = false; loadGrowth(); break;
+    case 'predict': predictLoaded = false; loadPredict(); break;
+    case 'portfolio': if (pfSelected) selectPortfolioUser(pfSelected.userId, pfSelected.sid, pfSelected.name); break;
+  }
+}
+
+// ---------- theme toggle ----------
+const THEME_KEY = 'sk_theme';
+function setThemeButtonLabel() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  $('#themeIcon').textContent = dark ? '☀️' : '🌙';
+  $('#themeLabel').textContent = dark ? 'Light mode' : 'Dark mode';
+}
+function toggleTheme() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const next = dark ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem(THEME_KEY, next);
+  setThemeButtonLabel();
+  C = readThemeColors();
+  applyChartDefaults();
+  repaintActiveTab();
+}
+
 function wire() {
-  $$('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  $$('.nav-link').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  $('#themeToggle').addEventListener('click', toggleTheme);
+  $('#navToggle').addEventListener('click', () => $('#appShell').classList.toggle('nav-open'));
+  // Tapping the dimmed backdrop (mobile drawer) closes it.
+  $('#appShell').addEventListener('click', (e) => {
+    if (e.target.id === 'appShell' || (!e.target.closest('.sidebar') && !e.target.closest('.nav-toggle'))) {
+      $('#appShell').classList.remove('nav-open');
+    }
+  });
 
   // portfolio
   $('#pfSearchBtn').addEventListener('click', searchPortfolioUsers);
@@ -980,6 +1033,7 @@ async function boot() {
 async function init() {
   const r = defaultRange();
   $('#from').value = r.from; $('#to').value = r.to;
+  setThemeButtonLabel();
   wire(); wireGate();
   try {
     const h = await api('/api/health');
