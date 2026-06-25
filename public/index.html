@@ -44,25 +44,26 @@
       <nav class="nav">
         <div class="nav-group">
           <div class="nav-label">Investor</div>
-          <button class="nav-link active" data-tab="portfolio">Portfolio</button>
+          <button class="nav-link active" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio</button>
         </div>
         <div class="nav-group">
           <div class="nav-label">Dashboards</div>
-          <button class="nav-link" data-tab="overview">Overview</button>
-          <button class="nav-link" data-tab="aum">AUM history</button>
-          <button class="nav-link" data-tab="performance">Performance</button>
-          <button class="nav-link" data-tab="growth">Growth</button>
+          <button class="nav-link" data-tab="overview"><span class="nav-icon">📊</span>Overview</button>
+          <button class="nav-link" data-tab="aum"><span class="nav-icon">📈</span>AUM history</button>
+          <button class="nav-link" data-tab="performance"><span class="nav-icon">🎯</span>Performance</button>
+          <button class="nav-link" data-tab="growth"><span class="nav-icon">🌱</span>Growth</button>
         </div>
         <div class="nav-group">
           <div class="nav-label">Operations</div>
-          <button class="nav-link" data-tab="reconciliation">Reconciliation</button>
-          <button class="nav-link" data-tab="predict">Predict</button>
+          <button class="nav-link" data-tab="reconciliation"><span class="nav-icon">🧮</span>Reconciliation</button>
+          <button class="nav-link" data-tab="revenue"><span class="nav-icon">💰</span>Revenue</button>
+          <button class="nav-link" data-tab="predict"><span class="nav-icon">🔮</span>Predict</button>
         </div>
         <div class="nav-group">
           <div class="nav-label">Tools</div>
-          <button class="nav-link" data-tab="ask">Ask</button>
-          <button class="nav-link" data-tab="explorer">Data explorer</button>
-          <button class="nav-link" data-tab="sql">SQL lab</button>
+          <button class="nav-link" data-tab="ask"><span class="nav-icon">💬</span>Ask</button>
+          <button class="nav-link" data-tab="explorer"><span class="nav-icon">🔍</span>Data explorer</button>
+          <button class="nav-link" data-tab="sql"><span class="nav-icon">🧪</span>SQL lab</button>
         </div>
       </nav>
 
@@ -295,6 +296,49 @@
         </div>
         <span class="hint">Daily completed-transaction totals: main.transactions (app) vs sinvest.trx_history (custodian). Uses the date range above. A large amount_diff flags a day worth investigating.</span>
         <div id="recTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ===================== REVENUE (management fee) ===================== -->
+    <section id="revenue" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Period</h2>
+          <div class="range">
+            <label>From <input type="month" id="revFrom" /></label>
+            <label>To <input type="month" id="revTo" /></label>
+            <button id="revApply" class="btn-primary">Apply</button>
+          </div>
+        </div>
+        <span class="hint">Month/year filter for this section only — independent of the date range above.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Revenue trend</h2></div>
+        <div class="chart-wrap"><canvas id="revTrendChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Management fee revenue (per fund, per month)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="revDetailCsv">CSV</button>
+            <button class="btn-ghost" id="revDetailXlsx">Excel</button>
+          </div>
+        </div>
+        <span class="hint">Management fee accrued daily from AUM (portfolio_with_code), split into AperD/MI share, summed per fund per month.</span>
+        <div id="revDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Monthly summary (all funds)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="revSummaryCsv">CSV</button>
+            <button class="btn-ghost" id="revSummaryXlsx">Excel</button>
+          </div>
+        </div>
+        <div id="revSummaryTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
     </section>
 

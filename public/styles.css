@@ -66,10 +66,11 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
   width: 240px; flex: 0 0 240px;
   background: var(--surface);
   border-right: 1px solid var(--line);
+  box-shadow: 1px 0 0 var(--line), 2px 0 12px rgba(0,0,0,.04);
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; z-index: 30;
 }
-.sidebar .brand { padding: 20px 18px 16px; display: flex; align-items: center; gap: 12px; }
+.sidebar .brand { padding: 20px 18px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
 .brand-mark {
   width: 38px; height: 38px; border-radius: 9px; flex: 0 0 38px;
   background: var(--indigo); color: #fff;
@@ -80,19 +81,26 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
 .brand-sub { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; }
 
 .nav { flex: 1; overflow-y: auto; padding: 4px 12px 12px; }
-.nav-group { margin-bottom: 14px; }
+.nav-group { margin-bottom: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.nav-group:first-child { padding-top: 0; border-top: 0; }
 .nav-label {
   color: var(--muted); font-size: 10.5px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 1.1px; padding: 6px 10px 4px;
+  letter-spacing: 1.1px; padding: 6px 10px 6px;
 }
 .nav-link {
   display: flex; align-items: center; width: 100%; text-align: left;
-  border: 0; background: transparent; color: var(--muted);
+  border: 0; border-left: 2px solid transparent; background: transparent; color: var(--muted);
   font-family: inherit; font-size: 13.5px; font-weight: 500;
   padding: 9px 10px; border-radius: 8px; cursor: pointer; margin-bottom: 2px;
+  transition: background-color .15s, color .15s, border-color .15s, transform .15s;
 }
-.nav-link:hover { background: var(--hover-bg); color: var(--ink); }
-.nav-link.active { background: var(--indigo); color: #fff; }
+.nav-icon { display: inline-flex; width: 20px; font-size: 13.5px; margin-right: 8px; opacity: .85; }
+.nav-link:hover { background: var(--hover-bg); color: var(--ink); transform: translateX(2px); }
+.nav-link.active {
+  background: var(--indigo); color: #fff; border-left-color: var(--amber);
+  box-shadow: var(--shadow);
+}
+.nav-link.active .nav-icon { opacity: 1; }
 
 .theme-toggle {
   display: flex; align-items: center; gap: 10px; width: calc(100% - 24px); margin: 8px 12px 16px;

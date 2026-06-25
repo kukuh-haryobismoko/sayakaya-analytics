@@ -5,13 +5,19 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 const PW_KEY = 'sk_app_pw';
 
+// On Netlify this is served same-origin, so relative /api/* paths just work.
+// GitHub Pages is static-only — it can't run the Express backend — so this
+// mirror calls the live Netlify Functions API instead. Update the hostname
+// here if the Netlify site is ever renamed/moved.
+const API_BASE = location.hostname.endsWith('.github.io') ? 'https://sayakaya-analytics.netlify.app' : '';
+
 function authHeaders() {
   const pw = sessionStorage.getItem(PW_KEY);
   return pw ? { 'x-app-password': pw } : {};
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(API_BASE + path, {
     ...opts,
     headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(opts.headers || {}) },
   });
@@ -46,6 +52,20 @@ function defaultRange() {
   return { from: isoDate(from), to: isoDate(to) };
 }
 function currentRange() { return { from: $('#from').value, to: $('#to').value }; }
+
+// Revenue tab has its own month/year filter (native <input type="month">),
+// independent of the day-range pickers used everywhere else.
+function isoMonth(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+function defaultMonthRange() {
+  const to = new Date();
+  const from = new Date(); from.setMonth(from.getMonth() - 5);
+  return { from: isoMonth(from), to: isoMonth(to) };
+}
+function revRange() {
+  const fromM = $('#revFrom').value, toM = $('#revTo').value;
+  const [ty, tm] = toM.split('-').map(Number);
+  return { from: `${fromM}-01`, to: isoDate(new Date(ty, tm, 0)) }; // tm/0 = last day of month
+}
 
 // ---------- chart palette (theme-aware: read from CSS custom properties) ----------
 function readThemeColors() {
@@ -547,7 +567,7 @@ function pivotByFund(rows) {
   rows.forEach((r) => {
     const name = val(r.name), type = val(r.type);
     const key = type + '||' + name;
-    const f = (byFund[key] = byFund[key] || { name, type });
+    const f = (byFund[key] = byFund[key] || { name, type, nav: val(r.latest_nav) });
     f[val(r.period)] = val(r.pct_change);
   });
   return Object.values(byFund);
@@ -565,9 +585,9 @@ function renderPerformanceDetail() {
       if (pct == null) return '<td class="num">—</td>';
       return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
     }).join('');
-    return `<tr><td>${f.name}</td><td><span class="tag other">${f.type}</span></td>${cells}</tr>`;
+    return `<tr><td>${f.name}</td><td><span class="tag other">${f.type}</span></td><td class="num">${num(f.nav)}</td>${cells}</tr>`;
   }).join('');
-  $('#perfDetailTable').innerHTML = `<table><thead><tr><th>Fund</th><th>Type</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  $('#perfDetailTable').innerHTML = `<table><thead><tr><th>Fund</th><th>Type</th><th class="num">NAV</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 // ====================================================================
@@ -636,6 +656,68 @@ async function loadReconciliation() {
       { key: 'amount_diff', label: 'Diff', type: 'idr' },
     ], 'No data in this range.');
   } catch (e) { $('#recTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// ====================================================================
+//  REVENUE (management fee earned per fund/month)
+// ====================================================================
+function renderRevenueTrend(rows) {
+  if (!rows.length) return;
+  paint('revTrendChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((d) => val(d.month)),
+      datasets: [
+        { label: 'AperD share', data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, stack: 'fee', order: 2 },
+        { label: 'MI share', data: rows.map((d) => Number(val(d.total_mi_share))), backgroundColor: C.amber, borderRadius: 4, stack: 'fee', order: 2 },
+        { label: 'Total AUM', data: rows.map((d) => Number(val(d.total_aum))), type: 'line', yAxisID: 'y1',
+          borderColor: C.indigo, backgroundColor: C.indigo, tension: .3, pointRadius: 2, order: 1 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { stacked: true, grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (v) => idr(v) } },
+        x: { grid: { display: false } },
+      },
+      plugins: { legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${idrFull(c.raw)}` } } },
+    },
+  });
+}
+
+async function loadRevenue() {
+  const r = revRange();
+  $('#revDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  $('#revSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  try {
+    const [detail, summary] = await Promise.all([
+      api(`/api/revenue?from=${r.from}&to=${r.to}`),
+      api(`/api/revenue/summary?from=${r.from}&to=${r.to}`),
+    ]);
+    renderRevenueTrend(summary);
+    genTable('#revDetailTable', detail, [
+      { key: 'month', label: 'Month', type: 'date' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
+      { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
+      { key: 'days_running', label: 'Days running', type: 'num' },
+      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM EOM', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+    ], 'No revenue in this range.');
+    genTable('#revSummaryTable', summary, [
+      { key: 'month', label: 'Month', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
+      { key: 'days_running', label: 'Days running', type: 'num' },
+      { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+    ], 'No revenue in this range.');
+  } catch (e) {
+    $('#revDetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#revSummaryTable').innerHTML = '';
+  }
 }
 
 // ====================================================================
@@ -809,7 +891,7 @@ function renderGenericTable(sel, rows) {
 //  EXPORTS
 // ====================================================================
 async function download(body, filename) {
-  const res = await fetch('/api/export', {
+  const res = await fetch(API_BASE + '/api/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
@@ -839,7 +921,7 @@ async function runAsk(q) {
   $('#askSql').classList.add('hidden');
   $('#askCsv').disabled = $('#askXlsx').disabled = true;
   try {
-    const res = await fetch('/api/ask', {
+    const res = await fetch(API_BASE + '/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ question }),
@@ -871,6 +953,7 @@ function switchTab(name) {
   if (name === 'performance' && !perfDetailCache.length) loadPerformanceDetail();
   if (name === 'growth' && !growthLoaded) loadGrowth();
   if (name === 'reconciliation') loadReconciliation();
+  if (name === 'revenue') loadRevenue();
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
 }
@@ -932,6 +1015,7 @@ function wire() {
     { source: 'portfolio_full', format: 'pdf', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
     `portfolio_${pfSelected.sid}.pdf`));
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
+  $('#revApply').addEventListener('click', loadRevenue);
 
   // predict
   $('#fcHorizon').addEventListener('click', (e) => {
@@ -969,6 +1053,12 @@ function wire() {
   // reconciliation
   $('#recCsv').addEventListener('click', () => { const r = currentRange(); download({ source: 'reconciliation', format: 'csv', filename: 'reconciliation', from: r.from, to: r.to }, 'reconciliation.csv'); });
   $('#recXlsx').addEventListener('click', () => { const r = currentRange(); download({ source: 'reconciliation', format: 'xlsx', filename: 'reconciliation', from: r.from, to: r.to }, 'reconciliation.xlsx'); });
+
+  // revenue
+  $('#revDetailCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'csv', filename: 'revenue_detail', from: r.from, to: r.to }, 'revenue_detail.csv'); });
+  $('#revDetailXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'xlsx', filename: 'revenue_detail', from: r.from, to: r.to }, 'revenue_detail.xlsx'); });
+  $('#revSummaryCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'csv', filename: 'revenue_summary', from: r.from, to: r.to }, 'revenue_summary.csv'); });
+  $('#revSummaryXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'xlsx', filename: 'revenue_summary', from: r.from, to: r.to }, 'revenue_summary.xlsx'); });
 
   $('#gran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1033,6 +1123,8 @@ async function boot() {
 async function init() {
   const r = defaultRange();
   $('#from').value = r.from; $('#to').value = r.to;
+  const rm = defaultMonthRange();
+  $('#revFrom').value = rm.from; $('#revTo').value = rm.to;
   setThemeButtonLabel();
   wire(); wireGate();
   try {

@@ -14,6 +14,7 @@ const USERS = '`sayakaya.main.users`';
 const FUNDS = '`sayakaya.main.funds`';
 const PORT = '`sayakaya.main.portfolios`';
 const MIFEE = '`sayakaya.mi_fee_logs.mi_fee`';
+const MGMT_FEE_LOGS = '`sayakaya.main.management_fee_logs`';
 
 function range(from, to) {
   return {
@@ -528,6 +529,107 @@ const reconciliationDaily = (from, to) => {
   };
 };
 
+// ---- Revenue: management fee earned per fund, prorated daily from AUM -----
+// Daily AUM snapshots (portfolio_with_code) x the management fee rate in
+// effect (latest_mgmt_fee, deduped by updated_at) gives a daily fee accrual,
+// split into AperD's and MI's share. Grouped by month + fund for the detail
+// view; summed again across funds for the monthly summary.
+function revenueCTEs(from, to) {
+  const r = range(from, to);
+  return {
+    cte: `WITH latest_mgmt_fee AS (
+        SELECT management_fee_id, management_fee, aperd_share, mi_share
+        FROM (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY management_fee_id ORDER BY updated_at DESC) AS rn
+          FROM ${MGMT_FEE_LOGS}
+        ) t
+        WHERE rn = 1
+      ),
+      combined AS (
+        SELECT
+          DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) AS created_date,
+          pwc.id AS fund_id,
+          f.sinvest_code,
+          f.name AS fund_name,
+          pwc.amount AS aum,
+          lmf.management_fee,
+          lmf.aperd_share,
+          lmf.mi_share
+        FROM ${PORT_WITH_CODE} pwc
+        LEFT JOIN ${FUNDS} f ON pwc.id = f.id
+        LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
+        WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) BETWEEN @from AND @to
+      ),
+      daily_detail AS (
+        SELECT *,
+          (management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(created_date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(created_date, YEAR), DAY) AS management_fee_per_day,
+          aperd_share * ((management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(created_date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(created_date, YEAR), DAY)) AS aperd_share_per_day,
+          mi_share * ((management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(created_date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(created_date, YEAR), DAY)) AS mi_share_per_day
+        FROM combined
+      ),
+      monthly_fund AS (
+        SELECT
+          DATE_TRUNC(created_date, MONTH) AS month,
+          fund_id,
+          sinvest_code,
+          ANY_VALUE(fund_name) AS fund_name,
+          ANY_VALUE(management_fee) AS management_fee,
+          ANY_VALUE(aperd_share) AS aperd_share,
+          ANY_VALUE(mi_share) AS mi_share,
+          COUNT(DISTINCT created_date) AS days_running,
+          AVG(aum) AS avg_aum,
+          ARRAY_AGG(aum ORDER BY created_date DESC LIMIT 1)[OFFSET(0)] AS aum_eom,
+          SUM(management_fee_per_day) AS total_management_fee,
+          SUM(aperd_share_per_day) AS total_aperd_share,
+          SUM(mi_share_per_day) AS total_mi_share
+        FROM daily_detail
+        GROUP BY month, fund_id, sinvest_code
+      )`,
+    params: r,
+  };
+}
+
+const revenueDetail = (from, to) => {
+  const { cte, params } = revenueCTEs(from, to);
+  return {
+    sql: `${cte}
+      SELECT
+        month, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
+        days_running, avg_aum, aum_eom, total_management_fee, total_aperd_share, total_mi_share
+      FROM monthly_fund
+      ORDER BY month, fund_id, sinvest_code`,
+    params,
+  };
+};
+
+// days_running per month is the MAX across funds in that month — funds that
+// started mid-month run fewer days, so the longest-running fund estimates the
+// actual calendar days elapsed (not yet accounting for mid-month closures).
+const revenueMonthlySummary = (from, to) => {
+  const { cte, params } = revenueCTEs(from, to);
+  return {
+    sql: `${cte}
+      SELECT
+        month,
+        COUNT(DISTINCT fund_id) AS funds,
+        MAX(days_running) AS days_running,
+        SUM(aum_eom) AS total_aum,
+        SUM(total_management_fee) AS total_management_fee,
+        SUM(total_aperd_share) AS total_aperd_share,
+        SUM(total_mi_share) AS total_mi_share
+      FROM monthly_fund
+      GROUP BY month
+      ORDER BY month`,
+    params,
+  };
+};
+
 module.exports = {
   overviewUsers, overviewAum, overviewTx, overviewFunds,
   trends, breakdownBy, topFunds, fundTypes, aumHistory,
@@ -537,4 +639,5 @@ module.exports = {
   userSearch, userContact, userHoldings, userPerformance, userAumHistory,
   campaignPerformance, switchingTopPairs, aumByManager,
   aumByRisk, aumByIncome, topReferrers, reconciliationDaily,
+  revenueDetail, revenueMonthlySummary,
 };

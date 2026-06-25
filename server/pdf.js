@@ -116,8 +116,9 @@ const HOLDINGS_COLS = (width) => [
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
 const PERF_COLS = (width) => [
-  { key: 'Fund', label: 'Fund', width: width * 0.28 },
-  ...PERF_PERIODS.map((p) => ({ key: p, label: p, width: (width * 0.72) / PERF_PERIODS.length, align: 'right', format: pctFmt })),
+  { key: 'Fund', label: 'Fund', width: width * 0.24 },
+  { key: 'NAV', label: 'NAV', width: width * 0.1, align: 'right', format: (v) => numFmt(v, 2) },
+  ...PERF_PERIODS.map((p) => ({ key: p, label: p, width: (width * 0.66) / PERF_PERIODS.length, align: 'right', format: pctFmt })),
 ];
 
 // contact: { name, sid, ifua, email, phone }

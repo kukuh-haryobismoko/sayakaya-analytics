@@ -26,13 +26,13 @@ function pivotPerformanceByType(rows) {
   for (const r of rows) {
     const type = r.type || '(none)';
     const byFund = (byType[type] = byType[type] || {});
-    const fund = (byFund[r.name] = byFund[r.name] || { Fund: r.name });
+    const fund = (byFund[r.name] = byFund[r.name] || { Fund: r.name, NAV: r.latest_nav });
     fund[r.period] = r.pct_change;
   }
   return Object.keys(byType).sort().map((type) => ({
     name: type,
     rows: Object.values(byType[type]).map((f) => {
-      const out = { Fund: f.Fund };
+      const out = { Fund: f.Fund, NAV: f.NAV };
       for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
       return out;
     }),
@@ -213,6 +213,19 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
+  // ---- Revenue: management fee earned per fund/month -------------------------
+  app.get('/api/revenue', handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.revenueDetail(from, to);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
+  app.get('/api/revenue/summary', handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.revenueMonthlySummary(from, to);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
   // ---- Predictive models (BigQuery ML) --------------------------------------
   app.get('/api/ml/status', async (_req, res) => {
     try {
@@ -362,6 +375,12 @@ function createApp({ serveStatic = true } = {}) {
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'reconciliation') {
       const q = Q.reconciliationDaily(req.body.from, req.body.to);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'revenue_detail') {
+      const q = Q.revenueDetail(req.body.from, req.body.to);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'revenue_summary') {
+      const q = Q.revenueMonthlySummary(req.body.from, req.body.to);
       rows = await runQuery(q.sql, q.params);
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
