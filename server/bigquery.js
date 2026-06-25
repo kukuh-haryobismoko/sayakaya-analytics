@@ -38,6 +38,7 @@ async function runQuery(sql, params = {}, { maxBytes = MAX_BYTES_BILLED } = {}) 
     params,
     location: LOCATION,
     maximumBytesBilled: maxBytes,
+    useQueryCache: false, // every report must reflect live table state, not BigQuery's cached job results
   });
   const [rows] = await job.getQueryResults();
   return rows;
