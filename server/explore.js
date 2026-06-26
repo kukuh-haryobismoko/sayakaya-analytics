@@ -248,6 +248,53 @@ const DATASETS = {
     search: ['im.common_name', 'im.name', 'im.ojk_code'],
     order: 'im.latest_aum_value DESC NULLS LAST',
   },
+  // Raw KSEI/SInvest custodian feed, never cleaned — every column is STRING.
+  // SQL keeps the table's own column names (BigQuery aliases can't contain
+  // ".", "/", "(", ")", which the custodian's field names use) — the
+  // friendly rename to those exact field names (see the column `label`s)
+  // happens only at export time, via `friendlyExport` + exportRename().
+  // Transaction_Date is 'YYYYMMDD' text, so the date filter parses it
+  // before the generic DATE(dateCol) wrapper.
+  sinvest_trx: {
+    label: 'Sinvest Transactions',
+    from: '`sayakaya.sinvest.trx_history`',
+    select: `
+      Transaction_Date, Transaction_Type, Investor_Fund_Unit_A_C_No, Investor_Fund_Unit_A_C_Name,
+      SID, Fund_Code, Fund_Name, IM_Code, IM_Name, CB_Code, CB_Name, SA_Code, SA_Name,
+      Number_of_Units, NAV_per_Unit, Gross_Transaction_Amount, Transaction_Fee__Nominal,
+      Net_Transaction_Amount, Reference_No, SA_Reference_No, Input_Date, Realized_Gain_Loss, Remarks`,
+    columns: [
+      { key: 'Transaction_Date', label: 'Transaction Date' },
+      { key: 'Transaction_Type', label: 'Transaction Type', type: 'tag' },
+      { key: 'Investor_Fund_Unit_A_C_No', label: 'Investor Fund Unit A/C No.' },
+      { key: 'Investor_Fund_Unit_A_C_Name', label: 'Investor Fund Unit A/C Name' },
+      { key: 'SID', label: 'SID' },
+      { key: 'Fund_Code', label: 'Fund Code' },
+      { key: 'Fund_Name', label: 'Fund Name' },
+      { key: 'IM_Code', label: 'IM Code' },
+      { key: 'IM_Name', label: 'IM Name' },
+      { key: 'CB_Code', label: 'CB Code' },
+      { key: 'CB_Name', label: 'CB Name' },
+      { key: 'SA_Code', label: 'SA Code' },
+      { key: 'SA_Name', label: 'SA Name' },
+      { key: 'Number_of_Units', label: 'Number of Units', type: 'num4' },
+      { key: 'NAV_per_Unit', label: 'NAV per Unit', type: 'num' },
+      { key: 'Gross_Transaction_Amount', label: 'Gross Transaction Amount', type: 'num' },
+      { key: 'Transaction_Fee__Nominal', label: 'Transaction Fee (Nominal)', type: 'num' },
+      { key: 'Net_Transaction_Amount', label: 'Net Transaction Amount', type: 'num' },
+      { key: 'Reference_No', label: 'Reference No.' },
+      { key: 'SA_Reference_No', label: 'SA Reference No.' },
+      { key: 'Input_Date', label: 'Input Date' },
+      { key: 'Realized_Gain_Loss', label: 'Realized Gain/Loss', type: 'num' },
+      { key: 'Remarks', label: 'Remarks' },
+    ],
+    dateCol: "SAFE.PARSE_DATE('%Y%m%d', Transaction_Date)",
+    filters: [{ key: 'Transaction_Type', col: 'Transaction_Type' }],
+    search: ['SID', 'Investor_Fund_Unit_A_C_Name', 'Fund_Name', 'Fund_Code', 'Reference_No'],
+    order: 'Transaction_Date DESC',
+    friendlyExport: true,
+  },
+
   campaigns: {
     label: 'Campaigns',
     from: '`sayakaya.main.campaigns` c',
@@ -327,4 +374,13 @@ function filterValuesSql(datasetKey, filterKey) {
           ORDER BY v LIMIT 200`;
 }
 
-module.exports = { DATASETS, meta, buildExplore, filterValuesSql };
+// key -> label map for datasets opted into friendlyExport, so the exported
+// file's headers match the source field names exactly. null for everything
+// else, so existing exports (headers = SQL column names) stay unchanged.
+function exportRename(datasetKey) {
+  const d = DATASETS[datasetKey];
+  if (!d || !d.friendlyExport) return null;
+  return Object.fromEntries(d.columns.map((c) => [c.key, c.label]));
+}
+
+module.exports = { DATASETS, meta, buildExplore, filterValuesSql, exportRename };

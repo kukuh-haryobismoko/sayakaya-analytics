@@ -797,7 +797,7 @@ function buildExFilters(d) {
   box.appendChild(apply);
 
   box.insertAdjacentHTML('beforeend', '<span class="divider"></span>');
-  [['csv', 'CSV'], ['xlsx', 'Excel']].forEach(([fmt, label]) => {
+  [['csv', 'CSV'], ['xlsx', 'Excel'], ['txt', 'TXT (|)']].forEach(([fmt, label]) => {
     const b = document.createElement('button');
     b.className = 'btn-ghost'; b.textContent = label;
     b.addEventListener('click', () => download(

@@ -9,7 +9,7 @@ const {
   runQuery, dryRun, validateAdHoc, capRows, PROJECT_ID, MAX_BYTES_BILLED,
 } = require('./bigquery');
 const Q = require('./queries');
-const { toCsv, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
+const { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
 const { ask, askEnabled } = require('./ask');
 const EX = require('./explore');
 const ML = require('./ml');
@@ -296,6 +296,11 @@ function createApp({ serveStatic = true } = {}) {
     res.setHeader('Content-Disposition', `attachment; filename="${name}.csv"`);
     res.send('\uFEFF' + toCsv(rows));
   }
+  function sendTxt(res, rows, name) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}.txt"`);
+    res.send('\uFEFF' + toTxt(rows, '|'));
+  }
   async function sendXlsx(res, rows, name, pctCols = []) {
     const buf = await toXlsxBuffer(rows, name, pctCols);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -363,6 +368,8 @@ function createApp({ serveStatic = true } = {}) {
       const { dataset, filters } = req.body;
       const built = EX.buildExplore(dataset, { ...filters, limit: limit || 100000, offset: 0 });
       rows = await runQuery(built.sql, built.params);
+      const rename = EX.exportRename(dataset);
+      if (rename) rows = rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [rename[k] || k, v])));
     } else if (source === 'campaigns_performance') {
       const q = Q.campaignPerformance(limit || 1000);
       rows = await runQuery(q.sql, q.params);
@@ -386,6 +393,7 @@ function createApp({ serveStatic = true } = {}) {
       return res.status(400).json({ error: 'Unknown export source.' });
     }
     if (format === 'xlsx') return sendXlsx(res, rows, filename, pctCols);
+    if (format === 'txt') return sendTxt(res, rows, filename);
     return sendCsv(res, rows, filename);
   }));
 

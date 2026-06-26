@@ -35,6 +35,16 @@ function toCsv(rows) {
   return header + '\n' + body;
 }
 
+// Pipe-delimited flat file (the format custodian/KSEI feeds use) — no quoting,
+// just strip embedded newlines so they can't fracture the line structure.
+function toTxt(rows, sep = '|') {
+  const cols = inferColumns(rows);
+  const clean = (v) => String(cell(v) ?? '').replace(/[\r\n]+/g, ' ');
+  const header = cols.join(sep);
+  const body = rows.map((r) => cols.map((c) => clean(r[c])).join(sep)).join('\n');
+  return header + '\n' + body;
+}
+
 // Values in pctCols are already percentages (e.g. -16.49 means -16.49%), not
 // fractions — so use a literal "%" suffix format rather than Excel's native
 // percentage format, which would multiply the value by 100 again.
@@ -94,4 +104,4 @@ async function toXlsxMultiSheet(sheets) {
   return wb.xlsx.writeBuffer();
 }
 
-module.exports = { toCsv, toXlsxBuffer, toXlsxMultiSheet };
+module.exports = { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet };
