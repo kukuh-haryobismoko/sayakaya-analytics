@@ -9,6 +9,16 @@ function askEnabled() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+// The curated set of tables Ask is allowed to reference — kept separate from
+// live BigQuery introspection so the UI's "scope to these tables" picker can
+// never list a table beyond what the SCHEMA below already exposes.
+const TABLES = [
+  'main.transactions', 'main.users', 'main.funds', 'main.portfolios',
+  'main.investment_managers', 'main.user_profiles',
+  'mi_fee_logs.mi_fee',
+  'ml.aum_forecast', 'ml.tx_forecast', 'ml.churn_model', 'ml.churn_features',
+];
+
 // Compact, accurate description of the tables the model may query. Keeping this
 // tight keeps each request cheap while still giving Claude what it needs.
 const SCHEMA = `
@@ -86,9 +96,21 @@ Output rules (strict):
 ${SCHEMA}`;
 }
 
-async function questionToSql(question) {
+async function questionToSql(question, priorAttempt, context) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set on the server.');
+
+  const userContent = context
+    ? `${question}\n\nUser-provided hint (tables/datasets to use, or a related query for context — may be partial or imprecise, verify against the schema above):\n${context}`
+    : question;
+  const messages = [{ role: 'user', content: userContent }];
+  if (priorAttempt) {
+    messages.push({ role: 'assistant', content: priorAttempt.sql });
+    messages.push({
+      role: 'user',
+      content: `That query failed with this BigQuery error:\n${priorAttempt.error}\n\nFix it and return only the corrected SQL.`,
+    });
+  }
 
   const res = await fetch(API_URL, {
     method: 'POST',
@@ -101,7 +123,7 @@ async function questionToSql(question) {
       model: MODEL,
       max_tokens: 800,
       system: systemPrompt(),
-      messages: [{ role: 'user', content: question }],
+      messages,
     }),
   });
 
@@ -128,18 +150,30 @@ async function questionToSql(question) {
 
 /**
  * Full flow: question -> SQL -> validate (read-only) -> run -> rows.
- * On a rejected query we still surface the SQL so the user can see/fix it.
+ * BigQuery errors (e.g. a guessed column/table name that doesn't exist) are
+ * fed back to the model once so it can self-correct before we give up.
  */
-async function ask(question) {
-  const sql = await questionToSql(question);
-  const v = validateAdHoc(sql);
-  if (!v.ok) {
-    const err = new Error(`The generated query was blocked: ${v.error}`);
-    err.sql = sql;
-    throw err;
+async function ask(question, context) {
+  let sql = await questionToSql(question, null, context);
+  for (let attempt = 0; ; attempt++) {
+    const v = validateAdHoc(sql);
+    if (!v.ok) {
+      const err = new Error(`The generated query was blocked: ${v.error}`);
+      err.sql = sql;
+      throw err;
+    }
+    try {
+      const rows = await runQuery(capRows(v.sql, 1000), {});
+      return { sql: v.sql, rows };
+    } catch (e) {
+      if (attempt >= 1) {
+        const err = new Error(`Query failed: ${e.message}`);
+        err.sql = v.sql;
+        throw err;
+      }
+      sql = await questionToSql(question, { sql: v.sql, error: e.message });
+    }
   }
-  const rows = await runQuery(capRows(v.sql, 1000), {});
-  return { sql: v.sql, rows };
 }
 
-module.exports = { ask, askEnabled };
+module.exports = { ask, askEnabled, TABLES };

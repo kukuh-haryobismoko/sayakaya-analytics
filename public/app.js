@@ -909,8 +909,25 @@ async function download(body, filename) {
 //  ASK (natural language)
 // ====================================================================
 let askSqlCache = '';
+let askTablesLoaded = false;
 
 function setAskMsg(msg, cls) { const m = $('#askMsg'); m.textContent = msg || ''; m.className = 'sql-msg ' + (cls || ''); }
+
+async function loadAskTables() {
+  if (askTablesLoaded) return;
+  askTablesLoaded = true;
+  try {
+    const res = await fetch(API_BASE + '/api/ask/tables', { headers: authHeaders() });
+    const data = await res.json();
+    $('#askTables').innerHTML = (data.tables || [])
+      .map((t) => `<label class="ask-table-chk"><input type="checkbox" value="${t}"> ${t}</label>`)
+      .join('');
+  } catch (e) { /* table picker is optional; silently skip on failure */ }
+}
+
+function selectedAskTables() {
+  return $$('#askTables input:checked').map((el) => el.value);
+}
 
 async function runAsk(q) {
   const question = (q != null ? q : $('#askInput').value).trim();
@@ -921,10 +938,16 @@ async function runAsk(q) {
   $('#askSql').classList.add('hidden');
   $('#askCsv').disabled = $('#askXlsx').disabled = true;
   try {
+    const tables = selectedAskTables();
+    const free = $('#askContext').value.trim();
+    const context = [
+      tables.length ? `Limit to these tables: ${tables.join(', ')}` : '',
+      free,
+    ].filter(Boolean).join('\n');
     const res = await fetch(API_BASE + '/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, context: context || undefined }),
     });
     const data = await res.json().catch(() => ({}));
     // Show the generated SQL even if it was blocked, so the user can see it.
@@ -1079,6 +1102,7 @@ function wire() {
   }));
 
   // ask
+  $('#askAdvanced').addEventListener('toggle', (e) => { if (e.target.open) loadAskTables(); });
   $('#askBtn').addEventListener('click', () => runAsk());
   $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') runAsk(); });
   $$('#ask .chip').forEach((c) => c.addEventListener('click', () => runAsk(c.textContent)));

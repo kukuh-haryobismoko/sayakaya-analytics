@@ -10,7 +10,7 @@ const {
 } = require('./bigquery');
 const Q = require('./queries');
 const { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
-const { ask, askEnabled } = require('./ask');
+const { ask, askEnabled, TABLES } = require('./ask');
 const EX = require('./explore');
 const ML = require('./ml');
 const PDF = require('./pdf');
@@ -263,11 +263,14 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- Ask (natural language -> SQL via Anthropic) --------------------------
+  app.get('/api/ask/tables', (req, res) => res.json({ tables: TABLES }));
+
   app.post('/api/ask', async (req, res) => {
     const question = (req.body && req.body.question || '').trim();
+    const context = (req.body && req.body.context || '').trim() || null;
     if (!question) return res.status(400).json({ error: 'Type a question first.' });
     try {
-      const { sql, rows } = await ask(question);
+      const { sql, rows } = await ask(question, context);
       res.json({ sql, rows, count: rows.length });
     } catch (err) {
       console.error('[POST /api/ask]', err.message);

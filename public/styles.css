@@ -257,6 +257,14 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 }
 .ask-bar input:focus { outline: 2px solid var(--amber); border-color: var(--amber); }
 .ask-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+#askAdvanced { margin-bottom: 16px; }
+#askAdvanced summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.ask-tables { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.ask-table-chk { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+#askAdvanced textarea {
+  width: 100%; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 9px; background: var(--surface); color: inherit; font: inherit; resize: vertical;
+}
 .chip {
   border: 1px solid var(--line); background: var(--surface); color: var(--muted);
   font-family: inherit; font-size: 12px; padding: 6px 11px; border-radius: 20px; cursor: pointer;

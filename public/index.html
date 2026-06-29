@@ -399,7 +399,7 @@
 
     <section id="ask" class="view">
       <div class="panel">
-        <div class="panel-head"><h2>Ask in plain English</h2><span class="hint" id="askHint">Ask a question about your data — it's turned into SQL and run on BigQuery.</span></div>
+        <div class="panel-head"><h2>Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data — no technical skills needed.</span></div>
 
         <div id="askDisabled" class="empty hidden">
           The Ask feature is off because no Anthropic API key is set on the server.
@@ -419,6 +419,13 @@
             <button class="chip">Transaction count by status</button>
             <button class="chip">Top 5 investment managers by fund count</button>
           </div>
+
+          <details id="askAdvanced">
+            <summary>Advanced (optional)</summary>
+            <div id="askTables" class="ask-tables"></div>
+            <textarea id="askContext" rows="3"
+              placeholder="Optional: a related SQL query to use as extra context"></textarea>
+          </details>
 
           <div id="askSql" class="ask-sql hidden">
             <div class="ask-sql-head">
