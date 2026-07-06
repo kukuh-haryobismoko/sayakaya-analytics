@@ -1,47 +1,48 @@
 :root {
-  --bg: #faf9f6;
-  --surface: #ffffff;
-  --surface-alt: #f4f2ec;
-  --hover-bg: #f1efe9;
-  --input-bg: #fcfbf8;
-  --ink: #1a1d2e;
-  --muted: #6b7280;
-  --line: #e7e4dc;
-  --indigo: #1e2a4a;
-  --indigo-soft: #34406a;
-  --amber: #e0a33e;
-  --teal: #2f9e78;
-  --rose: #d1495b;
-  --teal-tint: #e4f3ed;
-  --rose-tint: #fbe7ea;
-  --amber-tint: #fbefdc;
-  --indigo-tint: #eef0f6;
-  --muted-tint: #f3f0ea;
-  --heat-rgb: 47, 158, 120;
+  /* Brand: Blue (B300/B400) + Purple (P300) — see Sayakaya AssetComponents palette */
+  --bg: #f5f6fa;        /* Background / N200 */
+  --surface: #ffffff;    /* Background / N0 */
+  --surface-alt: #eef0fc; /* Blue / B100 */
+  --hover-bg: #e7eafa;
+  --input-bg: #fbfbfe;
+  --ink: #1c1d1f;        /* Text & Icon / High emphasis */
+  --muted: #565b6b;      /* Text & Icon / Low emphasis */
+  --line: #e1e4ed;
+  --indigo: #3a50ab;     /* Blue / B400 */
+  --indigo-soft: #6756c1; /* Purple / P300 */
+  --amber: #ffc531;      /* Yellow / Y300 */
+  --teal: #14c687;       /* Green / G300 */
+  --rose: #ff3165;       /* Red / R300 */
+  --teal-tint: #eefff9;  /* Green / G100 */
+  --rose-tint: #ffe5ec;  /* Red / R100 */
+  --amber-tint: #fff9e5; /* Yellow / Y100 */
+  --indigo-tint: #eef0fc; /* Blue / B100 */
+  --muted-tint: #f5f5f5; /* Neutral / N100 */
+  --heat-rgb: 20, 198, 135;
   --shadow: 0 1px 2px rgba(26,29,46,.06), 0 8px 24px rgba(26,29,46,.05);
   --radius: 12px;
 }
 
 :root[data-theme="dark"] {
-  --bg: #11131c;
-  --surface: #181b28;
-  --surface-alt: #1f2333;
-  --hover-bg: #242838;
-  --input-bg: #12141f;
-  --ink: #e9ebf3;
-  --muted: #8b92ab;
-  --line: #2a2e42;
-  --indigo: #7c93e8;
-  --indigo-soft: #99addf;
-  --amber: #e8b563;
-  --teal: #3dba8d;
-  --rose: #e2657a;
-  --teal-tint: rgba(61,186,141,.16);
-  --rose-tint: rgba(226,101,122,.16);
-  --amber-tint: rgba(232,181,99,.18);
-  --indigo-tint: rgba(124,147,232,.16);
-  --muted-tint: rgba(139,146,171,.14);
-  --heat-rgb: 61, 186, 141;
+  --bg: #0d1020;
+  --surface: #161a2e;
+  --surface-alt: #1d2238;
+  --hover-bg: #242b47;
+  --input-bg: #11142a;
+  --ink: #f2f3f8;
+  --muted: #9aa0b8;
+  --line: #2b3050;
+  --indigo: #4d68dc;     /* Blue / B300 */
+  --indigo-soft: #a095d8; /* Purple / P200 */
+  --amber: #ffd87e;      /* Yellow / Y200 */
+  --teal: #33eaaa;       /* Green / G200 */
+  --rose: #ff7e9f;       /* Red / R200 */
+  --teal-tint: rgba(51,234,170,.16);
+  --rose-tint: rgba(255,126,159,.16);
+  --amber-tint: rgba(255,216,126,.18);
+  --indigo-tint: rgba(77,104,220,.18);
+  --muted-tint: rgba(154,160,184,.14);
+  --heat-rgb: 51, 234, 170;
   --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.4);
 }
 
@@ -73,9 +74,7 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
 .sidebar .brand { padding: 20px 18px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
 .brand-mark {
   width: 38px; height: 38px; border-radius: 9px; flex: 0 0 38px;
-  background: var(--indigo); color: #fff;
-  display: grid; place-items: center;
-  font-family: "Space Grotesk"; font-weight: 700; letter-spacing: .5px;
+  object-fit: cover;
 }
 .brand-name { font-family: "Space Grotesk"; font-weight: 700; font-size: 15px; line-height: 1.3; }
 .brand-sub { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; }
@@ -109,7 +108,35 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
   padding: 9px 12px; border-radius: 9px; cursor: pointer;
 }
 .theme-toggle:hover { border-color: var(--indigo); }
-.theme-icon { font-size: 15px; line-height: 1; }
+
+.switch {
+  position: relative; flex: 0 0 36px; width: 36px; height: 20px; border-radius: 10px;
+  background: var(--line); transition: background .25s ease;
+}
+:root[data-theme="dark"] .switch { background: var(--indigo); }
+.switch-knob {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3);
+  display: grid; place-items: center; font-size: 10px; line-height: 1;
+  transition: transform .25s ease;
+}
+:root[data-theme="dark"] .switch-knob { transform: translateX(16px); }
+
+.conn-status {
+  display: flex; align-items: center; gap: 8px; margin: 0 12px 16px; padding: 0 4px;
+  font-size: 12px; color: var(--muted);
+}
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px;
+  background: var(--muted); transition: background-color .2s ease;
+}
+.conn-dot.live { background: var(--teal); box-shadow: 0 0 0 0 rgba(var(--heat-rgb), .6); animation: conn-pulse 2s infinite; }
+.conn-dot.down { background: var(--rose); }
+@keyframes conn-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(var(--heat-rgb), .5); }
+  70% { box-shadow: 0 0 0 5px rgba(var(--heat-rgb), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--heat-rgb), 0); }
+}
 
 .nav-toggle {
   display: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
@@ -231,7 +258,7 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 .sql-msg.ok { color: var(--teal); }
 
 /* ---------- Gate ---------- */
-.gate { position: fixed; inset: 0; background: #1e2a4a; display: grid; place-items: center; z-index: 50; }
+.gate { position: fixed; inset: 0; background: linear-gradient(135deg, #3a50ab, #6756c1); display: grid; place-items: center; z-index: 50; }
 .gate-card { background: var(--surface); border-radius: 16px; padding: 36px; width: 320px; text-align: center; }
 .gate-mark { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 11px; background: var(--indigo); color: #fff; display: grid; place-items: center; font-family: "Space Grotesk"; font-weight: 700; }
 .gate-card h1 { font-size: 19px; margin-bottom: 6px; }
@@ -243,7 +270,7 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 /* ---------- Toast / loading ---------- */
 /* Fixed dark pill regardless of theme — not tied to --ink, which flips light/dark. */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
-  background: #1a1d2e; color: #fff; padding: 11px 18px; border-radius: 9px; font-size: 13px;
+  background: #1c1d3a; color: #fff; padding: 11px 18px; border-radius: 9px; font-size: 13px;
   opacity: 0; transition: .25s; pointer-events: none; z-index: 60; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .empty { padding: 28px; text-align: center; color: var(--muted); }

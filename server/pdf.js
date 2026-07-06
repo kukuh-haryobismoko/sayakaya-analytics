@@ -106,12 +106,12 @@ function table(doc, columns, rows, { rowHeight = 16 } = {}) {
 }
 
 const HOLDINGS_COLS = (width) => [
-  { key: 'fund', label: 'Fund', width: width * 0.32 },
-  { key: 'fund_type', label: 'Type', width: width * 0.16 },
-  { key: 'source', label: 'Source', width: width * 0.12 },
+  { key: 'fund', label: 'Fund', width: width * 0.28 },
+  { key: 'fund_type', label: 'Type', width: width * 0.14 },
   { key: 'unit', label: 'Units', width: width * 0.13, align: 'right', format: (v) => numFmt(v, 4) },
+  { key: 'avg_buy_price', label: 'Avg Buy Price', width: width * 0.16, align: 'right', format: (v) => (v == null ? '—' : numFmt(v, 2)) },
   { key: 'nav', label: 'NAV', width: width * 0.12, align: 'right', format: (v) => numFmt(v, 2) },
-  { key: 'value', label: 'Value', width: width * 0.15, align: 'right', format: idr },
+  { key: 'value', label: 'Value', width: width * 0.17, align: 'right', format: idr },
 ];
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
@@ -141,10 +141,8 @@ function portfolioReport({ contact, holdings }, performanceSheets) {
   doc.moveDown(0.8);
 
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
-  const regular = holdings.filter((h) => val(h.source) === 'regular').reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
-  const bonus = holdings.filter((h) => val(h.source) === 'bonus').reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   doc.font('Helvetica-Bold').fontSize(10).fillColor(INDIGO).text(`Total AUM: ${idr(totalAum)}`);
-  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(`Regular: ${idr(regular)}  ·  Bonus: ${idr(bonus)}  ·  ${holdings.length} holding${holdings.length === 1 ? '' : 's'}`);
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(`${holdings.length} holding${holdings.length === 1 ? '' : 's'}`);
   doc.moveDown(0.8);
 
   doc.font('Helvetica-Bold').fontSize(11).fillColor(INK).text('Holdings');

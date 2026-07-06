@@ -43,8 +43,8 @@ function pivotPerformanceByType(rows) {
 // Friendly column names for the "Portfolio" sheet in the combined export.
 function portfolioSheetRows(holdings) {
   return holdings.map((h) => ({
-    Fund: h.fund, Type: h.fund_type, Source: h.source,
-    Units: h.unit, NAV: h.nav, Value: h.value, Opened: h.opened_at,
+    Fund: h.fund, Type: h.fund_type,
+    Units: h.unit, 'Avg Buy Price': h.avg_buy_price, NAV: h.nav, Value: h.value, Opened: h.opened_at,
   }));
 }
 
@@ -77,9 +77,24 @@ function createApp({ serveStatic = true } = {}) {
     }
   };
 
-  // ---- Health ---------------------------------------------------------------
-  app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, project: PROJECT_ID, passwordProtected: Boolean(APP_PASSWORD), askEnabled: askEnabled() });
+  // ---- Health -----------------------------------------------------------
+  // Pings BigQuery with a trivial query (no table scan, no cost) so the UI
+  // can show a live/down connection indicator instead of just "the API server
+  // itself responded".
+  app.get('/api/health', async (_req, res) => {
+    let bigquery = true;
+    try {
+      await Promise.race([
+        runQuery('SELECT 1'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+      ]);
+    } catch {
+      bigquery = false;
+    }
+    res.json({
+      ok: true, project: PROJECT_ID, bigquery,
+      passwordProtected: Boolean(APP_PASSWORD), askEnabled: askEnabled(),
+    });
   });
 
   // ---- Overview (KPIs) ------------------------------------------------------
@@ -160,14 +175,16 @@ function createApp({ serveStatic = true } = {}) {
     const { userId, sid } = req.query;
     if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
     const h = Q.userHoldings(userId);
+    const s = Q.userPortfolioSplit(userId);
     const p = Q.userPerformance(sid);
     const a = Q.userAumHistory(sid);
-    const [holdings, performance, history] = await Promise.all([
+    const [holdings, splitRows, performance, history] = await Promise.all([
       runQuery(h.sql, h.params),
+      runQuery(s.sql, s.params),
       runQuery(p.sql, p.params),
       runQuery(a.sql, a.params),
     ]);
-    res.json({ holdings, performance, history });
+    res.json({ holdings, split: splitRows[0], performance, history });
   }));
 
   // ---- Product performance (NAV % change per fund type, external Apollo DB) --

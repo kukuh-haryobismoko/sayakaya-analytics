@@ -328,20 +328,51 @@ const userContact = (userId) => ({
   params: { userId },
 });
 
-// Current holdings (regular + bonus) for one user, with live value at the
-// fund's latest NAV — same "active holdings" definition as the AUM KPI.
+// Current holdings for one user, one row per fund — regular + bonus units are
+// combined (the investor doesn't care which bucket a unit came from). Live
+// value at the fund's latest NAV, same "active holdings" definition as the
+// AUM KPI. avg_buy_price is the unit-weighted average price paid across all
+// completed buys in that fund: SUM(final_amount) / SUM(unit).
 const userHoldings = (userId) => ({
   sql: `WITH holdings AS (
-      SELECT p.fund_id, p.unit, p.created_at, 'regular' AS source
-      FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id = @userId
-      UNION ALL
-      SELECT bp.fund_id, bp.unit, bp.created_at, 'bonus' AS source
-      FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id = @userId
+      SELECT fund_id, SUM(unit) AS unit, MIN(created_at) AS opened_at
+      FROM (
+        SELECT p.fund_id, p.unit, p.created_at
+        FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id = @userId
+        UNION ALL
+        SELECT bp.fund_id, bp.unit, bp.created_at
+        FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id = @userId
+      )
+      GROUP BY fund_id
+    ),
+    buys AS (
+      SELECT fund_id, SUM(final_amount) / SUM(unit) AS avg_buy_price
+      FROM ${TX}
+      WHERE user_id = @userId AND type = 'buy' AND status = 'completed' AND unit > 0
+      GROUP BY fund_id
     )
-    SELECT f.name AS fund, f.type AS fund_type, h.source, h.unit,
-      f.latest_nav_value AS nav, ROUND(h.unit * f.latest_nav_value) AS value, h.created_at AS opened_at
-    FROM holdings h JOIN ${FUNDS} f ON f.id = h.fund_id
+    SELECT f.name AS fund, f.type AS fund_type, h.unit,
+      f.latest_nav_value AS nav, ROUND(h.unit * f.latest_nav_value) AS value,
+      b.avg_buy_price, h.opened_at
+    FROM holdings h
+    JOIN ${FUNDS} f ON f.id = h.fund_id
+    LEFT JOIN buys b ON b.fund_id = h.fund_id
     ORDER BY value DESC`,
+  params: { userId },
+});
+
+// Regular vs bonus AUM split for the dashboard KPIs only — the per-fund
+// holdings table/exports stay merged; this is purely for the breakdown card.
+const userPortfolioSplit = (userId) => ({
+  sql: `WITH regular AS (
+      SELECT p.fund_id, p.unit FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id = @userId
+    ),
+    bonus AS (
+      SELECT bp.fund_id, bp.unit FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id = @userId
+    )
+    SELECT
+      (SELECT COALESCE(SUM(r.unit * f.latest_nav_value), 0) FROM regular r JOIN ${FUNDS} f ON f.id = r.fund_id) AS regular_value,
+      (SELECT COALESCE(SUM(b.unit * f.latest_nav_value), 0) FROM bonus b JOIN ${FUNDS} f ON f.id = b.fund_id) AS bonus_value`,
   params: { userId },
 });
 
@@ -636,7 +667,7 @@ module.exports = {
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail,
-  userSearch, userContact, userHoldings, userPerformance, userAumHistory,
+  userSearch, userContact, userHoldings, userPortfolioSplit, userPerformance, userAumHistory,
   campaignPerformance, switchingTopPairs, aumByManager,
   aumByRisk, aumByIncome, topReferrers, reconciliationDaily,
   revenueDetail, revenueMonthlySummary,

@@ -124,8 +124,8 @@ async function selectPortfolioUser(userId, sid, name, email) {
   $('#pfHoldings').innerHTML = '';
   $('#pfPerformance').innerHTML = '';
   try {
-    const { holdings, performance, history } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}`);
-    renderPfKpis(holdings);
+    const { holdings, split, performance, history } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}`);
+    renderPfKpis(holdings, split);
     renderPfHoldings(holdings);
     renderPfPerformance(performance);
     renderPfAumChart(history);
@@ -151,14 +151,12 @@ function renderPfAumChart(rows) {
   });
 }
 
-function renderPfKpis(holdings) {
+function renderPfKpis(holdings, split) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
-  const regular = holdings.filter((h) => val(h.source) === 'regular').reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
-  const bonus = holdings.filter((h) => val(h.source) === 'bonus').reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   $('#pfKpis').innerHTML = [
     kpi('Total AUM', idrFull(totalAum), `${holdings.length} holding${holdings.length === 1 ? '' : 's'}`, 'accent'),
-    kpi('Regular portfolio', idrFull(regular), 'portfolios'),
-    kpi('Bonus portfolio', idrFull(bonus), 'bonus_portfolios (on_going)'),
+    kpi('Regular portfolio', idrFull(Number(val(split?.regular_value)) || 0), 'portfolios'),
+    kpi('Bonus portfolio', idrFull(Number(val(split?.bonus_value)) || 0), 'bonus_portfolios (on_going)'),
   ].join('');
 }
 
@@ -167,13 +165,13 @@ function renderPfHoldings(rows) {
   const body = rows.map((h) => `<tr>
       <td>${val(h.fund)}</td>
       <td><span class="tag other">${val(h.fund_type)}</span></td>
-      <td><span class="tag ${val(h.source) === 'bonus' ? 'other' : 'completed'}">${val(h.source)}</span></td>
       <td class="num">${Number(val(h.unit)).toFixed(4)}</td>
+      <td class="num">${h.avg_buy_price == null ? '—' : num(val(h.avg_buy_price))}</td>
       <td class="num">${num(val(h.nav))}</td>
       <td class="num">${idrFull(val(h.value))}</td>
     </tr>`).join('');
   $('#pfHoldings').innerHTML = `<table><thead><tr>
-      <th>Fund</th><th>Type</th><th>Source</th><th class="num">Units</th><th class="num">NAV</th><th class="num">Value</th>
+      <th>Fund</th><th>Type</th><th class="num">Units</th><th class="num">Avg Buy Price</th><th class="num">NAV</th><th class="num">Value</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 
@@ -1144,6 +1142,19 @@ async function boot() {
   // Portfolio is the landing tab; nothing to query until a SID is searched.
 }
 
+function setConnStatus(live) {
+  $('#connDot').classList.toggle('live', live === true);
+  $('#connDot').classList.toggle('down', live === false);
+  $('#connLabel').textContent = live === true ? 'BigQuery live' : live === false ? 'Connection down' : 'Checking…';
+}
+
+async function pollHealth() {
+  try {
+    const h = await api('/api/health');
+    setConnStatus(!!h.bigquery);
+  } catch { setConnStatus(false); }
+}
+
 async function init() {
   const r = defaultRange();
   $('#from').value = r.from; $('#to').value = r.to;
@@ -1153,12 +1164,14 @@ async function init() {
   wire(); wireGate();
   try {
     const h = await api('/api/health');
+    setConnStatus(!!h.bigquery);
+    setInterval(pollHealth, 30000);
     const askOn = !!h.askEnabled;
     $('#askDisabled').classList.toggle('hidden', askOn);
     $('#askBox').classList.toggle('hidden', !askOn);
     if (h.passwordProtected && !sessionStorage.getItem(PW_KEY)) { showGate(); return; }
     boot();
-  } catch { showGate('Could not reach the server.'); }
+  } catch { setConnStatus(false); showGate('Could not reach the server.'); }
 }
 
 init();

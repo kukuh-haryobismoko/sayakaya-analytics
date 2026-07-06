@@ -14,7 +14,7 @@ function askEnabled() {
 // never list a table beyond what the SCHEMA below already exposes.
 const TABLES = [
   'main.transactions', 'main.users', 'main.funds', 'main.portfolios',
-  'main.investment_managers', 'main.user_profiles',
+  'main.bonus_portfolios', 'main.investment_managers', 'main.user_profiles',
   'mi_fee_logs.mi_fee',
   'ml.aum_forecast', 'ml.tx_forecast', 'ml.churn_model', 'ml.churn_features',
 ];
@@ -42,9 +42,23 @@ funds (the fund catalog, ~2350 rows)
   is_sharia BOOL, latest_nav_value NUMERIC, latest_aum_value INT64, latest_aum_date DATE
   management_fee FLOAT, listing_status STRING (ACTIVE, INACTIVE, UPDATE), investment_manager_id
 
-portfolios (current holdings; one row per user+fund)
+portfolios (current holdings bought with cash; one row per user+fund)
   id, user_id, fund_id, unit FLOAT, deleted_at TIMESTAMP (NULL = active holding)
-  current holding value = unit * funds.latest_nav_value
+  active holding filter: deleted_at IS NULL AND unit > 0
+
+bonus_portfolios (current holdings granted as a bonus/promo; one row per user+fund)
+  user_id, fund_id, unit FLOAT, status STRING (on_going = active; others are not active holdings)
+  active holding filter: status = 'on_going'
+
+Both portfolios and bonus_portfolios hold the same shape (user_id, fund_id, unit) and
+combine into one investor's position: for any "holdings" or "AUM" question, UNION ALL
+the two tables (each filtered to active as above) before joining funds, e.g.:
+  WITH active AS (
+    SELECT user_id, fund_id, unit FROM portfolios WHERE deleted_at IS NULL AND unit > 0
+    UNION ALL
+    SELECT user_id, fund_id, unit FROM bonus_portfolios WHERE status = 'on_going'
+  )
+  holding value = unit * funds.latest_nav_value, summed/grouped per active row above
 
 investment_managers
   id, name STRING
@@ -78,7 +92,9 @@ Conventions:
   * Churn = an investor who ever bought but now holds nothing (fully redeemed).
 - All monetary amounts are in Indonesian Rupiah (IDR).
 - "Buy/sell volume" means SUM(final_amount) WHERE status='completed' for that type.
-- "AUM" of a fund = funds.latest_aum_value. Platform AUM = SUM(portfolios.unit * funds.latest_nav_value) for active holdings.
+- "AUM" of a fund = funds.latest_aum_value. A user's or the platform's AUM/holdings = the
+  portfolios + bonus_portfolios union above (both count — bonus units are real holdings the
+  investor did not pay cash for, but they still hold them), not portfolios alone.
 - transactions.created_at is TIMESTAMP; users.created_at is DATETIME — use DATE()/EXTRACT accordingly.
 `;
 

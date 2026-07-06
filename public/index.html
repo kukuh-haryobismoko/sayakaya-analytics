@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sayakaya Analytics</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
   <!-- Set the theme attribute before CSS paints, so there's no flash of the wrong theme. -->
   <script>
     (function () {
@@ -34,7 +35,7 @@
   <div class="app-shell" id="appShell">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <span class="brand-mark">SK</span>
+        <img class="brand-mark" src="logo.png" alt="Sayakaya">
         <div>
           <div class="brand-name">Sayakaya Analytics</div>
           <div class="brand-sub">BigQuery · live</div>
@@ -68,9 +69,14 @@
       </nav>
 
       <button id="themeToggle" class="theme-toggle" type="button">
-        <span class="theme-icon" id="themeIcon">🌙</span>
+        <span class="switch"><span class="switch-knob" id="themeIcon">🌙</span></span>
         <span id="themeLabel">Dark mode</span>
       </button>
+
+      <div id="connStatus" class="conn-status" title="BigQuery connection">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connLabel">Checking…</span>
+      </div>
     </aside>
 
     <div class="main-col">
