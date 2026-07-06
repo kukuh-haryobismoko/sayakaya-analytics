@@ -437,11 +437,14 @@
             <div class="ask-sql-head">
               <span>Generated SQL</span>
               <div class="exp">
+                <button class="btn-ghost" id="askCopy">Copy</button>
+                <button class="btn-ghost" id="askEdit">Edit</button>
+                <button class="btn-ghost" id="askRun">Run</button>
                 <button class="btn-ghost" id="askCsv" disabled>CSV</button>
                 <button class="btn-ghost" id="askXlsx" disabled>Excel</button>
               </div>
             </div>
-            <pre id="askSqlText" class="mono"></pre>
+            <textarea id="askSqlText" class="mono" rows="6" spellcheck="false" readonly></textarea>
           </div>
 
           <div id="askMsg" class="sql-msg"></div>

@@ -302,10 +302,11 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 12px; background: var(--surface-alt); font-size: 12px; color: var(--indigo); font-weight: 600;
 }
-.ask-sql pre {
-  margin: 0; padding: 12px 14px; font-size: 12.5px; line-height: 1.6;
-  white-space: pre-wrap; word-break: break-word; color: var(--ink); background: var(--input-bg);
+.ask-sql textarea {
+  display: block; width: 100%; margin: 0; padding: 12px 14px; font-size: 12.5px; line-height: 1.6;
+  color: var(--ink); background: var(--input-bg); border: none; resize: vertical;
 }
+.ask-sql textarea:not([readonly]) { background: var(--surface); outline: 2px solid var(--indigo); outline-offset: -2px; }
 
 /* ---------- Multi-table explorer ---------- */
 .ex-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }

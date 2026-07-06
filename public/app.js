@@ -934,6 +934,7 @@ async function runAsk(q) {
   setAskMsg('Thinking…', '');
   $('#askResult').innerHTML = '<div class="loading">Generating SQL and querying BigQuery…</div>';
   $('#askSql').classList.add('hidden');
+  setAskEditable(false);
   $('#askCsv').disabled = $('#askXlsx').disabled = true;
   try {
     const tables = selectedAskTables();
@@ -949,12 +950,43 @@ async function runAsk(q) {
     });
     const data = await res.json().catch(() => ({}));
     // Show the generated SQL even if it was blocked, so the user can see it.
-    if (data.sql) { askSqlCache = data.sql; $('#askSqlText').textContent = data.sql; $('#askSql').classList.remove('hidden'); }
+    if (data.sql) { askSqlCache = data.sql; $('#askSqlText').value = data.sql; $('#askSql').classList.remove('hidden'); }
     if (!res.ok) { $('#askResult').innerHTML = ''; setAskMsg(data.error || 'Request failed', 'err'); return; }
     renderGenericTable('#askResult', data.rows || []);
     const c = data.count || 0;
     setAskMsg(`${num(c)} row${c === 1 ? '' : 's'}`, 'ok');
     $('#askCsv').disabled = $('#askXlsx').disabled = (data.rows || []).length === 0;
+  } catch (e) {
+    $('#askResult').innerHTML = '';
+    setAskMsg(e.message, 'err');
+  }
+}
+
+function setAskEditable(on) {
+  $('#askSqlText').toggleAttribute('readonly', !on);
+  $('#askEdit').textContent = on ? 'Done' : 'Edit';
+  if (on) $('#askSqlText').focus();
+}
+
+function copyAskSql() {
+  navigator.clipboard.writeText($('#askSqlText').value).then(() => toast('SQL copied'));
+}
+
+// Runs whatever is currently in the SQL box (edited or not) via the same
+// read-only SQL Lab endpoint, so a tweaked query (e.g. an extra column) can
+// be re-run without going through the model again.
+async function runAskSql() {
+  const sql = $('#askSqlText').value.trim();
+  if (!sql) return;
+  askSqlCache = sql;
+  setAskMsg('Running…', '');
+  $('#askResult').innerHTML = '<div class="loading">Executing query…</div>';
+  $('#askCsv').disabled = $('#askXlsx').disabled = true;
+  try {
+    const { rows, count } = await api('/api/sql/run', { method: 'POST', body: JSON.stringify({ sql }) });
+    renderGenericTable('#askResult', rows);
+    setAskMsg(`${num(count)} row${count === 1 ? '' : 's'}`, 'ok');
+    $('#askCsv').disabled = $('#askXlsx').disabled = rows.length === 0;
   } catch (e) {
     $('#askResult').innerHTML = '';
     setAskMsg(e.message, 'err');
@@ -1103,6 +1135,9 @@ function wire() {
   $('#askAdvanced').addEventListener('toggle', (e) => { if (e.target.open) loadAskTables(); });
   $('#askBtn').addEventListener('click', () => runAsk());
   $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') runAsk(); });
+  $('#askCopy').addEventListener('click', copyAskSql);
+  $('#askEdit').addEventListener('click', () => setAskEditable($('#askSqlText').hasAttribute('readonly')));
+  $('#askRun').addEventListener('click', () => runAskSql());
   $$('#ask .chip').forEach((c) => c.addEventListener('click', () => runAsk(c.textContent)));
   $('#askCsv').addEventListener('click', () => askSqlCache && download({ source: 'sql', format: 'csv', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.csv'));
   $('#askXlsx').addEventListener('click', () => askSqlCache && download({ source: 'sql', format: 'xlsx', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.xlsx'));
