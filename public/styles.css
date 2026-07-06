@@ -47,7 +47,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; }
+html, body { margin: 0; overflow-x: hidden; }
 body {
   background: var(--bg);
   color: var(--ink);
@@ -56,6 +56,14 @@ body {
   -webkit-font-smoothing: antialiased;
   transition: background-color .15s, color .15s;
 }
+/* Smooth, professional light/dark theme switch on the main containers —
+   scoped to these rather than every element so it stays cheap on big tables. */
+.panel, .sidebar, .topbar, .table-wrap, thead th,
+.btn-ghost, .btn-primary, .chip, input, select, textarea {
+  transition: background-color .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
+}
+/* Tactile press feedback on clickable controls. */
+.btn-primary:active, .btn-ghost:active, .chip:active, .dropdown-multi-btn:active { transform: scale(.97); }
 .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .hidden { display: none !important; }
 h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
@@ -177,15 +185,15 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
 /* ---------- Layout ---------- */
 main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 .view { display: none; }
-.view.active { display: block; }
+.view.active { display: block; animation: view-in .25s ease; }
+@keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 .panel {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius); box-shadow: var(--shadow);
   padding: 18px 20px; margin-bottom: 20px;
 }
-.panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
-.panel-head.wrap { flex-wrap: wrap; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
 .panel-head h2 { font-size: 15px; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; }
 
@@ -199,7 +207,10 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 .kpi {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px 18px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+  transition: background-color .2s ease, border-color .2s ease, color .2s ease,
+    box-shadow .15s ease, transform .15s ease;
 }
+.kpi:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(26,29,46,.08), 0 12px 28px rgba(26,29,46,.08); }
 .kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--amber); }
 .kpi-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
 .kpi-value { font-family: "Space Grotesk"; font-weight: 700; font-size: 26px; margin-top: 6px; font-variant-numeric: tabular-nums; }
@@ -250,10 +261,14 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 }
 .dropdown-multi-btn:hover { border-color: var(--indigo); }
 .dropdown-multi-panel {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: 300px;
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
+  width: 300px; max-width: calc(100vw - 32px);
   background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
   box-shadow: var(--shadow); padding: 10px;
+  opacity: 0; visibility: hidden; transform: translateY(-6px); pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease, visibility .15s;
 }
+.dropdown-multi-panel.open { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
 /* Direct-child selector so this only styles the search box, not the checkbox
    inputs nested inside .dropdown-multi-list — a plain "input" descendant
    selector was also matching those and forcing them to width:100%. */
@@ -279,7 +294,8 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 
 /* ---------- Gate ---------- */
 .gate { position: fixed; inset: 0; background: linear-gradient(135deg, #3a50ab, #6756c1); display: grid; place-items: center; z-index: 50; }
-.gate-card { background: var(--surface); border-radius: 16px; padding: 36px; width: 320px; text-align: center; }
+.gate { padding: 16px; }
+.gate-card { background: var(--surface); border-radius: 16px; padding: 36px; width: 320px; max-width: 100%; text-align: center; }
 .gate-mark { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 11px; background: var(--indigo); color: #fff; display: grid; place-items: center; font-family: "Space Grotesk"; font-weight: 700; }
 .gate-card h1 { font-size: 19px; margin-bottom: 6px; }
 .gate-card p { color: var(--muted); margin: 0 0 18px; }
@@ -357,4 +373,26 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   .app-shell.nav-open::after {
     content: ""; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 25;
   }
+
+  main { padding: 14px; }
+  .topbar { padding: 10px 14px; gap: 10px; }
+  .panel { padding: 14px; }
+  .chart-wrap { height: 240px; }
+  .chart-wrap.sm { height: 200px; }
+  .kpi-value { font-size: 22px; }
+
+  /* A right-anchored absolute panel can overflow off the left edge of a
+     narrow screen depending on where its button lands after the filter row
+     wraps — pin it as a fixed sheet near the top of the viewport instead of
+     anchoring to the button. */
+  .dropdown-multi-panel {
+    position: fixed; left: 14px; right: 14px; top: 80px; width: auto; max-width: none;
+    max-height: 70vh; overflow-y: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid { gap: 10px; }
+  .panel { padding: 12px; }
+  h2 { font-size: 14px; }
 }

@@ -1259,10 +1259,10 @@ function wire() {
   $('#perfTrendFundSearch').addEventListener('input', filterPerfTrendFunds);
   $('#perfTrendFundsBtn').addEventListener('click', (e) => {
     e.stopPropagation();
-    $('#perfTrendFundsPanel').classList.toggle('hidden');
+    $('#perfTrendFundsPanel').classList.toggle('open');
   });
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('#perfTrendFundsDropdown')) $('#perfTrendFundsPanel').classList.add('hidden');
+    if (!e.target.closest('#perfTrendFundsDropdown')) $('#perfTrendFundsPanel').classList.remove('open');
   });
   $('#perfDetailCsv').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'csv', filename: 'product_performance_detail' }, 'product_performance_detail.csv'));
   $('#perfDetailXlsx').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'xlsx', filename: 'product_performance_detail' }, 'product_performance_detail.xlsx'));
