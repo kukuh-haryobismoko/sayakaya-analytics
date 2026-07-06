@@ -211,6 +211,37 @@
     <section id="performance" class="view">
       <div class="panel">
         <div class="panel-head wrap">
+          <h2>Fund performance trend</h2>
+          <div class="filters">
+            <select id="perfTrendType"><option value="">All fund types</option></select>
+            <select id="perfTrendPeriod">
+              <option value="1M">1M</option>
+              <option value="3M">3M</option>
+              <option value="YTD">YTD</option>
+              <option value="1Y" selected>1Y</option>
+              <option value="3Y">3Y</option>
+              <option value="5Y">5Y</option>
+            </select>
+            <select id="perfTrendLimit">
+              <option value="3">Top 3</option>
+              <option value="5" selected>Top 5</option>
+              <option value="10">Top 10</option>
+            </select>
+            <div class="dropdown-multi" id="perfTrendFundsDropdown">
+              <button type="button" class="dropdown-multi-btn" id="perfTrendFundsBtn">Pick funds</button>
+              <div class="dropdown-multi-panel hidden" id="perfTrendFundsPanel">
+                <input id="perfTrendFundSearch" type="text" placeholder="Search funds…" />
+                <div id="perfTrendFunds" class="dropdown-multi-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="hint">Daily NAV (actual price). Pick funds to compare them directly, or leave none picked to show the top performers by % change. Source: sayakaya.main.snapshots.</span>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="perfTrendChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
           <h2>Fund performance by type</h2>
           <div class="exp">
             <button class="btn-ghost" id="perfCsv">CSV</button>
@@ -225,6 +256,7 @@
         <div class="panel-head wrap">
           <h2>Fund detail</h2>
           <div class="filters">
+            <input id="perfDetailSearch" type="text" placeholder="Search funds…" style="min-width:160px" />
             <select id="perfTypeFilter"><option value="">All fund types</option></select>
             <span class="divider"></span>
             <button class="btn-ghost" id="perfDetailCsv">CSV</button>
@@ -448,6 +480,24 @@
           </div>
 
           <div id="askMsg" class="sql-msg"></div>
+
+          <div id="askChartControls" class="filters hidden" style="margin-bottom:12px">
+            <select id="askChartType">
+              <option value="none">No chart</option>
+              <option value="bar">Bar</option>
+              <option value="line">Line</option>
+              <option value="pie">Pie</option>
+              <option value="doughnut">Doughnut</option>
+              <option value="scatter">Scatter</option>
+            </select>
+            <select id="askChartX"></select>
+            <span class="hint">vs</span>
+            <select id="askChartY"></select>
+            <input id="askChartHint" type="text" placeholder="Optional: describe the chart you want" style="flex:1; min-width:180px" />
+            <button class="btn-ghost" id="askChartSuggest">✨ Suggest</button>
+          </div>
+          <div id="askChartWrap" class="chart-wrap hidden"><canvas id="askChart"></canvas></div>
+
           <div id="askResult" class="table-wrap tall"></div>
         </div>
       </div>

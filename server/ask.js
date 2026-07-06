@@ -192,4 +192,67 @@ async function ask(question, context) {
   }
 }
 
-module.exports = { ask, askEnabled, TABLES };
+// ---- Chart suggestion --------------------------------------------------
+// Given the question and the rows Ask (or an edited re-run) returned, ask the
+// model to pick a Chart.js-friendly visualization. Cheap, separate call from
+// questionToSql so a bad/no suggestion never affects the SQL generation path.
+const CHART_TYPES = ['bar', 'line', 'pie', 'doughnut', 'scatter', 'none'];
+
+function val(v) { return v && typeof v === 'object' && 'value' in v ? v.value : v; }
+
+function chartSystemPrompt() {
+  return `You choose how to visualize a table of query results with Chart.js.
+Respond with ONLY a JSON object, no markdown, no explanation:
+{"type": "bar"|"line"|"pie"|"doughnut"|"scatter"|"none", "x": "<column name>", "y": "<column name>", "label": "<short chart title>"}
+Rules:
+- "type" must be exactly one of: bar, line, pie, doughnut, scatter, none.
+- Use "none" if the data doesn't chart well (a single scalar/row, free-text-only columns, too many categories).
+- "line" for a time series (a date/period-like x column). "bar" for comparing categories.
+- "pie"/"doughnut" for a small (<= 8) set of categories that sum to a whole.
+- "scatter" for two numeric columns with no natural category axis.
+- "x" and "y" must be exact column names from the sample given, and "y" must be numeric.
+- Keep "label" under 40 characters.`;
+}
+
+async function suggestChart(question, rows, hint) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key || !Array.isArray(rows) || !rows.length) return { type: 'none' };
+
+  const columns = Object.keys(rows[0]);
+  const sample = rows.slice(0, 5).map((r) => Object.fromEntries(columns.map((c) => [c, val(r[c])])));
+  const userContent = [
+    `Question asked: ${question || '(none — this is a manually edited query)'}`,
+    hint ? `User's visualization request: ${hint}` : '',
+    `Columns: ${columns.join(', ')}`,
+    `Sample rows (up to 5 of ${rows.length}):\n${JSON.stringify(sample, null, 2)}`,
+  ].filter(Boolean).join('\n\n');
+
+  let text;
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL, max_tokens: 200, system: chartSystemPrompt(),
+        messages: [{ role: 'user', content: userContent }],
+      }),
+    });
+    if (!res.ok) return { type: 'none' };
+    const data = await res.json();
+    text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim()
+      .replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```$/, '').trim();
+  } catch {
+    return { type: 'none' };
+  }
+
+  try {
+    const spec = JSON.parse(text);
+    if (!CHART_TYPES.includes(spec.type)) return { type: 'none' };
+    if (spec.type !== 'none' && (!columns.includes(spec.x) || !columns.includes(spec.y))) return { type: 'none' };
+    return spec;
+  } catch {
+    return { type: 'none' };
+  }
+}
+
+module.exports = { ask, askEnabled, TABLES, suggestChart };

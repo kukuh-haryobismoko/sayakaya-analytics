@@ -10,7 +10,7 @@ const {
 } = require('./bigquery');
 const Q = require('./queries');
 const { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
-const { ask, askEnabled, TABLES } = require('./ask');
+const { ask, askEnabled, TABLES, suggestChart } = require('./ask');
 const EX = require('./explore');
 const ML = require('./ml');
 const PDF = require('./pdf');
@@ -132,6 +132,10 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.fundTypes();
     res.json(await runQuery(q.sql, q.params));
   }));
+  app.get('/api/funds/list', handler(async (req, res) => {
+    const q = Q.fundList(req.query.type);
+    res.json(await runQuery(q.sql, q.params));
+  }));
 
   // ---- Users ----------------------------------------------------------------
   app.get('/api/users/growth', handler(async (_req, res) => {
@@ -194,6 +198,12 @@ function createApp({ serveStatic = true } = {}) {
   }));
   app.get('/api/product-performance/detail', handler(async (_req, res) => {
     const q = Q.productPerformanceDetail();
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/product-performance/trend', handler(async (req, res) => {
+    const { type, period, limit } = req.query;
+    const funds = req.query.funds == null ? [] : [].concat(req.query.funds);
+    const q = Q.fundNavTrend({ type, period, limit, funds });
     res.json(await runQuery(q.sql, q.params));
   }));
 
@@ -294,6 +304,11 @@ function createApp({ serveStatic = true } = {}) {
       res.status(400).json({ error: err.message, sql: err.sql || null });
     }
   });
+
+  app.post('/api/ask/chart', handler(async (req, res) => {
+    const { question, rows, hint } = req.body || {};
+    res.json(await suggestChart(question, rows, hint));
+  }));
 
   // ---- SQL Lab --------------------------------------------------------------
   app.post('/api/sql/estimate', handler(async (req, res) => {

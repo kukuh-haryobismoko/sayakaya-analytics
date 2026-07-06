@@ -302,6 +302,78 @@ const productPerformanceDetail = () => ({
   params: {},
 });
 
+// All active, AUM-bearing funds — powers the fund-picker checkboxes on the
+// Performance trend chart.
+const fundList = (type) => {
+  const params = {};
+  let typeFilter = '';
+  if (type) { typeFilter = 'AND type = @type'; params.type = type; }
+  return {
+    sql: `SELECT name, type FROM ${FUNDS}
+      WHERE listing_status = 'ACTIVE' AND latest_aum_value IS NOT NULL ${typeFilter}
+      ORDER BY latest_aum_value DESC`,
+    params,
+  };
+};
+
+// Daily NAV trend for the Performance tab's top chart, over one of the shared
+// PERF_PERIODS windows above. Anchored to the platform's latest available NAV
+// date overall (not each fund's own), so every line shares one x-axis end point.
+// Two modes:
+//   - `funds` given (checkbox picks): chart exactly those funds, no ranking.
+//   - `funds` omitted: rank all candidates (optionally scoped by `type`) by
+//     their own % change over the period and chart the top `limit` performers
+//     — "best performing", not "biggest by AUM".
+function fundNavTrend({ type, period = '1Y', limit = 5, funds } = {}) {
+  const params = { period };
+  let typeFilter = '';
+  if (type) { typeFilter = 'AND f.type = @type'; params.type = type; }
+
+  const fundNames = (Array.isArray(funds) ? funds : funds ? [funds] : []).filter(Boolean);
+  let chosenCte;
+  if (fundNames.length) {
+    params.funds = fundNames;
+    chosenCte = `SELECT id AS product_id, name FROM ${FUNDS} WHERE name IN UNNEST(@funds)`;
+  } else {
+    params.limit = parseInt(limit, 10);
+    chosenCte = 'SELECT product_id, name FROM ranked ORDER BY pct_change DESC LIMIT @limit';
+  }
+
+  return {
+    sql: `WITH nav AS (${NAV_SOURCE}),
+      latest AS (SELECT MAX(d) AS latest_d FROM nav),
+      bounds AS (
+        SELECT latest_d,
+          (SELECT pr.target FROM UNNEST(${periodTargets('latest_d')}) AS pr WHERE pr.period = @period) AS from_d
+        FROM latest
+      ),
+      candidates AS (
+        SELECT f.id AS product_id, f.name
+        FROM ${FUNDS} f
+        WHERE f.listing_status = 'ACTIVE' AND f.latest_aum_value IS NOT NULL ${typeFilter}
+      ),
+      perf AS (
+        SELECT c.product_id, c.name,
+          ARRAY_AGG(STRUCT(n.value AS v, n.d AS d) ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS latest_snap,
+          ARRAY_AGG(IF(n.d <= (SELECT from_d FROM bounds), STRUCT(n.value AS v, n.d AS d), NULL) IGNORE NULLS ORDER BY n.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
+        FROM candidates c JOIN nav n ON n.product_id = c.product_id
+        GROUP BY c.product_id, c.name
+      ),
+      ranked AS (
+        SELECT product_id, name, SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) AS pct_change
+        FROM perf WHERE asof_snap IS NOT NULL
+      ),
+      chosen AS (${chosenCte})
+    SELECT n.name, n.type, n.d, n.value
+    FROM nav n
+    JOIN chosen c ON c.product_id = n.product_id
+    CROSS JOIN bounds b
+    WHERE n.d >= b.from_d
+    ORDER BY n.name, n.d`,
+    params,
+  };
+}
+
 // ---- User portfolio lookup (pick a user by SID code, print their holdings) -
 const BONUS_PORT = '`sayakaya.main.bonus_portfolios`';
 const USER_PROFILES = '`sayakaya.main.user_profiles`';
@@ -666,7 +738,7 @@ module.exports = {
   trends, breakdownBy, topFunds, fundTypes, aumHistory,
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
-  productPerformance, productPerformanceDetail,
+  productPerformance, productPerformanceDetail, fundNavTrend, fundList,
   userSearch, userContact, userHoldings, userPortfolioSplit, userPerformance, userAumHistory,
   campaignPerformance, switchingTopPairs, aumByManager,
   aumByRisk, aumByIncome, topReferrers, reconciliationDaily,

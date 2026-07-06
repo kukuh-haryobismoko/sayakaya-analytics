@@ -242,6 +242,26 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   font-family: inherit; font-size: 13px; background: var(--surface);
 }
 .divider { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+
+.dropdown-multi { position: relative; }
+.dropdown-multi-btn {
+  border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; color: var(--ink);
+  font-family: inherit; font-size: 13px; background: var(--surface); cursor: pointer;
+}
+.dropdown-multi-btn:hover { border-color: var(--indigo); }
+.dropdown-multi-panel {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: 300px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+  box-shadow: var(--shadow); padding: 10px;
+}
+/* Direct-child selector so this only styles the search box, not the checkbox
+   inputs nested inside .dropdown-multi-list — a plain "input" descendant
+   selector was also matching those and forcing them to width:100%. */
+.dropdown-multi-panel > input {
+  width: 100%; margin-bottom: 8px; box-sizing: border-box; border: 1px solid var(--line);
+  border-radius: 7px; padding: 7px 9px; background: var(--input-bg); color: var(--ink); font: inherit;
+}
+.dropdown-multi-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
 .exp { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ---------- SQL lab ---------- */

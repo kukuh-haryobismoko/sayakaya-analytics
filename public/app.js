@@ -512,6 +512,87 @@ function renderAumTable(data) {
 // ====================================================================
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
 let perfCache = [];
+let perfTrendLoaded = false;
+let perfTrendCache = [];
+
+async function loadPerfTrendTypes() {
+  const sel = $('#perfTrendType');
+  if (sel.options.length > 1) return; // built once
+  try {
+    const types = await api('/api/funds/types');
+    types.forEach((t) => sel.insertAdjacentHTML('beforeend', `<option value="${val(t.label)}">${val(t.label)}</option>`));
+  } catch (e) { /* filter is optional; chart still works with "All fund types" */ }
+}
+
+// Repopulates the fund checkbox list for the currently selected type. Resets
+// any prior selection/search since the candidate set changes with the type filter.
+async function loadPerfTrendFunds() {
+  const type = $('#perfTrendType').value;
+  $('#perfTrendFundSearch').value = '';
+  try {
+    const funds = await api(`/api/funds/list?type=${encodeURIComponent(type)}`);
+    $('#perfTrendFunds').innerHTML = funds.map((f) =>
+      `<label class="ask-table-chk"><input type="checkbox" value="${val(f.name)}"> ${val(f.name)}</label>`).join('');
+  } catch (e) { $('#perfTrendFunds').innerHTML = ''; }
+  updatePerfTrendFundsBtn();
+}
+
+// Client-side substring filter over the already-loaded checkbox list (at most
+// ~80 funds, no need for a server round trip).
+function filterPerfTrendFunds() {
+  const q = $('#perfTrendFundSearch').value.trim().toLowerCase();
+  $$('#perfTrendFunds label').forEach((lbl) => {
+    lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function updatePerfTrendFundsBtn() {
+  const n = $$('#perfTrendFunds input:checked').length;
+  $('#perfTrendFundsBtn').textContent = n ? `${n} fund${n === 1 ? '' : 's'} picked` : 'Pick funds';
+}
+
+async function loadPerfTrend() {
+  perfTrendLoaded = true;
+  const type = $('#perfTrendType').value;
+  const period = $('#perfTrendPeriod').value;
+  const limit = $('#perfTrendLimit').value;
+  const picked = $$('#perfTrendFunds input:checked').map((el) => el.value);
+  const qs = new URLSearchParams({ type, period, limit });
+  picked.forEach((f) => qs.append('funds', f));
+  try {
+    perfTrendCache = await api(`/api/product-performance/trend?${qs.toString()}`);
+    renderPerfTrendChart(perfTrendCache);
+  } catch (e) { /* leave the previous chart in place rather than blanking it */ }
+}
+
+function renderPerfTrendChart(rows) {
+  const byFund = {};
+  const dateSet = new Set();
+  rows.forEach((r) => {
+    const name = val(r.name), d = val(r.d);
+    dateSet.add(d);
+    (byFund[name] = byFund[name] || {})[d] = Number(val(r.value));
+  });
+  const labels = [...dateSet].sort();
+  const palette = pie();
+  const datasets = Object.keys(byFund).map((name, i) => ({
+    label: name,
+    data: labels.map((d) => (byFund[name][d] != null ? byFund[name][d] : null)),
+    borderColor: palette[i % palette.length], backgroundColor: 'transparent',
+    spanGaps: true, pointRadius: 0, tension: .25,
+  }));
+  paint('perfTrendChart', {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { y: { grid: { color: C.grid }, title: { display: true, text: 'NAV' } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } },
+      plugins: { legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw == null ? '—' : num(c.raw)}` } } },
+    },
+  });
+}
 
 async function loadPerformance() {
   $('#perfTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
@@ -573,9 +654,12 @@ function pivotByFund(rows) {
 
 function renderPerformanceDetail() {
   const typeFilter = $('#perfTypeFilter').value;
+  const search = $('#perfDetailSearch').value.trim().toLowerCase();
   const rows = typeFilter ? perfDetailCache.filter((r) => val(r.type) === typeFilter) : perfDetailCache;
-  const funds = pivotByFund(rows).sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
-  if (!funds.length) { $('#perfDetailTable').innerHTML = '<div class="empty">No NAV data.</div>'; return; }
+  const funds = pivotByFund(rows)
+    .filter((f) => !search || f.name.toLowerCase().includes(search))
+    .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+  if (!funds.length) { $('#perfDetailTable').innerHTML = '<div class="empty">No matching fund.</div>'; return; }
   const head = PERF_PERIODS.map((p) => `<th class="num">${p}</th>`).join('');
   const body = funds.map((f) => {
     const cells = PERF_PERIODS.map((p) => {
@@ -908,6 +992,8 @@ async function download(body, filename) {
 // ====================================================================
 let askSqlCache = '';
 let askTablesLoaded = false;
+let askRowsCache = [];
+let lastAskQuestion = '';
 
 function setAskMsg(msg, cls) { const m = $('#askMsg'); m.textContent = msg || ''; m.className = 'sql-msg ' + (cls || ''); }
 
@@ -931,9 +1017,12 @@ async function runAsk(q) {
   const question = (q != null ? q : $('#askInput').value).trim();
   if (!question) return;
   if (q != null) $('#askInput').value = question;
+  lastAskQuestion = question;
   setAskMsg('Thinking…', '');
   $('#askResult').innerHTML = '<div class="loading">Generating SQL and querying BigQuery…</div>';
   $('#askSql').classList.add('hidden');
+  $('#askChartControls').classList.add('hidden');
+  $('#askChartWrap').classList.add('hidden');
   setAskEditable(false);
   $('#askCsv').disabled = $('#askXlsx').disabled = true;
   try {
@@ -956,6 +1045,7 @@ async function runAsk(q) {
     const c = data.count || 0;
     setAskMsg(`${num(c)} row${c === 1 ? '' : 's'}`, 'ok');
     $('#askCsv').disabled = $('#askXlsx').disabled = (data.rows || []).length === 0;
+    suggestAskChart(question, data.rows || []);
   } catch (e) {
     $('#askResult').innerHTML = '';
     setAskMsg(e.message, 'err');
@@ -987,10 +1077,77 @@ async function runAskSql() {
     renderGenericTable('#askResult', rows);
     setAskMsg(`${num(count)} row${count === 1 ? '' : 's'}`, 'ok');
     $('#askCsv').disabled = $('#askXlsx').disabled = rows.length === 0;
+    suggestAskChart(lastAskQuestion, rows);
   } catch (e) {
     $('#askResult').innerHTML = '';
     setAskMsg(e.message, 'err');
   }
+}
+
+// ---- Chart: Claude picks a type/x/y, or the user overrides them by hand ----
+function buildAskChartConfig(type, rows, x, y, label) {
+  const capped = rows.slice(0, 50);
+  if (type === 'scatter') {
+    return { type: 'scatter', data: { datasets: [{ label: label || `${y} vs ${x}`,
+      data: capped.map((r) => ({ x: Number(val(r[x])) || 0, y: Number(val(r[y])) || 0 })),
+      backgroundColor: C.indigo }] },
+      options: { maintainAspectRatio: false,
+        scales: { x: { title: { display: true, text: x } }, y: { title: { display: true, text: y } } } } };
+  }
+  const labels = capped.map((r) => String(val(r[x]) ?? ''));
+  const values = capped.map((r) => Number(val(r[y])) || 0);
+  if (type === 'pie' || type === 'doughnut') {
+    return { type, data: { labels, datasets: [{ data: values, backgroundColor: pie() }] },
+      options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } };
+  }
+  return { type, data: { labels, datasets: [{ label: label || y, data: values,
+      backgroundColor: type === 'bar' ? C.indigo : 'rgba(30,42,74,.08)', borderColor: C.indigo,
+      fill: type === 'line', tension: .3 }] },
+    options: { maintainAspectRatio: false,
+      scales: { y: { grid: { color: C.grid } }, x: { grid: { display: false } } },
+      plugins: { legend: { display: false } } } };
+}
+
+function populateAskChartFields(rows, spec) {
+  const cols = rows.length ? Object.keys(rows[0]) : [];
+  const opts = cols.map((c) => `<option value="${c}">${c}</option>`).join('');
+  $('#askChartX').innerHTML = opts;
+  $('#askChartY').innerHTML = opts;
+  if (spec && cols.includes(spec.x)) $('#askChartX').value = spec.x;
+  if (spec && cols.includes(spec.y)) $('#askChartY').value = spec.y;
+}
+
+function renderAskChart() {
+  const type = $('#askChartType').value;
+  const x = $('#askChartX').value, y = $('#askChartY').value;
+  if (type === 'none' || !askRowsCache.length || !x || !y) { $('#askChartWrap').classList.add('hidden'); return; }
+  $('#askChartWrap').classList.remove('hidden');
+  paint('askChart', buildAskChartConfig(type, askRowsCache, x, y));
+}
+
+// Auto-suggests a chart via Claude whenever new rows arrive; `hint` carries
+// an optional free-text ask (e.g. "as a pie chart") from the Suggest button.
+async function suggestAskChart(question, rows, hint) {
+  askRowsCache = rows || [];
+  if (!askRowsCache.length) {
+    $('#askChartControls').classList.add('hidden');
+    $('#askChartWrap').classList.add('hidden');
+    return;
+  }
+  $('#askChartControls').classList.remove('hidden');
+  populateAskChartFields(askRowsCache);
+  try {
+    const spec = await api('/api/ask/chart', {
+      method: 'POST',
+      body: JSON.stringify({ question, rows: askRowsCache.slice(0, 50), hint }),
+    });
+    const validTypes = $$('#askChartType option').map((o) => o.value);
+    $('#askChartType').value = validTypes.includes(spec.type) ? spec.type : 'none';
+    populateAskChartFields(askRowsCache, spec);
+  } catch {
+    $('#askChartType').value = 'none';
+  }
+  renderAskChart();
 }
 
 // ====================================================================
@@ -1004,6 +1161,7 @@ function switchTab(name) {
   if (name === 'aum' && !aumCache.length) loadAumHistory();
   if (name === 'performance' && !perfCache.length) loadPerformance();
   if (name === 'performance' && !perfDetailCache.length) loadPerformanceDetail();
+  if (name === 'performance' && !perfTrendLoaded) { loadPerfTrendTypes(); loadPerfTrendFunds(); loadPerfTrend(); }
   if (name === 'growth' && !growthLoaded) loadGrowth();
   if (name === 'reconciliation') loadReconciliation();
   if (name === 'revenue') loadRevenue();
@@ -1022,6 +1180,7 @@ function repaintActiveTab() {
     case 'aum': aumCache = []; loadAumHistory(); break;
     case 'growth': growthLoaded = false; loadGrowth(); break;
     case 'predict': predictLoaded = false; loadPredict(); break;
+    case 'performance': renderPerfTrendChart(perfTrendCache); break;
     case 'portfolio': if (pfSelected) selectPortfolioUser(pfSelected.userId, pfSelected.sid, pfSelected.name); break;
   }
 }
@@ -1092,6 +1251,19 @@ function wire() {
   $('#perfCsv').addEventListener('click', () => download({ source: 'product_performance', format: 'csv', filename: 'product_performance' }, 'product_performance.csv'));
   $('#perfXlsx').addEventListener('click', () => download({ source: 'product_performance', format: 'xlsx', filename: 'product_performance' }, 'product_performance.xlsx'));
   $('#perfTypeFilter').addEventListener('change', renderPerformanceDetail);
+  $('#perfDetailSearch').addEventListener('input', renderPerformanceDetail);
+  $('#perfTrendType').addEventListener('change', () => { loadPerfTrendFunds(); loadPerfTrend(); });
+  $('#perfTrendPeriod').addEventListener('change', loadPerfTrend);
+  $('#perfTrendLimit').addEventListener('change', loadPerfTrend);
+  $('#perfTrendFunds').addEventListener('change', () => { updatePerfTrendFundsBtn(); loadPerfTrend(); });
+  $('#perfTrendFundSearch').addEventListener('input', filterPerfTrendFunds);
+  $('#perfTrendFundsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#perfTrendFundsPanel').classList.toggle('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#perfTrendFundsDropdown')) $('#perfTrendFundsPanel').classList.add('hidden');
+  });
   $('#perfDetailCsv').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'csv', filename: 'product_performance_detail' }, 'product_performance_detail.csv'));
   $('#perfDetailXlsx').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'xlsx', filename: 'product_performance_detail' }, 'product_performance_detail.xlsx'));
 
@@ -1138,6 +1310,11 @@ function wire() {
   $('#askCopy').addEventListener('click', copyAskSql);
   $('#askEdit').addEventListener('click', () => setAskEditable($('#askSqlText').hasAttribute('readonly')));
   $('#askRun').addEventListener('click', () => runAskSql());
+  $('#askChartType').addEventListener('change', renderAskChart);
+  $('#askChartX').addEventListener('change', renderAskChart);
+  $('#askChartY').addEventListener('change', renderAskChart);
+  $('#askChartSuggest').addEventListener('click', () =>
+    suggestAskChart(lastAskQuestion, askRowsCache, $('#askChartHint').value.trim()));
   $$('#ask .chip').forEach((c) => c.addEventListener('click', () => runAsk(c.textContent)));
   $('#askCsv').addEventListener('click', () => askSqlCache && download({ source: 'sql', format: 'csv', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.csv'));
   $('#askXlsx').addEventListener('click', () => askSqlCache && download({ source: 'sql', format: 'xlsx', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.xlsx'));
