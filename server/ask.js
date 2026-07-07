@@ -3,7 +3,7 @@
 const { runQuery, validateAdHoc, capRows } = require('./bigquery');
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 
 function askEnabled() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -96,6 +96,12 @@ Conventions:
   portfolios + bonus_portfolios union above (both count — bonus units are real holdings the
   investor did not pay cash for, but they still hold them), not portfolios alone.
 - transactions.created_at is TIMESTAMP; users.created_at is DATETIME — use DATE()/EXTRACT accordingly.
+- If the message includes a "Resolved entity lookups" block, those are real lookups from the
+  database for names the user mentioned. When a resolved entry gives an id, filter/join using
+  that id (the table's own id column, or the matching foreign key like fund_id /
+  investment_manager_id) — NOT a name = '...' comparison, and never a LIKE '%...%' guess.
+  When a resolved entry has no id (occupation/city), use an exact = or IN match on the given
+  value(s). Only fall back to your own LIKE guess if that block says no match was found.
 `;
 
 function systemPrompt() {
@@ -164,13 +170,146 @@ async function questionToSql(question, priorAttempt, context) {
     .trim();
 }
 
+// ---- Entity resolution --------------------------------------------------
+// A question that names a specific fund/manager/campaign/etc. ("exclude
+// Avrist Liquid Fund") gives the model nothing to match against but its own
+// guess at spelling — which is how it ends up writing a fragile
+// LOWER(name) LIKE '%...%' filter that can both under- and over-match. So
+// before generating SQL, look the mentioned name up for real and hand the
+// model the actual row value(s) to match exactly against instead.
+// idColumn is the table's own primary key, used to ground the model on a
+// stable identifier instead of a name string wherever one exists (funds,
+// investment_managers, campaigns all have one). occupation/city are plain
+// attribute values on user_profiles with no lookup table of their own — the
+// resolved text value IS the filter, there's no id to fall back to.
+const ENTITY_COLUMNS = [
+  { table: 'sayakaya.main.funds', column: 'name', idColumn: 'id', label: 'funds.name' },
+  { table: 'sayakaya.main.investment_managers', column: 'name', idColumn: 'id', label: 'investment_managers.name' },
+  { table: 'sayakaya.main.campaigns', column: 'name', idColumn: 'id', label: 'campaigns.name' },
+  { table: 'sayakaya.main.campaigns', column: 'promo_code', idColumn: 'id', label: 'campaigns.promo_code' },
+  { table: 'sayakaya.main.user_profiles', column: 'occupation', idColumn: null, label: 'user_profiles.occupation' },
+  { table: 'sayakaya.main.user_profiles', column: 'id_address_city', idColumn: null, label: 'user_profiles.id_address_city' },
+];
+
+function entitySystemPrompt() {
+  return `Extract any specific named entities in the question that would need to be matched
+against real row values in the Sayakaya database — free-text proper nouns like fund names,
+investment manager names, campaign/promo names, cities, occupations.
+
+Do NOT extract fixed enum values that are already fully known (transaction type/status,
+verification_status, gender, fund type, campaign_type, is_sharia) — only extract names the
+model would otherwise have to guess the exact spelling of.
+
+Respond with ONLY a JSON array, no markdown, no explanation:
+[{"column": "<one of: funds.name, investment_managers.name, campaigns.name, campaigns.promo_code, user_profiles.occupation, user_profiles.id_address_city>", "raw_text": "<the phrase from the question, as written>"}]
+
+Return [] if the question has no such named entities.`;
+}
+
+async function extractEntityMentions(question) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL, max_tokens: 300, system: entitySystemPrompt(),
+        messages: [{ role: 'user', content: question }],
+      }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim()
+      .replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```$/, '').trim();
+    const arr = JSON.parse(text);
+    return Array.isArray(arr) ? arr.filter((m) => m && m.column && m.raw_text) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Looks each extracted mention up for real and returns grounding text for the
+// SQL-generation prompt. Never throws — a lookup failure just means that one
+// mention falls back to the model's own guess, same as before this existed.
+async function resolveEntityContext(question) {
+  let mentions;
+  try {
+    mentions = await extractEntityMentions(question);
+  } catch {
+    return '';
+  }
+  if (!mentions.length) return '';
+
+  const lines = [];
+  for (const m of mentions) {
+    const col = ENTITY_COLUMNS.find((c) => c.label === m.column);
+    if (!col) continue;
+    try {
+      const idSelect = col.idColumn ? `${col.idColumn} AS id, ` : '';
+      const asOnePhrase = `%${String(m.raw_text).toLowerCase()}%`;
+      let rows = await runQuery(
+        `SELECT DISTINCT ${idSelect}${col.column} AS v FROM \`${col.table}\` WHERE LOWER(${col.column}) LIKE @pattern LIMIT 10`,
+        { pattern: asOnePhrase },
+      );
+      // The raw text may not be a contiguous substring of the real name (e.g.
+      // "avrist lq45" for "Avrist Indeks LQ45") — retry token-by-token before
+      // giving up, so the model still gets a real match instead of a guess.
+      const words = String(m.raw_text).toLowerCase().split(/\s+/).filter(Boolean);
+      if (!rows.length && words.length > 1) {
+        rows = await runQuery(
+          `SELECT DISTINCT ${idSelect}${col.column} AS v FROM \`${col.table}\` WHERE LOWER(${col.column}) LIKE @pattern LIMIT 10`,
+          { pattern: `%${words.join('%')}%` },
+        );
+      }
+      // Still nothing? Could be a genuine typo ("liqud" for "liquid") rather
+      // than a missing/reordered word — nearest-neighbor by edit distance.
+      // Only commit to a single, clearly-best match (tight ratio threshold,
+      // and require real separation from the runner-up) — an ambiguous or
+      // genuinely novel name should fall through to the model's own guess
+      // rather than get silently mapped to the wrong fund.
+      if (!rows.length) {
+        const term = String(m.raw_text).toLowerCase();
+        const fuzzy = await runQuery(
+          `SELECT DISTINCT ${idSelect}${col.column} AS v, EDIT_DISTANCE(LOWER(${col.column}), @term) AS d
+           FROM \`${col.table}\` ORDER BY d ASC LIMIT 2`,
+          { term },
+        );
+        const [best, runnerUp] = fuzzy;
+        const maxD = Math.max(1, Math.round(term.length * 0.2));
+        const isClearWinner = best && Number(best.d) <= maxD
+          && (!runnerUp || Number(runnerUp.d) > Number(best.d) + 1);
+        rows = isClearWinner ? [best] : [];
+      }
+      const candidates = rows.filter((r) => r.v);
+      if (!candidates.length) {
+        lines.push(`"${m.raw_text}" -> no matching ${m.column} value found in the database (check for a typo before falling back to a fuzzy match).`);
+      } else if (col.idColumn) {
+        // Prefer the table's own primary key over the name string — it's
+        // stable, unambiguous, and is what every join/filter in this schema
+        // actually uses (fund_id, investment_manager_id, ...), so ground the
+        // model on that instead of a WHERE ... name = '...' comparison.
+        const table = col.table.split('.').pop();
+        const pairs = candidates.map((r) => `id=${JSON.stringify(r.id)} (name: ${JSON.stringify(r.v)})`).join(', ');
+        lines.push(`"${m.raw_text}" -> resolved in ${table}: ${pairs}. Filter/join using this id (${table}.id, or the matching foreign key column such as fund_id / investment_manager_id elsewhere in the schema) — do NOT match by the name string.`);
+      } else {
+        lines.push(`"${m.raw_text}" -> exact ${m.column} value(s) found: ${candidates.map((c) => `"${c.v}"`).join(', ')}.`);
+      }
+    } catch {
+      // Skip this one mention; don't let a single lookup failure block the request.
+    }
+  }
+  return lines.length ? `Resolved entity lookups (ground truth from the database):\n${lines.join('\n')}` : '';
+}
+
 /**
  * Full flow: question -> SQL -> validate (read-only) -> run -> rows.
  * BigQuery errors (e.g. a guessed column/table name that doesn't exist) are
  * fed back to the model once so it can self-correct before we give up.
  */
 async function ask(question, context) {
-  let sql = await questionToSql(question, null, context);
+  const resolved = await resolveEntityContext(question);
+  const fullContext = [context, resolved].filter(Boolean).join('\n\n') || null;
+  let sql = await questionToSql(question, null, fullContext);
   for (let attempt = 0; ; attempt++) {
     const v = validateAdHoc(sql);
     if (!v.ok) {
