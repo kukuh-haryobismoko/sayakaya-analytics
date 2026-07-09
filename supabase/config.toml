@@ -412,3 +412,11 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# The "api" function implements its own auth (APP_PASSWORD header, see
+# supabase/functions/api/index.ts) and doesn't use Supabase Auth/Postgres —
+# disable Supabase's own JWT gate so the frontend's requests (which only
+# carry x-app-password, not a Supabase JWT) aren't rejected before they
+# even reach the function.
+[functions.api]
+verify_jwt = false
