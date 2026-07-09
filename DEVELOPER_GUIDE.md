@@ -41,7 +41,7 @@ Supabase Edge Functions run on Deno, not Node — see §2b.
 |---|---|---|
 | **Standalone Node** (local dev, Cloud Run, any VM) | `server/index.js` → `npm start` | Serves `public/` itself (`serveStatic: true`). Full doc: `README.md`. |
 | **Netlify** | `netlify/functions/api.js` (wraps `createApp({ serveStatic: false })` with `serverless-http`) | Netlify's CDN serves `public/` directly; `netlify.toml` rewrites `/api/*` to the function. Full doc: `NETLIFY-DEPLOY.md`. Function timeout is 10s (free) / 26s (Pro) — large exports can hit this. |
-| **GitHub Pages + Netlify** | `.github/workflows/gh-pages.yml` serving `public/`, backed by the Netlify deployment above | `app.js`'s `API_BASE` points GitHub Pages traffic at the live Netlify site. Currently **manual-trigger only** (`workflow_dispatch`), because GitHub Pages requires a public repo (or a paid plan) and this repo is private — see the workflow file's header comment before re-enabling the `push` trigger. |
+| **GitHub Pages + Netlify** | `.github/workflows/gh-pages.yml` serving `public/`, backed by the Netlify deployment above | `app.js`'s `API_BASE` points GitHub Pages traffic at the live Netlify site. |
 | **GitHub Pages + Supabase Edge Functions** | `supabase/functions/api/index.ts` | A from-scratch Deno port of every `server/*.js` route — see §2b. Full doc: `SUPABASE-DEPLOY.md`. |
 
 `server/app.js` exports `createApp({ serveStatic })` specifically so it can be
@@ -49,6 +49,21 @@ reused this way — if you add a new route, add it once in `server/app.js` and
 the first three targets get it automatically. The Supabase target does **not**
 get it automatically — see §2b for why, and add the route to
 `supabase/functions/api/index.ts` too if you want it there.
+
+### 2a. Deploys are not symmetric — know what auto-deploys and what doesn't
+
+| Target | Trigger |
+|---|---|
+| Standalone Node | Nothing to deploy — you run it. |
+| Netlify | **Auto**: every push to `main` redeploys the whole site (frontend + function) via Netlify's own Git integration. |
+| GitHub Pages (frontend, either backend) | **Auto, but scoped**: `.github/workflows/gh-pages.yml` only fires on push to `main` when the diff touches `public/**` or the workflow file itself. A `server/` or `supabase/` change alone does not trigger it. |
+| Supabase Edge Function | **Manual, always**: nothing in this repo watches `supabase/functions/api/**`. After every edit, run `supabase functions deploy api` yourself. There is no CI for this today — see `SUPABASE-DEPLOY.md`'s "Do commits auto-deploy?" section if you want to add one. |
+
+The practical trap: editing `supabase/functions/api/queries.ts` and pushing
+will **not** update the live Supabase function — GitHub Pages redeploys the
+(unchanged) frontend, if anything under `public/` also changed, but the
+backend keeps serving whatever was last manually deployed. Always pair a
+`supabase/functions/api/**` edit with `supabase functions deploy api`.
 
 ### 2b. Why Supabase is a separate implementation, not a reuse
 
@@ -387,8 +402,21 @@ tradeoffs, some are open issues worth revisiting:
   tabs left open all day means a steady trickle of BigQuery jobs just for
   liveness. Fine at current usage; worth caching (e.g. 30–60s in-process) if
   this ever becomes a cost line item.
-- **GitHub Pages workflow is manual-only** (see §2) because the repo is
-  private and GitHub Pages requires a public repo on the free plan.
+- **GitHub Pages auto-deploys, but only for `public/**` changes** — a
+  `server/` or `supabase/` edit alone won't trigger it (see §2a). The
+  Supabase Edge Function has **no CI at all**: `supabase functions deploy
+  api` must be run by hand after every change to
+  `supabase/functions/api/**`, or the live function silently keeps serving
+  old code while the frontend (if `public/` also changed) redeploys fine.
+- **Supabase Edge Functions require their own platform-level auth token by
+  default** (`verify_jwt`), completely separate from this app's
+  `APP_PASSWORD` gate. The `api` function doesn't use Supabase Auth/Postgres,
+  so this is disabled via `supabase/config.toml`'s `[functions.api]
+  verify_jwt = false`. If a fresh deploy of this function ever starts
+  returning `401 UNAUTHORIZED_NO_AUTH_HEADER` on every request (including
+  `/api/health`), that config wasn't picked up — redeploy explicitly with
+  `supabase functions deploy api --no-verify-jwt` and see
+  `SUPABASE-DEPLOY.md`'s Troubleshooting section.
 - **`PRODUCT-PERFORMANCE-AND-PORTFOLIO.md` predates** the fund NAV trend chart,
   the avg-buy-price column, and the fund search/checkbox picker — treat this
   guide (and the code) as authoritative over that file for those features.
@@ -432,6 +460,9 @@ KPI cards will drift apart from each other.
 told in that prompt.
 
 **Deploy target changes:** remember `server/app.js`'s `createApp()` is shared
-across all three targets (§2) — a route or middleware change there
+across the three Node targets (§2) — a route or middleware change there
 automatically applies everywhere; don't duplicate logic into
-`netlify/functions/api.js` or `server/index.js`.
+`netlify/functions/api.js` or `server/index.js`. The Supabase target does
+**not** share this — port the change to `supabase/functions/api/` by hand if
+you want it there too, then `supabase functions deploy api` (§2a: nothing
+auto-deploys that target).
