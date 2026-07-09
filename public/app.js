@@ -6,10 +6,15 @@ const $$ = (s) => Array.from(document.querySelectorAll(s));
 const PW_KEY = 'sk_app_pw';
 
 // On Netlify this is served same-origin, so relative /api/* paths just work.
-// GitHub Pages is static-only — it can't run the Express backend — so this
-// mirror calls the live Netlify Functions API instead. Update the hostname
-// here if the Netlify site is ever renamed/moved.
-const API_BASE = location.hostname.endsWith('.github.io') ? 'https://sayakaya-analytics.netlify.app' : '';
+// GitHub Pages is static-only — it can't run a backend — so this mirror calls
+// the Supabase Edge Function instead (supabase/functions/api/). The function
+// is deliberately named "api" so that the "/api/..." paths this file already
+// calls (e.g. api('/api/overview')) double as both the Supabase function-name
+// segment AND the path the function's own router expects — no extra rewrite
+// needed. Replace <PROJECT_REF> after running `supabase link` (see
+// DEVELOPER_GUIDE.md's Supabase deployment section) — find it in the
+// Supabase dashboard URL or `supabase status`.
+const API_BASE = location.hostname.endsWith('.github.io') ? 'https://josptpfisrsdjeggkqke.supabase.co/functions/v1' : '';
 
 function authHeaders() {
   const pw = sessionStorage.getItem(PW_KEY);

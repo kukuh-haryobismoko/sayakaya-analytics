@@ -1,0 +1,11 @@
+# Supabase
+.branches
+.temp
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
+
+# Real secret values for `supabase secrets set --env-file` — never commit.
+.env.secrets

@@ -30,20 +30,50 @@ it yourself (see §9 for the pattern used to verify changes in this repo).
 
 ---
 
-## 2. How it's deployed — three different targets from one codebase
+## 2. How it's deployed — four targets, two independent backend implementations
 
-The same `server/app.js` Express app is reused across all three; only the
-entrypoint differs:
+The same `server/app.js` Express app is reused across three Node-based
+targets; only the entrypoint differs. The fourth (GitHub Pages + Supabase) is
+a **separate backend implementation**, not a reuse of `server/`, because
+Supabase Edge Functions run on Deno, not Node — see §2b.
 
 | Target | Entrypoint | Notes |
 |---|---|---|
 | **Standalone Node** (local dev, Cloud Run, any VM) | `server/index.js` → `npm start` | Serves `public/` itself (`serveStatic: true`). Full doc: `README.md`. |
 | **Netlify** | `netlify/functions/api.js` (wraps `createApp({ serveStatic: false })` with `serverless-http`) | Netlify's CDN serves `public/` directly; `netlify.toml` rewrites `/api/*` to the function. Full doc: `NETLIFY-DEPLOY.md`. Function timeout is 10s (free) / 26s (Pro) — large exports can hit this. |
-| **GitHub Pages** | `.github/workflows/gh-pages.yml` | **Frontend only.** Publishes `public/` as static files; there is no backend on Pages, so `app.js`'s `API_BASE` must point at a live Netlify/Cloud Run deployment for this to do anything. Currently **manual-trigger only** (`workflow_dispatch`), because GitHub Pages requires a public repo (or a paid plan) and this repo is private — see the workflow file's header comment before re-enabling the `push` trigger. |
+| **GitHub Pages + Netlify** | `.github/workflows/gh-pages.yml` serving `public/`, backed by the Netlify deployment above | `app.js`'s `API_BASE` points GitHub Pages traffic at the live Netlify site. Currently **manual-trigger only** (`workflow_dispatch`), because GitHub Pages requires a public repo (or a paid plan) and this repo is private — see the workflow file's header comment before re-enabling the `push` trigger. |
+| **GitHub Pages + Supabase Edge Functions** | `supabase/functions/api/index.ts` | A from-scratch Deno port of every `server/*.js` route — see §2b. Full doc: `SUPABASE-DEPLOY.md`. |
 
 `server/app.js` exports `createApp({ serveStatic })` specifically so it can be
 reused this way — if you add a new route, add it once in `server/app.js` and
-all three targets get it automatically.
+the first three targets get it automatically. The Supabase target does **not**
+get it automatically — see §2b for why, and add the route to
+`supabase/functions/api/index.ts` too if you want it there.
+
+### 2b. Why Supabase is a separate implementation, not a reuse
+
+Supabase Edge Functions run on Deno, not Node, so `server/app.js`'s Express
+routing and its `@google-cloud/bigquery` SDK dependency don't carry over
+directly. `supabase/functions/api/` is a parallel, hand-ported implementation:
+
+- **`bigquery.ts` talks to BigQuery's REST API directly** (JWT-signed
+  service-account auth via Deno's Web Crypto API) instead of using the Node
+  SDK — deliberate, since the SDK's behavior under Deno was unverified and
+  this app already broke once on a Node host (Netlify) over a library's
+  disk-file assumption (see the `pdfkit` note below). This was verified
+  end-to-end against live BigQuery before ever deploying — `/api/overview`
+  returned byte-for-byte identical output to the Netlify deployment.
+- `queries.ts`, `explore.ts`, `ml.ts` are byte-for-byte SQL ports of their
+  `server/*.js` counterparts — **if you change a query, change it in both
+  places**, they are not auto-synced.
+- `ask.ts` ports 1:1 (it was already just `fetch()` calls to Anthropic).
+- `export.ts`/`pdf.ts` use `npm:exceljs`/`npm:pdfkit` via Supabase's native
+  npm-specifier support. One real bug surfaced and was fixed here:
+  `pdfkit`'s `.image()` does a `Buffer.isBuffer()` check to distinguish image
+  data from a file path — a plain `Uint8Array` fails that check silently, so
+  `pdf.ts` imports `Buffer` from `node:buffer` explicitly.
+
+Full rationale, verification steps, and setup: `SUPABASE-DEPLOY.md`.
 
 ---
 
@@ -72,8 +102,16 @@ netlify/functions/api.js   Netlify entrypoint (see §2)
 setup/ml_models.sql        One-time BQML model-training SQL — see PREDICTIVE-MODELS.md
 .github/workflows/gh-pages.yml   Static frontend deploy (see §2)
 
+supabase/functions/api/    Deno port of the whole backend, for GitHub Pages + Supabase (see §2b)
+  index.ts           Router (Deno.serve() + URLPattern) — mirrors every server/app.js route
+  bigquery.ts         REST-based BigQuery client (JWT auth) — replaces server/bigquery.js's SDK use
+  queries.ts, explore.ts, ml.ts, ask.ts   Byte-for-byte ports of their server/*.js counterparts
+  export.ts, pdf.ts   CSV/TXT ported; XLSX/PDF via npm:exceljs / npm:pdfkit
+  .env.secrets        Gitignored — real secret values for `supabase secrets set --env-file`
+
 README.md                            Install/run/deploy quick start
 NETLIFY-DEPLOY.md                    Netlify specifics
+SUPABASE-DEPLOY.md                   GitHub Pages + Supabase Edge Functions specifics
 PREDICTIVE-MODELS.md                 BQML model setup for the Predict tab
 PRODUCT-PERFORMANCE-AND-PORTFOLIO.md Older doc on the Performance tab + portfolio lookup
                                       (partially superseded — see §9, avg_buy_price/fund

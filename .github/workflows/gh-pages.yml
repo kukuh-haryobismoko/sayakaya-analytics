@@ -5,10 +5,12 @@ name: Deploy GitHub Pages
 # GitHub Pages can't run a server. public/app.js points its API calls at the
 # live Netlify site when served from *.github.io; see API_BASE in app.js.
 
-# Manual-only: GitHub Pages requires a public repo (or a paid plan) to enable
-# on a private repo, which this one is. Re-add the `push` trigger once the
-# repo goes public or upgrades, after enabling Pages in Settings > Pages.
 on:
+  push:
+    branches: [main]
+    paths:
+      - "public/**"
+      - ".github/workflows/gh-pages.yml"
   workflow_dispatch:
 
 permissions:
