@@ -7,7 +7,7 @@ import LOGO_BASE64 from './logo.ts';
 // data or a file path" — a plain Uint8Array fails that check and falls
 // through to the file-path branch, throwing. Must be a real Node Buffer.
 const LOGO_BUFFER = Buffer.from(LOGO_BASE64, 'base64');
-const LOGO_RATIO = 456 / 1856; // source PNG is 1856x456
+const LOGO_RATIO = 490 / 720; // source PNG is 720x490 (sayakaya-kotak.png)
 
 function val(v: unknown): unknown {
   if (v === null || v === undefined) return null;
@@ -20,14 +20,29 @@ function val(v: unknown): unknown {
   return v;
 }
 
-const idr = (n: unknown): string => {
-  const v = val(n);
-  if (v == null) return '—';
-  return 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(v)));
-};
 const numFmt = (n: unknown, digits = 4): string => {
   const v = val(n);
   return v == null ? '—' : Number(v).toFixed(digits);
+};
+// Indonesian number format, as on the official statement: 51.038,7052 / 100.239.429
+const idNum = (n: unknown, digits = 0): string => {
+  const v = val(n);
+  if (v == null) return '—';
+  return new Intl.NumberFormat('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(v));
+};
+// Accountant-style negatives for gain/loss cells: (214.800.256)
+const idParen = (n: unknown): string => {
+  const v = val(n);
+  if (v == null) return '—';
+  const num = Number(v);
+  return num < 0 ? `(${idNum(-num)})` : idNum(num);
+};
+// funds.type enum → the statement's friendly label ("MIXED" is sold as balanced).
+const FUND_TYPE_LABELS: Record<string, string> = { MIXED: 'Balanced Fund' };
+const fundTypeLabel = (t: unknown): string => {
+  const v = val(t);
+  if (!v) return '—';
+  return FUND_TYPE_LABELS[String(v)] || String(v).split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ') + ' Fund';
 };
 const pctFmt = (n: unknown): string => {
   const v = val(n);
@@ -55,7 +70,8 @@ function bufferDoc(doc: any): Promise<Buffer> {
 
 // deno-lint-ignore no-explicit-any
 function pageHeader(doc: any, title: string, sub?: string) {
-  const logoWidth = 120;
+  const logoWidth = 54; // square-ish kotak logo — keep it modest
+
   doc.image(LOGO_BUFFER, doc.page.margins.left, doc.y, { width: logoWidth });
   doc.y += logoWidth * LOGO_RATIO + 14;
 
@@ -75,53 +91,69 @@ interface Column { key: string; label: string; width: number; align?: string; fo
 // Minimal table renderer: header row + data rows, with column widths and
 // per-row page breaks.
 // deno-lint-ignore no-explicit-any
-function table(doc: any, columns: Column[], rows: Record<string, unknown>[], { rowHeight = 16 } = {}) {
+function table(doc: any, columns: Column[], rows: Record<string, unknown>[], { rowHeight = 16, fontSize = 8 } = {}) {
   const left = doc.page.margins.left;
   const bottom = doc.page.height - doc.page.margins.bottom;
   const totalWidth = columns.reduce((s, c) => s + c.width, 0);
 
-  function drawHeader() {
-    const y = doc.y;
-    doc.rect(left, y, totalWidth, rowHeight).fill('#f4f2ec');
+  // Row height grows when a cell wraps (long fund names, two-line headers).
+  // Caller must have the row's font set before measuring.
+  const measure = (texts: string[]) => Math.max(rowHeight,
+    8 + Math.max(...texts.map((t, i) => doc.heightOfString(t, { width: columns[i].width - 8 }) as number)));
+  const drawCells = (texts: string[], y: number) => {
     let x = left;
-    doc.font('Helvetica-Bold').fontSize(8).fillColor(INDIGO);
-    columns.forEach((c) => {
-      doc.text(c.label, x + 4, y + 4, { width: c.width - 8, align: c.align || 'left' });
+    columns.forEach((c, i) => {
+      doc.text(texts[i], x + 4, y + 4, { width: c.width - 8, align: c.align || 'left' });
       x += c.width;
     });
-    doc.y = y + rowHeight;
+  };
+
+  function drawHeader() {
+    doc.font('Helvetica-Bold').fontSize(fontSize).fillColor(INDIGO);
+    const labels = columns.map((c) => c.label);
+    const h = measure(labels);
+    const y = doc.y;
+    doc.rect(left, y, totalWidth, h).fill('#f4f2ec');
+    doc.fillColor(INDIGO);
+    drawCells(labels, y);
+    doc.y = y + h;
     doc.strokeColor(LINE).moveTo(left, doc.y).lineTo(left + totalWidth, doc.y).stroke();
   }
 
   drawHeader();
-  doc.font('Helvetica').fontSize(8).fillColor(INK);
+  doc.font('Helvetica').fontSize(fontSize).fillColor(INK);
   rows.forEach((r) => {
-    if (doc.y + rowHeight > bottom) {
+    const texts = columns.map((c) => {
+      const raw = r[c.key];
+      return String(c.format ? c.format(raw) : (val(raw) ?? '—'));
+    });
+    const h = measure(texts);
+    if (doc.y + h > bottom) {
       doc.addPage();
       drawHeader();
-      doc.font('Helvetica').fontSize(8).fillColor(INK);
+      doc.font('Helvetica').fontSize(fontSize).fillColor(INK);
     }
     const y = doc.y;
-    let x = left;
-    columns.forEach((c) => {
-      const raw = r[c.key];
-      const text = c.format ? c.format(raw) : (val(raw) ?? '—');
-      doc.text(String(text), x + 4, y + 4, { width: c.width - 8, align: c.align || 'left' });
-      x += c.width;
-    });
-    doc.y = y + rowHeight;
+    drawCells(texts, y);
+    doc.y = y + h;
   });
   doc.strokeColor(LINE).moveTo(left, doc.y).lineTo(left + totalWidth, doc.y).stroke();
   doc.moveDown(0.8);
 }
 
+// Statement columns, mirroring the official "CUSTOMER PORTFOLIO" layout:
+// fund value = avg buy NAV x units; market value = close NAV x units;
+// unrealized gain/loss = market - fund value; % = gain/loss over fund value.
 const HOLDINGS_COLS = (width: number): Column[] => [
-  { key: 'fund', label: 'Fund', width: width * 0.28 },
-  { key: 'fund_type', label: 'Type', width: width * 0.14 },
-  { key: 'unit', label: 'Units', width: width * 0.13, align: 'right', format: (v) => numFmt(v, 4) },
-  { key: 'avg_buy_price', label: 'Avg Buy Price', width: width * 0.16, align: 'right', format: (v) => (v == null ? '—' : numFmt(v, 2)) },
-  { key: 'nav', label: 'NAV', width: width * 0.12, align: 'right', format: (v) => numFmt(v, 2) },
-  { key: 'value', label: 'Value', width: width * 0.17, align: 'right', format: idr },
+  { key: 'fund', label: 'Fund Name', width: width * 0.15 },
+  { key: 'fund_type', label: 'Fund Type', width: width * 0.09, format: fundTypeLabel },
+  { key: 'unit', label: 'Unit Balance', width: width * 0.11, align: 'right', format: (v) => idNum(v, 4) },
+  { key: 'avg_buy_price', label: 'Average NAV', width: width * 0.10, align: 'right', format: (v) => idNum(v, 4) },
+  { key: 'nav', label: 'Close NAV', width: width * 0.10, align: 'right', format: (v) => idNum(v, 4) },
+  { key: 'fund_value', label: 'Fund Value', width: width * 0.13, align: 'right', format: idNum },
+  { key: 'value', label: 'Market Value', width: width * 0.13, align: 'right', format: idNum },
+  { key: 'gain_loss', label: 'Unrealized Gain/Loss', width: width * 0.12, align: 'right', format: idParen },
+  { key: 'gain_pct', label: '%', width: width * 0.07, align: 'right', format: (v) => (val(v) == null ? '—' : idNum(v, 2) + '%') },
 ];
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
@@ -131,10 +163,22 @@ const PERF_COLS = (width: number): Column[] => [
   ...PERF_PERIODS.map((p) => ({ key: p, label: p, width: (width * 0.66) / PERF_PERIODS.length, align: 'right', format: pctFmt })),
 ];
 
-interface Contact { name?: unknown; sid?: unknown; ifua?: unknown; email?: unknown; phone?: unknown }
+interface Contact { name?: unknown; sid?: unknown; ifua?: unknown; email?: unknown; phone?: unknown; address?: unknown }
 interface PerfSheet { name: string; rows: Record<string, unknown>[] }
 
-// contact: { name, sid, ifua, email, phone }
+const DISCLAIMER = 'Dokumen ini dipersiapkan oleh PT SAYAKAYA LAHIR BATIN dan hanya bisa digunakan untuk kepentingan investor tersebut di atas dan tidak untuk pihak lainnya. Laporan ini bukan merupakan konfirmasi dari PT SAYAKAYA LAHIR BATIN dan tidak untuk menggantikan laporan yang wajib diterbitkan oleh Bank Kustodian, jika ada perbedaan antara laporan ini dengan laporan Bank Kustodian, maka laporan Bank Kustodian adalah yang benar. Laporan ini diproses oleh komputer dan tidak memerlukan tandatangan.';
+const OJK_LINE = 'PT SAYAKAYA LAHIR BATIN terdaftar dan diawasi oleh OJK, dengan nomor registrasi KEP-17/PM.21/2021';
+
+// Statement date is the latest NAV date across the holdings (NAV publishes
+// H-1, so "today's" statement is dated yesterday). Formatted d/m/yyyy.
+function statementDate(holdings: Record<string, unknown>[]): string {
+  const latest = holdings.map((h) => String(val(h.nav_date) || '')).filter(Boolean).sort().pop();
+  if (!latest) return '—';
+  const [y, m, d] = latest.slice(0, 10).split('-').map(Number);
+  return `${d}/${m}/${y}`;
+}
+
+// contact: { name, sid, ifua, address, ... }
 // holdings: rows from queries.userHoldings()
 // performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }]
 export function portfolioReport(
@@ -146,32 +190,80 @@ export function portfolioReport(
   // `any` here matches the same pragmatism already used in the helpers below.
   // deno-lint-ignore no-explicit-any
   const doc: any = new PDFDocument({ size: 'A4', margin: 40 });
+  const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-  // ---- Page 1: investor card + holdings ----
-  pageHeader(doc, 'Investor Portfolio Report', `Generated ${new Date().toISOString().slice(0, 10)}`);
+  // ---- Page 1: CUSTOMER PORTFOLIO statement ----
+  // Letterhead: square logo + issuer address block.
+  const logoWidth = 54;
+  doc.image(LOGO_BUFFER, left, doc.y, { width: logoWidth });
+  const headX = left + logoWidth + 16;
+  const headY = doc.y;
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text('PT Sayakaya Lahir Batin', headX, headY);
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED)
+    .text('Sahid Sudirman Center, 12th Floor', headX)
+    .text('Jl Jenderal Sudirman Kav. 86, Jakarta 10220', headX);
+  doc.y = Math.max(doc.y, headY + logoWidth * LOGO_RATIO) + 24;
 
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(INK).text((val(contact?.name) as string) || '—');
-  doc.font('Helvetica').fontSize(9).fillColor(MUTED);
-  const line = (label: string, v: unknown) => doc.text(`${label}: ${val(v) || '—'}`);
-  line('SID', contact?.sid);
-  line('IFUA', contact?.ifua);
-  line('Email', contact?.email);
-  line('Phone', contact?.phone);
-  doc.moveDown(0.8);
+  // Investor block (left) + CUSTOMER PORTFOLIO / DATE (right).
+  const labelW = 60;
+  const valueW = width * 0.55 - labelW;
+  const rightW = 200;
+  const rightX = left + width - rightW;
+  const blockY = doc.y;
+  let y = blockY;
+  ([['NAME', contact?.name], ['SID', contact?.sid], ['IFUA', contact?.ifua], ['Address', contact?.address]] as [string, unknown][]).forEach(([label, v]) => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(INK).text(label, left, y, { width: labelW });
+    const text = String(val(v) || '—');
+    doc.font('Helvetica').fontSize(9).fillColor(INK).text(text, left + labelW, y, { width: valueW });
+    y += Math.max(13, doc.heightOfString(text, { width: valueW }) + 2);
+  });
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text('CUSTOMER PORTFOLIO', rightX, blockY, { width: rightW, align: 'center' });
+  doc.font('Helvetica').fontSize(9).fillColor(INK).text('DATE', rightX, blockY + 19, { width: rightW });
+  doc.text(statementDate(holdings), rightX, blockY + 19, { width: rightW, align: 'right' });
+  doc.x = left;
+  doc.y = y + 24;
 
-  const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(INDIGO).text(`Total AUM: ${idr(totalAum)}`);
-  doc.font('Helvetica').fontSize(9).fillColor(MUTED).text(`${holdings.length} holding${holdings.length === 1 ? '' : 's'}`);
-  doc.moveDown(0.8);
-
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(INK).text('Holdings');
-  doc.moveDown(0.3);
+  const cols = HOLDINGS_COLS(width);
   if (holdings.length) {
-    table(doc, HOLDINGS_COLS(width), holdings);
+    table(doc, cols, holdings, { fontSize: 7 });
   } else {
     doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No active holdings.');
+    doc.moveDown(0.8);
   }
+
+  // Total row (multiple funds only), spanning Close NAV → % like the statement.
+  if (holdings.length > 1) {
+    const sum = (k: string) => holdings.reduce((s, h) => s + (Number(val(h[k])) || 0), 0);
+    const totalFund = sum('fund_value');
+    const totalMarket = sum('value');
+    const totalGain = totalMarket - totalFund;
+    const totalPct = totalFund ? (totalGain / totalFund) * 100 : null;
+    const colX: Record<string, number> = {};
+    let x = left;
+    cols.forEach((c) => { colX[c.key] = x; x += c.width; });
+    const rowY = doc.y + 2;
+    const totX = colX.nav;
+    doc.strokeColor(INK).lineWidth(0.7).moveTo(totX, rowY).lineTo(left + width, rowY).stroke();
+    doc.font('Helvetica-Bold').fontSize(7).fillColor(INK);
+    const cell = (key: string, text: string) => {
+      const c = cols.find((col) => col.key === key)!;
+      doc.text(text, colX[key] + 4, rowY + 4, { width: c.width - 8, align: 'right' });
+    };
+    cell('nav', 'Total');
+    cell('fund_value', idNum(totalFund));
+    cell('value', idNum(totalMarket));
+    cell('gain_loss', idNum(totalGain));
+    cell('gain_pct', totalPct == null ? '—' : idNum(totalPct, 2) + '%');
+    doc.y = rowY + 15;
+    doc.strokeColor(INK).moveTo(totX, doc.y).lineTo(left + width, doc.y).stroke();
+    doc.y += 12;
+    doc.x = left;
+  }
+
+  doc.font('Helvetica').fontSize(7).fillColor(MUTED)
+    .text(DISCLAIMER, left, doc.y, { width })
+    .text(OJK_LINE, { width });
 
   // ---- One page per fund type: NAV % change table ----
   performanceSheets.forEach((sheet) => {

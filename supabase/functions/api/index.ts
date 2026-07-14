@@ -40,7 +40,9 @@ function pivotPerformanceByType(rows: Record<string, unknown>[]) {
 function portfolioSheetRows(holdings: Record<string, unknown>[]) {
   return holdings.map((h) => ({
     Fund: h.fund, Type: h.fund_type,
-    Units: h.unit, 'Avg Buy Price': h.avg_buy_price, NAV: h.nav, Value: h.value, Opened: h.opened_at,
+    'Unit Balance': h.unit, 'Average NAV': h.avg_buy_price, 'Close NAV': h.nav,
+    'Fund Value': h.fund_value, 'Market Value': h.value,
+    'Unrealized Gain/Loss': h.gain_loss, '%': h.gain_pct, Opened: h.opened_at,
   }));
 }
 

@@ -392,7 +392,8 @@ const userSearch = (q) => ({
 // Contact card for the PDF export header — fetched server-side by userId so
 // the report shows authoritative data, not whatever the client last selected.
 const userContact = (userId) => ({
-  sql: `SELECT u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone
+  sql: `SELECT u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone,
+      COALESCE(up.correspondence_address, up.id_address) AS address
     FROM ${USERS} u
     LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
     WHERE u.id = @userId
@@ -403,32 +404,32 @@ const userContact = (userId) => ({
 // Current holdings for one user, one row per fund — regular + bonus units are
 // combined (the investor doesn't care which bucket a unit came from). Live
 // value at the fund's latest NAV, same "active holdings" definition as the
-// AUM KPI. avg_buy_price is the unit-weighted average price paid across all
-// completed buys in that fund: SUM(final_amount) / SUM(unit).
+// AUM KPI. avg_buy_price averages the buy price carried on the portfolio rows
+// themselves (portfolios.initial_price / bonus_portfolios.average_nav), so it
+// exists even for holdings with no completed buy transaction (transfers, bonus).
 const userHoldings = (userId) => ({
   sql: `WITH holdings AS (
-      SELECT fund_id, SUM(unit) AS unit, MIN(created_at) AS opened_at
+      SELECT fund_id, SUM(unit) AS unit, AVG(price) AS avg_buy_price, MIN(created_at) AS opened_at
       FROM (
-        SELECT p.fund_id, p.unit, p.created_at
+        SELECT p.fund_id, p.unit, p.initial_price AS price, p.created_at
         FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id = @userId
         UNION ALL
-        SELECT bp.fund_id, bp.unit, bp.created_at
+        SELECT bp.fund_id, bp.unit, bp.average_nav AS price, bp.created_at
         FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id = @userId
       )
       GROUP BY fund_id
-    ),
-    buys AS (
-      SELECT fund_id, SUM(final_amount) / SUM(unit) AS avg_buy_price
-      FROM ${TX}
-      WHERE user_id = @userId AND type = 'buy' AND status = 'completed' AND unit > 0
-      GROUP BY fund_id
     )
-    SELECT f.name AS fund, f.type AS fund_type, h.unit,
-      f.latest_nav_value AS nav, ROUND(h.unit * f.latest_nav_value) AS value,
-      b.avg_buy_price, h.opened_at
-    FROM holdings h
-    JOIN ${FUNDS} f ON f.id = h.fund_id
-    LEFT JOIN buys b ON b.fund_id = h.fund_id
+    SELECT *, value - fund_value AS gain_loss,
+      SAFE_DIVIDE(value - fund_value, fund_value) * 100 AS gain_pct
+    FROM (
+      SELECT f.name AS fund, f.type AS fund_type, h.unit, h.avg_buy_price,
+        f.latest_nav_value AS nav, f.latest_nav_date AS nav_date,
+        ROUND(h.unit * h.avg_buy_price) AS fund_value,
+        ROUND(h.unit * f.latest_nav_value) AS value,
+        h.opened_at
+      FROM holdings h
+      JOIN ${FUNDS} f ON f.id = h.fund_id
+    )
     ORDER BY value DESC`,
   params: { userId },
 });

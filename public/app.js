@@ -165,16 +165,38 @@ function renderPfKpis(holdings, split) {
 
 function renderPfHoldings(rows) {
   if (!rows.length) { $('#pfHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
-  const body = rows.map((h) => `<tr>
+  const gl = (v) => {
+    if (v == null) return '<td class="num">—</td>';
+    const n = Number(v);
+    return `<td class="num"><span style="color:${n >= 0 ? 'var(--teal)' : 'var(--rose)'}">${idrFull(n)}</span></td>`;
+  };
+  const glPct = (v) => {
+    if (v == null) return '<td class="num">—</td>';
+    const n = Number(v);
+    return `<td class="num"><span style="color:${n >= 0 ? 'var(--teal)' : 'var(--rose)'}">${n >= 0 ? '+' : ''}${n.toFixed(2)}%</span></td>`;
+  };
+  const body = rows.map((h) => {
+    // Derived client-side so the table works regardless of API version:
+    // fund value = units x avg buy NAV; gain = market - fund value.
+    const avg = h.avg_buy_price == null ? null : Number(val(h.avg_buy_price));
+    const market = Number(val(h.value));
+    const fundValue = avg == null ? null : Math.round(Number(val(h.unit)) * avg);
+    const gain = fundValue == null ? null : market - fundValue;
+    const pct = fundValue ? (gain / fundValue) * 100 : null;
+    return `<tr>
       <td>${val(h.fund)}</td>
       <td><span class="tag other">${val(h.fund_type)}</span></td>
       <td class="num">${Number(val(h.unit)).toFixed(4)}</td>
-      <td class="num">${h.avg_buy_price == null ? '—' : num(val(h.avg_buy_price))}</td>
+      <td class="num">${avg == null ? '—' : num(avg)}</td>
       <td class="num">${num(val(h.nav))}</td>
-      <td class="num">${idrFull(val(h.value))}</td>
-    </tr>`).join('');
+      <td class="num">${fundValue == null ? '—' : idrFull(fundValue)}</td>
+      <td class="num">${idrFull(market)}</td>
+      ${gl(gain)}
+      ${glPct(pct)}
+    </tr>`;
+  }).join('');
   $('#pfHoldings').innerHTML = `<table><thead><tr>
-      <th>Fund</th><th>Type</th><th class="num">Units</th><th class="num">Avg Buy Price</th><th class="num">NAV</th><th class="num">Value</th>
+      <th>Fund</th><th>Type</th><th class="num">Unit Balance</th><th class="num">Average NAV</th><th class="num">Close NAV</th><th class="num">Fund Value</th><th class="num">Market Value</th><th class="num">Unrealized G/L</th><th class="num">%</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 
