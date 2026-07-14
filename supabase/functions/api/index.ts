@@ -309,6 +309,7 @@ on('GET', '/api/predict/transactions', async (_req, _params, url) => json(await 
 on('GET', '/api/predict/churn', async (_req, _params, url) => json(await ML.churnPredictions(qp(url, 'limit'))));
 on('GET', '/api/churn/overview', async () => json(await ML.churnOverview()));
 on('GET', '/api/retention/cohorts', async (_req, _params, url) => json(await ML.retentionCohorts(qp(url, 'months'))));
+on('GET', '/api/retention/aum-cohorts', async (_req, _params, url) => json(await ML.aumRetentionCohorts(qp(url, 'months'))));
 
 // ---- Generic multi-table explorer -----------------------------------------
 on('GET', '/api/explore/_meta', () => json(EX.meta()));

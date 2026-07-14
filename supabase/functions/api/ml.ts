@@ -7,6 +7,7 @@ const MIFEE = '`sayakaya.mi_fee_logs.mi_fee`';
 const TX = '`sayakaya.main.transactions`';
 const PORT = '`sayakaya.main.portfolios`';
 const USERS = '`sayakaya.main.users`';
+const MIFEE_PORT = '`sayakaya.mi_fee_logs.portfolios`';
 
 const clampHorizon = (h: unknown) => Math.min(Math.max(parseInt(String(h), 10) || 30, 1), 120);
 
@@ -142,5 +143,73 @@ export async function retentionCohorts(months: unknown = 12) {
       AND DATE_DIFF(a.m, ft.cohort, MONTH) >= 0
     GROUP BY cohort, month_offset
     ORDER BY cohort, month_offset`, {});
+  return rows;
+}
+
+// ---- AUM retention cohorts (engagement by months since first AUM) ---------
+// Cohort assignment is NOT first-transaction month (that's retentionCohorts
+// above) — it's the first calendar month a sid_code shows positive AUM in
+// mi_fee_logs.portfolios, joined to users via sid_code. Retention per month
+// offset is then calculated purely from transactions: a user counts as
+// retained in month M if their cumulative netflow (buy - sell, cohort month
+// through month M) is still >= 0 — i.e. they haven't net-redeemed more than
+// they've put in. netflow is buy-minus-sell only: SWITCH_IN/SWITCH_OUT/
+// reinvestment don't move cash across the platform boundary, so they're
+// excluded, matching the buy/sell convention used elsewhere (see overviewTx).
+// mi_fee_logs.portfolios alone scans ~4.4GB (unpartitioned, 107M rows) —
+// over this app's default 4GB per-query cap (see bigquery.ts) — so this call
+// passes an explicit higher maxBytes rather than the global default.
+export async function aumRetentionCohorts(months: unknown = 12) {
+  const m = Math.min(parseInt(String(months), 10) || 12, 24);
+  const rows = await runQuery(`
+    WITH first_aum AS (
+      SELECT sid_code, MIN(DATE_TRUNC(DATE(created_at), MONTH)) AS cohort
+      FROM ${MIFEE_PORT}
+      WHERE amount > 0
+      GROUP BY sid_code
+    ),
+    cohort_users AS (
+      SELECT u.id AS user_id, fa.cohort
+      FROM first_aum fa
+      JOIN ${USERS} u ON u.sid_code = fa.sid_code
+      WHERE fa.cohort >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL ${m} MONTH)
+    ),
+    monthly_flow AS (
+      SELECT user_id, DATE_TRUNC(DATE(created_at), MONTH) AS m,
+        SUM(IF(type='buy', final_amount, 0)) - SUM(IF(type='sell', final_amount, 0)) AS flow
+      FROM ${TX}
+      WHERE status='completed' AND type IN ('buy','sell')
+      GROUP BY user_id, m
+    ),
+    months AS (
+      SELECT month_start FROM UNNEST(GENERATE_DATE_ARRAY(
+        DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL ${m} MONTH),
+        DATE_TRUNC(CURRENT_DATE(), MONTH),
+        INTERVAL 1 MONTH
+      )) AS month_start
+    ),
+    grid AS (
+      SELECT cu.user_id, cu.cohort, mo.month_start AS m
+      FROM cohort_users cu CROSS JOIN months mo
+      WHERE mo.month_start >= cu.cohort
+    ),
+    joined AS (
+      SELECT g.user_id, g.cohort, g.m,
+        DATE_DIFF(g.m, g.cohort, MONTH) AS month_offset,
+        COALESCE(mf.flow, 0) AS flow
+      FROM grid g
+      LEFT JOIN monthly_flow mf ON mf.user_id = g.user_id AND mf.m = g.m
+    ),
+    withcum AS (
+      SELECT *, SUM(flow) OVER (PARTITION BY user_id ORDER BY m ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_netflow
+      FROM joined
+    )
+    SELECT FORMAT_DATE('%Y-%m', cohort) AS cohort, month_offset,
+      COUNT(DISTINCT user_id) AS cohort_size,
+      COUNT(DISTINCT IF(cum_netflow >= 0, user_id, NULL)) AS users,
+      ROUND(SUM(cum_netflow)) AS netflow
+    FROM withcum
+    GROUP BY cohort, month_offset
+    ORDER BY cohort, month_offset`, {}, { maxBytes: 5_000_000_000 });
   return rows;
 }

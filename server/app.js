@@ -269,6 +269,7 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/predict/churn', handler(async (req, res) => res.json(await ML.churnPredictions(req.query.limit))));
   app.get('/api/churn/overview', handler(async (_req, res) => res.json(await ML.churnOverview())));
   app.get('/api/retention/cohorts', handler(async (req, res) => res.json(await ML.retentionCohorts(req.query.months))));
+  app.get('/api/retention/aum-cohorts', handler(async (req, res) => res.json(await ML.aumRetentionCohorts(req.query.months))));
 
   // ---- Generic multi-table explorer -----------------------------------------
   app.get('/api/explore/_meta', handler(async (_req, res) => {

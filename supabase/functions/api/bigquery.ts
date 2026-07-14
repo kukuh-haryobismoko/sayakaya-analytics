@@ -167,13 +167,17 @@ async function bqFetch(path: string, body: Record<string, unknown>) {
  * Run a parameterized query that this app controls (trusted SQL, untrusted params).
  * Always prefer named parameters for any user-supplied value.
  */
-export async function runQuery(sql: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>[]> {
+export async function runQuery(
+  sql: string,
+  params: Record<string, unknown> = {},
+  { maxBytes = MAX_BYTES_BILLED }: { maxBytes?: string | number } = {},
+): Promise<Record<string, unknown>[]> {
   const queryParameters = Object.entries(params).map(([name, value]) => toQueryParameter(name, value));
   let data = await bqFetch(`projects/${PROJECT_ID}/queries`, {
     query: sql,
     useLegacySql: false,
     location: LOCATION,
-    maximumBytesBilled: MAX_BYTES_BILLED,
+    maximumBytesBilled: String(maxBytes),
     useQueryCache: false, // every report must reflect live table state, not a cached job result
     ...(queryParameters.length ? { parameterMode: 'NAMED', queryParameters } : {}),
   });

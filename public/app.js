@@ -329,6 +329,7 @@ async function loadPredict() {
   if (ready) { loadAumForecast(); loadTxForecast(); loadChurn(); }
   loadChurnOverview();
   loadRetention();
+  loadAumRetention();
   predictLoaded = true;
 }
 
@@ -464,6 +465,47 @@ async function loadRetention() {
     }).join('');
     $('#retentionHeatmap').innerHTML = `<table><thead><tr>${heads.join('')}</tr></thead><tbody>${body}</tbody></table>`;
   } catch (e) { $('#retentionHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// Retained-by-capital cohort: same cohort basis as loadRetention (first
+// transaction month), but a month counts a user as retained if they still
+// have AUM that month OR their cumulative netflow since month 0 is still
+// >= 0. Each cell also carries that cumulative netflow so a retention drop
+// caused by net redemptions is visible, not just the resulting %.
+async function loadAumRetention() {
+  $('#aumRetentionHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
+  try {
+    const rows = await api('/api/retention/aum-cohorts?months=12');
+    if (!rows.length) { $('#aumRetentionHeatmap').innerHTML = '<div class="empty">Not enough data.</div>'; return; }
+    const cohorts = {};
+    const sizes = {};
+    let maxOffset = 0;
+    rows.forEach((r) => {
+      const c = val(r.cohort), o = Number(val(r.month_offset));
+      const u = Number(val(r.users)), nf = val(r.netflow) == null ? null : Number(val(r.netflow));
+      (cohorts[c] = cohorts[c] || {})[o] = { u, nf };
+      sizes[c] = Number(val(r.cohort_size)); // constant per cohort across offsets
+      if (o > maxOffset) maxOffset = o;
+    });
+    maxOffset = Math.min(maxOffset, 12);
+    const heads = ['<th class="coh">Cohort</th>', '<th class="num">Size</th>'];
+    for (let o = 0; o <= maxOffset; o++) heads.push(`<th>M${o}</th>`);
+    const body = Object.keys(cohorts).sort().map((c) => {
+      const size = sizes[c] || 0;
+      let tds = `<td class="coh">${c}</td><td class="num">${num(size)}</td>`;
+      for (let o = 0; o <= maxOffset; o++) {
+        const cell = cohorts[c][o];
+        if (!cell || !size) { tds += '<td>·</td>'; continue; }
+        const pctv = cell.u / size;
+        const bg = `rgba(${C.heatRgb},${(0.12 + pctv * 0.8).toFixed(2)})`;
+        const nfColor = cell.nf == null ? 'inherit' : (cell.nf >= 0 ? 'var(--teal)' : 'var(--rose)');
+        const nfLabel = cell.nf == null ? '' : `<div style="font-size:10px;color:${nfColor}">${idr(cell.nf)}</div>`;
+        tds += `<td class="heat" style="background:${bg}" title="Cumulative netflow: ${idrFull(cell.nf)}">${Math.round(pctv * 100)}%${nfLabel}</td>`;
+      }
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    $('#aumRetentionHeatmap').innerHTML = `<table><thead><tr>${heads.join('')}</tr></thead><tbody>${body}</tbody></table>`;
+  } catch (e) { $('#aumRetentionHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
 // ====================================================================
