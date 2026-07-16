@@ -1039,6 +1039,45 @@ function renderGenericTable(sel, rows) {
 // ====================================================================
 //  EXPORTS
 // ====================================================================
+
+// Portfolio PDF column picker. 'Fund Name' isn't listed — it's always kept
+// server-side as the row identity column.
+const PDF_COLS_KEY = 'sk_pdf_cols';
+const PDF_COLUMNS = [
+  { key: 'fund_type', label: 'Fund Type' },
+  { key: 'unit', label: 'Unit Balance' },
+  { key: 'avg_buy_price', label: 'Average NAV' },
+  { key: 'nav', label: 'Close NAV' },
+  { key: 'fund_value', label: 'Fund Value' },
+  { key: 'value', label: 'Market Value' },
+  { key: 'gain_loss', label: 'Unrealized Gain/Loss' },
+  { key: 'gain_pct', label: '%' },
+];
+
+function loadPdfColumnPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PDF_COLS_KEY));
+    if (Array.isArray(saved)) return saved;
+  } catch (e) { /* corrupt or missing prefs — fall back to all columns */ }
+  return PDF_COLUMNS.map((c) => c.key);
+}
+
+function renderPdfColumnPicker() {
+  const checked = new Set(loadPdfColumnPrefs());
+  $('#pfPdfCols').innerHTML = PDF_COLUMNS.map((c) =>
+    `<label class="ask-table-chk"><input type="checkbox" value="${c.key}" ${checked.has(c.key) ? 'checked' : ''}> ${c.label}</label>`).join('');
+}
+
+function savePdfColumnPrefs() {
+  localStorage.setItem(PDF_COLS_KEY, JSON.stringify($$('#pfPdfCols input:checked').map((el) => el.value)));
+}
+
+// null (all columns picked) keeps the request body free of a redundant list.
+function selectedPdfColumns() {
+  const picked = loadPdfColumnPrefs();
+  return picked.length === PDF_COLUMNS.length ? null : ['fund', ...picked];
+}
+
 async function download(body, filename) {
   const res = await fetch(API_BASE + '/api/export', {
     method: 'POST',
@@ -1290,8 +1329,20 @@ function wire() {
   $('#pfXlsx').addEventListener('click', () => pfSelected && download(
     { source: 'portfolio_full', format: 'xlsx', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
     `portfolio_${pfSelected.sid}.xlsx`));
+  renderPdfColumnPicker();
+  $('#pfPdfCols').addEventListener('change', savePdfColumnPrefs);
+  $('#pfPdfColsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#pfPdfColsPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#pfPdfColsDropdown')) $('#pfPdfColsPanel').classList.remove('open');
+  });
   $('#pfPdf').addEventListener('click', () => pfSelected && download(
-    { source: 'portfolio_full', format: 'pdf', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
+    { source: 'portfolio_full', format: 'pdf', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid, columns: selectedPdfColumns() },
+    `portfolio_${pfSelected.sid}.pdf`));
+  $('#pfPdfOnly').addEventListener('click', () => pfSelected && download(
+    { source: 'portfolio_full', format: 'pdf', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid, includePerformance: false, columns: selectedPdfColumns() },
     `portfolio_${pfSelected.sid}.pdf`));
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
   $('#revApply').addEventListener('click', loadRevenue);

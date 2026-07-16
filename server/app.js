@@ -387,9 +387,11 @@ function createApp({ serveStatic = true } = {}) {
         runQuery(pq.sql, pq.params),
       ]);
       if (format === 'pdf') {
+        const { includePerformance = true, columns } = req.body;
         const c = Q.userContact(userId);
         const [contact] = await runQuery(c.sql, c.params);
-        const buf = await PDF.portfolioReport({ contact, holdings }, pivotPerformanceByType(detail));
+        const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns });
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}.pdf"`);
         return res.send(buf);

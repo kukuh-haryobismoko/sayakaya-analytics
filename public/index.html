@@ -109,7 +109,14 @@
             <div class="exp">
               <button class="btn-ghost" id="pfCsv">CSV</button>
               <button class="btn-ghost" id="pfXlsx">Excel (portfolio + performance, all types)</button>
-              <button class="btn-ghost" id="pfPdf">PDF report</button>
+              <div class="dropdown-multi" id="pfPdfColsDropdown">
+                <button type="button" class="dropdown-multi-btn" id="pfPdfColsBtn">Columns</button>
+                <div class="dropdown-multi-panel" id="pfPdfColsPanel">
+                  <div id="pfPdfCols" class="dropdown-multi-list"></div>
+                </div>
+              </div>
+              <button class="btn-ghost" id="pfPdfOnly">PDF (portfolio only)</button>
+              <button class="btn-ghost" id="pfPdf">PDF (with performance)</button>
             </div>
           </div>
           <span class="hint" id="pfUserSub"></span>

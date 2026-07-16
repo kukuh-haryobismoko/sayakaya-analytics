@@ -421,12 +421,12 @@ export const userContact = (userId: string): Query => ({
 // Current holdings for one user, one row per fund — regular + bonus units are
 // combined (the investor doesn't care which bucket a unit came from). Live
 // value at the fund's latest NAV, same "active holdings" definition as the
-// AUM KPI. avg_buy_price averages the buy price carried on the portfolio rows
-// themselves (portfolios.initial_price / bonus_portfolios.average_nav), so it
-// exists even for holdings with no completed buy transaction (transfers, bonus).
+// AUM KPI. avg_buy_price is unit-weighted across the buy price carried on the
+// portfolio rows themselves (portfolios.initial_price / bonus_portfolios.average_nav),
+// so it exists even for holdings with no completed buy transaction (transfers, bonus).
 export const userHoldings = (userId: string): Query => ({
   sql: `WITH holdings AS (
-      SELECT fund_id, SUM(unit) AS unit, AVG(price) AS avg_buy_price, MIN(created_at) AS opened_at
+      SELECT fund_id, SUM(unit) AS unit, SAFE_DIVIDE(SUM(unit * price), SUM(unit)) AS avg_buy_price, MIN(created_at) AS opened_at
       FROM (
         SELECT p.fund_id, p.unit, p.initial_price AS price, p.created_at
         FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id = @userId

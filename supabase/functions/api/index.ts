@@ -414,9 +414,12 @@ on('POST', '/api/export', async (req) => {
       runQuery(pq.sql, pq.params),
     ]);
     if (format === 'pdf') {
+      const includePerformance = body.includePerformance !== false;
+      const columns = body.columns as string[] | undefined;
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params);
-      const buf = await portfolioReport({ contact, holdings }, pivotPerformanceByType(detail));
+      const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns });
       // Buffer (Node) satisfies BodyInit (a Uint8Array) at runtime, but the
       // two libraries' type declarations don't agree — wrap to satisfy both.
       return new Response(new Uint8Array(buf), {

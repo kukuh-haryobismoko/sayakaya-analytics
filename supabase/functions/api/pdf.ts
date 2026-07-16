@@ -156,6 +156,15 @@ const HOLDINGS_COLS = (width: number): Column[] => [
   { key: 'gain_pct', label: '%', width: width * 0.07, align: 'right', format: (v) => (val(v) == null ? '—' : idNum(v, 2) + '%') },
 ];
 
+// Drops columns not in `keys` (if given), keeping 'fund' always, and renormalizes
+// widths so the remaining columns still fill the full table width.
+function filterCols(cols: Column[], totalWidth: number, keys?: string[]): Column[] {
+  if (!keys) return cols;
+  const keep = cols.filter((c) => c.key === 'fund' || keys.includes(c.key));
+  const sumW = keep.reduce((s, c) => s + c.width, 0);
+  return keep.map((c) => ({ ...c, width: (c.width / sumW) * totalWidth }));
+}
+
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
 const PERF_COLS = (width: number): Column[] => [
   { key: 'Fund', label: 'Fund', width: width * 0.24 },
@@ -181,9 +190,11 @@ function statementDate(holdings: Record<string, unknown>[]): string {
 // contact: { name, sid, ifua, address, ... }
 // holdings: rows from queries.userHoldings()
 // performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }]
+// options.columns: optional list of HOLDINGS_COLS keys to keep (plus 'fund', always kept)
 export function portfolioReport(
   { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] },
   performanceSheets: PerfSheet[],
+  options: { columns?: string[] } = {},
 ): Promise<Buffer> {
   // pdfkit's bundled .d.ts doesn't fully describe PDFDocument's fluent
   // instance API (font/text/moveDown etc. all really exist at runtime) —
@@ -224,7 +235,7 @@ export function portfolioReport(
   doc.x = left;
   doc.y = y + 24;
 
-  const cols = HOLDINGS_COLS(width);
+  const cols = filterCols(HOLDINGS_COLS(width), width, options.columns);
   if (holdings.length) {
     table(doc, cols, holdings, { fontSize: 7 });
   } else {
@@ -233,7 +244,10 @@ export function portfolioReport(
   }
 
   // Total row (multiple funds only), spanning Close NAV → % like the statement.
-  if (holdings.length > 1) {
+  // Anchored at the first non-identity column still visible, so it holds up
+  // when hidden columns shift what's left in the table.
+  const anchorCol = cols.find((c) => c.key !== 'fund' && c.key !== 'fund_type');
+  if (holdings.length > 1 && anchorCol) {
     const sum = (k: string) => holdings.reduce((s, h) => s + (Number(val(h[k])) || 0), 0);
     const totalFund = sum('fund_value');
     const totalMarket = sum('value');
@@ -243,14 +257,16 @@ export function portfolioReport(
     let x = left;
     cols.forEach((c) => { colX[c.key] = x; x += c.width; });
     const rowY = doc.y + 2;
-    const totX = colX.nav;
+    const totX = colX[anchorCol.key];
     doc.strokeColor(INK).lineWidth(0.7).moveTo(totX, rowY).lineTo(left + width, rowY).stroke();
     doc.font('Helvetica-Bold').fontSize(7).fillColor(INK);
+    const sumKeys = ['fund_value', 'value', 'gain_loss', 'gain_pct'];
     const cell = (key: string, text: string) => {
-      const c = cols.find((col) => col.key === key)!;
+      const c = cols.find((col) => col.key === key);
+      if (!c) return;
       doc.text(text, colX[key] + 4, rowY + 4, { width: c.width - 8, align: 'right' });
     };
-    cell('nav', 'Total');
+    if (!sumKeys.includes(anchorCol.key)) cell(anchorCol.key, 'Total');
     cell('fund_value', idNum(totalFund));
     cell('value', idNum(totalMarket));
     cell('gain_loss', idNum(totalGain));
