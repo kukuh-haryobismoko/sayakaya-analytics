@@ -223,17 +223,45 @@ on('GET', '/api/users/search', async (_req, _params, url) => {
 on('GET', '/api/portfolio', async (_req, _params, url) => {
   const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
   if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
-  const h = Q.userHoldings(userId);
+  const date = qp(url, 'date');
+  const d = Q.userHoldingsLatestDate(sid);
+  const h = date ? Q.userHoldingsAsOf(sid, date) : Q.userHoldings(userId);
   const s = Q.userPortfolioSplit(userId);
   const p = Q.userPerformance(sid);
   const a = Q.userAumHistory(sid);
-  const [holdings, splitRows, performance, history] = await Promise.all([
+  const [dRows, holdings, splitRows, performance, history] = await Promise.all([
+    runQuery(d.sql, d.params),
     runQuery(h.sql, h.params),
     runQuery(s.sql, s.params),
     runQuery(p.sql, p.params),
     runQuery(a.sql, a.params),
   ]);
-  return json({ holdings, split: splitRows[0], performance, history });
+  const latestDate = (dRows[0]?.latest_date as string) || null;
+  // Regular/bonus split is always current-live (portfolios/bonus_portfolios
+  // don't have history), so it doesn't make sense to show it as if it were
+  // "as of" a past date — omit it in that mode rather than show a misleading number.
+  return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+});
+
+// ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
+on('GET', '/api/portfolio-explorer', async (_req, _params, url) => {
+  const userId = qp(url, 'userId');
+  if (!userId) return json({ error: 'userId is required.' }, 400);
+  // Always look up the latest available snapshot date, even when a specific
+  // date was requested — the UI shows it alongside asOfDate so it's obvious
+  // whether the picked date actually has data, and how it compares to "now".
+  const d = Q.goalLatestSnapshotDate(userId);
+  const [dRow] = await runQuery(d.sql, d.params);
+  const latestDate = (dRow?.latest_date as string) || null;
+  const asOfDate = qp(url, 'date') || latestDate || undefined;
+  if (!asOfDate) return json({ asOfDate: null, latestDate: null, holdings: [], byGoal: [] });
+  const h = Q.goalUserHoldings(userId, asOfDate);
+  const b = Q.goalUserHoldingsByGoal(userId, asOfDate);
+  const [holdings, byGoal] = await Promise.all([
+    runQuery(h.sql, h.params),
+    runQuery(b.sql, b.params),
+  ]);
+  return json({ asOfDate, latestDate, holdings, byGoal });
 });
 
 // ---- Product performance (NAV % change per fund type) ----------------------
@@ -293,6 +321,54 @@ on('GET', '/api/revenue', async (_req, _params, url) => {
 on('GET', '/api/revenue/summary', async (_req, _params, url) => {
   const q = Q.revenueMonthlySummary(qp(url, 'from'), qp(url, 'to'));
   return json(await runQuery(q.sql, q.params));
+});
+
+// ---- Revenue v2: same as Revenue above, but AUM sourced from goal_snapshots
+on('GET', '/api/revenue-v2', async (_req, _params, url) => {
+  const q = Q.revenueV2Detail(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+});
+on('GET', '/api/revenue-v2/summary', async (_req, _params, url) => {
+  const q = Q.revenueV2MonthlySummary(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+});
+
+// ---- Remisier sharing: management fee revenue for one remisier's users,
+// from goal_snapshots, split as a portion of the AperD share -----------------
+on('GET', '/api/remisier/users', async (_req, _params, url) => {
+  const code = qp(url, 'code');
+  if (!code) return json({ error: 'code is required.' }, 400);
+  const q = Q.remisierUsers(qp(url, 'field') || '', code);
+  return json(await runQuery(q.sql, q.params));
+});
+on('GET', '/api/remisier/revenue', async (_req, _params, url) => {
+  const code = qp(url, 'code');
+  if (!code) return json({ error: 'code is required.' }, 400);
+  const portion = Number(qp(url, 'portion')) || 0;
+  const q = Q.remisierRevenueDetail(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
+  return json(await runQuery(q.sql, q.params));
+});
+on('GET', '/api/remisier/revenue/summary', async (_req, _params, url) => {
+  const code = qp(url, 'code');
+  if (!code) return json({ error: 'code is required.' }, 400);
+  const portion = Number(qp(url, 'portion')) || 0;
+  const q = Q.remisierRevenueSummary(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
+  return json(await runQuery(q.sql, q.params));
+});
+on('GET', '/api/remisier/transactions', async (_req, _params, url) => {
+  const referrerCodes = qpAll(url, 'referrerCodes');
+  const salesCodes = qpAll(url, 'salesCodes');
+  if (!referrerCodes.length && !salesCodes.length) return json({ error: 'At least one referrer_code or sales_code is required.' }, 400);
+  const q = Q.remisierTransactions({
+    referrerCodes, salesCodes,
+    from: qp(url, 'from'), to: qp(url, 'to'),
+    limit: qp(url, 'limit') || 100, offset: qp(url, 'offset') || 0,
+  });
+  const [rows, countRows] = await Promise.all([
+    runQuery(q.sql, q.params),
+    runQuery(q.countSql!, q.params),
+  ]);
+  return json({ rows, total: Number(countRows[0]?.total || 0) });
 });
 
 // ---- Predictive models (BigQuery ML) --------------------------------------
@@ -407,7 +483,8 @@ on('POST', '/api/export', async (req) => {
   } else if (source === 'portfolio_full') {
     const userId = body.userId as string; const sid = body.sid as string;
     if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
-    const h = Q.userHoldings(userId);
+    const date = body.date as string | undefined;
+    const h = date ? Q.userHoldingsAsOf(sid, date) : Q.userHoldings(userId);
     const pq = Q.productPerformanceDetail();
     const [holdings, detail] = await Promise.all([
       runQuery(h.sql, h.params),
@@ -422,6 +499,43 @@ on('POST', '/api/export', async (req) => {
       const buf = await portfolioReport({ contact, holdings }, perf, { columns });
       // Buffer (Node) satisfies BodyInit (a Uint8Array) at runtime, but the
       // two libraries' type declarations don't agree — wrap to satisfy both.
+      return new Response(new Uint8Array(buf), {
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="${filename}.pdf"`,
+        },
+      });
+    }
+    const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+    if (format === 'xlsx') return xlsxMultiResponse(sheets, filename);
+    rows = sheets[0].rows; // CSV has no sheets — holdings only
+  } else if (source === 'portfolio_explorer_full') {
+    // Same shape/columns as portfolio_full, sourced from goal_snapshots as of
+    // a given date instead of the live portfolios/bonus_portfolios tables —
+    // always merged across goals, never split by goal, even in the preview
+    // that split is a preview-only view.
+    const userId = body.userId as string;
+    if (!userId) return json({ error: 'userId is required.' }, 400);
+    let asOfDate = body.date as string | undefined;
+    if (!asOfDate) {
+      const d = Q.goalLatestSnapshotDate(userId);
+      const [row] = await runQuery(d.sql, d.params);
+      asOfDate = row?.latest_date as string | undefined;
+    }
+    if (!asOfDate) return json({ error: 'No goal_snapshots found for this user.' }, 400);
+    const h = Q.goalUserHoldings(userId, asOfDate);
+    const pq = Q.productPerformanceDetail();
+    const [holdings, detail] = await Promise.all([
+      runQuery(h.sql, h.params),
+      runQuery(pq.sql, pq.params),
+    ]);
+    if (format === 'pdf') {
+      const includePerformance = body.includePerformance !== false;
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params);
+      const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
@@ -457,6 +571,25 @@ on('POST', '/api/export', async (req) => {
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'revenue_summary') {
     const q = Q.revenueMonthlySummary(body.from as string, body.to as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'revenue_v2_detail') {
+    const q = Q.revenueV2Detail(body.from as string, body.to as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'revenue_v2_summary') {
+    const q = Q.revenueV2MonthlySummary(body.from as string, body.to as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'remisier_revenue_detail' || source === 'remisier_revenue_summary') {
+    const code = body.code as string;
+    if (!code) return json({ error: 'code is required.' }, 400);
+    const portion = Number(body.portion) || 0;
+    const args = [body.field as string, code, body.from as string, body.to as string, body.granularity as string, portion] as const;
+    const q = source === 'remisier_revenue_detail' ? Q.remisierRevenueDetail(...args) : Q.remisierRevenueSummary(...args);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'remisier_transactions') {
+    const referrerCodes = (body.referrerCodes as string[]) || [];
+    const salesCodes = (body.salesCodes as string[]) || [];
+    if (!referrerCodes.length && !salesCodes.length) return json({ error: 'At least one referrer_code or sales_code is required.' }, 400);
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
     rows = await runQuery(q.sql, q.params);
   } else {
     return json({ error: 'Unknown export source.' }, 400);

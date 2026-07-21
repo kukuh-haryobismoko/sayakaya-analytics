@@ -449,6 +449,109 @@ const userPortfolioSplit = (userId) => ({
   params: { userId },
 });
 
+// ---- Portfolio Explorer: goal_snapshots-based, point-in-time holdings -----
+// goal_snapshots is a daily per-goal-per-fund valuation table (goal_id,
+// fund_id, nav, unit, amount, date); it has no user_id or buy-price column,
+// so every query here joins through goals for user_id and treats each
+// (goal, fund) pair's earliest ever snapshot nav as the buy price (there's
+// no real cost-basis column, same idea as portfolios.initial_price).
+const GOALS = '`sayakaya.main.goals`';
+const GOAL_SNAPSHOTS = '`sayakaya.main.goal_snapshots`';
+
+// Latest snapshot date available for this user — used to default the date
+// picker when the caller hasn't picked one yet.
+const goalLatestSnapshotDate = (userId) => ({
+  sql: `SELECT MAX(gs.date) AS latest_date
+    FROM ${GOAL_SNAPSHOTS} gs JOIN ${GOALS} g ON g.id = gs.goal_id
+    WHERE g.user_id = @userId AND g.deleted_at IS NULL`,
+  params: { userId },
+});
+
+// Holdings on a given date, merged across all of a user's goals — same row
+// shape as userHoldings() so it can feed the same PDF/table renderers.
+// Requires an exact snapshot row for that date per (goal, fund): the daily
+// job stops writing rows once a fund is fully redeemed rather than writing a
+// zero-unit row, so carrying forward the last snapshot before the date would
+// wrongly keep showing redeemed funds — no row on the date means no holding
+// that day. "Value" uses the snapshot's own nav (the NAV in effect on that
+// date), not the fund's live NAV, since this is a historical point-in-time view.
+const goalUserHoldings = (userId, asOfDate) => ({
+  sql: `WITH first_nav AS (
+      SELECT goal_id, fund_id,
+        ARRAY_AGG(STRUCT(nav AS nav, date AS date) ORDER BY date ASC LIMIT 1)[OFFSET(0)] AS first_snap
+      FROM ${GOAL_SNAPSHOTS}
+      GROUP BY goal_id, fund_id
+    ),
+    ranked AS (
+      SELECT gs.goal_id, gs.fund_id, gs.unit, gs.nav, gs.date,
+        ROW_NUMBER() OVER (PARTITION BY gs.goal_id, gs.fund_id ORDER BY gs.created_at DESC) AS rn
+      FROM ${GOAL_SNAPSHOTS} gs
+      JOIN ${GOALS} g ON g.id = gs.goal_id
+      WHERE g.user_id = @userId AND g.deleted_at IS NULL AND gs.date = @asOfDate
+    ),
+    latest AS (
+      SELECT r.goal_id, r.fund_id, r.unit, r.nav, r.date AS nav_date,
+        fn.first_snap.nav AS buy_nav, fn.first_snap.date AS opened_at
+      FROM ranked r JOIN first_nav fn ON fn.goal_id = r.goal_id AND fn.fund_id = r.fund_id
+      WHERE r.rn = 1 AND r.unit > 0
+    ),
+    holdings AS (
+      SELECT fund_id, SUM(unit) AS unit,
+        SAFE_DIVIDE(SUM(unit * buy_nav), SUM(unit)) AS avg_buy_price,
+        SAFE_DIVIDE(SUM(unit * nav), SUM(unit)) AS nav,
+        MAX(nav_date) AS nav_date, MIN(opened_at) AS opened_at
+      FROM latest
+      GROUP BY fund_id
+    )
+    SELECT *, value - fund_value AS gain_loss,
+      SAFE_DIVIDE(value - fund_value, fund_value) * 100 AS gain_pct
+    FROM (
+      SELECT f.name AS fund, f.type AS fund_type, h.unit, h.avg_buy_price,
+        h.nav, h.nav_date, h.opened_at,
+        ROUND(h.unit * h.avg_buy_price) AS fund_value,
+        ROUND(h.unit * h.nav) AS value
+      FROM holdings h
+      JOIN ${FUNDS} f ON f.id = h.fund_id
+    )
+    ORDER BY value DESC`,
+  params: { userId, asOfDate },
+});
+
+// Same computation as goalUserHoldings, but broken out per goal (one row per
+// goal+fund, with the goal's name) for the Portfolio Explorer preview's "by
+// goal" section. Never used for export — export always stays merged.
+const goalUserHoldingsByGoal = (userId, asOfDate) => ({
+  sql: `WITH first_nav AS (
+      SELECT goal_id, fund_id,
+        ARRAY_AGG(STRUCT(nav AS nav, date AS date) ORDER BY date ASC LIMIT 1)[OFFSET(0)] AS first_snap
+      FROM ${GOAL_SNAPSHOTS}
+      GROUP BY goal_id, fund_id
+    ),
+    ranked AS (
+      SELECT gs.goal_id, gs.fund_id, gs.unit, gs.nav, gs.date,
+        ROW_NUMBER() OVER (PARTITION BY gs.goal_id, gs.fund_id ORDER BY gs.created_at DESC) AS rn
+      FROM ${GOAL_SNAPSHOTS} gs
+      JOIN ${GOALS} g ON g.id = gs.goal_id
+      WHERE g.user_id = @userId AND g.deleted_at IS NULL AND gs.date = @asOfDate
+    ),
+    latest AS (
+      SELECT r.goal_id, r.fund_id, r.unit, r.nav, r.date AS nav_date, fn.first_snap.nav AS buy_nav
+      FROM ranked r JOIN first_nav fn ON fn.goal_id = r.goal_id AND fn.fund_id = r.fund_id
+      WHERE r.rn = 1 AND r.unit > 0
+    )
+    SELECT g.name AS goal, f.name AS fund, f.type AS fund_type,
+      l.unit, l.buy_nav AS avg_buy_price, l.nav, l.nav_date,
+      ROUND(l.unit * l.buy_nav) AS fund_value,
+      ROUND(l.unit * l.nav) AS value,
+      ROUND(l.unit * l.nav) - ROUND(l.unit * l.buy_nav) AS gain_loss,
+      SAFE_DIVIDE(ROUND(l.unit * l.nav) - ROUND(l.unit * l.buy_nav), ROUND(l.unit * l.buy_nav)) * 100 AS gain_pct
+    FROM latest l
+    JOIN ${GOALS} g ON g.id = l.goal_id
+    JOIN ${FUNDS} f ON f.id = l.fund_id
+    ORDER BY g.name, value DESC`,
+  params: { userId, asOfDate },
+});
+
 // AUM performance for one user (by SID code), summed across their funds per
 // day from portfolio_with_code (one row per sid_code+fund per day; `amount`
 // is that holding's value on that day).
@@ -490,6 +593,32 @@ const userPerformance = (sid) => ({
     FROM snaps
     ORDER BY ord`,
   params: { sid },
+});
+
+// Latest date with a portfolio_with_code snapshot for this SID — default for
+// the "as of" date picker below, and the "latest available" comparison line.
+const userHoldingsLatestDate = (sid) => ({
+  sql: `SELECT MAX(DATE(created_at)) AS latest_date FROM ${PORT_WITH_CODE} WHERE sid_code = @sid`,
+  params: { sid },
+});
+
+// Holdings on a specific date, from portfolio_with_code's daily
+// per-user-per-fund snapshot — same row shape as userHoldings() so it feeds
+// the same PDF/table renderers. Unlike userHoldings() (current units x
+// today's live NAV), this shows what was actually held and valued as of that
+// date; regular/bonus split isn't available here (portfolio_with_code
+// doesn't distinguish the two), so the caller skips userPortfolioSplit.
+const userHoldingsAsOf = (sid, date) => ({
+  sql: `SELECT fund, fund_type, total_unit AS unit, avg_buy_price,
+      latest_nav_value AS nav, DATE(created_at) AS nav_date,
+      ROUND(buy_amount) AS fund_value,
+      ROUND(amount) AS value,
+      ROUND(amount) - ROUND(buy_amount) AS gain_loss,
+      SAFE_DIVIDE(ROUND(amount) - ROUND(buy_amount), ROUND(buy_amount)) * 100 AS gain_pct
+    FROM ${PORT_WITH_CODE}
+    WHERE sid_code = @sid AND DATE(created_at) = @date AND total_unit > 0
+    ORDER BY value DESC`,
+  params: { sid, date },
 });
 
 // ---- Growth: campaigns, referrals, switching, manager/demographic AUM splits --
@@ -734,6 +863,270 @@ const revenueMonthlySummary = (from, to) => {
   };
 };
 
+// ---- Revenue v2: same shape/columns as revenueDetail/revenueMonthlySummary
+// above, but AUM comes from goal_snapshots instead of
+// mi_fee_logs.portfolio_with_code — goal_snapshots.date is already the
+// correct AUM date, so there's no "-1 day" correction to make, which is what
+// makes this the more accurate of the two. Kept as a fully separate section
+// (not a replacement) so the two can be compared side by side.
+function revenueV2CTEs(from, to) {
+  const r = range(from, to);
+  return {
+    cte: `WITH latest_mgmt_fee AS (
+        SELECT management_fee_id, management_fee, aperd_share, mi_share
+        FROM (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY management_fee_id ORDER BY updated_at DESC) AS rn
+          FROM ${MGMT_FEE_LOGS}
+        ) t
+        WHERE rn = 1
+      ),
+      daily AS (
+        SELECT gs.date, gs.fund_id, f.sinvest_code, f.name AS fund_name,
+          SUM(gs.amount) AS aum,
+          ANY_VALUE(lmf.management_fee) AS management_fee,
+          ANY_VALUE(lmf.aperd_share) AS aperd_share,
+          ANY_VALUE(lmf.mi_share) AS mi_share
+        FROM ${GOAL_SNAPSHOTS} gs
+        JOIN ${GOALS} g ON g.id = gs.goal_id AND g.deleted_at IS NULL
+        LEFT JOIN ${FUNDS} f ON f.id = gs.fund_id
+        LEFT JOIN latest_mgmt_fee lmf ON lmf.management_fee_id = gs.fund_id
+        WHERE gs.unit > 0 AND gs.date BETWEEN @from AND @to
+        GROUP BY gs.date, gs.fund_id, f.sinvest_code, f.name
+      ),
+      daily_detail AS (
+        SELECT *,
+          (management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(date, YEAR), DAY) AS management_fee_per_day,
+          aperd_share * ((management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(date, YEAR), DAY)) AS aperd_share_per_day,
+          mi_share * ((management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(date, YEAR), DAY)) AS mi_share_per_day
+        FROM daily
+      ),
+      monthly_fund AS (
+        SELECT
+          DATE_TRUNC(date, MONTH) AS month,
+          fund_id,
+          sinvest_code,
+          ANY_VALUE(fund_name) AS fund_name,
+          ANY_VALUE(management_fee) AS management_fee,
+          ANY_VALUE(aperd_share) AS aperd_share,
+          ANY_VALUE(mi_share) AS mi_share,
+          COUNT(DISTINCT date) AS days_running,
+          AVG(aum) AS avg_aum,
+          ARRAY_AGG(aum ORDER BY date DESC LIMIT 1)[OFFSET(0)] AS aum_eom,
+          SUM(management_fee_per_day) AS total_management_fee,
+          SUM(aperd_share_per_day) AS total_aperd_share,
+          SUM(mi_share_per_day) AS total_mi_share
+        FROM daily_detail
+        GROUP BY month, fund_id, sinvest_code
+      )`,
+    params: r,
+  };
+}
+
+const revenueV2Detail = (from, to) => {
+  const { cte, params } = revenueV2CTEs(from, to);
+  return {
+    sql: `${cte}
+      SELECT
+        month, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
+        days_running, avg_aum, aum_eom, total_management_fee, total_aperd_share, total_mi_share
+      FROM monthly_fund
+      ORDER BY month, fund_id, sinvest_code`,
+    params,
+  };
+};
+
+const revenueV2MonthlySummary = (from, to) => {
+  const { cte, params } = revenueV2CTEs(from, to);
+  return {
+    sql: `${cte}
+      SELECT
+        month,
+        COUNT(DISTINCT fund_id) AS funds,
+        MAX(days_running) AS days_running,
+        SUM(aum_eom) AS total_aum,
+        SUM(total_management_fee) AS total_management_fee,
+        SUM(total_aperd_share) AS total_aperd_share,
+        SUM(total_mi_share) AS total_mi_share
+      FROM monthly_fund
+      GROUP BY month
+      ORDER BY month`,
+    params,
+  };
+};
+
+// ---- Remisier sharing: same management-fee math as Revenue above, but the
+// AUM comes from goal_snapshots (already daily, per user+fund) filtered down
+// to one remisier's users, instead of the whole platform's daily AUM — so
+// there's no "-1 day" correction to make (that only exists because
+// portfolio_with_code's created_at is a day off from the AUM date it
+// represents; goal_snapshots.date is already correct). Remisier fee is a
+// portion of the AperD share specifically (never of the raw management
+// fee) — the rest of the AperD share stays with Sayakaya.
+const remisierFieldColumn = (field) =>
+  ({ referrer_code: 'referrer_code', sales_code: 'sales_code' })[field] || 'sales_code';
+const remisierGranularityPart = (granularity) =>
+  ({ day: 'DAY', month: 'MONTH', quarter: 'QUARTER' })[granularity] || 'DAY';
+
+// Users matching a remisier's code — lets the remisier's book of business be
+// listed/verified before running the revenue calculation below.
+const remisierUsers = (field, code) => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email, u.referrer_code, u.sales_code
+    FROM ${USERS} u
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+    WHERE u.${remisierFieldColumn(field)} = @code
+    ORDER BY up.name`,
+  params: { code },
+});
+
+function remisierRevenueCTEs(field, code, from, to) {
+  const r = range(from, to);
+  return {
+    cte: `WITH latest_mgmt_fee AS (
+        SELECT management_fee_id, management_fee, aperd_share, mi_share
+        FROM (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY management_fee_id ORDER BY updated_at DESC) AS rn
+          FROM ${MGMT_FEE_LOGS}
+        ) t
+        WHERE rn = 1
+      ),
+      matched_users AS (
+        SELECT id AS user_id FROM ${USERS} WHERE ${remisierFieldColumn(field)} = @code
+      ),
+      daily AS (
+        SELECT gs.date, gs.fund_id, f.sinvest_code, f.name AS fund_name,
+          SUM(gs.amount) AS aum,
+          ANY_VALUE(lmf.management_fee) AS management_fee,
+          ANY_VALUE(lmf.aperd_share) AS aperd_share,
+          ANY_VALUE(lmf.mi_share) AS mi_share
+        FROM ${GOAL_SNAPSHOTS} gs
+        JOIN ${GOALS} g ON g.id = gs.goal_id AND g.deleted_at IS NULL
+        JOIN matched_users mu ON mu.user_id = g.user_id
+        LEFT JOIN ${FUNDS} f ON f.id = gs.fund_id
+        LEFT JOIN latest_mgmt_fee lmf ON lmf.management_fee_id = gs.fund_id
+        WHERE gs.unit > 0 AND gs.date BETWEEN @from AND @to
+        GROUP BY gs.date, gs.fund_id, f.sinvest_code, f.name
+      ),
+      daily_detail AS (
+        SELECT *,
+          (management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(date, YEAR), DAY) AS management_fee_per_day,
+          aperd_share * ((management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(date, YEAR), DAY)) AS aperd_share_per_day,
+          mi_share * ((management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(date, YEAR), DAY)) AS mi_share_per_day
+        FROM daily
+      )`,
+    params: { ...r, code },
+  };
+}
+
+// Per fund, per period (day/month/quarter) — mirrors revenueDetail's shape
+// plus the remisier/Sayakaya split of the AperD share.
+const remisierRevenueDetail = (field, code, from, to, granularity, remisierPortion) => {
+  const { cte, params } = remisierRevenueCTEs(field, code, from, to);
+  const part = remisierGranularityPart(granularity);
+  return {
+    sql: `${cte}
+      SELECT DATE_TRUNC(date, ${part}) AS period, fund_id, sinvest_code,
+        ANY_VALUE(fund_name) AS fund_name,
+        ANY_VALUE(management_fee) AS management_fee,
+        ANY_VALUE(aperd_share) AS aperd_share,
+        ANY_VALUE(mi_share) AS mi_share,
+        COUNT(DISTINCT date) AS days_running,
+        AVG(aum) AS avg_aum,
+        ARRAY_AGG(aum ORDER BY date DESC LIMIT 1)[OFFSET(0)] AS aum_eom,
+        SUM(management_fee_per_day) AS total_management_fee,
+        SUM(aperd_share_per_day) AS total_aperd_share,
+        SUM(mi_share_per_day) AS total_mi_share,
+        SUM(aperd_share_per_day) * @remisierPortion AS total_remisier_fee,
+        SUM(aperd_share_per_day) * (1 - @remisierPortion) AS total_sayakaya_fee
+      FROM daily_detail
+      GROUP BY period, fund_id, sinvest_code
+      ORDER BY period, fund_id`,
+    params: { ...params, remisierPortion },
+  };
+};
+
+// Summed across funds, per period — mirrors revenueMonthlySummary's shape
+// (days_running = MAX across funds, AUM = SUM of each fund's end-of-period
+// value, not a naive sum of daily rows).
+const remisierRevenueSummary = (field, code, from, to, granularity, remisierPortion) => {
+  const { cte, params } = remisierRevenueCTEs(field, code, from, to);
+  const part = remisierGranularityPart(granularity);
+  return {
+    sql: `${cte},
+      per_fund AS (
+        SELECT DATE_TRUNC(date, ${part}) AS period, fund_id,
+          COUNT(DISTINCT date) AS days_running,
+          ARRAY_AGG(aum ORDER BY date DESC LIMIT 1)[OFFSET(0)] AS aum_eom,
+          SUM(management_fee_per_day) AS total_management_fee,
+          SUM(aperd_share_per_day) AS total_aperd_share,
+          SUM(mi_share_per_day) AS total_mi_share
+        FROM daily_detail
+        GROUP BY period, fund_id
+      )
+      SELECT period,
+        COUNT(DISTINCT fund_id) AS funds,
+        MAX(days_running) AS days_running,
+        SUM(aum_eom) AS total_aum,
+        SUM(total_management_fee) AS total_management_fee,
+        SUM(total_aperd_share) AS total_aperd_share,
+        SUM(total_mi_share) AS total_mi_share,
+        SUM(total_aperd_share) * @remisierPortion AS total_remisier_fee,
+        SUM(total_aperd_share) * (1 - @remisierPortion) AS total_sayakaya_fee
+      FROM per_fund
+      GROUP BY period
+      ORDER BY period`,
+    params: { ...params, remisierPortion },
+  };
+};
+
+// ---- Remisier transactions: per-transaction detail for one or more
+// referrer_code/sales_code values, with the buyer's contact info and fund
+// name attached — a due-diligence/audit list next to the revenue rollups
+// above, filtered by transaction date rather than snapshot date.
+function remisierTransactions({ referrerCodes = [], salesCodes = [], from, to, limit = 100, offset = 0 }) {
+  const params = {
+    ...range(from, to),
+    limit: parseInt(limit, 10),
+    offset: parseInt(offset, 10),
+  };
+  const codeConds = [];
+  if (referrerCodes.length) { codeConds.push('u.referrer_code IN UNNEST(@referrerCodes)'); params.referrerCodes = referrerCodes; }
+  if (salesCodes.length) { codeConds.push('u.sales_code IN UNNEST(@salesCodes)'); params.salesCodes = salesCodes; }
+  const codeWhere = codeConds.length ? `(${codeConds.join(' OR ')})` : 'FALSE';
+  const where = `${codeWhere} AND DATE(t.created_at) BETWEEN @from AND @to`;
+  return {
+    sql: `SELECT
+        t.id, t.transaction_number, t.type, t.status,
+        t.unit, t.amount, t.final_amount, t.value_per_unit, t.realized_gain_loss,
+        t.payment_method, t.payment_gateway, t.created_at, t.completed_at,
+        u.sid_code AS sid, u.email, up.name, up.phone_number AS phone,
+        u.referrer_code, u.sales_code,
+        f.name AS fund_name, f.type AS fund_type
+      FROM ${TX} t
+      JOIN ${USERS} u ON u.id = t.user_id
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+      WHERE ${where}
+      ORDER BY t.created_at DESC
+      LIMIT @limit OFFSET @offset`,
+    params,
+    countSql: `SELECT COUNT(*) AS total
+      FROM ${TX} t JOIN ${USERS} u ON u.id = t.user_id
+      WHERE ${where}`,
+  };
+}
+
 module.exports = {
   overviewUsers, overviewAum, overviewTx, overviewFunds,
   trends, breakdownBy, topFunds, fundTypes, aumHistory,
@@ -741,7 +1134,11 @@ module.exports = {
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail, fundNavTrend, fundList,
   userSearch, userContact, userHoldings, userPortfolioSplit, userPerformance, userAumHistory,
+  userHoldingsLatestDate, userHoldingsAsOf,
+  goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
   campaignPerformance, switchingTopPairs, aumByManager,
   aumByRisk, aumByIncome, topReferrers, reconciliationDaily,
   revenueDetail, revenueMonthlySummary,
+  revenueV2Detail, revenueV2MonthlySummary,
+  remisierUsers, remisierRevenueDetail, remisierRevenueSummary, remisierTransactions,
 };

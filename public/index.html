@@ -46,6 +46,7 @@
         <div class="nav-group">
           <div class="nav-label">Investor</div>
           <button class="nav-link active" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio</button>
+          <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon">🧭</span>Portfolio Explorer</button>
         </div>
         <div class="nav-group">
           <div class="nav-label">Dashboards</div>
@@ -58,6 +59,8 @@
           <div class="nav-label">Operations</div>
           <button class="nav-link" data-tab="reconciliation"><span class="nav-icon">🧮</span>Reconciliation</button>
           <button class="nav-link" data-tab="revenue"><span class="nav-icon">💰</span>Revenue</button>
+          <button class="nav-link" data-tab="revenue2"><span class="nav-icon">💹</span>Revenue (goal_snapshots)</button>
+          <button class="nav-link" data-tab="remisier"><span class="nav-icon">🤝</span>Remisier sharing</button>
           <button class="nav-link" data-tab="predict"><span class="nav-icon">🔮</span>Predict</button>
         </div>
         <div class="nav-group">
@@ -107,6 +110,8 @@
           <div class="panel-head wrap">
             <h2 id="pfUserName">—</h2>
             <div class="exp">
+              <label>As of <input type="date" id="pfDate" /></label>
+              <button class="btn-primary" id="pfDateApply">Go</button>
               <button class="btn-ghost" id="pfCsv">CSV</button>
               <button class="btn-ghost" id="pfXlsx">Excel (portfolio + performance, all types)</button>
               <div class="dropdown-multi" id="pfPdfColsDropdown">
@@ -119,7 +124,8 @@
               <button class="btn-ghost" id="pfPdf">PDF (with performance)</button>
             </div>
           </div>
-          <span class="hint" id="pfUserSub"></span>
+          <span class="hint" id="pfUserSub"></span><br>
+          <span class="hint" id="pfSnapshotInfo">Live holdings (current units × today's NAV). Pick a date to see a historical snapshot from mi_fee_logs.portfolio_with_code instead.</span>
           <div id="pfKpis" class="kpi-grid" style="margin-top:14px"></div>
         </div>
 
@@ -136,6 +142,53 @@
         <div class="panel">
           <div class="panel-head"><h2>AUM performance</h2><span class="hint">% change in total portfolio value, from mi_fee_logs.portfolio_with_code.</span></div>
           <div id="pfPerformance" class="table-wrap"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== PORTFOLIO EXPLORER (goal_snapshots) ===================== -->
+    <section id="portfolio-explorer" class="view">
+      <div class="panel">
+        <div class="panel-head"><h2>Find investor</h2><span class="hint">Search by SID code, name, or email.</span></div>
+        <div class="ask-bar">
+          <input id="peSearchInput" type="text" autocomplete="off" placeholder="e.g. SID code" />
+          <button id="peSearchBtn" class="btn-primary">Search</button>
+        </div>
+        <div id="peResults" class="table-wrap"></div>
+      </div>
+
+      <div id="peDetail" class="hidden">
+        <div class="panel">
+          <div class="panel-head wrap">
+            <h2 id="peUserName">—</h2>
+            <div class="exp">
+              <label>As of <input type="date" id="peDate" /></label>
+              <button class="btn-primary" id="peDateApply">Go</button>
+              <button class="btn-ghost" id="peCsv">CSV</button>
+              <button class="btn-ghost" id="peXlsx">Excel (portfolio + performance, all types)</button>
+              <div class="dropdown-multi" id="pePdfColsDropdown">
+                <button type="button" class="dropdown-multi-btn" id="pePdfColsBtn">Columns</button>
+                <div class="dropdown-multi-panel" id="pePdfColsPanel">
+                  <div id="pePdfCols" class="dropdown-multi-list"></div>
+                </div>
+              </div>
+              <button class="btn-ghost" id="pePdfOnly">PDF (portfolio only)</button>
+              <button class="btn-ghost" id="pePdf">PDF (with performance)</button>
+            </div>
+          </div>
+          <span class="hint" id="peUserSub"></span><br>
+          <span class="hint" id="peSnapshotInfo"></span>
+          <div id="peKpis" class="kpi-grid" style="margin-top:14px"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Holdings by fund</h2><span class="hint">Merged across all goals, as of the picked date.</span></div>
+          <div id="peHoldings" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Holdings by goal</h2><span class="hint">Preview only — exports stay merged across goals.</span></div>
+          <div id="peByGoal"></div>
         </div>
       </div>
     </section>
@@ -384,6 +437,130 @@
           </div>
         </div>
         <div id="revSummaryTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ===================== REVENUE v2 (goal_snapshots) ===================== -->
+    <section id="revenue2" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Period</h2>
+          <div class="range">
+            <label>From <input type="month" id="rev2From" /></label>
+            <label>To <input type="month" id="rev2To" /></label>
+            <button id="rev2Apply" class="btn-primary">Apply</button>
+          </div>
+        </div>
+        <span class="hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Revenue trend</h2></div>
+        <div class="chart-wrap"><canvas id="rev2TrendChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Management fee revenue (per fund, per month)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="rev2DetailCsv">CSV</button>
+            <button class="btn-ghost" id="rev2DetailXlsx">Excel</button>
+          </div>
+        </div>
+        <span class="hint">Management fee accrued daily from AUM (goal_snapshots), split into AperD/MI share, summed per fund per month.</span>
+        <div id="rev2DetailTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Monthly summary (all funds)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="rev2SummaryCsv">CSV</button>
+            <button class="btn-ghost" id="rev2SummaryXlsx">Excel</button>
+          </div>
+        </div>
+        <div id="rev2SummaryTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ===================== REMISIER SHARING (goal_snapshots) ===================== -->
+    <section id="remisier" class="view">
+      <div class="panel">
+        <div class="panel-head wrap"><h2>Remisier</h2></div>
+        <div class="ask-bar" style="flex-wrap:wrap">
+          <select id="remField">
+            <option value="sales_code">users.sales_code</option>
+            <option value="referrer_code">users.referrer_code</option>
+          </select>
+          <input id="remCode" type="text" autocomplete="off" placeholder="Remisier code" />
+          <label>Remisier portion (%) <input id="remPortion" type="number" min="0" max="100" step="0.1" value="60" style="width:80px" /></label>
+          <label>From <input type="date" id="remFrom" /></label>
+          <label>To <input type="date" id="remTo" /></label>
+          <div class="seg" id="remGran">
+            <button data-g="day" class="on">Daily</button>
+            <button data-g="month">Monthly</button>
+            <button data-g="quarter">Quarterly</button>
+          </div>
+          <button id="remRun" class="btn-primary">Run</button>
+        </div>
+        <span class="hint">Remisier's fee is a portion of the AperD share (not the raw management fee) — e.g. Sayakaya 40% / remisier 60% of AperD share.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Users under this remisier</h2></div>
+        <div id="remUsersTable" class="table-wrap"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Revenue detail (per fund)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="remDetailCsv">CSV</button>
+            <button class="btn-ghost" id="remDetailXlsx">Excel</button>
+          </div>
+        </div>
+        <span class="hint">Management fee accrued daily from goal_snapshots AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya — summed per fund per period.</span>
+        <div id="remDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Revenue summary (all funds)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="remSummaryCsv">CSV</button>
+            <button class="btn-ghost" id="remSummaryXlsx">Excel</button>
+          </div>
+        </div>
+        <div id="remSummaryTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <!-- ---- nested: remisier transactions (per-transaction detail, own filters) ---- -->
+      <div class="panel" style="margin-top:24px; border-top:2px solid var(--line); padding-top:20px">
+        <div class="panel-head wrap"><h2>Remisier transactions</h2></div>
+        <div class="ask-bar" style="flex-wrap:wrap">
+          <input id="remTxReferrerCodes" type="text" autocomplete="off" placeholder="referrer_code(s), comma separated" />
+          <input id="remTxSalesCodes" type="text" autocomplete="off" placeholder="sales_code(s), comma separated" />
+          <label>From <input type="date" id="remTxFrom" /></label>
+          <label>To <input type="date" id="remTxTo" /></label>
+          <button id="remTxRun" class="btn-primary">Run</button>
+        </div>
+        <span class="hint">Filtered by transaction date. Fill one code field for a single filter, or both to match either (either field also accepts multiple comma-separated codes).</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Transaction detail</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="remTxCsv">CSV</button>
+            <button class="btn-ghost" id="remTxXlsx">Excel</button>
+          </div>
+        </div>
+        <div id="remTxTable" class="table-wrap tall" style="margin-top:14px"></div>
+        <div class="pager">
+          <button id="remTxPrev" class="btn-ghost">← Prev</button>
+          <span id="remTxPageinfo" class="mono"></span>
+          <button id="remTxNext" class="btn-ghost">Next →</button>
+        </div>
       </div>
     </section>
 

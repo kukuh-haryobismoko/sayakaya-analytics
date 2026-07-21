@@ -69,6 +69,11 @@ function revRange() {
   const [ty, tm] = toM.split('-').map(Number);
   return { from: `${fromM}-01`, to: isoDate(new Date(ty, tm, 0)) }; // tm/0 = last day of month
 }
+function rev2Range() {
+  const fromM = $('#rev2From').value, toM = $('#rev2To').value;
+  const [ty, tm] = toM.split('-').map(Number);
+  return { from: `${fromM}-01`, to: isoDate(new Date(ty, tm, 0)) };
+}
 
 // ---------- chart palette (theme-aware: read from CSS custom properties) ----------
 function readThemeColors() {
@@ -116,18 +121,36 @@ function renderPfResults(rows) {
     selectPortfolioUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
 }
 
-let pfSelected = null; // { userId, sid, name } — used by the export buttons
+let pfSelected = null; // { userId, sid, name, date } — used by the export buttons
 
+// New user picked from search results — resets the date filter to live.
 async function selectPortfolioUser(userId, sid, name, email) {
-  pfSelected = { userId, sid, name: name || sid };
+  pfSelected = { userId, sid, name: name || sid, date: '' };
   $('#pfDetail').classList.remove('hidden');
   $('#pfUserName').textContent = name || sid;
   $('#pfUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
+  $('#pfDate').value = '';
+  await loadPortfolioUser();
+}
+
+// Fetches/renders for the currently selected user + whatever date is in the
+// picker — used both by selectPortfolioUser above and by the "Go" button, and
+// by repaintActiveTab (theme toggle) so a toggle doesn't reset the date back to live.
+async function loadPortfolioUser() {
+  if (!pfSelected) return;
+  const { userId, sid } = pfSelected;
+  const dateVal = $('#pfDate').value;
   $('#pfKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#pfHoldings').innerHTML = '';
   $('#pfPerformance').innerHTML = '';
   try {
-    const { holdings, split, performance, history } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}`);
+    const dateParam = dateVal ? `&date=${dateVal}` : '';
+    const { holdings, split, performance, history, asOfDate, latestDate } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    pfSelected.date = val(asOfDate) || '';
+    const asOf = val(asOfDate), latest = val(latestDate);
+    $('#pfSnapshotInfo').textContent = asOf
+      ? `Snapshot date: ${asOf}${latest && latest !== asOf ? ` (latest available: ${latest})` : ''} — from mi_fee_logs.portfolio_with_code.`
+      : `Live holdings (current units × today's NAV).${latest ? ` Latest historical snapshot available: ${latest}.` : ''}`;
     renderPfKpis(holdings, split);
     renderPfHoldings(holdings);
     renderPfPerformance(performance);
@@ -156,15 +179,18 @@ function renderPfAumChart(rows) {
 
 function renderPfKpis(holdings, split) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  // split is null in "as of date" mode — portfolios/bonus_portfolios only
+  // have a live split, not a historical one, so there's nothing real to show.
   $('#pfKpis').innerHTML = [
     kpi('Total AUM', idrFull(totalAum), `${holdings.length} holding${holdings.length === 1 ? '' : 's'}`, 'accent'),
-    kpi('Regular portfolio', idrFull(Number(val(split?.regular_value)) || 0), 'portfolios'),
-    kpi('Bonus portfolio', idrFull(Number(val(split?.bonus_value)) || 0), 'bonus_portfolios (on_going)'),
+    kpi('Regular portfolio', split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : 'not available for a past date'),
+    kpi('Bonus portfolio', split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : 'not available for a past date'),
   ].join('');
 }
 
-function renderPfHoldings(rows) {
-  if (!rows.length) { $('#pfHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+// Shared by the Portfolio tab and Portfolio Explorer — both feed rows of the
+// same shape (fund, fund_type, unit, avg_buy_price, nav, value, ...).
+function holdingsTableHtml(rows) {
   const gl = (v) => {
     if (v == null) return '<td class="num">—</td>';
     const n = Number(v);
@@ -195,9 +221,14 @@ function renderPfHoldings(rows) {
       ${glPct(pct)}
     </tr>`;
   }).join('');
-  $('#pfHoldings').innerHTML = `<table><thead><tr>
+  return `<table><thead><tr>
       <th>Fund</th><th>Type</th><th class="num">Unit Balance</th><th class="num">Average NAV</th><th class="num">Close NAV</th><th class="num">Fund Value</th><th class="num">Market Value</th><th class="num">Unrealized G/L</th><th class="num">%</th>
     </tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderPfHoldings(rows) {
+  if (!rows.length) { $('#pfHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  $('#pfHoldings').innerHTML = holdingsTableHtml(rows);
 }
 
 function renderPfPerformance(rows) {
@@ -209,6 +240,94 @@ function renderPfPerformance(rows) {
     return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
   }).join('');
   $('#pfPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
+}
+
+// ====================================================================
+//  PORTFOLIO EXPLORER (goal_snapshots — point-in-time holdings by date,
+//  merged by fund and also broken out by goal for the preview only)
+// ====================================================================
+async function searchExplorerUsers() {
+  const q = $('#peSearchInput').value.trim();
+  if (!q) return;
+  $('#peResults').innerHTML = '<div class="loading">Searching…</div>';
+  try {
+    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    renderPeResults(rows);
+  } catch (e) { $('#peResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPeResults(rows) {
+  if (!rows.length) { $('#peResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  const body = rows.map((r) => `<tr class="pe-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
+      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+    </tr>`).join('');
+  $('#peResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $$('#peResults .pe-row').forEach((tr) => tr.addEventListener('click', () =>
+    selectExplorerUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+}
+
+let peSelected = null; // { userId, sid, name, date } — used by the export buttons
+
+async function selectExplorerUser(userId, sid, name, email) {
+  peSelected = { userId, sid, name: name || sid, date: '' };
+  $('#peDetail').classList.remove('hidden');
+  $('#peUserName').textContent = name || sid;
+  $('#peUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
+  $('#peSnapshotInfo').textContent = '';
+  $('#peKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
+  $('#peHoldings').innerHTML = '';
+  $('#peByGoal').innerHTML = '';
+  await loadExplorerPortfolio();
+}
+
+async function loadExplorerPortfolio() {
+  if (!peSelected) return;
+  const dateParam = $('#peDate').value ? `&date=${$('#peDate').value}` : '';
+  try {
+    const { asOfDate, latestDate, holdings, byGoal } = await api(`/api/portfolio-explorer?userId=${encodeURIComponent(peSelected.userId)}${dateParam}`);
+    const asOf = val(asOfDate), latest = val(latestDate);
+    peSelected.date = asOf || '';
+    $('#peDate').value = asOf || '';
+    $('#peSnapshotInfo').textContent = asOf
+      ? `Snapshot date: ${asOf}${latest && latest !== asOf ? ` (latest available: ${latest})` : ''}`
+      : (latest ? `No snapshot for this date. Latest available: ${latest}` : 'No goal_snapshots found for this user.');
+    renderPeKpis(holdings, byGoal);
+    renderPeHoldings(holdings);
+    renderPeByGoal(byGoal);
+  } catch (e) { $('#peKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPeKpis(holdings, byGoal) {
+  const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  const goalCount = new Set(byGoal.map((r) => val(r.goal))).size;
+  $('#peKpis').innerHTML = [
+    kpi('Total AUM (as of date)', idrFull(totalAum), `${holdings.length} holding${holdings.length === 1 ? '' : 's'}`, 'accent'),
+    kpi('Goals', num(goalCount), 'goal_snapshots (main.goals)'),
+  ].join('');
+}
+
+function renderPeHoldings(rows) {
+  if (!rows.length) { $('#peHoldings').innerHTML = '<div class="empty">No holdings for this date.</div>'; return; }
+  $('#peHoldings').innerHTML = holdingsTableHtml(rows);
+}
+
+// Preview-only breakdown: one mini table per goal, headed by the goal's name.
+// Exports never use this grouping — they always use the merged holdings above.
+function renderPeByGoal(rows) {
+  if (!rows.length) { $('#peByGoal').innerHTML = '<div class="empty">No goals with holdings for this date.</div>'; return; }
+  const byGoal = new Map();
+  rows.forEach((r) => {
+    const name = val(r.goal) || '(unnamed goal)';
+    if (!byGoal.has(name)) byGoal.set(name, []);
+    byGoal.get(name).push(r);
+  });
+  $('#peByGoal').innerHTML = Array.from(byGoal.entries()).map(([name, goalRows]) => {
+    const total = goalRows.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+    return `<div class="panel" style="margin-top:12px">
+        <div class="panel-head"><h3 style="margin:0">${name}</h3><span class="hint">${idrFull(total)}</span></div>
+        <div class="table-wrap">${holdingsTableHtml(goalRows)}</div>
+      </div>`;
+  }).join('');
 }
 
 // ====================================================================
@@ -810,9 +929,9 @@ async function loadReconciliation() {
 // ====================================================================
 //  REVENUE (management fee earned per fund/month)
 // ====================================================================
-function renderRevenueTrend(rows) {
+function renderRevenueTrend(rows, chartId = 'revTrendChart') {
   if (!rows.length) return;
-  paint('revTrendChart', {
+  paint(chartId, {
     type: 'bar',
     data: {
       labels: rows.map((d) => val(d.month)),
@@ -867,6 +986,154 @@ async function loadRevenue() {
     $('#revDetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
     $('#revSummaryTable').innerHTML = '';
   }
+}
+
+// ====================================================================
+//  REVENUE v2 (same calculation as Revenue above, AUM from goal_snapshots)
+// ====================================================================
+async function loadRevenue2() {
+  const r = rev2Range();
+  $('#rev2DetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  $('#rev2SummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  try {
+    const [detail, summary] = await Promise.all([
+      api(`/api/revenue-v2?from=${r.from}&to=${r.to}`),
+      api(`/api/revenue-v2/summary?from=${r.from}&to=${r.to}`),
+    ]);
+    renderRevenueTrend(summary, 'rev2TrendChart');
+    genTable('#rev2DetailTable', detail, [
+      { key: 'month', label: 'Month', type: 'date' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
+      { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
+      { key: 'days_running', label: 'Days running', type: 'num' },
+      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM EOM', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+    ], 'No revenue in this range.');
+    genTable('#rev2SummaryTable', summary, [
+      { key: 'month', label: 'Month', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
+      { key: 'days_running', label: 'Days running', type: 'num' },
+      { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+    ], 'No revenue in this range.');
+  } catch (e) {
+    $('#rev2DetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#rev2SummaryTable').innerHTML = '';
+  }
+}
+
+// ====================================================================
+//  REMISIER SHARING (goal_snapshots — one remisier's users, AperD share
+//  split between remisier and Sayakaya)
+// ====================================================================
+let remGranularity = 'day';
+
+// UI takes a whole percent (e.g. 60); the API/DB deal in fractions (0.6),
+// same units as management_fee_logs.aperd_share/mi_share.
+function remPortionFraction() { return (Number($('#remPortion').value) || 0) / 100; }
+
+function remParams() {
+  return {
+    field: $('#remField').value,
+    code: $('#remCode').value.trim(),
+    from: $('#remFrom').value,
+    to: $('#remTo').value,
+    granularity: remGranularity,
+    portion: remPortionFraction(),
+  };
+}
+
+async function loadRemisier() {
+  const p = remParams();
+  if (!p.code) { toast('Enter a remisier code first.'); return; }
+  $('#remUsersTable').innerHTML = '<div class="loading">Loading…</div>';
+  $('#remDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  $('#remSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  const qs = `field=${encodeURIComponent(p.field)}&code=${encodeURIComponent(p.code)}&from=${p.from}&to=${p.to}&granularity=${p.granularity}&portion=${p.portion}`;
+  try {
+    const [users, detail, summary] = await Promise.all([
+      api(`/api/remisier/users?field=${encodeURIComponent(p.field)}&code=${encodeURIComponent(p.code)}`),
+      api(`/api/remisier/revenue?${qs}`),
+      api(`/api/remisier/revenue/summary?${qs}`),
+    ]);
+    genTable('#remUsersTable', users, [
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+    ], 'No users under this remisier code.');
+    genTable('#remDetailTable', detail, [
+      { key: 'period', label: 'Period', type: 'date' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
+      { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
+      { key: 'days_running', label: 'Days running', type: 'num' },
+      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM (EOP)', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_remisier_fee', label: 'Remisier fee', type: 'idr' }, { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr' },
+    ], 'No revenue in this range.');
+    genTable('#remSummaryTable', summary, [
+      { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
+      { key: 'days_running', label: 'Days running', type: 'num' },
+      { key: 'total_aum', label: 'Total AUM (EOP)', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_remisier_fee', label: 'Remisier fee', type: 'idr' }, { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr' },
+    ], 'No revenue in this range.');
+  } catch (e) {
+    $('#remUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#remDetailTable').innerHTML = '';
+    $('#remSummaryTable').innerHTML = '';
+  }
+}
+
+// ---- nested: remisier transactions (per-transaction detail, own filters) --
+const remTx = { limit: 100, offset: 0, total: 0 };
+
+function remTxCodesArr(sel) {
+  return $(sel).value.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+function remTxParams() {
+  return {
+    referrerCodes: remTxCodesArr('#remTxReferrerCodes'),
+    salesCodes: remTxCodesArr('#remTxSalesCodes'),
+    from: $('#remTxFrom').value,
+    to: $('#remTxTo').value,
+  };
+}
+
+async function loadRemTx() {
+  const p = remTxParams();
+  if (!p.referrerCodes.length && !p.salesCodes.length) { toast('Enter at least one referrer_code or sales_code.'); return; }
+  $('#remTxTable').innerHTML = '<div class="loading">Loading…</div>';
+  const qs = new URLSearchParams();
+  p.referrerCodes.forEach((c) => qs.append('referrerCodes', c));
+  p.salesCodes.forEach((c) => qs.append('salesCodes', c));
+  qs.set('from', p.from); qs.set('to', p.to);
+  qs.set('limit', remTx.limit); qs.set('offset', remTx.offset);
+  try {
+    const { rows, total } = await api(`/api/remisier/transactions?${qs}`);
+    remTx.total = total;
+    genTable('#remTxTable', rows, [
+      { key: 'created_at', label: 'Date', type: 'date' },
+      { key: 'transaction_number', label: 'Trx #' },
+      { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
+      { key: 'fund_name', label: 'Fund' },
+      { key: 'unit', label: 'Unit', type: 'num' },
+      { key: 'value_per_unit', label: 'NAV', type: 'num' },
+      { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
+      { key: 'realized_gain_loss', label: 'Realized G/L', type: 'idr' },
+      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+    ], 'No transactions match these filters.');
+    const start = total ? remTx.offset + 1 : 0;
+    const end = Math.min(remTx.offset + remTx.limit, total);
+    $('#remTxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
+    $('#remTxPrev').disabled = remTx.offset === 0;
+    $('#remTxNext').disabled = end >= total;
+  } catch (e) { $('#remTxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
 // ====================================================================
@@ -1062,14 +1329,16 @@ function loadPdfColumnPrefs() {
   return PDF_COLUMNS.map((c) => c.key);
 }
 
-function renderPdfColumnPicker() {
+// Shared by the Portfolio tab (#pfPdfCols) and Portfolio Explorer (#pePdfCols)
+// — same column set and localStorage prefs, just two picker widgets.
+function renderPdfColumnPicker(containerId = 'pfPdfCols') {
   const checked = new Set(loadPdfColumnPrefs());
-  $('#pfPdfCols').innerHTML = PDF_COLUMNS.map((c) =>
+  $('#' + containerId).innerHTML = PDF_COLUMNS.map((c) =>
     `<label class="ask-table-chk"><input type="checkbox" value="${c.key}" ${checked.has(c.key) ? 'checked' : ''}> ${c.label}</label>`).join('');
 }
 
-function savePdfColumnPrefs() {
-  localStorage.setItem(PDF_COLS_KEY, JSON.stringify($$('#pfPdfCols input:checked').map((el) => el.value)));
+function savePdfColumnPrefs(containerId = 'pfPdfCols') {
+  localStorage.setItem(PDF_COLS_KEY, JSON.stringify($$('#' + containerId + ' input:checked').map((el) => el.value)));
 }
 
 // null (all columns picked) keeps the request body free of a redundant list.
@@ -1271,6 +1540,7 @@ function switchTab(name) {
   if (name === 'growth' && !growthLoaded) loadGrowth();
   if (name === 'reconciliation') loadReconciliation();
   if (name === 'revenue') loadRevenue();
+  if (name === 'revenue2') loadRevenue2();
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
 }
@@ -1287,7 +1557,7 @@ function repaintActiveTab() {
     case 'growth': growthLoaded = false; loadGrowth(); break;
     case 'predict': predictLoaded = false; loadPredict(); break;
     case 'performance': renderPerfTrendChart(perfTrendCache); break;
-    case 'portfolio': if (pfSelected) selectPortfolioUser(pfSelected.userId, pfSelected.sid, pfSelected.name); break;
+    case 'portfolio': if (pfSelected) loadPortfolioUser(); break;
   }
 }
 
@@ -1323,14 +1593,18 @@ function wire() {
   // portfolio
   $('#pfSearchBtn').addEventListener('click', searchPortfolioUsers);
   $('#pfSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPortfolioUsers(); });
+  // filename/body carry the currently viewed date (if any) so an export
+  // matches whatever's on screen, not always the live holdings.
+  const pfFilename = () => `portfolio_${pfSelected.sid}${pfSelected.date ? '_' + pfSelected.date : ''}`;
+  const pfExportBody = () => ({ userId: pfSelected.userId, sid: pfSelected.sid, ...(pfSelected.date ? { date: pfSelected.date } : {}) });
   $('#pfCsv').addEventListener('click', () => pfSelected && download(
-    { source: 'portfolio_full', format: 'csv', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
-    `portfolio_${pfSelected.sid}.csv`));
+    { source: 'portfolio_full', format: 'csv', filename: pfFilename(), ...pfExportBody() },
+    `${pfFilename()}.csv`));
   $('#pfXlsx').addEventListener('click', () => pfSelected && download(
-    { source: 'portfolio_full', format: 'xlsx', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid },
-    `portfolio_${pfSelected.sid}.xlsx`));
-  renderPdfColumnPicker();
-  $('#pfPdfCols').addEventListener('change', savePdfColumnPrefs);
+    { source: 'portfolio_full', format: 'xlsx', filename: pfFilename(), ...pfExportBody() },
+    `${pfFilename()}.xlsx`));
+  renderPdfColumnPicker('pfPdfCols');
+  $('#pfPdfCols').addEventListener('change', () => savePdfColumnPrefs('pfPdfCols'));
   $('#pfPdfColsBtn').addEventListener('click', (e) => {
     e.stopPropagation();
     $('#pfPdfColsPanel').classList.toggle('open');
@@ -1339,13 +1613,44 @@ function wire() {
     if (!e.target.closest('#pfPdfColsDropdown')) $('#pfPdfColsPanel').classList.remove('open');
   });
   $('#pfPdf').addEventListener('click', () => pfSelected && download(
-    { source: 'portfolio_full', format: 'pdf', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid, columns: selectedPdfColumns() },
-    `portfolio_${pfSelected.sid}.pdf`));
+    { source: 'portfolio_full', format: 'pdf', filename: pfFilename(), ...pfExportBody(), columns: selectedPdfColumns() },
+    `${pfFilename()}.pdf`));
   $('#pfPdfOnly').addEventListener('click', () => pfSelected && download(
-    { source: 'portfolio_full', format: 'pdf', filename: `portfolio_${pfSelected.sid}`, userId: pfSelected.userId, sid: pfSelected.sid, includePerformance: false, columns: selectedPdfColumns() },
-    `portfolio_${pfSelected.sid}.pdf`));
+    { source: 'portfolio_full', format: 'pdf', filename: pfFilename(), ...pfExportBody(), includePerformance: false, columns: selectedPdfColumns() },
+    `${pfFilename()}.pdf`));
+  $('#pfDateApply').addEventListener('click', loadPortfolioUser);
+
+  // portfolio explorer (goal_snapshots)
+  $('#peSearchBtn').addEventListener('click', searchExplorerUsers);
+  $('#peSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchExplorerUsers(); });
+  // Explicit "Go" rather than firing on every `change` — a native date input
+  // fires `change` per field segment in some browsers, mid-edit.
+  $('#peDateApply').addEventListener('click', loadExplorerPortfolio);
+  $('#peCsv').addEventListener('click', () => peSelected && download(
+    { source: 'portfolio_explorer_full', format: 'csv', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date },
+    `portfolio_explorer_${peSelected.sid}_${peSelected.date}.csv`));
+  $('#peXlsx').addEventListener('click', () => peSelected && download(
+    { source: 'portfolio_explorer_full', format: 'xlsx', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date },
+    `portfolio_explorer_${peSelected.sid}_${peSelected.date}.xlsx`));
+  renderPdfColumnPicker('pePdfCols');
+  $('#pePdfCols').addEventListener('change', () => savePdfColumnPrefs('pePdfCols'));
+  $('#pePdfColsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#pePdfColsPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#pePdfColsDropdown')) $('#pePdfColsPanel').classList.remove('open');
+  });
+  $('#pePdf').addEventListener('click', () => peSelected && download(
+    { source: 'portfolio_explorer_full', format: 'pdf', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, columns: selectedPdfColumns() },
+    `portfolio_explorer_${peSelected.sid}_${peSelected.date}.pdf`));
+  $('#pePdfOnly').addEventListener('click', () => peSelected && download(
+    { source: 'portfolio_explorer_full', format: 'pdf', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, includePerformance: false, columns: selectedPdfColumns() },
+    `portfolio_explorer_${peSelected.sid}_${peSelected.date}.pdf`));
+
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
   $('#revApply').addEventListener('click', loadRevenue);
+  $('#rev2Apply').addEventListener('click', loadRevenue2);
 
   // predict
   $('#fcHorizon').addEventListener('click', (e) => {
@@ -1402,6 +1707,38 @@ function wire() {
   $('#revDetailXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'xlsx', filename: 'revenue_detail', from: r.from, to: r.to }, 'revenue_detail.xlsx'); });
   $('#revSummaryCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'csv', filename: 'revenue_summary', from: r.from, to: r.to }, 'revenue_summary.csv'); });
   $('#revSummaryXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'xlsx', filename: 'revenue_summary', from: r.from, to: r.to }, 'revenue_summary.xlsx'); });
+
+  // revenue v2 (goal_snapshots)
+  $('#rev2DetailCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'csv', filename: 'revenue_v2_detail', from: r.from, to: r.to }, 'revenue_v2_detail.csv'); });
+  $('#rev2DetailXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'xlsx', filename: 'revenue_v2_detail', from: r.from, to: r.to }, 'revenue_v2_detail.xlsx'); });
+  $('#rev2SummaryCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'csv', filename: 'revenue_v2_summary', from: r.from, to: r.to }, 'revenue_v2_summary.csv'); });
+  $('#rev2SummaryXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'xlsx', filename: 'revenue_v2_summary', from: r.from, to: r.to }, 'revenue_v2_summary.xlsx'); });
+
+  // remisier sharing
+  $('#remRun').addEventListener('click', loadRemisier);
+  $('#remGran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#remGran button').forEach((x) => x.classList.toggle('on', x === b));
+    remGranularity = b.dataset.g;
+    if ($('#remCode').value.trim()) loadRemisier();
+  });
+  $('#remDetailCsv').addEventListener('click', () => download(
+    { source: 'remisier_revenue_detail', format: 'csv', filename: 'remisier_revenue_detail', ...remParams() }, 'remisier_revenue_detail.csv'));
+  $('#remDetailXlsx').addEventListener('click', () => download(
+    { source: 'remisier_revenue_detail', format: 'xlsx', filename: 'remisier_revenue_detail', ...remParams() }, 'remisier_revenue_detail.xlsx'));
+  $('#remSummaryCsv').addEventListener('click', () => download(
+    { source: 'remisier_revenue_summary', format: 'csv', filename: 'remisier_revenue_summary', ...remParams() }, 'remisier_revenue_summary.csv'));
+  $('#remSummaryXlsx').addEventListener('click', () => download(
+    { source: 'remisier_revenue_summary', format: 'xlsx', filename: 'remisier_revenue_summary', ...remParams() }, 'remisier_revenue_summary.xlsx'));
+
+  // remisier transactions
+  $('#remTxRun').addEventListener('click', () => { remTx.offset = 0; loadRemTx(); });
+  $('#remTxPrev').addEventListener('click', () => { remTx.offset = Math.max(0, remTx.offset - remTx.limit); loadRemTx(); });
+  $('#remTxNext').addEventListener('click', () => { remTx.offset += remTx.limit; loadRemTx(); });
+  $('#remTxCsv').addEventListener('click', () => download(
+    { source: 'remisier_transactions', format: 'csv', filename: 'remisier_transactions', ...remTxParams() }, 'remisier_transactions.csv'));
+  $('#remTxXlsx').addEventListener('click', () => download(
+    { source: 'remisier_transactions', format: 'xlsx', filename: 'remisier_transactions', ...remTxParams() }, 'remisier_transactions.xlsx'));
 
   $('#gran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1490,6 +1827,9 @@ async function init() {
   $('#from').value = r.from; $('#to').value = r.to;
   const rm = defaultMonthRange();
   $('#revFrom').value = rm.from; $('#revTo').value = rm.to;
+  $('#rev2From').value = rm.from; $('#rev2To').value = rm.to;
+  $('#remFrom').value = r.from; $('#remTo').value = r.to;
+  $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   setThemeButtonLabel();
   wire(); wireGate();
   try {
