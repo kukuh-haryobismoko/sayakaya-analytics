@@ -314,6 +314,20 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.remisierRevenueSummary(field, code, from, to, granularity, Number(portion) || 0);
     res.json(await runQuery(q.sql, q.params));
   }));
+  // ---- Remisier sharing (portfolio_with_code): same as above, AUM sourced
+  // from mi_fee_logs.portfolio_with_code instead of goal_snapshots ----------
+  app.get('/api/remisier/revenue-pwc', handler(async (req, res) => {
+    const { field, code, from, to, granularity, portion } = req.query;
+    if (!code) return res.status(400).json({ error: 'code is required.' });
+    const q = Q.remisierRevenuePwcDetail(field, code, from, to, granularity, Number(portion) || 0);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/remisier/revenue-pwc/summary', handler(async (req, res) => {
+    const { field, code, from, to, granularity, portion } = req.query;
+    if (!code) return res.status(400).json({ error: 'code is required.' });
+    const q = Q.remisierRevenuePwcSummary(field, code, from, to, granularity, Number(portion) || 0);
+    res.json(await runQuery(q.sql, q.params));
+  }));
   app.get('/api/remisier/transactions', handler(async (req, res) => {
     const referrerCodes = req.query.referrerCodes == null ? [] : [].concat(req.query.referrerCodes);
     const salesCodes = req.query.salesCodes == null ? [] : [].concat(req.query.salesCodes);
@@ -550,6 +564,12 @@ function createApp({ serveStatic = true } = {}) {
       if (!code) return res.status(400).json({ error: 'code is required.' });
       const args = [field, code, from, to, granularity, Number(portion) || 0];
       const q = source === 'remisier_revenue_detail' ? Q.remisierRevenueDetail(...args) : Q.remisierRevenueSummary(...args);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'remisier_revenue_pwc_detail' || source === 'remisier_revenue_pwc_summary') {
+      const { field, code, from, to, granularity, portion } = req.body;
+      if (!code) return res.status(400).json({ error: 'code is required.' });
+      const args = [field, code, from, to, granularity, Number(portion) || 0];
+      const q = source === 'remisier_revenue_pwc_detail' ? Q.remisierRevenuePwcDetail(...args) : Q.remisierRevenuePwcSummary(...args);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'remisier_transactions') {
       const referrerCodes = req.body.referrerCodes || [];

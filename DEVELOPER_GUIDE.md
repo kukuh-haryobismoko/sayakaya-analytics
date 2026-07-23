@@ -130,7 +130,12 @@ SUPABASE-DEPLOY.md                   GitHub Pages + Supabase Edge Functions spec
 PREDICTIVE-MODELS.md                 BQML model setup for the Predict tab
 PRODUCT-PERFORMANCE-AND-PORTFOLIO.md Older doc on the Performance tab + portfolio lookup
                                       (partially superseded — see §9, avg_buy_price/fund
-                                      trend chart/fund picker were added after this was written)
+                                      trend chart/fund picker were added after this was written) —
+                                      also covers Portfolio Explorer and the Portfolio tab's
+                                      "as of date" picker
+REMISIER-SHARING.md                  Revenue v2, Remisier sharing, and Remisier transactions
+                                      (all goal_snapshots-based, alongside — not replacing —
+                                      the original Revenue tab)
 ```
 
 No `node_modules` surprises: dependencies are exactly `@google-cloud/bigquery`,

@@ -355,6 +355,22 @@ on('GET', '/api/remisier/revenue/summary', async (_req, _params, url) => {
   const q = Q.remisierRevenueSummary(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
   return json(await runQuery(q.sql, q.params));
 });
+// ---- Remisier sharing (portfolio_with_code): same as above, AUM sourced
+// from mi_fee_logs.portfolio_with_code instead of goal_snapshots ----------
+on('GET', '/api/remisier/revenue-pwc', async (_req, _params, url) => {
+  const code = qp(url, 'code');
+  if (!code) return json({ error: 'code is required.' }, 400);
+  const portion = Number(qp(url, 'portion')) || 0;
+  const q = Q.remisierRevenuePwcDetail(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
+  return json(await runQuery(q.sql, q.params));
+});
+on('GET', '/api/remisier/revenue-pwc/summary', async (_req, _params, url) => {
+  const code = qp(url, 'code');
+  if (!code) return json({ error: 'code is required.' }, 400);
+  const portion = Number(qp(url, 'portion')) || 0;
+  const q = Q.remisierRevenuePwcSummary(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
+  return json(await runQuery(q.sql, q.params));
+});
 on('GET', '/api/remisier/transactions', async (_req, _params, url) => {
   const referrerCodes = qpAll(url, 'referrerCodes');
   const salesCodes = qpAll(url, 'salesCodes');
@@ -584,6 +600,13 @@ on('POST', '/api/export', async (req) => {
     const portion = Number(body.portion) || 0;
     const args = [body.field as string, code, body.from as string, body.to as string, body.granularity as string, portion] as const;
     const q = source === 'remisier_revenue_detail' ? Q.remisierRevenueDetail(...args) : Q.remisierRevenueSummary(...args);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'remisier_revenue_pwc_detail' || source === 'remisier_revenue_pwc_summary') {
+    const code = body.code as string;
+    if (!code) return json({ error: 'code is required.' }, 400);
+    const portion = Number(body.portion) || 0;
+    const args = [body.field as string, code, body.from as string, body.to as string, body.granularity as string, portion] as const;
+    const q = source === 'remisier_revenue_pwc_detail' ? Q.remisierRevenuePwcDetail(...args) : Q.remisierRevenuePwcSummary(...args);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'remisier_transactions') {
     const referrerCodes = (body.referrerCodes as string[]) || [];

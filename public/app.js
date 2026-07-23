@@ -36,6 +36,7 @@ const idr = (n) => {
   return 'Rp ' + new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 2 }).format(Number(n));
 };
 const idrFull = (n) => (n == null ? '—' : 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n))));
+const idrExact = (n) => (n == null ? '—' : 'Rp ' + new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(Number(n)));
 const num = (n) => (n == null ? '—' : new Intl.NumberFormat('en-US').format(Number(n)));
 const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) + '%' : '—');
 
@@ -864,12 +865,13 @@ function renderPerformanceDetail() {
 let growthLoaded = false;
 function genTable(sel, rows, cols, emptyMsg) {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
-  const numTypes = ['idr', 'num', 'pct'];
+  const numTypes = ['idr', 'idrx', 'num', 'pct'];
   const head = cols.map((c) => `<th class="${numTypes.includes(c.type) ? 'num' : ''}">${c.label}</th>`).join('');
   const body = rows.map((r) => '<tr>' + cols.map((c) => {
     const v = val(r[c.key]);
     let out = v == null ? '—' : v;
     if (c.type === 'idr') out = idrFull(v);
+    if (c.type === 'idrx') out = idrExact(v);
     if (c.type === 'num') out = num(v);
     if (c.type === 'pct') out = v == null ? '—' : `${Number(v).toFixed(1)}%`;
     if (c.type === 'date') out = v == null ? '—' : String(v).slice(0, 10);
@@ -1064,6 +1066,7 @@ async function loadRemisier() {
     ], 'No users under this remisier code.');
     genTable('#remDetailTable', detail, [
       { key: 'period', label: 'Period', type: 'date' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
       { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
       { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
@@ -1071,7 +1074,9 @@ async function loadRemisier() {
       { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM (EOP)', type: 'idr' },
       { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
-      { key: 'total_remisier_fee', label: 'Remisier fee', type: 'idr' }, { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr' },
+      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idr' },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr' }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idr' },
+      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr' },
     ], 'No revenue in this range.');
     genTable('#remSummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
@@ -1079,12 +1084,81 @@ async function loadRemisier() {
       { key: 'total_aum', label: 'Total AUM (EOP)', type: 'idr' },
       { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
-      { key: 'total_remisier_fee', label: 'Remisier fee', type: 'idr' }, { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr' },
+      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idr' },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr' }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idr' },
+      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr' },
     ], 'No revenue in this range.');
   } catch (e) {
     $('#remUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
     $('#remDetailTable').innerHTML = '';
     $('#remSummaryTable').innerHTML = '';
+  }
+}
+
+// ====================================================================
+//  REMISIER SHARING (portfolio_with_code — same math, AUM from the
+//  original Revenue tab's source instead of goal_snapshots)
+// ====================================================================
+let remPwcGranularity = 'day';
+
+function remPwcPortionFraction() { return (Number($('#remPwcPortion').value) || 0) / 100; }
+
+function remPwcParams() {
+  return {
+    field: $('#remPwcField').value,
+    code: $('#remPwcCode').value.trim(),
+    from: $('#remPwcFrom').value,
+    to: $('#remPwcTo').value,
+    granularity: remPwcGranularity,
+    portion: remPwcPortionFraction(),
+  };
+}
+
+async function loadRemisierPwc() {
+  const p = remPwcParams();
+  if (!p.code) { toast('Enter a remisier code first.'); return; }
+  $('#remPwcUsersTable').innerHTML = '<div class="loading">Loading…</div>';
+  $('#remPwcDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  $('#remPwcSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  const qs = `field=${encodeURIComponent(p.field)}&code=${encodeURIComponent(p.code)}&from=${p.from}&to=${p.to}&granularity=${p.granularity}&portion=${p.portion}`;
+  try {
+    const [users, detail, summary] = await Promise.all([
+      api(`/api/remisier/users?field=${encodeURIComponent(p.field)}&code=${encodeURIComponent(p.code)}`),
+      api(`/api/remisier/revenue-pwc?${qs}`),
+      api(`/api/remisier/revenue-pwc/summary?${qs}`),
+    ]);
+    genTable('#remPwcUsersTable', users, [
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+    ], 'No users under this remisier code.');
+    genTable('#remPwcDetailTable', detail, [
+      { key: 'period', label: 'Period', type: 'date' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
+      { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
+      { key: 'days_running', label: 'Days running', type: 'num' },
+      { key: 'avg_aum', label: 'Avg AUM', type: 'idrx' }, { key: 'aum_eom', label: 'AUM (EOP)', type: 'idrx' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idrx' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idrx' }, { key: 'total_mi_share', label: 'Total MI', type: 'idrx' },
+      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idrx' },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx' }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idrx' },
+      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx' },
+    ], 'No revenue in this range.');
+    genTable('#remPwcSummaryTable', summary, [
+      { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
+      { key: 'days_running', label: 'Days running', type: 'num' },
+      { key: 'total_aum', label: 'Total AUM (EOP)', type: 'idrx' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idrx' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idrx' }, { key: 'total_mi_share', label: 'Total MI', type: 'idrx' },
+      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idrx' },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx' }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idrx' },
+      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx' },
+    ], 'No revenue in this range.');
+  } catch (e) {
+    $('#remPwcUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#remPwcDetailTable').innerHTML = '';
+    $('#remPwcSummaryTable').innerHTML = '';
   }
 }
 
@@ -1730,6 +1804,23 @@ function wire() {
     { source: 'remisier_revenue_summary', format: 'csv', filename: 'remisier_revenue_summary', ...remParams() }, 'remisier_revenue_summary.csv'));
   $('#remSummaryXlsx').addEventListener('click', () => download(
     { source: 'remisier_revenue_summary', format: 'xlsx', filename: 'remisier_revenue_summary', ...remParams() }, 'remisier_revenue_summary.xlsx'));
+
+  // remisier sharing (portfolio_with_code)
+  $('#remPwcRun').addEventListener('click', loadRemisierPwc);
+  $('#remPwcGran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#remPwcGran button').forEach((x) => x.classList.toggle('on', x === b));
+    remPwcGranularity = b.dataset.g;
+    if ($('#remPwcCode').value.trim()) loadRemisierPwc();
+  });
+  $('#remPwcDetailCsv').addEventListener('click', () => download(
+    { source: 'remisier_revenue_pwc_detail', format: 'csv', filename: 'remisier_revenue_pwc_detail', ...remPwcParams() }, 'remisier_revenue_pwc_detail.csv'));
+  $('#remPwcDetailXlsx').addEventListener('click', () => download(
+    { source: 'remisier_revenue_pwc_detail', format: 'xlsx', filename: 'remisier_revenue_pwc_detail', ...remPwcParams() }, 'remisier_revenue_pwc_detail.xlsx'));
+  $('#remPwcSummaryCsv').addEventListener('click', () => download(
+    { source: 'remisier_revenue_pwc_summary', format: 'csv', filename: 'remisier_revenue_pwc_summary', ...remPwcParams() }, 'remisier_revenue_pwc_summary.csv'));
+  $('#remPwcSummaryXlsx').addEventListener('click', () => download(
+    { source: 'remisier_revenue_pwc_summary', format: 'xlsx', filename: 'remisier_revenue_pwc_summary', ...remPwcParams() }, 'remisier_revenue_pwc_summary.xlsx'));
 
   // remisier transactions
   $('#remTxRun').addEventListener('click', () => { remTx.offset = 0; loadRemTx(); });
