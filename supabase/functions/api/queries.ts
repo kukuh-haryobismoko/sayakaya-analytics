@@ -971,7 +971,7 @@ export const remisierUsers = (field: string, code: string): Query => ({
   sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email, u.referrer_code, u.sales_code
     FROM ${USERS} u
     LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-    WHERE u.${remisierFieldColumn(field)} = @code
+    WHERE UPPER(u.${remisierFieldColumn(field)}) LIKE CONCAT('%', UPPER(@code), '%')
     ORDER BY up.name`,
   params: { code },
 });
@@ -991,7 +991,7 @@ function remisierRevenueCTEs(field: string, code: string, from?: string, to?: st
         SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email
         FROM ${USERS} u
         LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-        WHERE u.${remisierFieldColumn(field)} = @code
+        WHERE UPPER(u.${remisierFieldColumn(field)}) LIKE CONCAT('%', UPPER(@code), '%')
       ),
       daily AS (
         SELECT gs.date, gs.fund_id, f.sinvest_code, f.name AS fund_name,
@@ -1128,7 +1128,7 @@ function remisierRevenuePwcCTEs(field: string, code: string, from?: string, to?:
         SELECT u.sid_code AS sid, up.name, u.email
         FROM ${USERS} u
         LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-        WHERE u.${remisierFieldColumn(field)} = @code
+        WHERE UPPER(u.${remisierFieldColumn(field)}) LIKE CONCAT('%', UPPER(@code), '%')
       ),
       combined AS (
         SELECT
@@ -1256,12 +1256,12 @@ export const remisierRevenuePwcSummary = (
 // name attached — a due-diligence/audit list next to the revenue rollups
 // above, filtered by transaction date rather than snapshot date.
 export interface RemisierTransactionsArgs {
-  referrerCodes?: string[]; salesCodes?: string[];
+  referrerCodes?: string[]; salesCodes?: string[]; type?: string; status?: string;
   from?: string; to?: string; limit?: number | string; offset?: number | string;
 }
 
 export function remisierTransactions(
-  { referrerCodes = [], salesCodes = [], from, to, limit = 100, offset = 0 }: RemisierTransactionsArgs,
+  { referrerCodes = [], salesCodes = [], type, status, from, to, limit = 100, offset = 0 }: RemisierTransactionsArgs,
 ): Query {
   const params: Record<string, unknown> = {
     ...range(from, to),
@@ -1269,10 +1269,18 @@ export function remisierTransactions(
     offset: parseInt(String(offset), 10),
   };
   const codeConds: string[] = [];
-  if (referrerCodes.length) { codeConds.push('u.referrer_code IN UNNEST(@referrerCodes)'); params.referrerCodes = referrerCodes; }
-  if (salesCodes.length) { codeConds.push('u.sales_code IN UNNEST(@salesCodes)'); params.salesCodes = salesCodes; }
+  if (referrerCodes.length) {
+    codeConds.push("EXISTS (SELECT 1 FROM UNNEST(@referrerCodes) rc WHERE UPPER(u.referrer_code) LIKE CONCAT('%', rc, '%'))");
+    params.referrerCodes = referrerCodes.map((c) => c.toUpperCase());
+  }
+  if (salesCodes.length) {
+    codeConds.push("EXISTS (SELECT 1 FROM UNNEST(@salesCodes) sc WHERE UPPER(u.sales_code) LIKE CONCAT('%', sc, '%'))");
+    params.salesCodes = salesCodes.map((c) => c.toUpperCase());
+  }
   const codeWhere = codeConds.length ? `(${codeConds.join(' OR ')})` : 'FALSE';
-  const where = `${codeWhere} AND DATE(t.created_at) BETWEEN @from AND @to`;
+  let where = `${codeWhere} AND DATE(t.created_at) BETWEEN @from AND @to`;
+  if (type) { where += ' AND t.type = @type'; params.type = type; }
+  if (status) { where += ' AND t.status = @status'; params.status = status; }
   return {
     sql: `SELECT
         t.id, t.transaction_number, t.type, t.status,

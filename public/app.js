@@ -921,6 +921,7 @@ async function loadReconciliation() {
     const rows = await api(`/api/reconciliation?from=${r.from}&to=${r.to}`);
     genTable('#recTable', rows, [
       { key: 'bucket', label: 'Date' },
+      { key: 'type', label: 'Type' },
       { key: 'app_count', label: 'App tx', type: 'num' }, { key: 'app_amount', label: 'App amount', type: 'idr' },
       { key: 'sinvest_count', label: 'Custodian tx', type: 'num' }, { key: 'sinvest_amount', label: 'Custodian amount', type: 'idr' },
       { key: 'amount_diff', label: 'Diff', type: 'idr' },
@@ -1173,9 +1174,19 @@ function remTxParams() {
   return {
     referrerCodes: remTxCodesArr('#remTxReferrerCodes'),
     salesCodes: remTxCodesArr('#remTxSalesCodes'),
+    type: $('#remTxType').value,
+    status: $('#remTxStatus').value,
     from: $('#remTxFrom').value,
     to: $('#remTxTo').value,
   };
+}
+
+async function loadRemTxFilterOptions() {
+  try {
+    const { types, statuses } = await api('/api/transactions/filters');
+    (types || []).forEach((t) => $('#remTxType').insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+    (statuses || []).forEach((s) => $('#remTxStatus').insertAdjacentHTML('beforeend', `<option value="${s}">${s}</option>`));
+  } catch { /* filter dropdowns just stay at "All" */ }
 }
 
 async function loadRemTx() {
@@ -1185,6 +1196,8 @@ async function loadRemTx() {
   const qs = new URLSearchParams();
   p.referrerCodes.forEach((c) => qs.append('referrerCodes', c));
   p.salesCodes.forEach((c) => qs.append('salesCodes', c));
+  if (p.type) qs.set('type', p.type);
+  if (p.status) qs.set('status', p.status);
   qs.set('from', p.from); qs.set('to', p.to);
   qs.set('limit', remTx.limit); qs.set('offset', remTx.offset);
   try {
@@ -1195,7 +1208,7 @@ async function loadRemTx() {
       { key: 'transaction_number', label: 'Trx #' },
       { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
       { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
-      { key: 'fund_name', label: 'Fund' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'fund_type', label: 'Fund type' },
       { key: 'unit', label: 'Unit', type: 'num' },
       { key: 'value_per_unit', label: 'NAV', type: 'num' },
       { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
@@ -1921,6 +1934,7 @@ async function init() {
   $('#rev2From').value = rm.from; $('#rev2To').value = rm.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
+  loadRemTxFilterOptions();
   setThemeButtonLabel();
   wire(); wireGate();
   try {

@@ -804,29 +804,47 @@ const topReferrers = (limit = 20) => ({
 // formatted numbers) — the raw KSEI/SInvest export, never cleaned.
 const SINVEST = '`sayakaya.sinvest.trx_history`';
 
+// Transaction_Type is a numeric-code string ('1'..'9') for KSEI/SInvest's
+// Subscription/Redemption/Switch In/Switch Out/Reinvestment/Liquidation/
+// Transfer In/Transfer Out/Unit Adjustment. main.transactions.type only
+// covers the first five (buy/sell/SWITCH_IN/SWITCH_OUT/reinvestment) — the
+// backoffice doesn't book Liquidation/Transfer/Unit Adjustment yet, so those
+// rows will show sinvest-only counts until it does.
+const RECON_TYPE_CASE = `CASE Transaction_Type
+        WHEN '1' THEN 'BUY' WHEN '2' THEN 'SELL' WHEN '3' THEN 'SWITCH_IN' WHEN '4' THEN 'SWITCH_OUT'
+        WHEN '5' THEN 'REINVESTMENT' WHEN '6' THEN 'LIQUIDATION' WHEN '7' THEN 'TRANSFER_IN'
+        WHEN '8' THEN 'TRANSFER_OUT' WHEN '9' THEN 'UNIT_ADJUSTMENT' ELSE 'OTHER' END`;
+
 const reconciliationDaily = (from, to) => {
   const r = range(from, to);
   return {
-    sql: `WITH sinvest AS (
-        SELECT PARSE_DATE('%Y%m%d', Transaction_Date) AS d,
-          SUM(SAFE_CAST(Net_Transaction_Amount AS NUMERIC)) AS amount,
-          COUNT(*) AS cnt
+    sql: `WITH sinvest_raw AS (
+        SELECT PARSE_DATE('%Y%m%d', Input_Date) AS d,
+          ${RECON_TYPE_CASE} AS type_label,
+          SAFE_CAST(Net_Transaction_Amount AS NUMERIC) AS amount
         FROM ${SINVEST}
-        WHERE Transaction_Date IS NOT NULL
-        GROUP BY d
+        WHERE Input_Date IS NOT NULL
+      ),
+      sinvest AS (
+        SELECT d, IFNULL(type_label, 'ALL') AS type, SUM(amount) AS amount, COUNT(*) AS cnt
+        FROM sinvest_raw GROUP BY ROLLUP(d, type_label)
+      ),
+      app_raw AS (
+        SELECT DATE(completed_at) AS d, UPPER(type) AS type_label, final_amount
+        FROM ${TX} WHERE status = 'completed'
       ),
       app AS (
-        SELECT DATE(created_at) AS d, SUM(final_amount) AS amount, COUNT(*) AS cnt
-        FROM ${TX} WHERE status = 'completed'
-        GROUP BY d
+        SELECT d, IFNULL(type_label, 'ALL') AS type, SUM(final_amount) AS amount, COUNT(*) AS cnt
+        FROM app_raw GROUP BY ROLLUP(d, type_label)
       )
       SELECT FORMAT_DATE('%Y-%m-%d', COALESCE(s.d, a.d)) AS bucket,
+        COALESCE(s.type, a.type) AS type,
         IFNULL(s.amount, 0) AS sinvest_amount, IFNULL(s.cnt, 0) AS sinvest_count,
         IFNULL(a.amount, 0) AS app_amount, IFNULL(a.cnt, 0) AS app_count,
         ROUND(IFNULL(a.amount, 0) - IFNULL(s.amount, 0)) AS amount_diff
-      FROM sinvest s FULL OUTER JOIN app a ON s.d = a.d
+      FROM sinvest s FULL OUTER JOIN app a ON s.d = a.d AND s.type = a.type
       WHERE COALESCE(s.d, a.d) BETWEEN @from AND @to
-      ORDER BY bucket DESC`,
+      ORDER BY bucket DESC, type = 'ALL' DESC, type`,
     params: r,
   };
 };
@@ -1051,7 +1069,7 @@ const remisierUsers = (field, code) => ({
   sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email, u.referrer_code, u.sales_code
     FROM ${USERS} u
     LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-    WHERE u.${remisierFieldColumn(field)} = @code
+    WHERE UPPER(u.${remisierFieldColumn(field)}) LIKE CONCAT('%', UPPER(@code), '%')
     ORDER BY up.name`,
   params: { code },
 });
@@ -1071,7 +1089,7 @@ function remisierRevenueCTEs(field, code, from, to) {
         SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email
         FROM ${USERS} u
         LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-        WHERE u.${remisierFieldColumn(field)} = @code
+        WHERE UPPER(u.${remisierFieldColumn(field)}) LIKE CONCAT('%', UPPER(@code), '%')
       ),
       daily AS (
         SELECT gs.date, gs.fund_id, f.sinvest_code, f.name AS fund_name,
@@ -1204,7 +1222,7 @@ function remisierRevenuePwcCTEs(field, code, from, to) {
         SELECT u.sid_code AS sid, up.name, u.email
         FROM ${USERS} u
         LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-        WHERE u.${remisierFieldColumn(field)} = @code
+        WHERE UPPER(u.${remisierFieldColumn(field)}) LIKE CONCAT('%', UPPER(@code), '%')
       ),
       combined AS (
         SELECT
@@ -1325,17 +1343,19 @@ const remisierRevenuePwcSummary = (field, code, from, to, granularity, remisierP
 // referrer_code/sales_code values, with the buyer's contact info and fund
 // name attached — a due-diligence/audit list next to the revenue rollups
 // above, filtered by transaction date rather than snapshot date.
-function remisierTransactions({ referrerCodes = [], salesCodes = [], from, to, limit = 100, offset = 0 }) {
+function remisierTransactions({ referrerCodes = [], salesCodes = [], type, status, from, to, limit = 100, offset = 0 }) {
   const params = {
     ...range(from, to),
     limit: parseInt(limit, 10),
     offset: parseInt(offset, 10),
   };
   const codeConds = [];
-  if (referrerCodes.length) { codeConds.push('u.referrer_code IN UNNEST(@referrerCodes)'); params.referrerCodes = referrerCodes; }
-  if (salesCodes.length) { codeConds.push('u.sales_code IN UNNEST(@salesCodes)'); params.salesCodes = salesCodes; }
+  if (referrerCodes.length) { codeConds.push('EXISTS (SELECT 1 FROM UNNEST(@referrerCodes) rc WHERE UPPER(u.referrer_code) LIKE CONCAT(\'%\', rc, \'%\'))'); params.referrerCodes = referrerCodes.map((c) => c.toUpperCase()); }
+  if (salesCodes.length) { codeConds.push('EXISTS (SELECT 1 FROM UNNEST(@salesCodes) sc WHERE UPPER(u.sales_code) LIKE CONCAT(\'%\', sc, \'%\'))'); params.salesCodes = salesCodes.map((c) => c.toUpperCase()); }
   const codeWhere = codeConds.length ? `(${codeConds.join(' OR ')})` : 'FALSE';
-  const where = `${codeWhere} AND DATE(t.created_at) BETWEEN @from AND @to`;
+  let where = `${codeWhere} AND DATE(t.created_at) BETWEEN @from AND @to`;
+  if (type) { where += ' AND t.type = @type'; params.type = type; }
+  if (status) { where += ' AND t.status = @status'; params.status = status; }
   return {
     sql: `SELECT
         t.id, t.transaction_number, t.type, t.status,

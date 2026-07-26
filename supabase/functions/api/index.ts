@@ -377,6 +377,7 @@ on('GET', '/api/remisier/transactions', async (_req, _params, url) => {
   if (!referrerCodes.length && !salesCodes.length) return json({ error: 'At least one referrer_code or sales_code is required.' }, 400);
   const q = Q.remisierTransactions({
     referrerCodes, salesCodes,
+    type: qp(url, 'type'), status: qp(url, 'status'),
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 100, offset: qp(url, 'offset') || 0,
   });
@@ -612,7 +613,7 @@ on('POST', '/api/export', async (req) => {
     const referrerCodes = (body.referrerCodes as string[]) || [];
     const salesCodes = (body.salesCodes as string[]) || [];
     if (!referrerCodes.length && !salesCodes.length) return json({ error: 'At least one referrer_code or sales_code is required.' }, 400);
-    const q = Q.remisierTransactions({ referrerCodes, salesCodes, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
     rows = await runQuery(q.sql, q.params);
   } else {
     return json({ error: 'Unknown export source.' }, 400);

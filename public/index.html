@@ -62,6 +62,7 @@
           <button class="nav-link" data-tab="revenue2"><span class="nav-icon">💹</span>Revenue (goal_snapshots)</button>
           <button class="nav-link" data-tab="remisier"><span class="nav-icon">🤝</span>Remisier sharing</button>
           <button class="nav-link" data-tab="remisier-pwc"><span class="nav-icon">🤝</span>Remisier sharing (PWC)</button>
+          <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon">🧾</span>Remisier transactions</button>
           <button class="nav-link" data-tab="predict"><span class="nav-icon">🔮</span>Predict</button>
         </div>
         <div class="nav-group">
@@ -393,7 +394,7 @@
             <button class="btn-ghost" id="recXlsx">Excel</button>
           </div>
         </div>
-        <span class="hint">Daily completed-transaction totals: main.transactions (app) vs sinvest.trx_history (custodian). Uses the date range above. A large amount_diff flags a day worth investigating.</span>
+        <span class="hint">Daily completed-transaction totals by type: main.transactions.completed_at (app) vs sinvest.trx_history.Input_Date (custodian), matched on transaction type. "ALL" is the per-day total across types; the backoffice doesn't yet book Liquidation/Transfer/Unit Adjustment, so those types may show custodian-only rows. Uses the date range above. A large amount_diff flags a day worth investigating.</span>
         <div id="recTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
@@ -493,7 +494,7 @@
             <option value="sales_code">users.sales_code</option>
             <option value="referrer_code">users.referrer_code</option>
           </select>
-          <input id="remCode" type="text" autocomplete="off" placeholder="Remisier code" />
+          <input id="remCode" type="text" autocomplete="off" placeholder="Remisier code (partial match, e.g. CE matches CELIA/CENIA)" />
           <label>Remisier portion (%) <input id="remPortion" type="number" min="0" max="100" step="0.1" value="60" style="width:80px" /></label>
           <label>From <input type="date" id="remFrom" /></label>
           <label>To <input type="date" id="remTo" /></label>
@@ -534,35 +535,6 @@
         </div>
         <div id="remSummaryTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
-
-      <!-- ---- nested: remisier transactions (per-transaction detail, own filters) ---- -->
-      <div class="panel" style="margin-top:24px; border-top:2px solid var(--line); padding-top:20px">
-        <div class="panel-head wrap"><h2>Remisier transactions</h2></div>
-        <div class="ask-bar" style="flex-wrap:wrap">
-          <input id="remTxReferrerCodes" type="text" autocomplete="off" placeholder="referrer_code(s), comma separated" />
-          <input id="remTxSalesCodes" type="text" autocomplete="off" placeholder="sales_code(s), comma separated" />
-          <label>From <input type="date" id="remTxFrom" /></label>
-          <label>To <input type="date" id="remTxTo" /></label>
-          <button id="remTxRun" class="btn-primary">Run</button>
-        </div>
-        <span class="hint">Filtered by transaction date. Fill one code field for a single filter, or both to match either (either field also accepts multiple comma-separated codes).</span>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head wrap">
-          <h2>Transaction detail</h2>
-          <div class="exp">
-            <button class="btn-ghost" id="remTxCsv">CSV</button>
-            <button class="btn-ghost" id="remTxXlsx">Excel</button>
-          </div>
-        </div>
-        <div id="remTxTable" class="table-wrap tall" style="margin-top:14px"></div>
-        <div class="pager">
-          <button id="remTxPrev" class="btn-ghost">← Prev</button>
-          <span id="remTxPageinfo" class="mono"></span>
-          <button id="remTxNext" class="btn-ghost">Next →</button>
-        </div>
-      </div>
     </section>
 
     <!-- ===================== REMISIER SHARING (portfolio_with_code) ===================== -->
@@ -574,7 +546,7 @@
             <option value="sales_code">users.sales_code</option>
             <option value="referrer_code">users.referrer_code</option>
           </select>
-          <input id="remPwcCode" type="text" autocomplete="off" placeholder="Remisier code" />
+          <input id="remPwcCode" type="text" autocomplete="off" placeholder="Remisier code (partial match, e.g. CE matches CELIA/CENIA)" />
           <label>Remisier portion (%) <input id="remPwcPortion" type="number" min="0" max="100" step="0.1" value="60" style="width:80px" /></label>
           <label>From <input type="date" id="remPwcFrom" /></label>
           <label>To <input type="date" id="remPwcTo" /></label>
@@ -614,6 +586,39 @@
           </div>
         </div>
         <div id="remPwcSummaryTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ===================== REMISIER TRANSACTIONS ===================== -->
+    <section id="remisier-tx" class="view">
+      <div class="panel">
+        <div class="panel-head wrap"><h2>Remisier transactions</h2></div>
+        <div class="ask-bar" style="flex-wrap:wrap">
+          <input id="remTxReferrerCodes" type="text" autocomplete="off" placeholder="referrer_code(s), comma separated" />
+          <input id="remTxSalesCodes" type="text" autocomplete="off" placeholder="sales_code(s), comma separated" />
+          <select id="remTxType"><option value="">All types</option></select>
+          <select id="remTxStatus"><option value="">All statuses</option></select>
+          <label>From <input type="date" id="remTxFrom" /></label>
+          <label>To <input type="date" id="remTxTo" /></label>
+          <button id="remTxRun" class="btn-primary">Run</button>
+        </div>
+        <span class="hint">Filtered by transaction date. Each code is a case-insensitive partial match (e.g. CE matches CELIA/CENIA) — fill one field for a single filter, or both to match either, and either field accepts multiple comma-separated codes.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Transaction detail</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="remTxCsv">CSV</button>
+            <button class="btn-ghost" id="remTxXlsx">Excel</button>
+          </div>
+        </div>
+        <div id="remTxTable" class="table-wrap tall" style="margin-top:14px"></div>
+        <div class="pager">
+          <button id="remTxPrev" class="btn-ghost">← Prev</button>
+          <span id="remTxPageinfo" class="mono"></span>
+          <button id="remTxNext" class="btn-ghost">Next →</button>
+        </div>
       </div>
     </section>
 

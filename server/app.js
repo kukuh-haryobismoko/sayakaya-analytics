@@ -332,8 +332,8 @@ function createApp({ serveStatic = true } = {}) {
     const referrerCodes = req.query.referrerCodes == null ? [] : [].concat(req.query.referrerCodes);
     const salesCodes = req.query.salesCodes == null ? [] : [].concat(req.query.salesCodes);
     if (!referrerCodes.length && !salesCodes.length) return res.status(400).json({ error: 'At least one referrer_code or sales_code is required.' });
-    const { from, to, limit, offset } = req.query;
-    const q = Q.remisierTransactions({ referrerCodes, salesCodes, from, to, limit: limit || 100, offset: offset || 0 });
+    const { from, to, type, status, limit, offset } = req.query;
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100, offset: offset || 0 });
     const [rows, countRows] = await Promise.all([
       runQuery(q.sql, q.params),
       runQuery(q.countSql, q.params),
@@ -575,7 +575,7 @@ function createApp({ serveStatic = true } = {}) {
       const referrerCodes = req.body.referrerCodes || [];
       const salesCodes = req.body.salesCodes || [];
       if (!referrerCodes.length && !salesCodes.length) return res.status(400).json({ error: 'At least one referrer_code or sales_code is required.' });
-      const q = Q.remisierTransactions({ referrerCodes, salesCodes, from: req.body.from, to: req.body.to, limit: limit || 100000, offset: 0 });
+      const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: req.body.type, status: req.body.status, from: req.body.from, to: req.body.to, limit: limit || 100000, offset: 0 });
       rows = await runQuery(q.sql, q.params);
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
