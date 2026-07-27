@@ -9,10 +9,37 @@ import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
 import { portfolioReport } from './pdf.ts';
-
-const APP_PASSWORD = Deno.env.get('APP_PASSWORD') || '';
+import * as A from './auth.ts';
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
+
+// Every export `source` maps to exactly one tab — mirrors server/app.js.
+const EXPORT_SOURCE_TAB: Record<string, string> = {
+  sql: 'sql',
+  ask_result: 'ask',
+  growth_top_funds: 'growth',
+  transactions: 'remisier-tx',
+  churn_risk: 'predict',
+  aum_history: 'aum',
+  product_performance: 'performance',
+  product_performance_detail: 'performance',
+  portfolio_full: 'portfolio',
+  portfolio_explorer_full: 'portfolio-explorer',
+  explore: 'explorer',
+  campaigns_performance: 'growth',
+  switching_pairs: 'growth',
+  referrals_top: 'growth',
+  reconciliation: 'reconciliation',
+  revenue_detail: 'revenue',
+  revenue_summary: 'revenue',
+  revenue_v2_detail: 'revenue2',
+  revenue_v2_summary: 'revenue2',
+  remisier_revenue_detail: 'remisier',
+  remisier_revenue_summary: 'remisier',
+  remisier_revenue_pwc_detail: 'remisier-pwc',
+  remisier_revenue_pwc_summary: 'remisier-pwc',
+  remisier_transactions: 'remisier-tx',
+};
 
 // Pivot flat (type, name, period, pct_change) rows into one fund-per-row
 // table per fund type — used for the per-type Excel sheets.
@@ -60,8 +87,8 @@ function portfolioSheetRows(holdings: Record<string, unknown>[]) {
 // ---- Response helpers -----------------------------------------------------
 const CORS_HEADERS: Record<string, string> = {
   'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET,POST,OPTIONS',
-  'access-control-allow-headers': 'content-type, x-app-password',
+  'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+  'access-control-allow-headers': 'content-type, authorization',
 };
 
 function withCors(res: Response): Response {
@@ -74,50 +101,84 @@ function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 }
 
-function csvResponse(rows: Record<string, unknown>[], name: string): Response {
+// Every exported file is remarked with the requesting user: appended to the
+// filename, and (for xlsx) written into the file's own "last modified by"
+// document property — mirrors server/app.js's filenameWithUser.
+function filenameWithUser(name: string, username: string): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+  return `${name}_${username}_${ts}`;
+}
+
+function csvResponse(rows: Record<string, unknown>[], name: string, username: string): Response {
   return new Response('﻿' + toCsv(rows), {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
-      'content-disposition': `attachment; filename="${name}.csv"`,
+      'content-disposition': `attachment; filename="${filenameWithUser(name, username)}.csv"`,
     },
   });
 }
 
-function txtResponse(rows: Record<string, unknown>[], name: string): Response {
+function txtResponse(rows: Record<string, unknown>[], name: string, username: string): Response {
   return new Response('﻿' + toTxt(rows, '|'), {
     headers: {
       'content-type': 'text/plain; charset=utf-8',
-      'content-disposition': `attachment; filename="${name}.txt"`,
+      'content-disposition': `attachment; filename="${filenameWithUser(name, username)}.txt"`,
     },
   });
 }
 
-async function xlsxResponse(rows: Record<string, unknown>[], name: string, pctCols: string[] = []): Promise<Response> {
-  const buf = await toXlsxBuffer(rows, name, pctCols);
+async function xlsxResponse(rows: Record<string, unknown>[], name: string, username: string, pctCols: string[] = []): Promise<Response> {
+  const buf = await toXlsxBuffer(rows, name, pctCols, username);
   return new Response(buf, {
     headers: {
       'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'content-disposition': `attachment; filename="${name}.xlsx"`,
+      'content-disposition': `attachment; filename="${filenameWithUser(name, username)}.xlsx"`,
     },
   });
 }
 
-async function xlsxMultiResponse(sheets: { name: string; rows: Record<string, unknown>[]; pctCols?: string[] }[], name: string): Promise<Response> {
-  const buf = await toXlsxMultiSheet(sheets);
+async function xlsxMultiResponse(sheets: { name: string; rows: Record<string, unknown>[]; pctCols?: string[] }[], name: string, username: string): Promise<Response> {
+  const buf = await toXlsxMultiSheet(sheets, username);
   return new Response(buf, {
     headers: {
       'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'content-disposition': `attachment; filename="${name}.xlsx"`,
+      'content-disposition': `attachment; filename="${filenameWithUser(name, username)}.xlsx"`,
     },
   });
 }
 
 // ---- Tiny router ------------------------------------------------------------
-type Handler = (req: Request, params: Record<string, string>, url: URL) => Promise<Response> | Response;
+// The 4th arg is the authenticated user (null only for /api/health and
+// /api/auth/login, the two routes that skip the auth check below) — handlers
+// that don't need it can simply omit it from their signature.
+type Handler = (req: Request, params: Record<string, string>, url: URL, user: A.DashboardUser | null) => Promise<Response> | Response;
 interface Route { method: string; pattern: URLPattern; handler: Handler }
 const routes: Route[] = [];
 function on(method: string, pathname: string, handler: Handler) {
   routes.push({ method, pattern: new URLPattern({ pathname }), handler });
+}
+
+// Per-tab access control — superuser always passes; everyone else needs the
+// tab in their allowed_tabs. Mirrors requireTab in server/app.js.
+function requireTab(tab: string, handler: Handler): Handler {
+  return (req, params, url, user) => {
+    if (!A.userCan(user, tab)) return json({ error: `You do not have access to this section (${tab}).` }, 403);
+    return handler(req, params, url, user);
+  };
+}
+// A route two tabs both legitimately use (e.g. the shared investor search) —
+// allowed if the caller has at least one of them.
+function requireAnyTab(tabs: string[], handler: Handler): Handler {
+  return (req, params, url, user) => {
+    if (!tabs.some((t) => A.userCan(user, t))) return json({ error: 'You do not have access to this section.' }, 403);
+    return handler(req, params, url, user);
+  };
+}
+function requireSuperuser(handler: Handler): Handler {
+  return (req, params, url, user) => {
+    if (!user?.is_superuser) return json({ error: 'Superuser access required.' }, 403);
+    return handler(req, params, url, user);
+  };
 }
 
 function qp(url: URL, name: string): string | undefined {
@@ -148,14 +209,83 @@ on('GET', '/api/health', async () => {
   } catch {
     bigquery = false;
   }
-  return json({
-    ok: true, project: PROJECT_ID, bigquery,
-    passwordProtected: Boolean(APP_PASSWORD), askEnabled: askEnabled(),
-  });
+  return json({ ok: true, project: PROJECT_ID, bigquery, askEnabled: askEnabled() });
 });
 
+// ---- Auth: login/logout/me --------------------------------------------
+// Login is the one route not gated by the auth check below (it's how you get
+// a token in the first place).
+on('POST', '/api/auth/login', async (req) => {
+  const body = await bodyOf(req);
+  const username = body.username as string;
+  const password = body.password as string;
+  if (!username || !password) return json({ error: 'Username and password are required.' }, 400);
+  const user = await A.findUserByUsername(username);
+  if (!user || !A.verifyPassword(password, user.password_hash)) {
+    return json({ error: 'Incorrect username or password.' }, 401);
+  }
+  const token = await A.createSession(user.id);
+  return json({ token, user: A.publicUser(user) });
+});
+
+on('POST', '/api/auth/logout', async (req) => {
+  const authHeader = req.headers.get('authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  await A.deleteSessionByToken(token);
+  return json({ ok: true });
+});
+
+on('GET', '/api/auth/me', (_req, _params, _url, user) => json({ user: A.publicUser(user!) }));
+
+// ---- Admin: manage dashboard accounts (superuser only) --------------------
+on('GET', '/api/admin/users', requireSuperuser(async () => {
+  const rows = await A.listUsers();
+  return json(rows.map((r) => A.publicUser({ ...r, password_hash: '' })));
+}));
+
+on('POST', '/api/admin/users', requireSuperuser(async (req) => {
+  const body = await bodyOf(req);
+  const username = body.username as string;
+  const password = body.password as string;
+  if (!username || !password) return json({ error: 'Username and password are required.' }, 400);
+  const existing = await A.findUserByUsername(username);
+  if (existing) return json({ error: 'That username is already taken.' }, 409);
+  const created = await A.createUser({
+    username, password,
+    isSuperuser: !!body.isSuperuser,
+    allowedTabs: (body.allowedTabs as string[]) || [],
+  });
+  return json(A.publicUser(created));
+}));
+
+on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params) => {
+  const target = await A.findUserById(params.id);
+  if (!target) return json({ error: 'User not found.' }, 404);
+  const body = await bodyOf(req);
+  // Lockout guard: refuse to demote the last remaining superuser.
+  if (target.is_superuser && body.isSuperuser === false && (await A.countSuperusers()) <= 1) {
+    return json({ error: 'Cannot remove the last remaining superuser.' }, 400);
+  }
+  const updated = await A.updateUser(params.id, {
+    password: body.password as string | undefined,
+    isSuperuser: body.isSuperuser as boolean | undefined,
+    allowedTabs: body.allowedTabs as string[] | undefined,
+  });
+  return json(A.publicUser(updated));
+}));
+
+on('DELETE', '/api/admin/users/:id', requireSuperuser(async (_req, params) => {
+  const target = await A.findUserById(params.id);
+  if (!target) return json({ error: 'User not found.' }, 404);
+  if (target.is_superuser && (await A.countSuperusers()) <= 1) {
+    return json({ error: 'Cannot delete the last remaining superuser.' }, 400);
+  }
+  await A.deleteUser(params.id);
+  return json({ ok: true });
+}));
+
 // ---- Overview (KPIs) ------------------------------------------------------
-on('GET', '/api/overview', async (_req, _params, url) => {
+on('GET', '/api/overview', requireTab('overview', async (_req, _params, url) => {
   const from = qp(url, 'from'); const to = qp(url, 'to');
   const [users, aum, tx, funds] = await Promise.all([
     runQuery(Q.overviewUsers().sql, Q.overviewUsers().params),
@@ -164,51 +294,51 @@ on('GET', '/api/overview', async (_req, _params, url) => {
     runQuery(Q.overviewFunds().sql, Q.overviewFunds().params),
   ]);
   return json({ ...users[0], ...aum[0], ...tx[0], ...funds[0] });
-});
+}));
 
 // ---- Trends ---------------------------------------------------------------
-on('GET', '/api/trends', async (_req, _params, url) => {
+on('GET', '/api/trends', requireTab('overview', async (_req, _params, url) => {
   const q = Q.trends(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Breakdowns -----------------------------------------------------------
-on('GET', '/api/breakdown/:dimension', async (_req, params, url) => {
+on('GET', '/api/breakdown/:dimension', requireTab('overview', async (_req, params, url) => {
   const q = Q.breakdownBy(params.dimension, qp(url, 'from'), qp(url, 'to'));
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Funds ----------------------------------------------------------------
-on('GET', '/api/funds/top', async (_req, _params, url) => {
+on('GET', '/api/funds/top', requireTab('overview', async (_req, _params, url) => {
   const q = Q.topFunds(qp(url, 'limit') || 10);
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/funds/types', async () => {
+}));
+on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance'], async () => {
   const q = Q.fundTypes();
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/funds/list', async (_req, _params, url) => {
+}));
+on('GET', '/api/funds/list', requireTab('performance', async (_req, _params, url) => {
   const q = Q.fundList(qp(url, 'type'));
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Users ----------------------------------------------------------------
-on('GET', '/api/users/growth', async () => {
+on('GET', '/api/users/growth', requireTab('overview', async () => {
   const q = Q.userGrowth();
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/users/verification', async () => {
+}));
+on('GET', '/api/users/verification', requireTab('overview', async () => {
   const q = Q.verificationBreakdown();
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Transactions explorer ------------------------------------------------
-on('GET', '/api/transactions/filters', async () => {
+on('GET', '/api/transactions/filters', requireTab('remisier-tx', async () => {
   const q = Q.txFilterValues();
   const rows = await runQuery(q.sql, q.params);
   return json(rows[0] || { types: [], statuses: [] });
-});
-on('GET', '/api/transactions', async (_req, _params, url) => {
+}));
+on('GET', '/api/transactions', requireTab('remisier-tx', async (_req, _params, url) => {
   const q = Q.transactions({
     from: qp(url, 'from'), to: qp(url, 'to'), type: qp(url, 'type'), status: qp(url, 'status'),
     search: qp(url, 'search'), limit: qp(url, 'limit') ?? 50, offset: qp(url, 'offset') ?? 0,
@@ -218,20 +348,20 @@ on('GET', '/api/transactions', async (_req, _params, url) => {
     runQuery(q.countSql!, q.params),
   ]);
   return json({ rows, total: Number(countRows[0]?.total || 0) });
-});
+}));
 
 // ---- AUM history (mi_fee_logs.mi_fee) -------------------------------------
-on('GET', '/api/aum-history', async (_req, _params, url) => {
+on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
   const q = Q.aumHistory(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-on('GET', '/api/users/search', async (_req, _params, url) => {
+on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/portfolio', async (_req, _params, url) => {
+}));
+on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url) => {
   const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
   if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
   const date = qp(url, 'date');
@@ -252,10 +382,10 @@ on('GET', '/api/portfolio', async (_req, _params, url) => {
   // don't have history), so it doesn't make sense to show it as if it were
   // "as of" a past date — omit it in that mode rather than show a misleading number.
   return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
-});
+}));
 
 // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
-on('GET', '/api/portfolio-explorer', async (_req, _params, url) => {
+on('GET', '/api/portfolio-explorer', requireTab('portfolio-explorer', async (_req, _params, url) => {
   const userId = qp(url, 'userId');
   if (!userId) return json({ error: 'userId is required.' }, 400);
   // Always look up the latest available snapshot date, even when a specific
@@ -273,116 +403,116 @@ on('GET', '/api/portfolio-explorer', async (_req, _params, url) => {
     runQuery(b.sql, b.params),
   ]);
   return json({ asOfDate, latestDate, holdings, byGoal });
-});
+}));
 
 // ---- Product performance (NAV % change per fund type) ----------------------
-on('GET', '/api/product-performance', async () => {
+on('GET', '/api/product-performance', requireTab('performance', async () => {
   const q = Q.productPerformance();
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/product-performance/detail', async () => {
+}));
+on('GET', '/api/product-performance/detail', requireTab('performance', async () => {
   const q = Q.productPerformanceDetail();
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/product-performance/trend', async (_req, _params, url) => {
+}));
+on('GET', '/api/product-performance/trend', requireTab('performance', async (_req, _params, url) => {
   const q = Q.fundNavTrend({
     type: qp(url, 'type'), period: qp(url, 'period'), limit: qp(url, 'limit'),
     funds: qpAll(url, 'funds'),
   });
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Growth: campaigns, referrals, switching, manager/demographic AUM -----
-on('GET', '/api/campaigns/performance', async (_req, _params, url) => {
+on('GET', '/api/campaigns/performance', requireTab('growth', async (_req, _params, url) => {
   const q = Q.campaignPerformance(qp(url, 'limit'));
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/switching/top-pairs', async (_req, _params, url) => {
+}));
+on('GET', '/api/switching/top-pairs', requireTab('growth', async (_req, _params, url) => {
   const q = Q.switchingTopPairs(qp(url, 'limit'));
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/funds/by-manager', async (_req, _params, url) => {
+}));
+on('GET', '/api/funds/by-manager', requireTab('growth', async (_req, _params, url) => {
   const q = Q.aumByManager(qp(url, 'limit'));
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/users/aum-by-risk', async () => {
+}));
+on('GET', '/api/users/aum-by-risk', requireTab('growth', async () => {
   const q = Q.aumByRisk();
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/users/aum-by-income', async () => {
+}));
+on('GET', '/api/users/aum-by-income', requireTab('growth', async () => {
   const q = Q.aumByIncome();
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/referrals/top', async (_req, _params, url) => {
+}));
+on('GET', '/api/referrals/top', requireTab('growth', async (_req, _params, url) => {
   const q = Q.topReferrers(qp(url, 'limit'));
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Reconciliation: app ledger vs custodian (sinvest) feed ----------------
-on('GET', '/api/reconciliation', async (_req, _params, url) => {
+on('GET', '/api/reconciliation', requireTab('reconciliation', async (_req, _params, url) => {
   const q = Q.reconciliationDaily(qp(url, 'from'), qp(url, 'to'));
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Revenue: management fee earned per fund/period -------------------------
-on('GET', '/api/revenue', async (_req, _params, url) => {
+on('GET', '/api/revenue', requireTab('revenue', async (_req, _params, url) => {
   const q = Q.revenueDetail(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/revenue/summary', async (_req, _params, url) => {
+}));
+on('GET', '/api/revenue/summary', requireTab('revenue', async (_req, _params, url) => {
   const q = Q.revenueMonthlySummary(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Revenue v2: same as Revenue above, but AUM sourced from goal_snapshots
-on('GET', '/api/revenue-v2', async (_req, _params, url) => {
+on('GET', '/api/revenue-v2', requireTab('revenue2', async (_req, _params, url) => {
   const q = Q.revenueV2Detail(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/revenue-v2/summary', async (_req, _params, url) => {
+}));
+on('GET', '/api/revenue-v2/summary', requireTab('revenue2', async (_req, _params, url) => {
   const q = Q.revenueV2MonthlySummary(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
-});
+}));
 
 // ---- Remisier sharing: management fee revenue for one remisier's users,
 // from goal_snapshots, split as a portion of the AperD share -----------------
-on('GET', '/api/remisier/users', async (_req, _params, url) => {
+on('GET', '/api/remisier/users', requireAnyTab(['remisier', 'remisier-pwc'], async (_req, _params, url) => {
   const code = qp(url, 'code');
   if (!code) return json({ error: 'code is required.' }, 400);
   const q = Q.remisierUsers(qp(url, 'field') || '', code);
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/remisier/revenue', async (_req, _params, url) => {
+}));
+on('GET', '/api/remisier/revenue', requireTab('remisier', async (_req, _params, url) => {
   const code = qp(url, 'code');
   if (!code) return json({ error: 'code is required.' }, 400);
   const portion = Number(qp(url, 'portion')) || 0;
   const q = Q.remisierRevenueDetail(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/remisier/revenue/summary', async (_req, _params, url) => {
+}));
+on('GET', '/api/remisier/revenue/summary', requireTab('remisier', async (_req, _params, url) => {
   const code = qp(url, 'code');
   if (!code) return json({ error: 'code is required.' }, 400);
   const portion = Number(qp(url, 'portion')) || 0;
   const q = Q.remisierRevenueSummary(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
   return json(await runQuery(q.sql, q.params));
-});
+}));
 // ---- Remisier sharing (portfolio_with_code): same as above, AUM sourced
 // from mi_fee_logs.portfolio_with_code instead of goal_snapshots ----------
-on('GET', '/api/remisier/revenue-pwc', async (_req, _params, url) => {
+on('GET', '/api/remisier/revenue-pwc', requireTab('remisier-pwc', async (_req, _params, url) => {
   const code = qp(url, 'code');
   if (!code) return json({ error: 'code is required.' }, 400);
   const portion = Number(qp(url, 'portion')) || 0;
   const q = Q.remisierRevenuePwcDetail(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/remisier/revenue-pwc/summary', async (_req, _params, url) => {
+}));
+on('GET', '/api/remisier/revenue-pwc/summary', requireTab('remisier-pwc', async (_req, _params, url) => {
   const code = qp(url, 'code');
   if (!code) return json({ error: 'code is required.' }, 400);
   const portion = Number(qp(url, 'portion')) || 0;
   const q = Q.remisierRevenuePwcSummary(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
   return json(await runQuery(q.sql, q.params));
-});
-on('GET', '/api/remisier/transactions', async (_req, _params, url) => {
+}));
+on('GET', '/api/remisier/transactions', requireTab('remisier-tx', async (_req, _params, url) => {
   const referrerCodes = qpAll(url, 'referrerCodes');
   const salesCodes = qpAll(url, 'salesCodes');
   if (!referrerCodes.length && !salesCodes.length) return json({ error: 'At least one referrer_code or sales_code is required.' }, 400);
@@ -397,35 +527,35 @@ on('GET', '/api/remisier/transactions', async (_req, _params, url) => {
     runQuery(q.countSql!, q.params),
   ]);
   return json({ rows, total: Number(countRows[0]?.total || 0) });
-});
+}));
 
 // ---- Predictive models (BigQuery ML) --------------------------------------
-on('GET', '/api/ml/status', async () => {
+on('GET', '/api/ml/status', requireTab('predict', async () => {
   try {
     const models = await ML.status();
     return json({ ready: models.length > 0, models });
   } catch {
     return json({ ready: false, models: [] }); // ml dataset not created yet
   }
-});
-on('GET', '/api/predict/aum', async (_req, _params, url) => json(await ML.aumForecast(qp(url, 'horizon'))));
-on('GET', '/api/predict/transactions', async (_req, _params, url) => json(await ML.txForecast(qp(url, 'horizon'))));
-on('GET', '/api/predict/churn', async (_req, _params, url) => json(await ML.churnPredictions(qp(url, 'limit'))));
-on('GET', '/api/churn/overview', async () => json(await ML.churnOverview()));
-on('GET', '/api/retention/cohorts', async (_req, _params, url) => json(await ML.retentionCohorts(qp(url, 'months'))));
-on('GET', '/api/retention/aum-cohorts', async (_req, _params, url) => json(await ML.aumRetentionCohorts(qp(url, 'months'))));
+}));
+on('GET', '/api/predict/aum', requireTab('predict', async (_req, _params, url) => json(await ML.aumForecast(qp(url, 'horizon')))));
+on('GET', '/api/predict/transactions', requireTab('predict', async (_req, _params, url) => json(await ML.txForecast(qp(url, 'horizon')))));
+on('GET', '/api/predict/churn', requireTab('predict', async (_req, _params, url) => json(await ML.churnPredictions(qp(url, 'limit')))));
+on('GET', '/api/churn/overview', requireTab('predict', async () => json(await ML.churnOverview())));
+on('GET', '/api/retention/cohorts', requireTab('predict', async (_req, _params, url) => json(await ML.retentionCohorts(qp(url, 'months')))));
+on('GET', '/api/retention/aum-cohorts', requireTab('predict', async (_req, _params, url) => json(await ML.aumRetentionCohorts(qp(url, 'months')))));
 
 // ---- Generic multi-table explorer -----------------------------------------
-on('GET', '/api/explore/_meta', () => json(EX.meta()));
+on('GET', '/api/explore/_meta', requireTab('explorer', () => json(EX.meta())));
 
-on('GET', '/api/explore/:dataset/filters/:filter', async (_req, params) => {
+on('GET', '/api/explore/:dataset/filters/:filter', requireTab('explorer', async (_req, params) => {
   const sql = EX.filterValuesSql(params.dataset, params.filter);
   if (!sql) return json({ values: [] });
   const rows = await runQuery(sql, {});
   return json({ values: rows.map((r) => r.v).filter((v) => v !== null) });
-});
+}));
 
-on('GET', '/api/explore/:dataset', async (_req, params, url) => {
+on('GET', '/api/explore/:dataset', requireTab('explorer', async (_req, params, url) => {
   const q: Record<string, string | undefined> = Object.fromEntries(url.searchParams.entries());
   const { sql, countSql, params: bqParams } = EX.buildExplore(params.dataset, q);
   const [rows, countRows] = await Promise.all([
@@ -433,12 +563,12 @@ on('GET', '/api/explore/:dataset', async (_req, params, url) => {
     runQuery(countSql, bqParams),
   ]);
   return json({ rows, total: Number(countRows[0]?.total || 0) });
-});
+}));
 
 // ---- Ask (natural language -> SQL via Anthropic) --------------------------
-on('GET', '/api/ask/tables', () => json({ tables: TABLES }));
+on('GET', '/api/ask/tables', requireTab('ask', () => json({ tables: TABLES })));
 
-on('POST', '/api/ask', async (req) => {
+on('POST', '/api/ask', requireTab('ask', async (req) => {
   const body = await bodyOf(req);
   const question = String(body.question || '').trim();
   const context = String(body.context || '').trim() || null;
@@ -450,45 +580,52 @@ on('POST', '/api/ask', async (req) => {
     console.error('[POST /api/ask]', (err as Error).message);
     return json({ error: (err as Error).message, sql: (err as { sql?: string }).sql || null }, 400);
   }
-});
+}));
 
-on('POST', '/api/ask/chart', async (req) => {
+on('POST', '/api/ask/chart', requireTab('ask', async (req) => {
   const body = await bodyOf(req);
   const { question, rows, hint } = body as { question?: string; rows?: Record<string, unknown>[]; hint?: string };
   return json(await suggestChart(question, rows || [], hint));
-});
+}));
 
 // ---- SQL Lab --------------------------------------------------------------
-on('POST', '/api/sql/estimate', async (req) => {
+on('POST', '/api/sql/estimate', requireTab('sql', async (req) => {
   const body = await bodyOf(req);
   const v = validateAdHoc(String(body.sql || ''));
   if (!v.ok) return json({ error: v.error }, 400);
   const { bytes } = await dryRun(capRows(v.sql, (body.limit as number) || 5000));
   return json({ bytes, withinLimit: bytes <= Number(MAX_BYTES_BILLED) });
-});
+}));
 
-on('POST', '/api/sql/run', async (req) => {
+on('POST', '/api/sql/run', requireTab('sql', async (req) => {
   const body = await bodyOf(req);
   const v = validateAdHoc(String(body.sql || ''));
   if (!v.ok) return json({ error: v.error }, 400);
   const rows = await runQuery(capRows(v.sql, (body.limit as number) || 5000), {});
   return json({ rows, count: rows.length });
-});
+}));
 
 // ---- Exports --------------------------------------------------------------
-on('POST', '/api/export', async (req) => {
+on('POST', '/api/export', async (req, _params, _url, user) => {
   const body = await bodyOf(req);
   const source = body.source as string;
   const format = (body.format as string) || 'csv';
   const filename = (body.filename as string) || 'export';
   const limit = body.limit as number | undefined;
+  const tab = EXPORT_SOURCE_TAB[source];
+  if (!tab) return json({ error: 'Unknown export source.' }, 400);
+  if (!A.userCan(user, tab)) return json({ error: 'You do not have access to this export.' }, 403);
+  const username = user!.username;
   let rows: Record<string, unknown>[] = [];
   let pctCols: string[] = [];
 
-  if (source === 'sql') {
+  if (source === 'sql' || source === 'ask_result') {
     const v = validateAdHoc(String(body.sql || ''));
     if (!v.ok) return json({ error: v.error }, 400);
     rows = await runQuery(capRows(v.sql, limit || 100000), {});
+  } else if (source === 'growth_top_funds') {
+    const q = Q.topFunds(50);
+    rows = await runQuery(q.sql, q.params);
   } else if (source === 'transactions') {
     const filters = (body.filters as Record<string, unknown>) || {};
     const q = Q.transactions({ ...filters, limit: limit || 100000, offset: 0 } as Q.TransactionsArgs);
@@ -506,7 +643,7 @@ on('POST', '/api/export', async (req) => {
   } else if (source === 'product_performance_detail') {
     const q = Q.productPerformanceDetail();
     const detail = await runQuery(q.sql, q.params);
-    if (format === 'xlsx') return xlsxMultiResponse(pivotPerformanceByType(detail), filename);
+    if (format === 'xlsx') return xlsxMultiResponse(pivotPerformanceByType(detail), filename, username);
     rows = detail;
   } else if (source === 'portfolio_full') {
     const userId = body.userId as string; const sid = body.sid as string;
@@ -524,18 +661,18 @@ on('POST', '/api/export', async (req) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params);
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
       // Buffer (Node) satisfies BodyInit (a Uint8Array) at runtime, but the
       // two libraries' type declarations don't agree — wrap to satisfy both.
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
-          'content-disposition': `attachment; filename="${filename}.pdf"`,
+          'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
         },
       });
     }
     const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
-    if (format === 'xlsx') return xlsxMultiResponse(sheets, filename);
+    if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);
     rows = sheets[0].rows; // CSV has no sheets — holdings only
   } else if (source === 'portfolio_explorer_full') {
     // Same shape/columns as portfolio_full, sourced from goal_snapshots as of
@@ -563,16 +700,16 @@ on('POST', '/api/export', async (req) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params);
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
-          'content-disposition': `attachment; filename="${filename}.pdf"`,
+          'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
         },
       });
     }
     const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
-    if (format === 'xlsx') return xlsxMultiResponse(sheets, filename);
+    if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);
     rows = sheets[0].rows; // CSV has no sheets — holdings only
   } else if (source === 'explore') {
     const dataset = body.dataset as string;
@@ -601,7 +738,7 @@ on('POST', '/api/export', async (req) => {
     const detail = await runQuery(q.sql, q.params);
     const splitBy = body.splitBy as string | undefined; // 'fund' | 'mi' | undefined — xlsx only, one sheet per value
     if (format === 'xlsx' && (splitBy === 'fund' || splitBy === 'mi')) {
-      return xlsxMultiResponse(splitRowsBySheet(detail, splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename);
+      return xlsxMultiResponse(splitRowsBySheet(detail, splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename, username);
     }
     rows = detail;
   } else if (source === 'revenue_summary') {
@@ -634,9 +771,9 @@ on('POST', '/api/export', async (req) => {
     return json({ error: 'Unknown export source.' }, 400);
   }
 
-  if (format === 'xlsx') return xlsxResponse(rows, filename, pctCols);
-  if (format === 'txt') return txtResponse(rows, filename);
-  return csvResponse(rows, filename);
+  if (format === 'xlsx') return xlsxResponse(rows, filename, username, pctCols);
+  if (format === 'txt') return txtResponse(rows, filename, username);
+  return csvResponse(rows, filename, username);
 });
 
 // ---- Serve ------------------------------------------------------------------
@@ -650,8 +787,22 @@ Deno.serve(async (req) => {
 
   if (req.method === 'OPTIONS') return withCors(new Response(null, { status: 204 }));
 
-  if (APP_PASSWORD && pathname !== '/api/health' && req.headers.get('x-app-password') !== APP_PASSWORD) {
-    return withCors(json({ error: 'Unauthorized. Check the app password.' }, 401));
+  // Per-user login (replaces the old shared APP_PASSWORD gate). Every route
+  // except login + health requires a valid session token (Authorization:
+  // Bearer <token>). user is always re-read live from dashboard_users — never
+  // cached in the token — so a permission edit or account deletion takes
+  // effect on the user's very next request, not just at their next login.
+  let user: A.DashboardUser | null = null;
+  if (pathname !== '/api/health' && pathname !== '/api/auth/login') {
+    const authHeader = req.headers.get('authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    try {
+      user = await A.findUserByToken(token);
+    } catch (err) {
+      console.error('[auth]', (err as Error).message);
+      return withCors(json({ error: 'Auth check failed.' }, 500));
+    }
+    if (!user) return withCors(json({ error: 'Unauthorized. Please log in.' }, 401));
   }
 
   for (const r of routes) {
@@ -662,7 +813,7 @@ Deno.serve(async (req) => {
       const params = Object.fromEntries(
         Object.entries(match.pathname.groups).filter(([, v]) => v !== undefined),
       ) as Record<string, string>;
-      return withCors(await r.handler(req, params, url));
+      return withCors(await r.handler(req, params, url, user));
     } catch (err) {
       console.error(`[${req.method} ${pathname}]`, (err as Error).message);
       return withCors(json({ error: (err as Error).message || 'Query failed.' }, 500));

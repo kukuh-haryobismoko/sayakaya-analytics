@@ -55,10 +55,11 @@ const PCT_FMT = '0.00"%"';
 // must be coerced to a real number or the percent format is silently ignored.
 function num(v) { return v === '' || v == null ? v : Number(v); }
 
-async function toXlsxBuffer(rows, sheetName = 'Data', pctCols = []) {
+async function toXlsxBuffer(rows, sheetName = 'Data', pctCols = [], username) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';
   wb.created = new Date();
+  if (username) wb.lastModifiedBy = username;
   const ws = wb.addWorksheet(sheetName);
   const cols = inferColumns(rows);
 
@@ -80,10 +81,11 @@ async function toXlsxBuffer(rows, sheetName = 'Data', pctCols = []) {
 }
 
 // sheets: [{ name, rows, pctCols }] — one worksheet per entry, e.g. one per fund type.
-async function toXlsxMultiSheet(sheets) {
+async function toXlsxMultiSheet(sheets, username) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';
   wb.created = new Date();
+  if (username) wb.lastModifiedBy = username;
 
   for (const { name, rows, pctCols = [] } of sheets) {
     const ws = wb.addWorksheet(String(name).slice(0, 31)); // Excel sheet name limit

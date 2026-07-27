@@ -65,7 +65,8 @@ In the Netlify UI: **Site configuration → Environment variables → Add a vari
 | `GCP_PROJECT_ID` | `sayakaya` |
 | `BQ_LOCATION` | `asia-southeast2` |
 | `MAX_BYTES_BILLED` | `2000000000` (your 2 GB-per-query cost cap) |
-| `APP_PASSWORD` | A password you choose — **strongly recommended** (see security note). |
+| `SUPABASE_URL` | `https://<your-project-ref>.supabase.co` — backs per-user login (see below). |
+| `SUPABASE_SERVICE_ROLE_KEY` | From the Supabase dashboard → Settings → API. Supabase's own Edge Function gets this injected automatically; Netlify needs it set explicitly. |
 | `ANTHROPIC_API_KEY` | Optional. Enables the **Ask** tab (plain-English questions → SQL). Get one at console.anthropic.com/settings/keys. |
 
 The UI handles the multi-line JSON cleanly. With the CLI, do it in one shot from
@@ -76,7 +77,8 @@ netlify env:set GCP_SA_KEY "$(cat service-account.json)"
 netlify env:set GCP_PROJECT_ID sayakaya
 netlify env:set BQ_LOCATION asia-southeast2
 netlify env:set MAX_BYTES_BILLED 2000000000
-netlify env:set APP_PASSWORD "choose-a-strong-password"
+netlify env:set SUPABASE_URL "https://<your-project-ref>.supabase.co"
+netlify env:set SUPABASE_SERVICE_ROLE_KEY "<your service_role key>"
 ```
 
 > If a build ever fails on Netlify's **secrets scanning** because it detects the
@@ -85,26 +87,27 @@ netlify env:set APP_PASSWORD "choose-a-strong-password"
 
 ---
 
-## ⚠️ Security: lock it down before sharing the URL
+## ⚠️ Security: per-user login is mandatory
 
 A Netlify site is **public on the internet** by default. This app reads your
-production financial data, so do at least one of these before sending the link
-around:
+production financial data, so every route (other than `/api/health` and the
+login endpoint itself) requires a signed-in account — there's no way to turn
+this off. Accounts, passwords, and per-tab permissions live in a small
+Postgres schema in the same Supabase project used for the Edge Function
+deploy (`dashboard_users`/`dashboard_sessions` — see the migration in
+`supabase/migrations/`), reachable from Netlify via `SUPABASE_URL` +
+`SUPABASE_SERVICE_ROLE_KEY` above.
 
-- **Set `APP_PASSWORD`** — the app then shows a password gate and requires it on
-  every request. Simplest option.
-- Use **Netlify's built-in password protection** or **Identity / SSO** (Site
-  configuration → Access control) for per-user logins.
-
-Either way, the `users.password` column stays blocked and the SQL lab stays
-read-only — but the gate is what keeps strangers out.
+A superuser account is seeded by that migration; sign in as them and use the
+**Manage users** tab to create accounts for everyone else, scoping each one to
+just the nav tabs they need. The `users.password` column stays blocked and the
+SQL lab stays read-only regardless of who's signed in.
 
 ---
 
 ## Verify it works
 
-1. Open `https://<name>.netlify.app` — you should see the dashboard (or the
-   password gate if you set one).
+1. Open `https://<name>.netlify.app` — you should see the login screen.
 2. Open `https://<name>.netlify.app/api/health` — it should return
    `{"ok":true,"project":"sayakaya",...}`.
 3. If the Overview KPIs stay on "Loading…", check **Functions → api → logs** in

@@ -3,7 +3,13 @@
 // ---------- tiny helpers ----------
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
-const PW_KEY = 'sk_app_pw';
+const AUTH_KEY = 'sk_auth'; // { token, user: { id, username, isSuperuser, allowedTabs } }
+
+function getAuth() {
+  try { return JSON.parse(localStorage.getItem(AUTH_KEY)); } catch { return null; }
+}
+function setAuth(auth) { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); }
+function clearAuth() { localStorage.removeItem(AUTH_KEY); }
 
 // On Netlify this is served same-origin, so relative /api/* paths just work.
 // GitHub Pages is static-only — it can't run a backend — so this mirror calls
@@ -15,8 +21,8 @@ const PW_KEY = 'sk_app_pw';
 const API_BASE = location.hostname.endsWith('.github.io') ? 'https://josptpfisrsdjeggkqke.supabase.co/functions/v1' : '';
 
 function authHeaders() {
-  const pw = sessionStorage.getItem(PW_KEY);
-  return pw ? { 'x-app-password': pw } : {};
+  const auth = getAuth();
+  return auth ? { Authorization: `Bearer ${auth.token}` } : {};
 }
 
 async function api(path, opts = {}) {
@@ -24,6 +30,11 @@ async function api(path, opts = {}) {
     ...opts,
     headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(opts.headers || {}) },
   });
+  if (res.status === 401) {
+    clearAuth();
+    showGate();
+    throw new Error('Session expired. Please log in again.');
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed (${res.status})`);
@@ -1611,9 +1622,141 @@ async function suggestAskChart(question, rows, hint) {
 }
 
 // ====================================================================
+//  ADMIN (superuser only — manage dashboard accounts + tab permissions)
+// ====================================================================
+// Derives the tab list from the nav itself (id + visible label) rather than
+// hardcoding a second copy — adding a tab to the nav automatically makes it
+// selectable here too.
+function allTabs() {
+  return $$('.nav-link[data-tab]')
+    .filter((t) => t.dataset.tab !== 'admin')
+    .map((t) => ({ id: t.dataset.tab, label: t.textContent.trim() }));
+}
+
+function renderAdminTabsPicker(selected = []) {
+  const checked = new Set(selected);
+  $('#adminTabsPicker').innerHTML = allTabs().map((t) =>
+    `<label class="ask-table-chk"><input type="checkbox" value="${t.id}" ${checked.has(t.id) ? 'checked' : ''}> ${t.label}</label>`
+  ).join('');
+}
+
+let editingUserId = null;
+
+function resetAdminForm() {
+  editingUserId = null;
+  $('#adminFormTitle').textContent = 'Add user';
+  $('#adminSaveBtn').textContent = 'Create user';
+  $('#adminCancelEditBtn').classList.add('hidden');
+  $('#adminUsername').value = '';
+  $('#adminUsername').disabled = false;
+  $('#adminPassword').value = '';
+  $('#adminPassword').placeholder = 'Password';
+  $('#adminIsSuperuser').checked = false;
+  $('#adminFormErr').textContent = '';
+  renderAdminTabsPicker([]);
+}
+
+function startEditUser(user) {
+  editingUserId = user.id;
+  $('#adminFormTitle').textContent = `Edit ${user.username}`;
+  $('#adminSaveBtn').textContent = 'Save changes';
+  $('#adminCancelEditBtn').classList.remove('hidden');
+  $('#adminUsername').value = user.username;
+  $('#adminUsername').disabled = true; // username is immutable once created
+  $('#adminPassword').value = '';
+  $('#adminPassword').placeholder = 'Leave blank to keep current password';
+  $('#adminIsSuperuser').checked = user.isSuperuser;
+  $('#adminFormErr').textContent = '';
+  renderAdminTabsPicker(user.allowedTabs || []);
+  $('#adminFormTitle').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+let adminUsersCache = [];
+
+function renderAdminUsers(users) {
+  const body = users.map((u) => `
+    <tr>
+      <td>${u.username}</td>
+      <td>${u.isSuperuser ? 'Superuser' : (u.allowedTabs || []).join(', ') || '—'}</td>
+      <td class="mono">${String(u.createdAt || '').slice(0, 10)}</td>
+      <td>
+        <button class="btn-ghost" data-edit="${u.id}">Edit</button>
+        <button class="btn-ghost" data-delete="${u.id}" data-username="${u.username}">Delete</button>
+      </td>
+    </tr>`).join('');
+  $('#adminUsersTable').innerHTML = `<table>
+    <thead><tr><th>Username</th><th>Access</th><th>Created</th><th></th></tr></thead>
+    <tbody>${body}</tbody>
+  </table>`;
+  adminUsersCache = users;
+  $$('#adminUsersTable [data-edit]').forEach((b) => b.addEventListener('click', () => {
+    const u = adminUsersCache.find((x) => x.id === b.dataset.edit);
+    if (u) startEditUser(u);
+  }));
+  $$('#adminUsersTable [data-delete]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(`Delete user "${b.dataset.username}"? This can't be undone.`)) return;
+    try {
+      await api(`/api/admin/users/${b.dataset.delete}`, { method: 'DELETE' });
+      if (editingUserId === b.dataset.delete) resetAdminForm();
+      loadAdminUsers();
+    } catch (e) { toast(e.message); }
+  }));
+}
+
+async function loadAdminUsers() {
+  $('#adminUsersTable').innerHTML = '<div class="loading">Loading users…</div>';
+  try {
+    const users = await api('/api/admin/users');
+    renderAdminUsers(users);
+  } catch (e) { $('#adminUsersTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+async function saveAdminUser() {
+  const username = $('#adminUsername').value.trim();
+  const password = $('#adminPassword').value;
+  const isSuperuser = $('#adminIsSuperuser').checked;
+  const allowedTabs = $$('#adminTabsPicker input:checked').map((el) => el.value);
+  $('#adminFormErr').textContent = '';
+  if (!editingUserId && (!username || !password)) {
+    $('#adminFormErr').textContent = 'Username and password are required.';
+    return;
+  }
+  try {
+    if (editingUserId) {
+      const patch = { isSuperuser, allowedTabs };
+      if (password) patch.password = password;
+      await api(`/api/admin/users/${editingUserId}`, { method: 'PATCH', body: JSON.stringify(patch) });
+      toast('User updated');
+    } else {
+      await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, password, isSuperuser, allowedTabs }) });
+      toast('User created');
+    }
+    resetAdminForm();
+    loadAdminUsers();
+  } catch (e) { $('#adminFormErr').textContent = e.message; }
+}
+
+function wireAdmin() {
+  renderAdminTabsPicker([]);
+  $('#adminSaveBtn').addEventListener('click', saveAdminUser);
+  $('#adminCancelEditBtn').addEventListener('click', resetAdminForm);
+}
+
+// ====================================================================
 //  WIRING
 // ====================================================================
+// Set on login/session-restore (applyPermissions) — null until then.
+let currentUser = null;
+function userCan(tab) {
+  if (!currentUser) return false;
+  if (currentUser.isSuperuser) return true;
+  return (currentUser.allowedTabs || []).includes(tab);
+}
+
 function switchTab(name) {
+  // Real enforcement is the backend 403 on every route — this is just UX
+  // polish so a restricted user never even sees a tab they can't use.
+  if (!userCan(name)) return;
   $$('.nav-link').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === name));
   $('#appShell').classList.remove('nav-open'); // close the mobile drawer after navigating
@@ -1628,6 +1771,32 @@ function switchTab(name) {
   if (name === 'revenue2') loadRevenue2();
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
+  if (name === 'admin') loadAdminUsers();
+}
+
+// Called once after login/session-restore: hides nav links + the Admin group
+// the current user isn't allowed to see, and lands on the first tab they can
+// actually use (the HTML defaults to "portfolio" active, which may not be
+// permitted).
+function applyPermissions(user) {
+  currentUser = user;
+  $('#userBadgeName').textContent = user.username + (user.isSuperuser ? ' (superuser)' : '');
+  $('#adminNavGroup').classList.toggle('hidden', !user.isSuperuser);
+  $$('.nav-link[data-tab]').forEach((t) => {
+    const allowed = t.dataset.tab === 'admin' ? user.isSuperuser : userCan(t.dataset.tab);
+    t.classList.toggle('hidden', !allowed);
+  });
+  // Hide a whole nav-group (its section label included) when every link in
+  // it is hidden, so a narrowly-scoped user doesn't see empty headers.
+  $$('.nav-group').forEach((g) => {
+    const links = Array.from(g.querySelectorAll('.nav-link[data-tab]'));
+    if (links.length) g.classList.toggle('hidden', links.every((t) => t.classList.contains('hidden')));
+  });
+  const active = document.querySelector('.view.active');
+  if (active && !userCan(active.id)) {
+    const first = $$('.nav-link[data-tab]').find((t) => !t.classList.contains('hidden'));
+    if (first) switchTab(first.dataset.tab);
+  }
 }
 
 // Re-render whatever charts are on the currently visible tab with fresh theme
@@ -1862,12 +2031,11 @@ function wire() {
   $('#exPrev').addEventListener('click', () => { ex.offset = Math.max(0, ex.offset - ex.limit); loadExplore(); });
   $('#exNext').addEventListener('click', () => { ex.offset += ex.limit; loadExplore(); });
 
-  // top funds export (re-query via sql source for clean column set)
+  // top funds export (dedicated source — a proper query builder server-side,
+  // not raw client SQL, so this doesn't need SQL Lab-level access)
   $$('[data-export="topfunds"]').forEach((b) => b.addEventListener('click', () => {
     const fmt = b.dataset.fmt;
-    download({ source: 'sql', format: fmt, filename: 'top_funds',
-      sql: "SELECT name, type, is_sharia, latest_nav_value, latest_aum_value, management_fee FROM `sayakaya.main.funds` WHERE listing_status='ACTIVE' AND latest_aum_value IS NOT NULL ORDER BY latest_aum_value DESC LIMIT 50" },
-      `top_funds.${fmt}`);
+    download({ source: 'growth_top_funds', format: fmt, filename: 'top_funds' }, `top_funds.${fmt}`);
   }));
 
   // ask
@@ -1883,8 +2051,8 @@ function wire() {
   $('#askChartSuggest').addEventListener('click', () =>
     suggestAskChart(lastAskQuestion, askRowsCache, $('#askChartHint').value.trim()));
   $$('#ask .chip').forEach((c) => c.addEventListener('click', () => runAsk(c.textContent)));
-  $('#askCsv').addEventListener('click', () => askSqlCache && download({ source: 'sql', format: 'csv', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.csv'));
-  $('#askXlsx').addEventListener('click', () => askSqlCache && download({ source: 'sql', format: 'xlsx', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.xlsx'));
+  $('#askCsv').addEventListener('click', () => askSqlCache && download({ source: 'ask_result', format: 'csv', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.csv'));
+  $('#askXlsx').addEventListener('click', () => askSqlCache && download({ source: 'ask_result', format: 'xlsx', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.xlsx'));
 
   // sql lab
   $('#sqlRun').addEventListener('click', runSql);
@@ -1894,31 +2062,55 @@ function wire() {
   $('#sqlXlsx').addEventListener('click', () => download({ source: 'sql', format: 'xlsx', filename: 'query_result', sql: $('#sqlInput').value, limit: 100000 }, 'query_result.xlsx'));
 }
 
-// ---------- password gate ----------
+// ---------- login gate ----------
 function showGate(err) {
+  $('#appShell').classList.add('hidden');
   $('#gate').classList.remove('hidden');
-  if (err) $('#gate-err').textContent = err;
-  $('#gate-input').focus();
+  $('#gate-err').textContent = err || '';
+  $('#gate-username').focus();
+}
+function hideGate() {
+  $('#gate').classList.add('hidden');
+  $('#appShell').classList.remove('hidden');
 }
 function wireGate() {
   const submit = async () => {
-    sessionStorage.setItem(PW_KEY, $('#gate-input').value);
+    const username = $('#gate-username').value.trim();
+    const password = $('#gate-input').value;
+    if (!username || !password) { $('#gate-err').textContent = 'Enter a username and password.'; return; }
     try {
-      await api('/api/overview?from=2025-01-01&to=2025-01-02');
-      $('#gate').classList.add('hidden');
+      const res = await fetch(API_BASE + '/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { $('#gate-err').textContent = body.error || 'Incorrect username or password.'; return; }
+      setAuth({ token: body.token, user: body.user });
+      $('#gate-input').value = '';
+      hideGate();
+      applyPermissions(body.user);
       boot();
     } catch (e) {
-      sessionStorage.removeItem(PW_KEY);
-      $('#gate-err').textContent = 'Incorrect password.';
+      $('#gate-err').textContent = 'Could not reach the server.';
     }
   };
   $('#gate-btn').addEventListener('click', submit);
+  $('#gate-username').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   $('#gate-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  $('#logoutBtn').addEventListener('click', async () => {
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* token already invalid — fine */ }
+    clearAuth();
+    currentUser = null;
+    showGate();
+  });
 }
 
 // ---------- boot ----------
+// Runs once we know who's logged in (fresh login or a restored session).
 async function boot() {
-  // Portfolio is the landing tab; nothing to query until a SID is searched.
+  loadRemTxFilterOptions();
+  // Portfolio is the landing tab; nothing else to query until a SID is searched.
 }
 
 function setConnStatus(live) {
@@ -1941,9 +2133,10 @@ async function init() {
   $('#rev2From').value = r.from; $('#rev2To').value = r.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
-  loadRemTxFilterOptions();
   setThemeButtonLabel();
-  wire(); wireGate();
+  wire(); wireGate(); wireAdmin();
+
+  // Health is the one route that doesn't need a session — check it either way.
   try {
     const h = await api('/api/health');
     setConnStatus(!!h.bigquery);
@@ -1951,9 +2144,19 @@ async function init() {
     const askOn = !!h.askEnabled;
     $('#askDisabled').classList.toggle('hidden', askOn);
     $('#askBox').classList.toggle('hidden', !askOn);
-    if (h.passwordProtected && !sessionStorage.getItem(PW_KEY)) { showGate(); return; }
+  } catch { setConnStatus(false); }
+
+  const auth = getAuth();
+  if (!auth) { showGate(); return; }
+  try {
+    const me = await api('/api/auth/me');
+    hideGate();
+    applyPermissions(me.user);
     boot();
-  } catch { setConnStatus(false); showGate('Could not reach the server.'); }
+  } catch {
+    clearAuth();
+    showGate();
+  }
 }
 
 init();

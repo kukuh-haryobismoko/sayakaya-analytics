@@ -216,7 +216,10 @@ Notable helpers other queries build on:
 ### `server/app.js` — the Express app + every route
 `createApp({ serveStatic })` builds one Express app:
 1. CORS, JSON body parsing.
-2. Optional password gate (`APP_PASSWORD` env var) on `/api/*` except `/api/health`.
+2. Session auth (`server/auth.js`) on `/api/*` except `/api/health` and
+   `/api/auth/login` — every route requires a valid `Authorization: Bearer
+   <token>`, and most are further gated per-tab via `requireTab(...)` against
+   the authenticated user's `allowed_tabs`.
 3. `handler(fn)` wraps async route handlers so any thrown error becomes a
    `500 { error: message }` instead of crashing the process.
 4. `/api/health` — pings BigQuery with `SELECT 1` (5s timeout) so the frontend
@@ -338,12 +341,19 @@ reduction for small phones) — see the `@media` blocks at the bottom of the fil
 
 ## 7. API reference
 
-All routes are prefixed `/api`. Gated by `APP_PASSWORD` (header
-`x-app-password`) except `/api/health`.
+All routes are prefixed `/api`. Every route requires `Authorization: Bearer
+<token>` (from `/api/auth/login`) except `/api/health` and the login route
+itself; most are further scoped to one nav tab via `requireTab(...)` in
+`server/app.js` (see `server/auth.js`).
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/health` | GET | Server + BigQuery liveness (pings `SELECT 1`), plus `passwordProtected`/`askEnabled` flags the frontend needs at boot |
+| `/health` | GET | Server + BigQuery liveness (pings `SELECT 1`), plus `askEnabled` flag the frontend needs at boot |
+| `/auth/login` | POST | Username + password → session token + user (tabs, superuser flag) |
+| `/auth/logout` | POST | Invalidate the current session token |
+| `/auth/me` | GET | Validate the current token, return the user (used to restore a session on page load) |
+| `/admin/users` | GET/POST | List / create dashboard accounts (superuser only) |
+| `/admin/users/:id` | PATCH/DELETE | Edit permissions or password / remove an account (superuser only) |
 | `/overview` | GET | Platform KPIs for a date range |
 | `/trends` | GET | Volume trend chart data |
 | `/breakdown/:dimension` | GET | Transaction breakdown by type/status/etc. |
@@ -376,7 +386,8 @@ All routes are prefixed `/api`. Gated by `APP_PASSWORD` (header
 | `PORT` | Standalone server port (default 8080) |
 | `MAX_BYTES_BILLED` | Hard cap on bytes scanned per query — cost guardrail (default 2GB) |
 | `BQ_LOCATION` | BigQuery region (`asia-southeast2`) |
-| `APP_PASSWORD` | Optional shared-secret gate. Blank = disabled. This is **not real auth** — no per-user accounts, no session expiry; put real SSO in front of it for production multi-user access. |
+| `SUPABASE_URL` | Backs per-user login — accounts/sessions live in this Supabase project's Postgres (`dashboard_users`/`dashboard_sessions`), reached over PostgREST. |
+| `SUPABASE_SERVICE_ROLE_KEY` | From the Supabase dashboard → Settings → API. The Edge Function deploy gets this injected automatically; Netlify/standalone needs it set explicitly. |
 | `ANTHROPIC_API_KEY` | Enables the Ask tab (both NL→SQL and chart suggestion). Ask is fully hidden/disabled without it. |
 | `ANTHROPIC_MODEL` | Overrides the default Claude model used by Ask (defaults to `claude-sonnet-4-6` in `server/ask.js`) |
 
@@ -414,10 +425,11 @@ tradeoffs, some are open issues worth revisiting:
   `supabase/functions/api/**`, or the live function silently keeps serving
   old code while the frontend (if `public/` also changed) redeploys fine.
 - **Supabase Edge Functions require their own platform-level auth token by
-  default** (`verify_jwt`), completely separate from this app's
-  `APP_PASSWORD` gate. The `api` function doesn't use Supabase Auth/Postgres,
-  so this is disabled via `supabase/config.toml`'s `[functions.api]
-  verify_jwt = false`. If a fresh deploy of this function ever starts
+  default** (`verify_jwt`), completely separate from this app's own per-user
+  login. The `api` function reads `dashboard_users`/`dashboard_sessions` as
+  plain Postgres tables over PostgREST — it doesn't use Supabase's own
+  Auth/GoTrue product, so `verify_jwt` is disabled via `supabase/config.toml`'s
+  `[functions.api] verify_jwt = false`. If a fresh deploy of this function ever starts
   returning `401 UNAUTHORIZED_NO_AUTH_HEADER` on every request (including
   `/api/health`), that config wasn't picked up — redeploy explicitly with
   `supabase functions deploy api --no-verify-jwt` and see

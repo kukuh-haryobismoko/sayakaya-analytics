@@ -180,6 +180,7 @@ function statementDate(holdings) {
 // options.columns: optional list of HOLDINGS_COLS keys to keep (plus 'fund', always kept)
 function portfolioReport({ contact, holdings }, performanceSheets, options = {}) {
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  if (options.username) doc.info.Author = options.username;
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 

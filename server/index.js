@@ -13,6 +13,6 @@ const app = createApp({ serveStatic: true });
 app.listen(PORT, () => {
   console.log(`\n  Sayakaya Analytics running → http://localhost:${PORT}`);
   console.log(`  Project: ${PROJECT_ID}  |  Max bytes/query: ${MAX_BYTES_BILLED}`);
-  if (process.env.APP_PASSWORD) console.log('  Password protection: ON');
+  console.log('  Auth: per-user login (Supabase Postgres)');
   console.log('');
 });

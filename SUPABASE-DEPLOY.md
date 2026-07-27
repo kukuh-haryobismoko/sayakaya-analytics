@@ -134,10 +134,11 @@ https://<your-project-ref>.supabase.co/functions/v1/api
 
 > **Why this works without `--no-verify-jwt`:** Supabase Edge Functions
 > require a *Supabase* auth token (its own platform-level JWT check) on every
-> request by default — completely separate from this app's own
-> `APP_PASSWORD` gate. Since this function doesn't use Supabase Auth or
-> Postgres at all, and the frontend was never built to send a Supabase JWT,
-> that default would reject every request with `401
+> request by default — completely separate from this app's own per-user login
+> (`dashboard_users`/`dashboard_sessions`, a plain Postgres schema this
+> function reads over PostgREST, not Supabase's own Auth/GoTrue product).
+> Since the frontend was never built to send a Supabase JWT, that platform
+> default would reject every request with `401
 > UNAUTHORIZED_NO_AUTH_HEADER` before it ever reached our router.
 > `supabase/config.toml` already has `[functions.api] verify_jwt = false`
 > committed, so a plain `supabase functions deploy api` picks it up
@@ -179,7 +180,10 @@ either a public repo or a paid GitHub plan on the free tier — see
 
 ```bash
 curl https://<your-project-ref>.supabase.co/functions/v1/api/health
-curl -H "x-app-password: <your APP_PASSWORD>" https://<your-project-ref>.supabase.co/functions/v1/api/overview
+TOKEN=$(curl -s -X POST -H "Content-Type: application/json" \
+  https://<your-project-ref>.supabase.co/functions/v1/api/auth/login \
+  -d '{"username":"<your username>","password":"<your password>"}' | python3 -c "import json,sys;print(json.load(sys.stdin)['token'])")
+curl -H "Authorization: Bearer $TOKEN" https://<your-project-ref>.supabase.co/functions/v1/api/overview
 ```
 
 Compare the `/api/overview` numbers against the same endpoint on Netlify —

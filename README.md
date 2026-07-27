@@ -77,7 +77,8 @@ Open **http://localhost:8080**.
 | `PORT` | Port the app serves on (default 8080). |
 | `MAX_BYTES_BILLED` | Hard cap on bytes scanned per query — your cost guardrail. Default 2 GB. |
 | `BQ_LOCATION` | BigQuery location. The `main` dataset is in `asia-southeast2`. |
-| `APP_PASSWORD` | Optional. If set, the app shows a password gate and requires it on every request. Leave blank to disable. |
+| `SUPABASE_URL` | Backs per-user login (accounts + sessions live in Supabase Postgres). `https://<project-ref>.supabase.co`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | From the Supabase dashboard → Settings → API. |
 
 ---
 
@@ -112,8 +113,10 @@ spending. Ad-hoc results are capped at 5,000 rows in the UI (100,000 for export)
   endpoint.
 - The SQL lab rejects anything that is not a single `SELECT` / `WITH`, and blocks
   DML/DDL keywords.
-- Set `APP_PASSWORD` for a quick shared-secret gate. For real multi-user auth,
-  put this behind your own SSO / reverse proxy.
+- Every route requires a signed-in account (username + password, checked
+  against `dashboard_users` in Supabase Postgres) — there's no way to disable
+  this. A superuser account manages other accounts and their per-tab
+  permissions from the **Manage users** tab.
 
 ---
 
@@ -132,8 +135,9 @@ gcloud run deploy sayakaya-analytics \
 
 On Cloud Run you can skip the JSON key entirely: deploy with a runtime service
 account that has the two BigQuery roles, and the app picks up credentials
-automatically (Application Default Credentials). Set `APP_PASSWORD` (or require
-authenticated invocations) before exposing it publicly.
+automatically (Application Default Credentials). Set `SUPABASE_URL` /
+`SUPABASE_SERVICE_ROLE_KEY` before exposing it publicly — the login system
+depends on them regardless of host.
 
 ---
 
