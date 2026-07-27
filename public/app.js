@@ -58,9 +58,13 @@ function defaultRange() {
 function currentRange() { return { from: $('#from').value, to: $('#to').value }; }
 
 // Revenue tabs have their own date-range pickers, independent of the
-// day-range pickers used everywhere else.
-function revRange() { return { from: $('#revFrom').value, to: $('#revTo').value }; }
-function rev2Range() { return { from: $('#rev2From').value, to: $('#rev2To').value }; }
+// day-range pickers used everywhere else — plus wildcard fund/MI filters.
+function revRange() {
+  return { from: $('#revFrom').value, to: $('#revTo').value, fund: $('#revFund').value.trim(), mi: $('#revMi').value.trim() };
+}
+function rev2Range() {
+  return { from: $('#rev2From').value, to: $('#rev2To').value, fund: $('#rev2Fund').value.trim(), mi: $('#rev2Mi').value.trim() };
+}
 
 // ---------- chart palette (theme-aware: read from CSS custom properties) ----------
 function readThemeColors() {
@@ -951,14 +955,16 @@ async function loadRevenue() {
   $('#revDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#revSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   try {
+    const qs = `from=${r.from}&to=${r.to}&granularity=${revGran}&fund=${encodeURIComponent(r.fund)}&mi=${encodeURIComponent(r.mi)}`;
     const [detail, summary] = await Promise.all([
-      api(`/api/revenue?from=${r.from}&to=${r.to}&granularity=${revGran}`),
-      api(`/api/revenue/summary?from=${r.from}&to=${r.to}&granularity=${revGran}`),
+      api(`/api/revenue?${qs}`),
+      api(`/api/revenue/summary?${qs}`),
     ]);
     renderRevenueTrend(summary);
     genTable('#revDetailTable', detail, [
       { key: 'period', label: 'Period', type: 'date' },
       { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'mi_name', label: 'Investment Manager' },
       { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
@@ -989,14 +995,16 @@ async function loadRevenue2() {
   $('#rev2DetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#rev2SummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   try {
+    const qs = `from=${r.from}&to=${r.to}&granularity=${rev2Gran}&fund=${encodeURIComponent(r.fund)}&mi=${encodeURIComponent(r.mi)}`;
     const [detail, summary] = await Promise.all([
-      api(`/api/revenue-v2?from=${r.from}&to=${r.to}&granularity=${rev2Gran}`),
-      api(`/api/revenue-v2/summary?from=${r.from}&to=${r.to}&granularity=${rev2Gran}`),
+      api(`/api/revenue-v2?${qs}`),
+      api(`/api/revenue-v2/summary?${qs}`),
     ]);
     renderRevenueTrend(summary, 'rev2TrendChart');
     genTable('#rev2DetailTable', detail, [
       { key: 'period', label: 'Period', type: 'date' },
       { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'mi_name', label: 'Investment Manager' },
       { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
@@ -1785,10 +1793,10 @@ function wire() {
     $$('#revGran button').forEach((x) => x.classList.toggle('on', x === b));
     revGran = b.dataset.g; loadRevenue();
   });
-  $('#revDetailCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'csv', filename: 'revenue_detail', from: r.from, to: r.to, granularity: revGran }, 'revenue_detail.csv'); });
-  $('#revDetailXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'xlsx', filename: 'revenue_detail', from: r.from, to: r.to, granularity: revGran }, 'revenue_detail.xlsx'); });
-  $('#revSummaryCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'csv', filename: 'revenue_summary', from: r.from, to: r.to, granularity: revGran }, 'revenue_summary.csv'); });
-  $('#revSummaryXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'xlsx', filename: 'revenue_summary', from: r.from, to: r.to, granularity: revGran }, 'revenue_summary.xlsx'); });
+  $('#revDetailCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'csv', filename: 'revenue_detail', ...r, granularity: revGran }, 'revenue_detail.csv'); });
+  $('#revDetailXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'xlsx', filename: 'revenue_detail', ...r, granularity: revGran }, 'revenue_detail.xlsx'); });
+  $('#revSummaryCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'csv', filename: 'revenue_summary', ...r, granularity: revGran }, 'revenue_summary.csv'); });
+  $('#revSummaryXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'xlsx', filename: 'revenue_summary', ...r, granularity: revGran }, 'revenue_summary.xlsx'); });
 
   // revenue v2 (goal_snapshots)
   $('#rev2Gran').addEventListener('click', (e) => {
@@ -1796,10 +1804,10 @@ function wire() {
     $$('#rev2Gran button').forEach((x) => x.classList.toggle('on', x === b));
     rev2Gran = b.dataset.g; loadRevenue2();
   });
-  $('#rev2DetailCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'csv', filename: 'revenue_v2_detail', from: r.from, to: r.to, granularity: rev2Gran }, 'revenue_v2_detail.csv'); });
-  $('#rev2DetailXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'xlsx', filename: 'revenue_v2_detail', from: r.from, to: r.to, granularity: rev2Gran }, 'revenue_v2_detail.xlsx'); });
-  $('#rev2SummaryCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'csv', filename: 'revenue_v2_summary', from: r.from, to: r.to, granularity: rev2Gran }, 'revenue_v2_summary.csv'); });
-  $('#rev2SummaryXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'xlsx', filename: 'revenue_v2_summary', from: r.from, to: r.to, granularity: rev2Gran }, 'revenue_v2_summary.xlsx'); });
+  $('#rev2DetailCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'csv', filename: 'revenue_v2_detail', ...r, granularity: rev2Gran }, 'revenue_v2_detail.csv'); });
+  $('#rev2DetailXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'xlsx', filename: 'revenue_v2_detail', ...r, granularity: rev2Gran }, 'revenue_v2_detail.xlsx'); });
+  $('#rev2SummaryCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'csv', filename: 'revenue_v2_summary', ...r, granularity: rev2Gran }, 'revenue_v2_summary.csv'); });
+  $('#rev2SummaryXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'xlsx', filename: 'revenue_v2_summary', ...r, granularity: rev2Gran }, 'revenue_v2_summary.xlsx'); });
 
   // remisier sharing
   $('#remRun').addEventListener('click', loadRemisier);

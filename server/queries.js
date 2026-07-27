@@ -28,6 +28,12 @@ function range(from, to) {
 const granularityPart = (granularity, fallback = 'MONTH') =>
   ({ day: 'DAY', week: 'WEEK', month: 'MONTH', quarter: 'QUARTER' })[granularity] || fallback;
 
+// Wildcard (partial, case-insensitive) fund/MI filter shared by the revenue
+// queries below — empty string means "no filter" for that field.
+const FUND_MI_FILTER_SQL = `
+  (@fund = '' OR UPPER(f.name) LIKE CONCAT('%', UPPER(@fund), '%') OR UPPER(f.sinvest_code) LIKE CONCAT('%', UPPER(@fund), '%'))
+  AND (@mi = '' OR UPPER(COALESCE(im.common_name, im.name)) LIKE CONCAT('%', UPPER(@mi), '%'))`;
+
 // ---- Overview KPIs ----------------------------------------------------------
 
 const overviewUsers = () => ({
@@ -859,7 +865,7 @@ const reconciliationDaily = (from, to) => {
 // effect (latest_mgmt_fee, deduped by updated_at) gives a daily fee accrual,
 // split into AperD's and MI's share. Grouped by month + fund for the detail
 // view; summed again across funds for the monthly summary.
-function revenueCTEs(from, to, granularity = 'month') {
+function revenueCTEs(from, to, granularity = 'month', fund = '', mi = '') {
   const r = range(from, to);
   const part = granularityPart(granularity);
   return {
@@ -877,14 +883,17 @@ function revenueCTEs(from, to, granularity = 'month') {
           pwc.id AS fund_id,
           f.sinvest_code,
           f.name AS fund_name,
+          COALESCE(im.common_name, im.name) AS mi_name,
           pwc.amount AS aum,
           lmf.management_fee,
           lmf.aperd_share,
           lmf.mi_share
         FROM ${PORT_WITH_CODE} pwc
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
         WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) BETWEEN @from AND @to
+          AND ${FUND_MI_FILTER_SQL}
       ),
       daily_detail AS (
         SELECT *,
@@ -905,6 +914,7 @@ function revenueCTEs(from, to, granularity = 'month') {
           fund_id,
           sinvest_code,
           ANY_VALUE(fund_name) AS fund_name,
+          ANY_VALUE(mi_name) AS mi_name,
           ANY_VALUE(management_fee) AS management_fee,
           ANY_VALUE(aperd_share) AS aperd_share,
           ANY_VALUE(mi_share) AS mi_share,
@@ -917,16 +927,16 @@ function revenueCTEs(from, to, granularity = 'month') {
         FROM daily_detail
         GROUP BY period, fund_id, sinvest_code
       )`,
-    params: r,
+    params: { ...r, fund, mi },
   };
 }
 
-const revenueDetail = (from, to, granularity = 'month') => {
-  const { cte, params } = revenueCTEs(from, to, granularity);
+const revenueDetail = (from, to, granularity = 'month', fund = '', mi = '') => {
+  const { cte, params } = revenueCTEs(from, to, granularity, fund, mi);
   return {
     sql: `${cte}
       SELECT
-        period, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
+        period, fund_id, sinvest_code, fund_name, mi_name, management_fee, aperd_share, mi_share,
         days_running, avg_aum, aum_eom, total_management_fee, total_aperd_share, total_mi_share
       FROM period_fund
       ORDER BY period, fund_id, sinvest_code`,
@@ -937,8 +947,8 @@ const revenueDetail = (from, to, granularity = 'month') => {
 // days_running per period is the MAX across funds in that period — funds that
 // started mid-period run fewer days, so the longest-running fund estimates the
 // actual calendar days elapsed (not yet accounting for mid-period closures).
-const revenueMonthlySummary = (from, to, granularity = 'month') => {
-  const { cte, params } = revenueCTEs(from, to, granularity);
+const revenueMonthlySummary = (from, to, granularity = 'month', fund = '', mi = '') => {
+  const { cte, params } = revenueCTEs(from, to, granularity, fund, mi);
   return {
     sql: `${cte}
       SELECT
@@ -962,7 +972,7 @@ const revenueMonthlySummary = (from, to, granularity = 'month') => {
 // correct AUM date, so there's no "-1 day" correction to make, which is what
 // makes this the more accurate of the two. Kept as a fully separate section
 // (not a replacement) so the two can be compared side by side.
-function revenueV2CTEs(from, to, granularity = 'month') {
+function revenueV2CTEs(from, to, granularity = 'month', fund = '', mi = '') {
   const r = range(from, to);
   const part = granularityPart(granularity);
   return {
@@ -979,12 +989,15 @@ function revenueV2CTEs(from, to, granularity = 'month') {
           SUM(gs.amount) AS aum,
           ANY_VALUE(lmf.management_fee) AS management_fee,
           ANY_VALUE(lmf.aperd_share) AS aperd_share,
-          ANY_VALUE(lmf.mi_share) AS mi_share
+          ANY_VALUE(lmf.mi_share) AS mi_share,
+          ANY_VALUE(COALESCE(im.common_name, im.name)) AS mi_name
         FROM ${GOAL_SNAPSHOTS} gs
         JOIN ${GOALS} g ON g.id = gs.goal_id AND g.deleted_at IS NULL
         LEFT JOIN ${FUNDS} f ON f.id = gs.fund_id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON lmf.management_fee_id = gs.fund_id
         WHERE gs.unit > 0 AND gs.date BETWEEN @from AND @to
+          AND ${FUND_MI_FILTER_SQL}
         GROUP BY gs.date, gs.fund_id, f.sinvest_code, f.name
       ),
       daily_detail AS (
@@ -1006,6 +1019,7 @@ function revenueV2CTEs(from, to, granularity = 'month') {
           fund_id,
           sinvest_code,
           ANY_VALUE(fund_name) AS fund_name,
+          ANY_VALUE(mi_name) AS mi_name,
           ANY_VALUE(management_fee) AS management_fee,
           ANY_VALUE(aperd_share) AS aperd_share,
           ANY_VALUE(mi_share) AS mi_share,
@@ -1018,16 +1032,16 @@ function revenueV2CTEs(from, to, granularity = 'month') {
         FROM daily_detail
         GROUP BY period, fund_id, sinvest_code
       )`,
-    params: r,
+    params: { ...r, fund, mi },
   };
 }
 
-const revenueV2Detail = (from, to, granularity = 'month') => {
-  const { cte, params } = revenueV2CTEs(from, to, granularity);
+const revenueV2Detail = (from, to, granularity = 'month', fund = '', mi = '') => {
+  const { cte, params } = revenueV2CTEs(from, to, granularity, fund, mi);
   return {
     sql: `${cte}
       SELECT
-        period, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
+        period, fund_id, sinvest_code, fund_name, mi_name, management_fee, aperd_share, mi_share,
         days_running, avg_aum, aum_eom, total_management_fee, total_aperd_share, total_mi_share
       FROM period_fund
       ORDER BY period, fund_id, sinvest_code`,
@@ -1035,8 +1049,8 @@ const revenueV2Detail = (from, to, granularity = 'month') => {
   };
 };
 
-const revenueV2MonthlySummary = (from, to, granularity = 'month') => {
-  const { cte, params } = revenueV2CTEs(from, to, granularity);
+const revenueV2MonthlySummary = (from, to, granularity = 'month', fund = '', mi = '') => {
+  const { cte, params } = revenueV2CTEs(from, to, granularity, fund, mi);
   return {
     sql: `${cte}
       SELECT

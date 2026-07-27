@@ -417,7 +417,11 @@
             <button id="revApply" class="btn-primary">Apply</button>
           </div>
         </div>
-        <span class="hint">Date filter for this section only — independent of the date range above. The Day/Week/Month toggle controls the bucket size of the tables and chart below.</span>
+        <div class="filters" style="margin-top:10px">
+          <input type="text" id="revFund" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
+          <input type="text" id="revMi" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
+        </div>
+        <span class="hint">Date filter for this section only — independent of the date range above. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches (e.g. "equity" matches any fund with "equity" in its name or code).</span>
       </div>
 
       <div class="panel">
@@ -465,7 +469,11 @@
             <button id="rev2Apply" class="btn-primary">Apply</button>
           </div>
         </div>
-        <span class="hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison. The Day/Week/Month toggle controls the bucket size of the tables and chart below.</span>
+        <div class="filters" style="margin-top:10px">
+          <input type="text" id="rev2Fund" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
+          <input type="text" id="rev2Mi" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
+        </div>
+        <span class="hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches.</span>
       </div>
 
       <div class="panel">
