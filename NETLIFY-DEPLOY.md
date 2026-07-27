@@ -84,6 +84,17 @@ netlify env:set SUPABASE_SERVICE_ROLE_KEY "<your service_role key>"
 > If a build ever fails on Netlify's **secrets scanning** because it detects the
 > service-account string, add `SECRETS_SCAN_OMIT_KEYS = GCP_SA_KEY` as another
 > environment variable. The key lives only in the env, never in your code.
+>
+> **`SUPABASE_URL` needs the same treatment, for a different reason:** its
+> value isn't actually sensitive (it's a project ref, not a credential), but
+> `public/app.js`'s `API_BASE` line also hardcodes it (for GitHub Pages, which
+> talks to the Supabase Edge Function instead of Netlify — see
+> `SUPABASE-DEPLOY.md`), so the same string legitimately appears in both the
+> env and the repo. Netlify's scanner flags that match as a leak. Add
+> `SUPABASE_URL` to `SECRETS_SCAN_OMIT_KEYS` too (comma-separated if you
+> already have that variable set: `GCP_SA_KEY,SUPABASE_URL`) — do **not**
+> add `SUPABASE_SERVICE_ROLE_KEY` to this list, that one *is* a real secret
+> and should never appear in repo code.
 
 ---
 
