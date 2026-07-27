@@ -293,15 +293,33 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 .sql-msg.ok { color: var(--teal); }
 
 /* ---------- Gate ---------- */
-.gate { position: fixed; inset: 0; background: linear-gradient(135deg, #3a50ab, #6756c1); display: grid; place-items: center; z-index: 50; }
-.gate { padding: 16px; }
-.gate-card { background: var(--surface); border-radius: 16px; padding: 36px; width: 320px; max-width: 100%; text-align: center; }
-.gate-mark { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 11px; background: var(--indigo); color: #fff; display: grid; place-items: center; font-family: "Space Grotesk"; font-weight: 700; }
-.gate-card h1 { font-size: 19px; margin-bottom: 6px; }
-.gate-card p { color: var(--muted); margin: 0 0 18px; }
-.gate-card input { width: 100%; padding: 11px; border: 1px solid var(--line); border-radius: 9px; font-family: inherit; margin-bottom: 12px; background: var(--input-bg); color: var(--ink); }
-.gate-card button { width: 100%; }
-.gate-err { color: var(--rose); font-size: 13px; margin-top: 10px; min-height: 16px; }
+.gate {
+  position: fixed; inset: 0; padding: 16px; z-index: 50;
+  display: grid; place-items: center;
+  background:
+    radial-gradient(1100px 600px at 12% -10%, rgba(255,255,255,.14), transparent 60%),
+    radial-gradient(900px 700px at 100% 110%, rgba(255,255,255,.10), transparent 55%),
+    linear-gradient(135deg, #3a50ab, #6756c1);
+}
+.gate-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; padding: 40px 36px; width: 340px; max-width: 100%;
+  text-align: center; box-shadow: 0 24px 60px -12px rgba(20, 20, 50, .35);
+  animation: gate-in .35s ease;
+}
+@keyframes gate-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+.gate-mark { width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 12px; object-fit: cover; box-shadow: 0 6px 16px rgba(58, 80, 171, .3); }
+.gate-card h1 { font-size: 20px; margin-bottom: 6px; }
+.gate-card p { color: var(--muted); font-size: 13.5px; margin: 0 0 24px; }
+.gate-field { margin-bottom: 14px; }
+.gate-card input {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 9px;
+  font-family: inherit; font-size: 14px; background: var(--input-bg); color: var(--ink);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.gate-card input:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px var(--indigo-tint); }
+.gate-submit { width: 100%; padding: 11px 16px; font-size: 14px; }
+.gate-err { color: var(--rose); font-size: 13px; margin-top: 12px; min-height: 16px; }
 
 /* ---------- Toast / loading ---------- */
 /* Fixed dark pill regardless of theme — not tied to --ink, which flips light/dark. */

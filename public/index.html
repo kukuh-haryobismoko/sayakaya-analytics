@@ -23,11 +23,13 @@
   <!-- Password gate (only shown if the server reports it's enabled) -->
   <div id="gate" class="gate hidden">
     <div class="gate-card">
-      <div class="gate-mark">SK</div>
+      <img class="gate-mark" src="logo.png" alt="Sayakaya" />
       <h1>Sayakaya Analytics</h1>
       <p>Enter the access password to continue.</p>
-      <input id="gate-input" type="password" placeholder="Password" autocomplete="current-password" />
-      <button id="gate-btn">Unlock</button>
+      <div class="gate-field">
+        <input id="gate-input" type="password" placeholder="Password" autocomplete="current-password" />
+      </div>
+      <button id="gate-btn" class="btn-primary gate-submit">Unlock</button>
       <div id="gate-err" class="gate-err"></div>
     </div>
   </div>
