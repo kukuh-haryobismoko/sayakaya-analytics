@@ -36,6 +36,17 @@ function pivotPerformanceByType(rows: Record<string, unknown>[]) {
   }));
 }
 
+// Splits flat detail rows into one worksheet per distinct value of keyField —
+// used for the revenue exports' "one sheet per fund/MI" option.
+function splitRowsBySheet(rows: Record<string, unknown>[], keyField: string) {
+  const groups: Record<string, Record<string, unknown>[]> = {};
+  for (const r of rows) {
+    const key = (r[keyField] as string) || '(none)';
+    (groups[key] = groups[key] || []).push(r);
+  }
+  return Object.keys(groups).sort().map((name) => ({ name, rows: groups[name] }));
+}
+
 // Friendly column names for the "Portfolio" sheet in the combined export.
 function portfolioSheetRows(holdings: Record<string, unknown>[]) {
   return holdings.map((h) => ({
@@ -313,23 +324,23 @@ on('GET', '/api/reconciliation', async (_req, _params, url) => {
   return json(await runQuery(q.sql, q.params));
 });
 
-// ---- Revenue: management fee earned per fund/month -------------------------
+// ---- Revenue: management fee earned per fund/period -------------------------
 on('GET', '/api/revenue', async (_req, _params, url) => {
-  const q = Q.revenueDetail(qp(url, 'from'), qp(url, 'to'));
+  const q = Q.revenueDetail(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
 });
 on('GET', '/api/revenue/summary', async (_req, _params, url) => {
-  const q = Q.revenueMonthlySummary(qp(url, 'from'), qp(url, 'to'));
+  const q = Q.revenueMonthlySummary(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
 });
 
 // ---- Revenue v2: same as Revenue above, but AUM sourced from goal_snapshots
 on('GET', '/api/revenue-v2', async (_req, _params, url) => {
-  const q = Q.revenueV2Detail(qp(url, 'from'), qp(url, 'to'));
+  const q = Q.revenueV2Detail(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
 });
 on('GET', '/api/revenue-v2/summary', async (_req, _params, url) => {
-  const q = Q.revenueV2MonthlySummary(qp(url, 'from'), qp(url, 'to'));
+  const q = Q.revenueV2MonthlySummary(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
 });
 
@@ -583,17 +594,21 @@ on('POST', '/api/export', async (req) => {
   } else if (source === 'reconciliation') {
     const q = Q.reconciliationDaily(body.from as string, body.to as string);
     rows = await runQuery(q.sql, q.params);
-  } else if (source === 'revenue_detail') {
-    const q = Q.revenueDetail(body.from as string, body.to as string);
-    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'revenue_detail' || source === 'revenue_v2_detail') {
+    const q = source === 'revenue_detail'
+      ? Q.revenueDetail(body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string)
+      : Q.revenueV2Detail(body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string);
+    const detail = await runQuery(q.sql, q.params);
+    const splitBy = body.splitBy as string | undefined; // 'fund' | 'mi' | undefined — xlsx only, one sheet per value
+    if (format === 'xlsx' && (splitBy === 'fund' || splitBy === 'mi')) {
+      return xlsxMultiResponse(splitRowsBySheet(detail, splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename);
+    }
+    rows = detail;
   } else if (source === 'revenue_summary') {
-    const q = Q.revenueMonthlySummary(body.from as string, body.to as string);
-    rows = await runQuery(q.sql, q.params);
-  } else if (source === 'revenue_v2_detail') {
-    const q = Q.revenueV2Detail(body.from as string, body.to as string);
+    const q = Q.revenueMonthlySummary(body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'revenue_v2_summary') {
-    const q = Q.revenueV2MonthlySummary(body.from as string, body.to as string);
+    const q = Q.revenueV2MonthlySummary(body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'remisier_revenue_detail' || source === 'remisier_revenue_summary') {
     const code = body.code as string;

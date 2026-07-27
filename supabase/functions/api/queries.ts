@@ -31,6 +31,17 @@ function range(from?: string, to?: string) {
   };
 }
 
+// Shared day/week/month/quarter -> DATE_TRUNC part mapping, used everywhere a
+// query lets the caller pick the bucket size (revenue, remisier revenue, ...).
+const granularityPart = (granularity?: string, fallback = 'MONTH'): string =>
+  ({ day: 'DAY', week: 'WEEK', month: 'MONTH', quarter: 'QUARTER' } as Record<string, string>)[granularity || ''] || fallback;
+
+// Wildcard (partial, case-insensitive) fund/MI filter shared by the revenue
+// queries below — empty string means "no filter" for that field.
+const FUND_MI_FILTER_SQL = `
+  (@fund = '' OR UPPER(f.name) LIKE CONCAT('%', UPPER(@fund), '%') OR UPPER(f.sinvest_code) LIKE CONCAT('%', UPPER(@fund), '%'))
+  AND (@mi = '' OR UPPER(COALESCE(im.common_name, im.name)) LIKE CONCAT('%', UPPER(@mi), '%'))`;
+
 // ---- Overview KPIs ----------------------------------------------------------
 
 export const overviewUsers = (): Query => ({
@@ -853,8 +864,9 @@ export const reconciliationDaily = (from?: string, to?: string): Query => {
 // effect (latest_mgmt_fee, deduped by updated_at) gives a daily fee accrual,
 // split into AperD's and MI's share. Grouped by month + fund for the detail
 // view; summed again across funds for the monthly summary.
-function revenueCTEs(from?: string, to?: string) {
+function revenueCTEs(from?: string, to?: string, granularity = 'month', fund = '', mi = '') {
   const r = range(from, to);
+  const part = granularityPart(granularity);
   return {
     cte: `WITH latest_mgmt_fee AS (
         SELECT management_fee_id, management_fee, aperd_share, mi_share
@@ -870,14 +882,17 @@ function revenueCTEs(from?: string, to?: string) {
           pwc.id AS fund_id,
           f.sinvest_code,
           f.name AS fund_name,
+          COALESCE(im.common_name, im.name) AS mi_name,
           pwc.amount AS aum,
           lmf.management_fee,
           lmf.aperd_share,
           lmf.mi_share
         FROM ${PORT_WITH_CODE} pwc
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
         WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) BETWEEN @from AND @to
+          AND ${FUND_MI_FILTER_SQL}
       ),
       daily_detail AS (
         SELECT *,
@@ -892,12 +907,13 @@ function revenueCTEs(from?: string, to?: string) {
             DATE_TRUNC(created_date, YEAR), DAY)) AS mi_share_per_day
         FROM combined
       ),
-      monthly_fund AS (
+      period_fund AS (
         SELECT
-          DATE_TRUNC(created_date, MONTH) AS month,
+          DATE_TRUNC(created_date, ${part}) AS period,
           fund_id,
           sinvest_code,
           ANY_VALUE(fund_name) AS fund_name,
+          ANY_VALUE(mi_name) AS mi_name,
           ANY_VALUE(management_fee) AS management_fee,
           ANY_VALUE(aperd_share) AS aperd_share,
           ANY_VALUE(mi_share) AS mi_share,
@@ -908,43 +924,43 @@ function revenueCTEs(from?: string, to?: string) {
           SUM(aperd_share_per_day) AS total_aperd_share,
           SUM(mi_share_per_day) AS total_mi_share
         FROM daily_detail
-        GROUP BY month, fund_id, sinvest_code
+        GROUP BY period, fund_id, sinvest_code
       )`,
-    params: r,
+    params: { ...r, fund, mi },
   };
 }
 
-export const revenueDetail = (from?: string, to?: string): Query => {
-  const { cte, params } = revenueCTEs(from, to);
+export const revenueDetail = (from?: string, to?: string, granularity = 'month', fund = '', mi = ''): Query => {
+  const { cte, params } = revenueCTEs(from, to, granularity, fund, mi);
   return {
     sql: `${cte}
       SELECT
-        month, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
+        period, fund_id, sinvest_code, fund_name, mi_name, management_fee, aperd_share, mi_share,
         days_running, avg_aum, aum_eom, total_management_fee, total_aperd_share, total_mi_share
-      FROM monthly_fund
-      ORDER BY month, fund_id, sinvest_code`,
+      FROM period_fund
+      ORDER BY period, fund_id, sinvest_code`,
     params,
   };
 };
 
-// days_running per month is the MAX across funds in that month — funds that
-// started mid-month run fewer days, so the longest-running fund estimates the
-// actual calendar days elapsed (not yet accounting for mid-month closures).
-export const revenueMonthlySummary = (from?: string, to?: string): Query => {
-  const { cte, params } = revenueCTEs(from, to);
+// days_running per period is the MAX across funds in that period — funds that
+// started mid-period run fewer days, so the longest-running fund estimates the
+// actual calendar days elapsed (not yet accounting for mid-period closures).
+export const revenueMonthlySummary = (from?: string, to?: string, granularity = 'month', fund = '', mi = ''): Query => {
+  const { cte, params } = revenueCTEs(from, to, granularity, fund, mi);
   return {
     sql: `${cte}
       SELECT
-        month,
+        period,
         COUNT(DISTINCT fund_id) AS funds,
         MAX(days_running) AS days_running,
         SUM(aum_eom) AS total_aum,
         SUM(total_management_fee) AS total_management_fee,
         SUM(total_aperd_share) AS total_aperd_share,
         SUM(total_mi_share) AS total_mi_share
-      FROM monthly_fund
-      GROUP BY month
-      ORDER BY month`,
+      FROM period_fund
+      GROUP BY period
+      ORDER BY period`,
     params,
   };
 };
@@ -959,8 +975,7 @@ export const revenueMonthlySummary = (from?: string, to?: string): Query => {
 // fee) — the rest of the AperD share stays with Sayakaya.
 const remisierFieldColumn = (field?: string): string =>
   ({ referrer_code: 'referrer_code', sales_code: 'sales_code' } as Record<string, string>)[field || ''] || 'sales_code';
-const remisierGranularityPart = (granularity?: string): string =>
-  ({ day: 'DAY', month: 'MONTH', quarter: 'QUARTER' } as Record<string, string>)[granularity || ''] || 'DAY';
+const remisierGranularityPart = (granularity?: string): string => granularityPart(granularity, 'DAY');
 // PPh 23 withholding tax cut on the remisier's fee — a fixed statutory rate,
 // not a runtime input like remisierPortion.
 const REMISIER_PPH_RATE = 0.025;
@@ -1309,8 +1324,9 @@ export function remisierTransactions(
 // correct AUM date, so there's no "-1 day" correction to make, which is what
 // makes this the more accurate of the two. Kept as a fully separate section
 // (not a replacement) so the two can be compared side by side.
-function revenueV2CTEs(from?: string, to?: string) {
+function revenueV2CTEs(from?: string, to?: string, granularity = 'month', fund = '', mi = '') {
   const r = range(from, to);
+  const part = granularityPart(granularity);
   return {
     cte: `WITH latest_mgmt_fee AS (
         SELECT management_fee_id, management_fee, aperd_share, mi_share
@@ -1325,12 +1341,15 @@ function revenueV2CTEs(from?: string, to?: string) {
           SUM(gs.amount) AS aum,
           ANY_VALUE(lmf.management_fee) AS management_fee,
           ANY_VALUE(lmf.aperd_share) AS aperd_share,
-          ANY_VALUE(lmf.mi_share) AS mi_share
+          ANY_VALUE(lmf.mi_share) AS mi_share,
+          ANY_VALUE(COALESCE(im.common_name, im.name)) AS mi_name
         FROM ${GOAL_SNAPSHOTS} gs
         JOIN ${GOALS} g ON g.id = gs.goal_id AND g.deleted_at IS NULL
         LEFT JOIN ${FUNDS} f ON f.id = gs.fund_id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON lmf.management_fee_id = gs.fund_id
         WHERE gs.unit > 0 AND gs.date BETWEEN @from AND @to
+          AND ${FUND_MI_FILTER_SQL}
         GROUP BY gs.date, gs.fund_id, f.sinvest_code, f.name
       ),
       daily_detail AS (
@@ -1346,12 +1365,13 @@ function revenueV2CTEs(from?: string, to?: string) {
             DATE_TRUNC(date, YEAR), DAY)) AS mi_share_per_day
         FROM daily
       ),
-      monthly_fund AS (
+      period_fund AS (
         SELECT
-          DATE_TRUNC(date, MONTH) AS month,
+          DATE_TRUNC(date, ${part}) AS period,
           fund_id,
           sinvest_code,
           ANY_VALUE(fund_name) AS fund_name,
+          ANY_VALUE(mi_name) AS mi_name,
           ANY_VALUE(management_fee) AS management_fee,
           ANY_VALUE(aperd_share) AS aperd_share,
           ANY_VALUE(mi_share) AS mi_share,
@@ -1362,40 +1382,40 @@ function revenueV2CTEs(from?: string, to?: string) {
           SUM(aperd_share_per_day) AS total_aperd_share,
           SUM(mi_share_per_day) AS total_mi_share
         FROM daily_detail
-        GROUP BY month, fund_id, sinvest_code
+        GROUP BY period, fund_id, sinvest_code
       )`,
-    params: r,
+    params: { ...r, fund, mi },
   };
 }
 
-export const revenueV2Detail = (from?: string, to?: string): Query => {
-  const { cte, params } = revenueV2CTEs(from, to);
+export const revenueV2Detail = (from?: string, to?: string, granularity = 'month', fund = '', mi = ''): Query => {
+  const { cte, params } = revenueV2CTEs(from, to, granularity, fund, mi);
   return {
     sql: `${cte}
       SELECT
-        month, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
+        period, fund_id, sinvest_code, fund_name, mi_name, management_fee, aperd_share, mi_share,
         days_running, avg_aum, aum_eom, total_management_fee, total_aperd_share, total_mi_share
-      FROM monthly_fund
-      ORDER BY month, fund_id, sinvest_code`,
+      FROM period_fund
+      ORDER BY period, fund_id, sinvest_code`,
     params,
   };
 };
 
-export const revenueV2MonthlySummary = (from?: string, to?: string): Query => {
-  const { cte, params } = revenueV2CTEs(from, to);
+export const revenueV2MonthlySummary = (from?: string, to?: string, granularity = 'month', fund = '', mi = ''): Query => {
+  const { cte, params } = revenueV2CTEs(from, to, granularity, fund, mi);
   return {
     sql: `${cte}
       SELECT
-        month,
+        period,
         COUNT(DISTINCT fund_id) AS funds,
         MAX(days_running) AS days_running,
         SUM(aum_eom) AS total_aum,
         SUM(total_management_fee) AS total_management_fee,
         SUM(total_aperd_share) AS total_aperd_share,
         SUM(total_mi_share) AS total_mi_share
-      FROM monthly_fund
-      GROUP BY month
-      ORDER BY month`,
+      FROM period_fund
+      GROUP BY period
+      ORDER BY period`,
     params,
   };
 };
