@@ -23,6 +23,11 @@ function range(from, to) {
   };
 }
 
+// Shared day/week/month/quarter -> DATE_TRUNC part mapping, used everywhere a
+// query lets the caller pick the bucket size (revenue, remisier revenue, ...).
+const granularityPart = (granularity, fallback = 'MONTH') =>
+  ({ day: 'DAY', week: 'WEEK', month: 'MONTH', quarter: 'QUARTER' })[granularity] || fallback;
+
 // ---- Overview KPIs ----------------------------------------------------------
 
 const overviewUsers = () => ({
@@ -854,8 +859,9 @@ const reconciliationDaily = (from, to) => {
 // effect (latest_mgmt_fee, deduped by updated_at) gives a daily fee accrual,
 // split into AperD's and MI's share. Grouped by month + fund for the detail
 // view; summed again across funds for the monthly summary.
-function revenueCTEs(from, to) {
+function revenueCTEs(from, to, granularity = 'month') {
   const r = range(from, to);
+  const part = granularityPart(granularity);
   return {
     cte: `WITH latest_mgmt_fee AS (
         SELECT management_fee_id, management_fee, aperd_share, mi_share
@@ -893,9 +899,9 @@ function revenueCTEs(from, to) {
             DATE_TRUNC(created_date, YEAR), DAY)) AS mi_share_per_day
         FROM combined
       ),
-      monthly_fund AS (
+      period_fund AS (
         SELECT
-          DATE_TRUNC(created_date, MONTH) AS month,
+          DATE_TRUNC(created_date, ${part}) AS period,
           fund_id,
           sinvest_code,
           ANY_VALUE(fund_name) AS fund_name,
@@ -909,43 +915,43 @@ function revenueCTEs(from, to) {
           SUM(aperd_share_per_day) AS total_aperd_share,
           SUM(mi_share_per_day) AS total_mi_share
         FROM daily_detail
-        GROUP BY month, fund_id, sinvest_code
+        GROUP BY period, fund_id, sinvest_code
       )`,
     params: r,
   };
 }
 
-const revenueDetail = (from, to) => {
-  const { cte, params } = revenueCTEs(from, to);
+const revenueDetail = (from, to, granularity = 'month') => {
+  const { cte, params } = revenueCTEs(from, to, granularity);
   return {
     sql: `${cte}
       SELECT
-        month, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
+        period, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
         days_running, avg_aum, aum_eom, total_management_fee, total_aperd_share, total_mi_share
-      FROM monthly_fund
-      ORDER BY month, fund_id, sinvest_code`,
+      FROM period_fund
+      ORDER BY period, fund_id, sinvest_code`,
     params,
   };
 };
 
-// days_running per month is the MAX across funds in that month — funds that
-// started mid-month run fewer days, so the longest-running fund estimates the
-// actual calendar days elapsed (not yet accounting for mid-month closures).
-const revenueMonthlySummary = (from, to) => {
-  const { cte, params } = revenueCTEs(from, to);
+// days_running per period is the MAX across funds in that period — funds that
+// started mid-period run fewer days, so the longest-running fund estimates the
+// actual calendar days elapsed (not yet accounting for mid-period closures).
+const revenueMonthlySummary = (from, to, granularity = 'month') => {
+  const { cte, params } = revenueCTEs(from, to, granularity);
   return {
     sql: `${cte}
       SELECT
-        month,
+        period,
         COUNT(DISTINCT fund_id) AS funds,
         MAX(days_running) AS days_running,
         SUM(aum_eom) AS total_aum,
         SUM(total_management_fee) AS total_management_fee,
         SUM(total_aperd_share) AS total_aperd_share,
         SUM(total_mi_share) AS total_mi_share
-      FROM monthly_fund
-      GROUP BY month
-      ORDER BY month`,
+      FROM period_fund
+      GROUP BY period
+      ORDER BY period`,
     params,
   };
 };
@@ -956,8 +962,9 @@ const revenueMonthlySummary = (from, to) => {
 // correct AUM date, so there's no "-1 day" correction to make, which is what
 // makes this the more accurate of the two. Kept as a fully separate section
 // (not a replacement) so the two can be compared side by side.
-function revenueV2CTEs(from, to) {
+function revenueV2CTEs(from, to, granularity = 'month') {
   const r = range(from, to);
+  const part = granularityPart(granularity);
   return {
     cte: `WITH latest_mgmt_fee AS (
         SELECT management_fee_id, management_fee, aperd_share, mi_share
@@ -993,9 +1000,9 @@ function revenueV2CTEs(from, to) {
             DATE_TRUNC(date, YEAR), DAY)) AS mi_share_per_day
         FROM daily
       ),
-      monthly_fund AS (
+      period_fund AS (
         SELECT
-          DATE_TRUNC(date, MONTH) AS month,
+          DATE_TRUNC(date, ${part}) AS period,
           fund_id,
           sinvest_code,
           ANY_VALUE(fund_name) AS fund_name,
@@ -1009,40 +1016,40 @@ function revenueV2CTEs(from, to) {
           SUM(aperd_share_per_day) AS total_aperd_share,
           SUM(mi_share_per_day) AS total_mi_share
         FROM daily_detail
-        GROUP BY month, fund_id, sinvest_code
+        GROUP BY period, fund_id, sinvest_code
       )`,
     params: r,
   };
 }
 
-const revenueV2Detail = (from, to) => {
-  const { cte, params } = revenueV2CTEs(from, to);
+const revenueV2Detail = (from, to, granularity = 'month') => {
+  const { cte, params } = revenueV2CTEs(from, to, granularity);
   return {
     sql: `${cte}
       SELECT
-        month, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
+        period, fund_id, sinvest_code, fund_name, management_fee, aperd_share, mi_share,
         days_running, avg_aum, aum_eom, total_management_fee, total_aperd_share, total_mi_share
-      FROM monthly_fund
-      ORDER BY month, fund_id, sinvest_code`,
+      FROM period_fund
+      ORDER BY period, fund_id, sinvest_code`,
     params,
   };
 };
 
-const revenueV2MonthlySummary = (from, to) => {
-  const { cte, params } = revenueV2CTEs(from, to);
+const revenueV2MonthlySummary = (from, to, granularity = 'month') => {
+  const { cte, params } = revenueV2CTEs(from, to, granularity);
   return {
     sql: `${cte}
       SELECT
-        month,
+        period,
         COUNT(DISTINCT fund_id) AS funds,
         MAX(days_running) AS days_running,
         SUM(aum_eom) AS total_aum,
         SUM(total_management_fee) AS total_management_fee,
         SUM(total_aperd_share) AS total_aperd_share,
         SUM(total_mi_share) AS total_mi_share
-      FROM monthly_fund
-      GROUP BY month
-      ORDER BY month`,
+      FROM period_fund
+      GROUP BY period
+      ORDER BY period`,
     params,
   };
 };
@@ -1057,8 +1064,7 @@ const revenueV2MonthlySummary = (from, to) => {
 // fee) — the rest of the AperD share stays with Sayakaya.
 const remisierFieldColumn = (field) =>
   ({ referrer_code: 'referrer_code', sales_code: 'sales_code' })[field] || 'sales_code';
-const remisierGranularityPart = (granularity) =>
-  ({ day: 'DAY', month: 'MONTH', quarter: 'QUARTER' })[granularity] || 'DAY';
+const remisierGranularityPart = (granularity) => granularityPart(granularity, 'DAY');
 // PPh 23 withholding tax cut on the remisier's fee — a fixed statutory rate,
 // not a runtime input like remisierPortion.
 const REMISIER_PPH_RATE = 0.025;

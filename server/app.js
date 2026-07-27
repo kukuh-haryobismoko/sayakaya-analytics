@@ -269,28 +269,28 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Revenue: management fee earned per fund/month -------------------------
+  // ---- Revenue: management fee earned per fund/period -------------------------
   app.get('/api/revenue', handler(async (req, res) => {
-    const { from, to } = req.query;
-    const q = Q.revenueDetail(from, to);
+    const { from, to, granularity } = req.query;
+    const q = Q.revenueDetail(from, to, granularity);
     res.json(await runQuery(q.sql, q.params));
   }));
 
   app.get('/api/revenue/summary', handler(async (req, res) => {
-    const { from, to } = req.query;
-    const q = Q.revenueMonthlySummary(from, to);
+    const { from, to, granularity } = req.query;
+    const q = Q.revenueMonthlySummary(from, to, granularity);
     res.json(await runQuery(q.sql, q.params));
   }));
 
   // ---- Revenue v2: same as Revenue above, but AUM sourced from goal_snapshots
   app.get('/api/revenue-v2', handler(async (req, res) => {
-    const { from, to } = req.query;
-    const q = Q.revenueV2Detail(from, to);
+    const { from, to, granularity } = req.query;
+    const q = Q.revenueV2Detail(from, to, granularity);
     res.json(await runQuery(q.sql, q.params));
   }));
   app.get('/api/revenue-v2/summary', handler(async (req, res) => {
-    const { from, to } = req.query;
-    const q = Q.revenueV2MonthlySummary(from, to);
+    const { from, to, granularity } = req.query;
+    const q = Q.revenueV2MonthlySummary(from, to, granularity);
     res.json(await runQuery(q.sql, q.params));
   }));
 
@@ -548,16 +548,16 @@ function createApp({ serveStatic = true } = {}) {
       const q = Q.reconciliationDaily(req.body.from, req.body.to);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'revenue_detail') {
-      const q = Q.revenueDetail(req.body.from, req.body.to);
+      const q = Q.revenueDetail(req.body.from, req.body.to, req.body.granularity);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'revenue_summary') {
-      const q = Q.revenueMonthlySummary(req.body.from, req.body.to);
+      const q = Q.revenueMonthlySummary(req.body.from, req.body.to, req.body.granularity);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'revenue_v2_detail') {
-      const q = Q.revenueV2Detail(req.body.from, req.body.to);
+      const q = Q.revenueV2Detail(req.body.from, req.body.to, req.body.granularity);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'revenue_v2_summary') {
-      const q = Q.revenueV2MonthlySummary(req.body.from, req.body.to);
+      const q = Q.revenueV2MonthlySummary(req.body.from, req.body.to, req.body.granularity);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'remisier_revenue_detail' || source === 'remisier_revenue_summary') {
       const { field, code, from, to, granularity, portion } = req.body;

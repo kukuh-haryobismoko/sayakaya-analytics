@@ -407,12 +407,17 @@
         <div class="panel-head wrap">
           <h2>Period</h2>
           <div class="range">
+            <div class="seg" id="revGran">
+              <button data-g="day">Day</button>
+              <button data-g="week">Week</button>
+              <button class="on" data-g="month">Month</button>
+            </div>
             <label>From <input type="month" id="revFrom" /></label>
             <label>To <input type="month" id="revTo" /></label>
             <button id="revApply" class="btn-primary">Apply</button>
           </div>
         </div>
-        <span class="hint">Month/year filter for this section only — independent of the date range above.</span>
+        <span class="hint">Month/year filter for this section only — independent of the date range above. The Day/Week/Month toggle controls the bucket size of the tables and chart below.</span>
       </div>
 
       <div class="panel">
@@ -422,19 +427,19 @@
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Management fee revenue (per fund, per month)</h2>
+          <h2>Management fee revenue (per fund, per period)</h2>
           <div class="exp">
             <button class="btn-ghost" id="revDetailCsv">CSV</button>
             <button class="btn-ghost" id="revDetailXlsx">Excel</button>
           </div>
         </div>
-        <span class="hint">Management fee accrued daily from AUM (portfolio_with_code), split into AperD/MI share, summed per fund per month.</span>
+        <span class="hint">Management fee accrued daily from AUM (portfolio_with_code), split into AperD/MI share, summed per fund per period.</span>
         <div id="revDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Monthly summary (all funds)</h2>
+          <h2>Period summary (all funds)</h2>
           <div class="exp">
             <button class="btn-ghost" id="revSummaryCsv">CSV</button>
             <button class="btn-ghost" id="revSummaryXlsx">Excel</button>
@@ -450,12 +455,17 @@
         <div class="panel-head wrap">
           <h2>Period</h2>
           <div class="range">
+            <div class="seg" id="rev2Gran">
+              <button data-g="day">Day</button>
+              <button data-g="week">Week</button>
+              <button class="on" data-g="month">Month</button>
+            </div>
             <label>From <input type="month" id="rev2From" /></label>
             <label>To <input type="month" id="rev2To" /></label>
             <button id="rev2Apply" class="btn-primary">Apply</button>
           </div>
         </div>
-        <span class="hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison.</span>
+        <span class="hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison. The Day/Week/Month toggle controls the bucket size of the tables and chart below.</span>
       </div>
 
       <div class="panel">
@@ -465,19 +475,19 @@
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Management fee revenue (per fund, per month)</h2>
+          <h2>Management fee revenue (per fund, per period)</h2>
           <div class="exp">
             <button class="btn-ghost" id="rev2DetailCsv">CSV</button>
             <button class="btn-ghost" id="rev2DetailXlsx">Excel</button>
           </div>
         </div>
-        <span class="hint">Management fee accrued daily from AUM (goal_snapshots), split into AperD/MI share, summed per fund per month.</span>
+        <span class="hint">Management fee accrued daily from AUM (goal_snapshots), split into AperD/MI share, summed per fund per period.</span>
         <div id="rev2DetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Monthly summary (all funds)</h2>
+          <h2>Period summary (all funds)</h2>
           <div class="exp">
             <button class="btn-ghost" id="rev2SummaryCsv">CSV</button>
             <button class="btn-ghost" id="rev2SummaryXlsx">Excel</button>

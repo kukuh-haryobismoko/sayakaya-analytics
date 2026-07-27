@@ -937,7 +937,7 @@ function renderRevenueTrend(rows, chartId = 'revTrendChart') {
   paint(chartId, {
     type: 'bar',
     data: {
-      labels: rows.map((d) => val(d.month)),
+      labels: rows.map((d) => val(d.period)),
       datasets: [
         { label: 'AperD share', data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, stack: 'fee', order: 2 },
         { label: 'MI share', data: rows.map((d) => Number(val(d.total_mi_share))), backgroundColor: C.amber, borderRadius: 4, stack: 'fee', order: 2 },
@@ -958,18 +958,20 @@ function renderRevenueTrend(rows, chartId = 'revTrendChart') {
   });
 }
 
+let revGran = 'month';
+
 async function loadRevenue() {
   const r = revRange();
   $('#revDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#revSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   try {
     const [detail, summary] = await Promise.all([
-      api(`/api/revenue?from=${r.from}&to=${r.to}`),
-      api(`/api/revenue/summary?from=${r.from}&to=${r.to}`),
+      api(`/api/revenue?from=${r.from}&to=${r.to}&granularity=${revGran}`),
+      api(`/api/revenue/summary?from=${r.from}&to=${r.to}&granularity=${revGran}`),
     ]);
     renderRevenueTrend(summary);
     genTable('#revDetailTable', detail, [
-      { key: 'month', label: 'Month', type: 'date' },
+      { key: 'period', label: 'Period', type: 'date' },
       { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
       { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
@@ -979,7 +981,7 @@ async function loadRevenue() {
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
     ], 'No revenue in this range.');
     genTable('#revSummaryTable', summary, [
-      { key: 'month', label: 'Month', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
+      { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' },
       { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
@@ -994,18 +996,20 @@ async function loadRevenue() {
 // ====================================================================
 //  REVENUE v2 (same calculation as Revenue above, AUM from goal_snapshots)
 // ====================================================================
+let rev2Gran = 'month';
+
 async function loadRevenue2() {
   const r = rev2Range();
   $('#rev2DetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#rev2SummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   try {
     const [detail, summary] = await Promise.all([
-      api(`/api/revenue-v2?from=${r.from}&to=${r.to}`),
-      api(`/api/revenue-v2/summary?from=${r.from}&to=${r.to}`),
+      api(`/api/revenue-v2?from=${r.from}&to=${r.to}&granularity=${rev2Gran}`),
+      api(`/api/revenue-v2/summary?from=${r.from}&to=${r.to}&granularity=${rev2Gran}`),
     ]);
     renderRevenueTrend(summary, 'rev2TrendChart');
     genTable('#rev2DetailTable', detail, [
-      { key: 'month', label: 'Month', type: 'date' },
+      { key: 'period', label: 'Period', type: 'date' },
       { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
       { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
@@ -1015,7 +1019,7 @@ async function loadRevenue2() {
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
     ], 'No revenue in this range.');
     genTable('#rev2SummaryTable', summary, [
-      { key: 'month', label: 'Month', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
+      { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' },
       { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
@@ -1790,16 +1794,26 @@ function wire() {
   $('#recXlsx').addEventListener('click', () => { const r = currentRange(); download({ source: 'reconciliation', format: 'xlsx', filename: 'reconciliation', from: r.from, to: r.to }, 'reconciliation.xlsx'); });
 
   // revenue
-  $('#revDetailCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'csv', filename: 'revenue_detail', from: r.from, to: r.to }, 'revenue_detail.csv'); });
-  $('#revDetailXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'xlsx', filename: 'revenue_detail', from: r.from, to: r.to }, 'revenue_detail.xlsx'); });
-  $('#revSummaryCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'csv', filename: 'revenue_summary', from: r.from, to: r.to }, 'revenue_summary.csv'); });
-  $('#revSummaryXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'xlsx', filename: 'revenue_summary', from: r.from, to: r.to }, 'revenue_summary.xlsx'); });
+  $('#revGran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#revGran button').forEach((x) => x.classList.toggle('on', x === b));
+    revGran = b.dataset.g; loadRevenue();
+  });
+  $('#revDetailCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'csv', filename: 'revenue_detail', from: r.from, to: r.to, granularity: revGran }, 'revenue_detail.csv'); });
+  $('#revDetailXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'xlsx', filename: 'revenue_detail', from: r.from, to: r.to, granularity: revGran }, 'revenue_detail.xlsx'); });
+  $('#revSummaryCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'csv', filename: 'revenue_summary', from: r.from, to: r.to, granularity: revGran }, 'revenue_summary.csv'); });
+  $('#revSummaryXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'xlsx', filename: 'revenue_summary', from: r.from, to: r.to, granularity: revGran }, 'revenue_summary.xlsx'); });
 
   // revenue v2 (goal_snapshots)
-  $('#rev2DetailCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'csv', filename: 'revenue_v2_detail', from: r.from, to: r.to }, 'revenue_v2_detail.csv'); });
-  $('#rev2DetailXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'xlsx', filename: 'revenue_v2_detail', from: r.from, to: r.to }, 'revenue_v2_detail.xlsx'); });
-  $('#rev2SummaryCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'csv', filename: 'revenue_v2_summary', from: r.from, to: r.to }, 'revenue_v2_summary.csv'); });
-  $('#rev2SummaryXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'xlsx', filename: 'revenue_v2_summary', from: r.from, to: r.to }, 'revenue_v2_summary.xlsx'); });
+  $('#rev2Gran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#rev2Gran button').forEach((x) => x.classList.toggle('on', x === b));
+    rev2Gran = b.dataset.g; loadRevenue2();
+  });
+  $('#rev2DetailCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'csv', filename: 'revenue_v2_detail', from: r.from, to: r.to, granularity: rev2Gran }, 'revenue_v2_detail.csv'); });
+  $('#rev2DetailXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'xlsx', filename: 'revenue_v2_detail', from: r.from, to: r.to, granularity: rev2Gran }, 'revenue_v2_detail.xlsx'); });
+  $('#rev2SummaryCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'csv', filename: 'revenue_v2_summary', from: r.from, to: r.to, granularity: rev2Gran }, 'revenue_v2_summary.csv'); });
+  $('#rev2SummaryXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'xlsx', filename: 'revenue_v2_summary', from: r.from, to: r.to, granularity: rev2Gran }, 'revenue_v2_summary.xlsx'); });
 
   // remisier sharing
   $('#remRun').addEventListener('click', loadRemisier);
