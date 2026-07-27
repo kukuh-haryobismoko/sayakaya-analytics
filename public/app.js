@@ -57,24 +57,10 @@ function defaultRange() {
 }
 function currentRange() { return { from: $('#from').value, to: $('#to').value }; }
 
-// Revenue tab has its own month/year filter (native <input type="month">),
-// independent of the day-range pickers used everywhere else.
-function isoMonth(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-function defaultMonthRange() {
-  const to = new Date();
-  const from = new Date(); from.setMonth(from.getMonth() - 5);
-  return { from: isoMonth(from), to: isoMonth(to) };
-}
-function revRange() {
-  const fromM = $('#revFrom').value, toM = $('#revTo').value;
-  const [ty, tm] = toM.split('-').map(Number);
-  return { from: `${fromM}-01`, to: isoDate(new Date(ty, tm, 0)) }; // tm/0 = last day of month
-}
-function rev2Range() {
-  const fromM = $('#rev2From').value, toM = $('#rev2To').value;
-  const [ty, tm] = toM.split('-').map(Number);
-  return { from: `${fromM}-01`, to: isoDate(new Date(ty, tm, 0)) };
-}
+// Revenue tabs have their own date-range pickers, independent of the
+// day-range pickers used everywhere else.
+function revRange() { return { from: $('#revFrom').value, to: $('#revTo').value }; }
+function rev2Range() { return { from: $('#rev2From').value, to: $('#rev2To').value }; }
 
 // ---------- chart palette (theme-aware: read from CSS custom properties) ----------
 function readThemeColors() {
@@ -1943,9 +1929,8 @@ async function pollHealth() {
 async function init() {
   const r = defaultRange();
   $('#from').value = r.from; $('#to').value = r.to;
-  const rm = defaultMonthRange();
-  $('#revFrom').value = rm.from; $('#revTo').value = rm.to;
-  $('#rev2From').value = rm.from; $('#rev2To').value = rm.to;
+  $('#revFrom').value = r.from; $('#revTo').value = r.to;
+  $('#rev2From').value = r.from; $('#rev2To').value = r.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   loadRemTxFilterOptions();
