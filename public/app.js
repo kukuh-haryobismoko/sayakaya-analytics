@@ -1794,7 +1794,7 @@ function wire() {
     revGran = b.dataset.g; loadRevenue();
   });
   $('#revDetailCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'csv', filename: 'revenue_detail', ...r, granularity: revGran }, 'revenue_detail.csv'); });
-  $('#revDetailXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'xlsx', filename: 'revenue_detail', ...r, granularity: revGran }, 'revenue_detail.xlsx'); });
+  $('#revDetailXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_detail', format: 'xlsx', filename: 'revenue_detail', ...r, granularity: revGran, splitBy: $('#revSplitBy').value }, 'revenue_detail.xlsx'); });
   $('#revSummaryCsv').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'csv', filename: 'revenue_summary', ...r, granularity: revGran }, 'revenue_summary.csv'); });
   $('#revSummaryXlsx').addEventListener('click', () => { const r = revRange(); download({ source: 'revenue_summary', format: 'xlsx', filename: 'revenue_summary', ...r, granularity: revGran }, 'revenue_summary.xlsx'); });
 
@@ -1805,7 +1805,7 @@ function wire() {
     rev2Gran = b.dataset.g; loadRevenue2();
   });
   $('#rev2DetailCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'csv', filename: 'revenue_v2_detail', ...r, granularity: rev2Gran }, 'revenue_v2_detail.csv'); });
-  $('#rev2DetailXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'xlsx', filename: 'revenue_v2_detail', ...r, granularity: rev2Gran }, 'revenue_v2_detail.xlsx'); });
+  $('#rev2DetailXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_detail', format: 'xlsx', filename: 'revenue_v2_detail', ...r, granularity: rev2Gran, splitBy: $('#rev2SplitBy').value }, 'revenue_v2_detail.xlsx'); });
   $('#rev2SummaryCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'csv', filename: 'revenue_v2_summary', ...r, granularity: rev2Gran }, 'revenue_v2_summary.csv'); });
   $('#rev2SummaryXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'xlsx', filename: 'revenue_v2_summary', ...r, granularity: rev2Gran }, 'revenue_v2_summary.xlsx'); });
 

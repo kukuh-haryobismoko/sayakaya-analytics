@@ -433,6 +433,11 @@
         <div class="panel-head wrap">
           <h2>Management fee revenue (per fund, per period)</h2>
           <div class="exp">
+            <select id="revSplitBy" title="Excel sheet split">
+              <option value="">Excel: single sheet</option>
+              <option value="fund">Excel: one sheet per fund</option>
+              <option value="mi">Excel: one sheet per MI</option>
+            </select>
             <button class="btn-ghost" id="revDetailCsv">CSV</button>
             <button class="btn-ghost" id="revDetailXlsx">Excel</button>
           </div>
@@ -485,6 +490,11 @@
         <div class="panel-head wrap">
           <h2>Management fee revenue (per fund, per period)</h2>
           <div class="exp">
+            <select id="rev2SplitBy" title="Excel sheet split">
+              <option value="">Excel: single sheet</option>
+              <option value="fund">Excel: one sheet per fund</option>
+              <option value="mi">Excel: one sheet per MI</option>
+            </select>
             <button class="btn-ghost" id="rev2DetailCsv">CSV</button>
             <button class="btn-ghost" id="rev2DetailXlsx">Excel</button>
           </div>

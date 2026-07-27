@@ -40,6 +40,17 @@ function pivotPerformanceByType(rows) {
   }));
 }
 
+// Splits flat detail rows into one worksheet per distinct value of keyField —
+// used for the revenue exports' "one sheet per fund/MI" option.
+function splitRowsBySheet(rows, keyField) {
+  const groups = {};
+  for (const r of rows) {
+    const key = r[keyField] || '(none)';
+    (groups[key] = groups[key] || []).push(r);
+  }
+  return Object.keys(groups).sort().map((name) => ({ name, rows: groups[name] }));
+}
+
 // Friendly column names for the "Portfolio" sheet in the combined export.
 function portfolioSheetRows(holdings) {
   return holdings.map((h) => ({
@@ -547,14 +558,21 @@ function createApp({ serveStatic = true } = {}) {
     } else if (source === 'reconciliation') {
       const q = Q.reconciliationDaily(req.body.from, req.body.to);
       rows = await runQuery(q.sql, q.params);
-    } else if (source === 'revenue_detail') {
-      const q = Q.revenueDetail(req.body.from, req.body.to, req.body.granularity, req.body.fund, req.body.mi);
-      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'revenue_detail' || source === 'revenue_v2_detail') {
+      const q = source === 'revenue_detail'
+        ? Q.revenueDetail(req.body.from, req.body.to, req.body.granularity, req.body.fund, req.body.mi)
+        : Q.revenueV2Detail(req.body.from, req.body.to, req.body.granularity, req.body.fund, req.body.mi);
+      const detail = await runQuery(q.sql, q.params);
+      const { splitBy } = req.body; // 'fund' | 'mi' | undefined — xlsx only, one sheet per value
+      if (format === 'xlsx' && (splitBy === 'fund' || splitBy === 'mi')) {
+        const buf = await toXlsxMultiSheet(splitRowsBySheet(detail, splitBy === 'fund' ? 'fund_name' : 'mi_name'));
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.xlsx"`);
+        return res.send(Buffer.from(buf));
+      }
+      rows = detail;
     } else if (source === 'revenue_summary') {
       const q = Q.revenueMonthlySummary(req.body.from, req.body.to, req.body.granularity, req.body.fund, req.body.mi);
-      rows = await runQuery(q.sql, q.params);
-    } else if (source === 'revenue_v2_detail') {
-      const q = Q.revenueV2Detail(req.body.from, req.body.to, req.body.granularity, req.body.fund, req.body.mi);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'revenue_v2_summary') {
       const q = Q.revenueV2MonthlySummary(req.body.from, req.body.to, req.body.granularity, req.body.fund, req.body.mi);
