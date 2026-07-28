@@ -937,22 +937,34 @@ function revenueCTEs(from, to, granularity = 'month', fund = '', mi = '') {
         WHERE rn = 1
       ),
       combined AS (
+        -- portfolio_with_code is one row per sid_code (investor) + fund + day,
+        -- not one row per fund + day — SUM(pwc.amount) across investors is
+        -- required to get the fund's actual daily AUM. Without this, aum_eom/
+        -- avg_aum below silently pick a single investor's holding instead of
+        -- the whole fund's (management_fee/aperd_share/mi_share are the same
+        -- for every row of a fund regardless, so ANY_VALUE is still correct
+        -- there — and summing each investor's per-day fee contribution, which
+        -- is what daily_detail/period_fund do below, was already
+        -- mathematically equal to the fund total either way; this fix is
+        -- about the AUM columns specifically).
         SELECT
           DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) AS created_date,
           pwc.id AS fund_id,
           f.sinvest_code,
           f.name AS fund_name,
           COALESCE(im.common_name, im.name) AS mi_name,
-          pwc.amount AS aum,
-          lmf.management_fee,
-          lmf.aperd_share,
-          lmf.mi_share
+          SUM(pwc.amount) AS aum,
+          ANY_VALUE(lmf.management_fee) AS management_fee,
+          ANY_VALUE(lmf.aperd_share) AS aperd_share,
+          ANY_VALUE(lmf.mi_share) AS mi_share
         FROM ${PORT_WITH_CODE} pwc
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
         LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
         WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) BETWEEN @from AND @to
           AND ${FUND_MI_FILTER_SQL}
+        GROUP BY DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY), pwc.id, f.sinvest_code, f.name,
+          COALESCE(im.common_name, im.name)
       ),
       daily_detail AS (
         SELECT *,
@@ -1008,19 +1020,39 @@ const revenueDetail = (from, to, granularity = 'month', fund = '', mi = '') => {
 // actual calendar days elapsed (not yet accounting for mid-period closures).
 const revenueMonthlySummary = (from, to, granularity = 'month', fund = '', mi = '') => {
   const { cte, params } = revenueCTEs(from, to, granularity, fund, mi);
+  const part = granularityPart(granularity);
   return {
-    sql: `${cte}
-      SELECT
-        period,
-        COUNT(DISTINCT fund_id) AS funds,
-        MAX(days_running) AS days_running,
-        SUM(aum_eom) AS total_aum,
-        SUM(total_management_fee) AS total_management_fee,
-        SUM(total_aperd_share) AS total_aperd_share,
-        SUM(total_mi_share) AS total_mi_share
-      FROM period_fund
-      GROUP BY period
-      ORDER BY period`,
+    // avg_aum here is the average of each day's *platform-wide* total AUM
+    // across the period — not an average of each fund's own average (which
+    // would double-count differently sized funds) or of end-of-period values.
+    sql: `${cte},
+      daily_platform AS (
+        SELECT created_date, SUM(aum) AS platform_aum
+        FROM daily_detail
+        GROUP BY created_date
+      ),
+      period_avg_aum AS (
+        SELECT DATE_TRUNC(created_date, ${part}) AS period, AVG(platform_aum) AS avg_aum
+        FROM daily_platform
+        GROUP BY period
+      ),
+      per_period AS (
+        SELECT
+          period,
+          COUNT(DISTINCT fund_id) AS funds,
+          MAX(days_running) AS days_running,
+          SUM(aum_eom) AS total_aum,
+          SUM(total_management_fee) AS total_management_fee,
+          SUM(total_aperd_share) AS total_aperd_share,
+          SUM(total_mi_share) AS total_mi_share
+        FROM period_fund
+        GROUP BY period
+      )
+      SELECT pp.period, pp.funds, pp.days_running, pp.total_aum, pa.avg_aum,
+        pp.total_management_fee, pp.total_aperd_share, pp.total_mi_share
+      FROM per_period pp
+      JOIN period_avg_aum pa ON pa.period = pp.period
+      ORDER BY pp.period`,
     params,
   };
 };
@@ -1110,19 +1142,39 @@ const revenueV2Detail = (from, to, granularity = 'month', fund = '', mi = '') =>
 
 const revenueV2MonthlySummary = (from, to, granularity = 'month', fund = '', mi = '') => {
   const { cte, params } = revenueV2CTEs(from, to, granularity, fund, mi);
+  const part = granularityPart(granularity);
   return {
-    sql: `${cte}
-      SELECT
-        period,
-        COUNT(DISTINCT fund_id) AS funds,
-        MAX(days_running) AS days_running,
-        SUM(aum_eom) AS total_aum,
-        SUM(total_management_fee) AS total_management_fee,
-        SUM(total_aperd_share) AS total_aperd_share,
-        SUM(total_mi_share) AS total_mi_share
-      FROM period_fund
-      GROUP BY period
-      ORDER BY period`,
+    // avg_aum here is the average of each day's *platform-wide* total AUM
+    // across the period — not an average of each fund's own average (which
+    // would double-count differently sized funds) or of end-of-period values.
+    sql: `${cte},
+      daily_platform AS (
+        SELECT date, SUM(aum) AS platform_aum
+        FROM daily_detail
+        GROUP BY date
+      ),
+      period_avg_aum AS (
+        SELECT DATE_TRUNC(date, ${part}) AS period, AVG(platform_aum) AS avg_aum
+        FROM daily_platform
+        GROUP BY period
+      ),
+      per_period AS (
+        SELECT
+          period,
+          COUNT(DISTINCT fund_id) AS funds,
+          MAX(days_running) AS days_running,
+          SUM(aum_eom) AS total_aum,
+          SUM(total_management_fee) AS total_management_fee,
+          SUM(total_aperd_share) AS total_aperd_share,
+          SUM(total_mi_share) AS total_mi_share
+        FROM period_fund
+        GROUP BY period
+      )
+      SELECT pp.period, pp.funds, pp.days_running, pp.total_aum, pa.avg_aum,
+        pp.total_management_fee, pp.total_aperd_share, pp.total_mi_share
+      FROM per_period pp
+      JOIN period_avg_aum pa ON pa.period = pp.period
+      ORDER BY pp.period`,
     params,
   };
 };

@@ -1036,7 +1036,7 @@ async function loadRevenue() {
     genTable('#revSummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' },
+      { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' }, { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
       { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
     ], 'No revenue in this range.');
@@ -1076,7 +1076,7 @@ async function loadRevenue2() {
     genTable('#rev2SummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' },
+      { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' }, { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
       { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
     ], 'No revenue in this range.');
