@@ -135,6 +135,25 @@ async function deleteSessionByToken(token) {
   await rest(`/dashboard_sessions?token_hash=eq.${sha256Hex(token)}`, { method: 'DELETE' });
 }
 
+// ---- Audit log ----------------------------------------------------------
+// username is stored as a plain snapshot (not just a join through user_id)
+// so the record survives the account later being deleted.
+async function logEvent(userId, username, action, detail) {
+  try {
+    await rest('/dashboard_audit_log', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId || null, username, action, detail: detail || null }),
+    });
+  } catch (err) {
+    // Logging must never be able to break the login/export it's recording.
+    console.error('[audit log]', err.message);
+  }
+}
+
+function listAuditLog(limit = 200) {
+  return rest(`/dashboard_audit_log?select=*&order=created_at.desc&limit=${Number(limit) || 200}`);
+}
+
 // ---- Shaping + permission check ---------------------------------------------
 function publicUser(u) {
   return { id: u.id, username: u.username, isSuperuser: u.is_superuser, allowedTabs: u.allowed_tabs || [], createdAt: u.created_at };
@@ -150,5 +169,6 @@ module.exports = {
   hashPassword, verifyPassword,
   findUserByUsername, findUserById, listUsers, countSuperusers, createUser, updateUser, deleteUser,
   createSession, findUserByToken, deleteSessionByToken,
+  logEvent, listAuditLog,
   publicUser, userCan,
 };

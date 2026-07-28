@@ -1736,10 +1736,45 @@ async function saveAdminUser() {
   } catch (e) { $('#adminFormErr').textContent = e.message; }
 }
 
+async function loadAdminAuditLog() {
+  $('#adminAuditTable').innerHTML = '<div class="loading">Loading activity…</div>';
+  try {
+    const rows = await api('/api/admin/audit-log?limit=200');
+    const mapped = rows.map((r) => ({ ...r, created_at: String(val(r.created_at)).replace('T', ' ').slice(0, 16) }));
+    genTable('#adminAuditTable', mapped, [
+      { key: 'created_at', label: 'Time' },
+      { key: 'username', label: 'User' },
+      { key: 'action', label: 'Action' },
+      { key: 'detail', label: 'Detail' },
+    ], 'No activity yet.');
+  } catch (e) { $('#adminAuditTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
 function wireAdmin() {
   renderAdminTabsPicker([]);
   $('#adminSaveBtn').addEventListener('click', saveAdminUser);
   $('#adminCancelEditBtn').addEventListener('click', resetAdminForm);
+  $('#adminAuditRefresh').addEventListener('click', loadAdminAuditLog);
+}
+
+// ---------- change own password (sidebar) ----------
+function wireChangePassword() {
+  $('#changePwBtn').addEventListener('click', () => {
+    $('#changePwPanel').classList.toggle('hidden');
+    $('#changePwCurrent').focus();
+  });
+  $('#changePwSave').addEventListener('click', async () => {
+    const currentPassword = $('#changePwCurrent').value;
+    const newPassword = $('#changePwNew').value;
+    $('#changePwErr').textContent = '';
+    if (!currentPassword || !newPassword) { $('#changePwErr').textContent = 'Both fields are required.'; return; }
+    try {
+      await api('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
+      $('#changePwCurrent').value = ''; $('#changePwNew').value = '';
+      $('#changePwPanel').classList.add('hidden');
+      toast('Password updated');
+    } catch (e) { $('#changePwErr').textContent = e.message; }
+  });
 }
 
 // ====================================================================
@@ -1771,7 +1806,7 @@ function switchTab(name) {
   if (name === 'revenue2') loadRevenue2();
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
-  if (name === 'admin') loadAdminUsers();
+  if (name === 'admin') { loadAdminUsers(); loadAdminAuditLog(); }
 }
 
 // Called once after login/session-restore: hides nav links + the Admin group
@@ -2134,7 +2169,7 @@ async function init() {
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   setThemeButtonLabel();
-  wire(); wireGate(); wireAdmin();
+  wire(); wireGate(); wireAdmin(); wireChangePassword();
 
   // Health is the one route that doesn't need a session — check it either way.
   try {

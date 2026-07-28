@@ -153,9 +153,11 @@ function createApp({ serveStatic = true } = {}) {
     if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
     const user = await Auth.findUserByUsername(username);
     if (!user || !Auth.verifyPassword(password, user.password_hash)) {
+      await Auth.logEvent(user ? user.id : null, username, 'login_failure');
       return res.status(401).json({ error: 'Incorrect username or password.' });
     }
     const token = await Auth.createSession(user.id);
+    await Auth.logEvent(user.id, user.username, 'login_success');
     res.json({ token, user: Auth.publicUser(user) });
   }));
 
@@ -201,6 +203,28 @@ function createApp({ serveStatic = true } = {}) {
       return res.status(400).json({ error: 'Cannot delete the last remaining superuser.' });
     }
     await Auth.deleteUser(req.params.id);
+    res.json({ ok: true });
+  }));
+
+  app.get('/api/admin/audit-log', requireSuperuser, handler(async (req, res) => {
+    const rows = await Auth.listAuditLog(req.query.limit);
+    res.json(rows);
+  }));
+
+  // ---- Auth: change your own password ---------------------------------------
+  // Requires the current password (not just a valid session) so a hijacked-
+  // but-still-valid token can't lock the real owner out permanently.
+  app.post('/api/auth/change-password', handler(async (req, res) => {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password are required.' });
+    if (!Auth.verifyPassword(currentPassword, req.user.password_hash)) {
+      // 400, not 401 — the session itself is still valid, only the typed
+      // password is wrong. The frontend's api() helper force-logs-out on any
+      // 401, which a wrong-current-password typo must not trigger.
+      return res.status(400).json({ error: 'Current password is incorrect.' });
+    }
+    await Auth.updateUser(req.user.id, { password: newPassword });
+    await Auth.logEvent(req.user.id, req.user.username, 'password_change');
     res.json({ ok: true });
   }));
 
@@ -595,6 +619,7 @@ function createApp({ serveStatic = true } = {}) {
     if (!tab) return res.status(400).json({ error: 'Unknown export source.' });
     if (!Auth.userCan(req.user, tab)) return res.status(403).json({ error: 'You do not have access to this export.' });
     const username = req.user.username;
+    await Auth.logEvent(req.user.id, username, 'export', `${source} (${format}) as "${filename}"`);
     let rows;
     let pctCols = [];
     if (source === 'sql' || source === 'ask_result') {

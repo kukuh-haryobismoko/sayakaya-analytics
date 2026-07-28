@@ -222,9 +222,11 @@ on('POST', '/api/auth/login', async (req) => {
   if (!username || !password) return json({ error: 'Username and password are required.' }, 400);
   const user = await A.findUserByUsername(username);
   if (!user || !A.verifyPassword(password, user.password_hash)) {
+    await A.logEvent(user ? user.id : null, username, 'login_failure');
     return json({ error: 'Incorrect username or password.' }, 401);
   }
   const token = await A.createSession(user.id);
+  await A.logEvent(user.id, user.username, 'login_success');
   return json({ token, user: A.publicUser(user) });
 });
 
@@ -283,6 +285,30 @@ on('DELETE', '/api/admin/users/:id', requireSuperuser(async (_req, params) => {
   await A.deleteUser(params.id);
   return json({ ok: true });
 }));
+
+on('GET', '/api/admin/audit-log', requireSuperuser(async (_req, _params, url) => {
+  const rows = await A.listAuditLog(Number(qp(url, 'limit')) || undefined);
+  return json(rows);
+}));
+
+// ---- Auth: change your own password ---------------------------------------
+// Requires the current password (not just a valid session) so a hijacked-but-
+// still-valid token can't lock the real owner out permanently.
+on('POST', '/api/auth/change-password', async (req, _params, _url, user) => {
+  const body = await bodyOf(req);
+  const currentPassword = body.currentPassword as string;
+  const newPassword = body.newPassword as string;
+  if (!currentPassword || !newPassword) return json({ error: 'Current and new password are required.' }, 400);
+  if (!A.verifyPassword(currentPassword, user!.password_hash)) {
+    // 400, not 401 — the session itself is still valid, only the typed
+    // password is wrong. The frontend's api() helper force-logs-out on any
+    // 401, which a wrong-current-password typo must not trigger.
+    return json({ error: 'Current password is incorrect.' }, 400);
+  }
+  await A.updateUser(user!.id, { password: newPassword });
+  await A.logEvent(user!.id, user!.username, 'password_change');
+  return json({ ok: true });
+});
 
 // ---- Overview (KPIs) ------------------------------------------------------
 on('GET', '/api/overview', requireTab('overview', async (_req, _params, url) => {
@@ -616,6 +642,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
   if (!tab) return json({ error: 'Unknown export source.' }, 400);
   if (!A.userCan(user, tab)) return json({ error: 'You do not have access to this export.' }, 403);
   const username = user!.username;
+  await A.logEvent(user!.id, username, 'export', `${source} (${format}) as "${filename}"`);
   let rows: Record<string, unknown>[] = [];
   let pctCols: string[] = [];
 

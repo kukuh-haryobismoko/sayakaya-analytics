@@ -82,9 +82,18 @@
         </div>
       </nav>
 
-      <div id="userBadge" class="conn-status" style="margin-bottom:0">
-        <span id="userBadgeName"></span>
-        <button id="logoutBtn" class="btn-ghost" type="button" style="margin-left:auto; padding:4px 9px; font-size:12px">Log out</button>
+      <div id="userBadge" class="conn-status" style="margin-bottom:0; flex-direction:column; align-items:stretch; gap:6px">
+        <span id="userBadgeName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span>
+        <div style="display:flex; gap:6px">
+          <button id="changePwBtn" class="btn-ghost" type="button" style="flex:1; padding:4px 6px; font-size:11.5px; white-space:nowrap">Password</button>
+          <button id="logoutBtn" class="btn-ghost" type="button" style="flex:1; padding:4px 6px; font-size:11.5px; white-space:nowrap">Log out</button>
+        </div>
+      </div>
+      <div id="changePwPanel" class="hidden" style="margin: 0 12px 12px; padding:10px; border:1px solid var(--line); border-radius:9px; background:var(--surface-alt)">
+        <input type="password" id="changePwCurrent" placeholder="Current password" autocomplete="current-password" style="width:100%; box-sizing:border-box; margin-bottom:6px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
+        <input type="password" id="changePwNew" placeholder="New password" autocomplete="new-password" style="width:100%; box-sizing:border-box; margin-bottom:8px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
+        <button class="btn-primary" id="changePwSave" style="width:100%; padding:7px; font-size:12px">Update password</button>
+        <div id="changePwErr" class="gate-err" style="margin-top:6px; font-size:11px"></div>
       </div>
 
       <button id="themeToggle" class="theme-toggle" type="button">
@@ -850,6 +859,15 @@ ORDER BY n DESC"></textarea>
       <div class="panel">
         <div class="panel-head wrap"><h2>Users</h2></div>
         <div id="adminUsersTable" class="table-wrap"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Activity log</h2>
+          <button class="btn-ghost" id="adminAuditRefresh">Refresh</button>
+        </div>
+        <span class="hint">Logins and exports, most recent first.</span>
+        <div id="adminAuditTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
       </main>
