@@ -87,7 +87,13 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
 .brand-name { font-family: "Space Grotesk"; font-weight: 700; font-size: 15px; line-height: 1.3; }
 .brand-sub { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; }
 
-.nav { flex: 1; overflow-y: auto; padding: 4px 12px 12px; }
+/* min-height: 0 overrides the flex item's default min-height:auto, which
+   would otherwise force it to at least its content's natural height (all nav
+   buttons) and stop flex:1/overflow-y from ever actually kicking in — the
+   classic flexbox scroll bug. Without it, on short/mobile viewports the nav
+   list spills into the user badge/theme toggle/connection status below it
+   instead of scrolling in its own area. */
+.nav { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px; }
 .nav-group { margin-bottom: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .nav-group:first-child { padding-top: 0; border-top: 0; }
 .nav-label {
@@ -161,7 +167,7 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
   position: sticky; top: 0; z-index: 20;
   flex-wrap: wrap;
 }
-.range { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.range { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .range label { color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
 .range input[type=date] {
   font-family: "JetBrains Mono"; font-size: 13px; color: var(--ink);
