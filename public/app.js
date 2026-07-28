@@ -1688,7 +1688,7 @@ async function suggestAskChart(question, rows, hint) {
 // selectable here too.
 function allTabs() {
   return $$('.nav-link[data-tab]')
-    .filter((t) => t.dataset.tab !== 'admin')
+    .filter((t) => !SUPERUSER_ONLY_TABS.includes(t.dataset.tab))
     .map((t) => ({ id: t.dataset.tab, label: t.textContent.trim() }));
 }
 
@@ -1866,19 +1866,21 @@ function switchTab(name) {
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
   if (name === 'hnwi') loadHnwi();
-  if (name === 'admin') { loadAdminUsers(); loadAdminAuditLog(); }
+  if (name === 'admin') loadAdminUsers();
+  if (name === 'activity-log') loadAdminAuditLog();
 }
 
 // Called once after login/session-restore: hides nav links + the Admin group
 // the current user isn't allowed to see, and lands on the first tab they can
 // actually use (the HTML defaults to "portfolio" active, which may not be
 // permitted).
+const SUPERUSER_ONLY_TABS = ['admin', 'activity-log'];
 function applyPermissions(user) {
   currentUser = user;
   $('#userBadgeName').textContent = user.username + (user.isSuperuser ? ' (superuser)' : '');
   $('#adminNavGroup').classList.toggle('hidden', !user.isSuperuser);
   $$('.nav-link[data-tab]').forEach((t) => {
-    const allowed = t.dataset.tab === 'admin' ? user.isSuperuser : userCan(t.dataset.tab);
+    const allowed = SUPERUSER_ONLY_TABS.includes(t.dataset.tab) ? user.isSuperuser : userCan(t.dataset.tab);
     t.classList.toggle('hidden', !allowed);
   });
   // Hide a whole nav-group (its section label included) when every link in

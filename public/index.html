@@ -80,6 +80,7 @@
         <div class="nav-group hidden" id="adminNavGroup">
           <div class="nav-label">Admin</div>
           <button class="nav-link" data-tab="admin"><span class="nav-icon">🛡️</span>Manage users</button>
+          <button class="nav-link" data-tab="activity-log"><span class="nav-icon">📜</span>Activity log</button>
         </div>
       </nav>
 
@@ -683,8 +684,8 @@
       <div class="panel">
         <div class="panel-head wrap"><h2>Remisier transactions</h2></div>
         <div class="ask-bar" style="flex-wrap:wrap">
-          <input id="remTxReferrerCodes" type="text" autocomplete="off" placeholder="referrer_code(s), comma separated" />
-          <input id="remTxSalesCodes" type="text" autocomplete="off" placeholder="sales_code(s), comma separated" />
+          <input id="remTxReferrerCodes" type="text" autocomplete="off" placeholder="referrer_code(s), partial match, comma separated" />
+          <input id="remTxSalesCodes" type="text" autocomplete="off" placeholder="sales_code(s), partial match, comma separated" />
           <select id="remTxType"><option value="">All types</option></select>
           <select id="remTxStatus"><option value="">All statuses</option></select>
           <label>From <input type="date" id="remTxFrom" /></label>
@@ -898,7 +899,10 @@ ORDER BY n DESC"></textarea>
         <div class="panel-head wrap"><h2>Users</h2></div>
         <div id="adminUsersTable" class="table-wrap"></div>
       </div>
+    </section>
 
+    <!-- ===================== ACTIVITY LOG (superuser only) ===================== -->
+    <section id="activity-log" class="view">
       <div class="panel">
         <div class="panel-head wrap">
           <h2>Activity log</h2>
