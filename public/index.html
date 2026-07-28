@@ -52,6 +52,7 @@
           <div class="nav-label">Investor</div>
           <button class="nav-link active" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio (PWC)</button>
           <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon">🧭</span>Portfolio Explorer (GS)</button>
+          <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
         </div>
         <div class="nav-group">
           <div class="nav-label">Dashboards</div>
@@ -215,6 +216,43 @@
           <div class="panel-head"><h2>Holdings by goal</h2><span class="hint">Preview only — exports stay merged across goals.</span></div>
           <div id="peByGoal"></div>
         </div>
+      </div>
+    </section>
+
+    <!-- ===================== HNWI (High Net Worth Individual) ===================== -->
+    <section id="hnwi" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Filters</h2>
+          <div class="range">
+            <label>As of <input type="date" id="hnwiDate" /></label>
+            <label>Min AUM (Rp) <input type="number" id="hnwiMinAum" placeholder="e.g. 5000000000" step="1000000" style="width:180px" /></label>
+            <button id="hnwiApply" class="btn-primary">Apply</button>
+          </div>
+        </div>
+        <span class="hint">From mi_fee_logs.portfolio_with_code, one day before its own created_at (its created_at is a day ahead of the AUM date it represents). Leave Min AUM blank to see everyone, sorted highest AUM first.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>AUM per investor (total)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="hnwiTotalCsv">CSV</button>
+            <button class="btn-ghost" id="hnwiTotalXlsx">Excel</button>
+          </div>
+        </div>
+        <div id="hnwiTotalTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>AUM per investor per fund</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="hnwiByFundCsv">CSV</button>
+            <button class="btn-ghost" id="hnwiByFundXlsx">Excel</button>
+          </div>
+        </div>
+        <div id="hnwiByFundTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
 

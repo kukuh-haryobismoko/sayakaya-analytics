@@ -333,6 +333,56 @@ function renderPeByGoal(rows) {
 }
 
 // ====================================================================
+//  HNWI (High Net Worth Individual) — investors at/above an AUM threshold,
+//  as of a date, from portfolio_with_code (mirrors Portfolio's -1 day
+//  correction: created_at is a day ahead of the AUM date it represents).
+// ====================================================================
+let hnwiDateDefaulted = false;
+function hnwiParams() {
+  return { date: $('#hnwiDate').value, minAum: $('#hnwiMinAum').value || 0 };
+}
+const HNWI_CONTACT_COLS = [
+  { key: 'name', label: 'Name' }, { key: 'sid_code', label: 'SID code' }, { key: 'ifua', label: 'IFUA code' },
+  { key: 'phone', label: 'Phone' }, { key: 'email', label: 'Email' }, { key: 'birthdate', label: 'Birthdate', type: 'date' },
+];
+async function loadHnwi() {
+  if (!hnwiDateDefaulted) {
+    hnwiDateDefaulted = true;
+    try {
+      const { latestDate } = await api('/api/hnwi/latest-date');
+      if (latestDate && !$('#hnwiDate').value) $('#hnwiDate').value = val(latestDate);
+    } catch { /* leave blank — user can still pick a date manually */ }
+  }
+  if (!$('#hnwiDate').value) {
+    $('#hnwiTotalTable').innerHTML = '<div class="empty">Pick a date.</div>';
+    $('#hnwiByFundTable').innerHTML = '';
+    return;
+  }
+  const p = hnwiParams();
+  $('#hnwiTotalTable').innerHTML = '<div class="loading">Loading…</div>';
+  $('#hnwiByFundTable').innerHTML = '<div class="loading">Loading…</div>';
+  const qs = `date=${p.date}&minAum=${p.minAum}`;
+  try {
+    const [totals, byFund] = await Promise.all([
+      api(`/api/hnwi/total?${qs}`),
+      api(`/api/hnwi/by-fund?${qs}`),
+    ]);
+    genTable('#hnwiTotalTable', totals, [
+      ...HNWI_CONTACT_COLS,
+      { key: 'total_aum', label: 'Total AUM', type: 'idr' }, { key: 'aum_date', label: 'AUM date', type: 'date' },
+    ], 'No investors at or above this AUM threshold.');
+    genTable('#hnwiByFundTable', byFund, [
+      ...HNWI_CONTACT_COLS,
+      { key: 'fund_name', label: 'Fund' }, { key: 'fund_aum', label: 'Fund AUM', type: 'idr' },
+      { key: 'aum_date', label: 'AUM date', type: 'date' }, { key: 'total_aum', label: 'Total AUM', type: 'idr' },
+    ], 'No investors at or above this AUM threshold.');
+  } catch (e) {
+    $('#hnwiTotalTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#hnwiByFundTable').innerHTML = '';
+  }
+}
+
+// ====================================================================
 //  OVERVIEW
 // ====================================================================
 let overviewLoaded = false;
@@ -1443,6 +1493,15 @@ function selectedPdfColumns() {
   return picked.length === PDF_COLUMNS.length ? null : ['fund', ...picked];
 }
 
+// The server watermarks the actual filename with username + timestamp (see
+// server/app.js's filenameWithUser) via Content-Disposition — read it back
+// here instead of the plain name the caller asked for, or the watermark
+// would never make it into the downloaded file's name.
+function filenameFromResponse(res, fallback) {
+  const m = (res.headers.get('content-disposition') || '').match(/filename="?([^"]+)"?/);
+  return m ? m[1] : fallback;
+}
+
 async function download(body, filename) {
   const res = await fetch(API_BASE + '/api/export', {
     method: 'POST',
@@ -1453,7 +1512,7 @@ async function download(body, filename) {
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
+  a.href = url; a.download = filenameFromResponse(res, filename); a.click();
   URL.revokeObjectURL(url);
   toast('Export ready');
 }
@@ -1806,6 +1865,7 @@ function switchTab(name) {
   if (name === 'revenue2') loadRevenue2();
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
+  if (name === 'hnwi') loadHnwi();
   if (name === 'admin') { loadAdminUsers(); loadAdminAuditLog(); }
 }
 
@@ -1936,6 +1996,13 @@ function wire() {
   $('#pePdfOnly').addEventListener('click', () => peSelected && download(
     { source: 'portfolio_explorer_full', format: 'pdf', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, includePerformance: false, columns: selectedPdfColumns() },
     `portfolio_explorer_${peSelected.sid}_${peSelected.date}.pdf`));
+
+  // HNWI
+  $('#hnwiApply').addEventListener('click', loadHnwi);
+  $('#hnwiTotalCsv').addEventListener('click', () => { const p = hnwiParams(); download({ source: 'hnwi_total', format: 'csv', filename: 'hnwi_total', ...p }, 'hnwi_total.csv'); });
+  $('#hnwiTotalXlsx').addEventListener('click', () => { const p = hnwiParams(); download({ source: 'hnwi_total', format: 'xlsx', filename: 'hnwi_total', ...p }, 'hnwi_total.xlsx'); });
+  $('#hnwiByFundCsv').addEventListener('click', () => { const p = hnwiParams(); download({ source: 'hnwi_by_fund', format: 'csv', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.csv'); });
+  $('#hnwiByFundXlsx').addEventListener('click', () => { const p = hnwiParams(); download({ source: 'hnwi_by_fund', format: 'xlsx', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.xlsx'); });
 
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
   $('#revApply').addEventListener('click', loadRevenue);

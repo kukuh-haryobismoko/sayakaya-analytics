@@ -701,6 +701,65 @@ const userHoldingsAsOf = (sid, date) => ({
   params: { sid, date },
 });
 
+// ---- HNWI (High Net Worth Individual): investors at/above an AUM threshold,
+// as of a specific date, from portfolio_with_code — same -1 day correction as
+// the rest of this section (created_at is a day ahead of the AUM date it
+// represents). Two shapes: one row per investor (total AUM across funds), and
+// one row per investor per fund (for a full breakdown export).
+const hnwiLatestDate = () => ({
+  sql: `SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS latest_date FROM ${PORT_WITH_CODE}`,
+  params: {},
+});
+
+function hnwiCTE(date, minAum) {
+  return {
+    cte: `WITH daily AS (
+        SELECT sid_code, id AS fund_id, fund AS fund_name, amount,
+          DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS aum_date
+        FROM ${PORT_WITH_CODE}
+        WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND amount > 0
+      ),
+      per_user AS (
+        SELECT sid_code, SUM(amount) AS total_aum, ANY_VALUE(aum_date) AS aum_date
+        FROM daily
+        GROUP BY sid_code
+        HAVING SUM(amount) >= @minAum
+      )`,
+    params: { date, minAum: Number(minAum) || 0 },
+  };
+}
+
+const hnwiTotal = (date, minAum, limit = 500) => {
+  const { cte, params } = hnwiCTE(date, minAum);
+  return {
+    sql: `${cte}
+      SELECT u.sid_code, up.name, u.ifua_code AS ifua, up.phone_number AS phone, u.email, up.birthdate,
+        pu.total_aum, pu.aum_date
+      FROM per_user pu
+      JOIN ${USERS} u ON u.sid_code = pu.sid_code
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      ORDER BY pu.total_aum DESC
+      LIMIT @limit`,
+    params: { ...params, limit: parseInt(limit, 10) || 500 },
+  };
+};
+
+const hnwiByFund = (date, minAum, limit = 5000) => {
+  const { cte, params } = hnwiCTE(date, minAum);
+  return {
+    sql: `${cte}
+      SELECT u.sid_code, up.name, u.ifua_code AS ifua, up.phone_number AS phone, u.email, up.birthdate,
+        d.fund_name, d.amount AS fund_aum, d.aum_date, pu.total_aum
+      FROM daily d
+      JOIN per_user pu ON pu.sid_code = d.sid_code
+      JOIN ${USERS} u ON u.sid_code = d.sid_code
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      ORDER BY pu.total_aum DESC, u.sid_code, d.fund_name
+      LIMIT @limit`,
+    params: { ...params, limit: parseInt(limit, 10) || 5000 },
+  };
+};
+
 // ---- Growth: campaigns, referrals, switching, manager/demographic AUM splits --
 const CAMPAIGNS = '`sayakaya.main.campaigns`';
 const SWITCHING = '`sayakaya.main.switching_transactions`';
@@ -1406,6 +1465,7 @@ module.exports = {
   productPerformance, productPerformanceDetail, fundNavTrend, fundList,
   userSearch, userContact, userHoldings, userPortfolioSplit, userPerformance, userAumHistory,
   userHoldingsLatestDate, userHoldingsAsOf,
+  hnwiLatestDate, hnwiTotal, hnwiByFund,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
   campaignPerformance, switchingTopPairs, aumByManager,
   aumByRisk, aumByIncome, topReferrers, reconciliationDaily,

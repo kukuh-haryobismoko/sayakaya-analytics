@@ -44,6 +44,8 @@ const EXPORT_SOURCE_TAB = {
   remisier_revenue_pwc_detail: 'remisier-pwc',
   remisier_revenue_pwc_summary: 'remisier-pwc',
   remisier_transactions: 'remisier-tx',
+  hnwi_total: 'hnwi',
+  hnwi_by_fund: 'hnwi',
 };
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
@@ -99,7 +101,10 @@ function portfolioSheetRows(holdings) {
  */
 function createApp({ serveStatic = true } = {}) {
   const app = express();
-  app.use(cors());
+  // exposedHeaders: the export routes watermark the filename into
+  // Content-Disposition, which browsers otherwise hide from cross-origin
+  // fetch() responses (the GitHub Pages frontend calling this cross-origin).
+  app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json({ limit: '256kb' }));
 
   // ---- Per-user login (replaces the old shared APP_PASSWORD gate) -----------
@@ -374,6 +379,26 @@ function createApp({ serveStatic = true } = {}) {
       runQuery(b.sql, b.params),
     ]);
     res.json({ asOfDate, latestDate, holdings, byGoal });
+  }));
+
+  // ---- HNWI (High Net Worth Individual): investors above an AUM threshold,
+  // as of a date, from portfolio_with_code --------------------------------
+  app.get('/api/hnwi/latest-date', requireTab('hnwi'), handler(async (_req, res) => {
+    const d = Q.hnwiLatestDate();
+    const [row] = await runQuery(d.sql, d.params);
+    res.json({ latestDate: row?.latest_date || null });
+  }));
+  app.get('/api/hnwi/total', requireTab('hnwi'), handler(async (req, res) => {
+    const { date, minAum, limit } = req.query;
+    if (!date) return res.status(400).json({ error: 'date is required.' });
+    const q = Q.hnwiTotal(date, minAum, limit);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/hnwi/by-fund', requireTab('hnwi'), handler(async (req, res) => {
+    const { date, minAum, limit } = req.query;
+    if (!date) return res.status(400).json({ error: 'date is required.' });
+    const q = Q.hnwiByFund(date, minAum, limit);
+    res.json(await runQuery(q.sql, q.params));
   }));
 
   // ---- Product performance (NAV % change per fund type, external Apollo DB) --
@@ -750,6 +775,14 @@ function createApp({ serveStatic = true } = {}) {
       const salesCodes = req.body.salesCodes || [];
       if (!referrerCodes.length && !salesCodes.length) return res.status(400).json({ error: 'At least one referrer_code or sales_code is required.' });
       const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: req.body.type, status: req.body.status, from: req.body.from, to: req.body.to, limit: limit || 100000, offset: 0 });
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'hnwi_total') {
+      if (!req.body.date) return res.status(400).json({ error: 'date is required.' });
+      const q = Q.hnwiTotal(req.body.date, req.body.minAum, limit || 5000);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'hnwi_by_fund') {
+      if (!req.body.date) return res.status(400).json({ error: 'date is required.' });
+      const q = Q.hnwiByFund(req.body.date, req.body.minAum, limit || 20000);
       rows = await runQuery(q.sql, q.params);
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
