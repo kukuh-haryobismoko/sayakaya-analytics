@@ -12,7 +12,7 @@ const crypto = require('crypto');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, fixed — no refresh-on-activity.
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours, fixed — no refresh-on-activity.
 
 async function rest(path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
