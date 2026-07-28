@@ -293,7 +293,12 @@ on('DELETE', '/api/admin/users/:id', requireSuperuser(async (_req, params) => {
 }));
 
 on('GET', '/api/admin/audit-log', requireSuperuser(async (_req, _params, url) => {
-  const rows = await A.listAuditLog(Number(qp(url, 'limit')) || undefined);
+  const rows = await A.listAuditLog({
+    limit: Number(qp(url, 'limit')) || undefined,
+    search: qp(url, 'search'),
+    from: qp(url, 'from'),
+    to: qp(url, 'to'),
+  });
   return json(rows);
 }));
 

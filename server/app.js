@@ -212,7 +212,8 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   app.get('/api/admin/audit-log', requireSuperuser, handler(async (req, res) => {
-    const rows = await Auth.listAuditLog(req.query.limit);
+    const { limit, search, from, to } = req.query;
+    const rows = await Auth.listAuditLog({ limit, search, from, to });
     res.json(rows);
   }));
 

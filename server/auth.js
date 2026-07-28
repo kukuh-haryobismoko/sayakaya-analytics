@@ -150,8 +150,18 @@ async function logEvent(userId, username, action, detail) {
   }
 }
 
-function listAuditLog(limit = 200) {
-  return rest(`/dashboard_audit_log?select=*&order=created_at.desc&limit=${Number(limit) || 200}`);
+// search is a case-insensitive wildcard match across username, action, and
+// detail (so e.g. typing an export source/filename finds it too, not just a
+// username) — from/to filter on created_at, inclusive of the whole "to" day.
+function listAuditLog({ limit = 200, search = '', from = '', to = '' } = {}) {
+  const params = [`select=*`, `order=created_at.desc`, `limit=${Number(limit) || 200}`];
+  if (search) {
+    const term = `*${search}*`;
+    params.push(`or=(username.ilike.${encodeURIComponent(term)},action.ilike.${encodeURIComponent(term)},detail.ilike.${encodeURIComponent(term)})`);
+  }
+  if (from) params.push(`created_at=gte.${encodeURIComponent(from + 'T00:00:00')}`);
+  if (to) params.push(`created_at=lte.${encodeURIComponent(to + 'T23:59:59.999')}`);
+  return rest(`/dashboard_audit_log?${params.join('&')}`);
 }
 
 // ---- Shaping + permission check ---------------------------------------------

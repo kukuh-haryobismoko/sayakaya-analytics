@@ -906,9 +906,16 @@ ORDER BY n DESC"></textarea>
       <div class="panel">
         <div class="panel-head wrap">
           <h2>Activity log</h2>
-          <button class="btn-ghost" id="adminAuditRefresh">Refresh</button>
+          <div class="filters">
+            <input type="text" id="adminAuditSearch" placeholder="Search user, action, or detail (wildcard)" style="min-width:240px" />
+            <label>From <input type="date" id="adminAuditFrom" /></label>
+            <label>To <input type="date" id="adminAuditTo" /></label>
+            <button class="btn-primary" id="adminAuditApply">Apply</button>
+            <span class="divider"></span>
+            <button class="btn-ghost" id="adminAuditRefresh">Refresh</button>
+          </div>
         </div>
-        <span class="hint">Logins and exports, most recent first.</span>
+        <span class="hint">Logins and exports, most recent first. Search matches username, action, and export detail (e.g. "revenue" also finds revenue_detail exports) — leave blank to see everything.</span>
         <div id="adminAuditTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>

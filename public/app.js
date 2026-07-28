@@ -1797,15 +1797,22 @@ async function saveAdminUser() {
 
 async function loadAdminAuditLog() {
   $('#adminAuditTable').innerHTML = '<div class="loading">Loading activity…</div>';
+  const qs = new URLSearchParams({ limit: 200 });
+  const search = $('#adminAuditSearch').value.trim();
+  const from = $('#adminAuditFrom').value;
+  const to = $('#adminAuditTo').value;
+  if (search) qs.set('search', search);
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
   try {
-    const rows = await api('/api/admin/audit-log?limit=200');
+    const rows = await api(`/api/admin/audit-log?${qs}`);
     const mapped = rows.map((r) => ({ ...r, created_at: String(val(r.created_at)).replace('T', ' ').slice(0, 16) }));
     genTable('#adminAuditTable', mapped, [
       { key: 'created_at', label: 'Time' },
       { key: 'username', label: 'User' },
       { key: 'action', label: 'Action' },
       { key: 'detail', label: 'Detail' },
-    ], 'No activity yet.');
+    ], 'No activity matches these filters.');
   } catch (e) { $('#adminAuditTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
@@ -1814,6 +1821,8 @@ function wireAdmin() {
   $('#adminSaveBtn').addEventListener('click', saveAdminUser);
   $('#adminCancelEditBtn').addEventListener('click', resetAdminForm);
   $('#adminAuditRefresh').addEventListener('click', loadAdminAuditLog);
+  $('#adminAuditApply').addEventListener('click', loadAdminAuditLog);
+  $('#adminAuditSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAdminAuditLog(); });
 }
 
 // ---------- change own password (sidebar) ----------
