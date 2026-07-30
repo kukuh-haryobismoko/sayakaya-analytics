@@ -15,7 +15,7 @@ function askEnabled() {
 const TABLES = [
   'main.transactions', 'main.users', 'main.funds', 'main.portfolios',
   'main.bonus_portfolios', 'main.investment_managers', 'main.user_profiles',
-  'mi_fee_logs.mi_fee',
+  'mi_fee_logs.mi_fee', 'mi_fee_logs.portfolio_with_code',
   'ml.aum_forecast', 'ml.tx_forecast', 'ml.churn_model', 'ml.churn_features',
 ];
 
@@ -33,7 +33,8 @@ transactions (one row per order)
   created_at TIMESTAMP, completed_at TIMESTAMP, paid_at TIMESTAMP
 
 users (one row per registered user)
-  id, verification_status STRING (unverified, verified, failed, pending_verification)
+  id, sid_code STRING (unique investor code — the join key into portfolio_with_code below, which has no user_id)
+  verification_status STRING (unverified, verified, failed, pending_verification)
   created_at DATETIME
   (the password column EXISTS but is FORBIDDEN — never select or reference it)
 
@@ -59,6 +60,25 @@ the two tables (each filtered to active as above) before joining funds, e.g.:
     SELECT user_id, fund_id, unit FROM bonus_portfolios WHERE status = 'on_going'
   )
   holding value = unit * funds.latest_nav_value, summed/grouped per active row above
+
+portfolio_with_code (FULL PATH: \`sayakaya.mi_fee_logs.portfolio_with_code\` — different dataset)
+  daily snapshot of every investor's holdings, one row per sid_code + fund per day (no user_id column)
+  sid_code STRING (join to users.sid_code), id (this is the fund's id, i.e. fund_id), fund STRING (fund name),
+  fund_type STRING, total_unit NUMERIC (units held, > 0 = open position), avg_buy_price NUMERIC,
+  buy_amount NUMERIC (cost basis), latest_nav_value NUMERIC, amount NUMERIC (that holding's value on that day),
+  created_at TIMESTAMP — the snapshot's actual date is created_at's date MINUS 1 day, so match a
+  specific date with DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date, not DATE(created_at) directly.
+  Doesn't distinguish regular vs bonus holdings (unlike portfolios/bonus_portfolios below).
+
+Which holdings/AUM source to use:
+  - "current"/"today's"/no date mentioned -> the portfolios + bonus_portfolios union (see below):
+    live units x today's latest_nav_value.
+  - AUM/holdings "as of" or "on" a specific PAST DATE, or a historical trend over days/weeks/months
+    -> portfolio_with_code instead: it's the only table with a daily record; portfolios and
+    bonus_portfolios only hold today's state. Join users via sid_code (there is no user_id here):
+      SELECT ... FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` pwc
+      JOIN \`sayakaya.main.users\` u ON u.sid_code = pwc.sid_code
+      WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) = @date AND pwc.total_unit > 0
 
 investment_managers
   id, name STRING
@@ -92,9 +112,10 @@ Conventions:
   * Churn = an investor who ever bought but now holds nothing (fully redeemed).
 - All monetary amounts are in Indonesian Rupiah (IDR).
 - "Buy/sell volume" means SUM(final_amount) WHERE status='completed' for that type.
-- "AUM" of a fund = funds.latest_aum_value. A user's or the platform's AUM/holdings = the
+- "AUM" of a fund = funds.latest_aum_value. A user's or the platform's CURRENT AUM/holdings = the
   portfolios + bonus_portfolios union above (both count — bonus units are real holdings the
-  investor did not pay cash for, but they still hold them), not portfolios alone.
+  investor did not pay cash for, but they still hold them), not portfolios alone. For AUM/holdings
+  on a past date or over time, use portfolio_with_code instead (see the note under that table above).
 - transactions.created_at is TIMESTAMP; users.created_at is DATETIME — use DATE()/EXTRACT accordingly.
 - If the message includes a "Resolved entity lookups" block, those are real lookups from the
   database for names the user mentioned. When a resolved entry gives an id, filter/join using
@@ -114,18 +135,28 @@ Output rules (strict):
 - NEVER select or reference the users.password column.
 - Include a sensible LIMIT (<= 1000) for row-level results; aggregates that return few rows don't need one.
 - Use the conventions and schema below exactly.
+- Earlier turns from this conversation may be included before the current question. Treat the
+  current question as a follow-up when it reads like one ("now split that by month", "exclude
+  the sharia ones too", "same but for Q2") — reuse the prior query's filters/grouping/tables
+  unless the new question overrides them. If it's really a new, unrelated question, ignore the
+  earlier turns.
 
 ${SCHEMA}`;
 }
 
-async function questionToSql(question, priorAttempt, context) {
+async function questionToSql(question, priorAttempt, context, history) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set on the server.');
 
   const userContent = context
     ? `${question}\n\nUser-provided hint (tables/datasets to use, or a related query for context — may be partial or imprecise, verify against the schema above):\n${context}`
     : question;
-  const messages = [{ role: 'user', content: userContent }];
+  const messages = [];
+  for (const turn of history || []) {
+    messages.push({ role: 'user', content: turn.question });
+    messages.push({ role: 'assistant', content: turn.sql });
+  }
+  messages.push({ role: 'user', content: userContent });
   if (priorAttempt) {
     messages.push({ role: 'assistant', content: priorAttempt.sql });
     messages.push({
@@ -196,6 +227,10 @@ function entitySystemPrompt() {
 against real row values in the Sayakaya database — free-text proper nouns like fund names,
 investment manager names, campaign/promo names, cities, occupations.
 
+This includes wildcard/partial-name mentions (e.g. "exclude any fund matching *syariah*",
+"funds with 'index' in the name") — extract raw_text with the wildcard characters (* or %)
+kept exactly as the user wrote them; they'll be matched with LIKE, not treated as one exact name.
+
 Do NOT extract fixed enum values that are already fully known (transaction type/status,
 verification_status, gender, fund type, campaign_type, is_sharia) — only extract names the
 model would otherwise have to guess the exact spelling of.
@@ -228,6 +263,26 @@ async function extractEntityMentions(question) {
   }
 }
 
+// Prefer the table's own primary key over the name string — it's stable,
+// unambiguous, and is what every join/filter in this schema actually uses
+// (fund_id, investment_manager_id, ...), so ground the model on that instead
+// of a WHERE ... name = '...' comparison. One or many candidates both matter:
+// a wildcard or a loose word-order match can legitimately resolve to several
+// ids (e.g. "exclude any fund matching *syariah*"), and the model needs to
+// know whether the question means IN (keep only these) or NOT IN (exclude
+// these) — that's the caller's call to make from the question's wording, not
+// this lookup's, so both forms are spelled out for it here.
+function resolvedIdLine(m, col, candidates, cap) {
+  const table = col.table.split('.').pop();
+  const idList = candidates.map((r) => JSON.stringify(r.id)).join(', ');
+  const pairs = candidates.map((r) => `id=${JSON.stringify(r.id)} (name: ${JSON.stringify(r.v)})`).join(', ');
+  const truncated = candidates.length >= cap ? ` (capped at ${cap} matches — refine the wording if more exist)` : '';
+  return `"${m.raw_text}" -> resolved in ${table}: ${pairs}${truncated}. Reference by id (${table}.id, or the ` +
+    `matching foreign key column such as fund_id / investment_manager_id) — never by the name string. ` +
+    `If the question means to EXCLUDE/OMIT/WITHOUT these, filter with NOT IN (${idList}); if it means to ` +
+    `include or limit to these, filter with IN (${idList}).`;
+}
+
 // Looks each extracted mention up for real and returns grounding text for the
 // SQL-generation prompt. Never throws — a lookup failure just means that one
 // mention falls back to the model's own guess, same as before this existed.
@@ -246,9 +301,30 @@ async function resolveEntityContext(question) {
     if (!col) continue;
     try {
       const idSelect = col.idColumn ? `${col.idColumn} AS id, ` : '';
+      const MAX_MATCHES = 50;
+      // An explicit wildcard ("*syariah*", "index%") means the user wants every
+      // matching row (e.g. "exclude all funds matching *syariah*"), not a single
+      // best guess — use it directly instead of the fuzzy single-match chain below.
+      const hasWildcard = /[*%]/.test(String(m.raw_text));
+      let rows;
+      if (hasWildcard) {
+        rows = await runQuery(
+          `SELECT DISTINCT ${idSelect}${col.column} AS v FROM \`${col.table}\` WHERE LOWER(${col.column}) LIKE @pattern LIMIT ${MAX_MATCHES}`,
+          { pattern: String(m.raw_text).toLowerCase().replace(/\*/g, '%') },
+        );
+        const candidates = rows.filter((r) => r.v);
+        if (!candidates.length) {
+          lines.push(`"${m.raw_text}" -> no matching ${m.column} value found for that wildcard pattern.`);
+        } else if (col.idColumn) {
+          lines.push(resolvedIdLine(m, col, candidates, MAX_MATCHES));
+        } else {
+          lines.push(`"${m.raw_text}" -> ${m.column} value(s) matching that wildcard: ${candidates.map((c) => `"${c.v}"`).join(', ')}.`);
+        }
+        continue;
+      }
       const asOnePhrase = `%${String(m.raw_text).toLowerCase()}%`;
-      let rows = await runQuery(
-        `SELECT DISTINCT ${idSelect}${col.column} AS v FROM \`${col.table}\` WHERE LOWER(${col.column}) LIKE @pattern LIMIT 10`,
+      rows = await runQuery(
+        `SELECT DISTINCT ${idSelect}${col.column} AS v FROM \`${col.table}\` WHERE LOWER(${col.column}) LIKE @pattern LIMIT ${MAX_MATCHES}`,
         { pattern: asOnePhrase },
       );
       // The raw text may not be a contiguous substring of the real name (e.g.
@@ -257,7 +333,7 @@ async function resolveEntityContext(question) {
       const words = String(m.raw_text).toLowerCase().split(/\s+/).filter(Boolean);
       if (!rows.length && words.length > 1) {
         rows = await runQuery(
-          `SELECT DISTINCT ${idSelect}${col.column} AS v FROM \`${col.table}\` WHERE LOWER(${col.column}) LIKE @pattern LIMIT 10`,
+          `SELECT DISTINCT ${idSelect}${col.column} AS v FROM \`${col.table}\` WHERE LOWER(${col.column}) LIKE @pattern LIMIT ${MAX_MATCHES}`,
           { pattern: `%${words.join('%')}%` },
         );
       }
@@ -284,13 +360,7 @@ async function resolveEntityContext(question) {
       if (!candidates.length) {
         lines.push(`"${m.raw_text}" -> no matching ${m.column} value found in the database (check for a typo before falling back to a fuzzy match).`);
       } else if (col.idColumn) {
-        // Prefer the table's own primary key over the name string — it's
-        // stable, unambiguous, and is what every join/filter in this schema
-        // actually uses (fund_id, investment_manager_id, ...), so ground the
-        // model on that instead of a WHERE ... name = '...' comparison.
-        const table = col.table.split('.').pop();
-        const pairs = candidates.map((r) => `id=${JSON.stringify(r.id)} (name: ${JSON.stringify(r.v)})`).join(', ');
-        lines.push(`"${m.raw_text}" -> resolved in ${table}: ${pairs}. Filter/join using this id (${table}.id, or the matching foreign key column such as fund_id / investment_manager_id elsewhere in the schema) — do NOT match by the name string.`);
+        lines.push(resolvedIdLine(m, col, candidates, MAX_MATCHES));
       } else {
         lines.push(`"${m.raw_text}" -> exact ${m.column} value(s) found: ${candidates.map((c) => `"${c.v}"`).join(', ')}.`);
       }
@@ -306,10 +376,10 @@ async function resolveEntityContext(question) {
  * BigQuery errors (e.g. a guessed column/table name that doesn't exist) are
  * fed back to the model once so it can self-correct before we give up.
  */
-async function ask(question, context) {
+async function ask(question, context, history) {
   const resolved = await resolveEntityContext(question);
   const fullContext = [context, resolved].filter(Boolean).join('\n\n') || null;
-  let sql = await questionToSql(question, null, fullContext);
+  let sql = await questionToSql(question, null, fullContext, history);
   for (let attempt = 0; ; attempt++) {
     const v = validateAdHoc(sql);
     if (!v.ok) {
@@ -326,7 +396,7 @@ async function ask(question, context) {
         err.sql = v.sql;
         throw err;
       }
-      sql = await questionToSql(question, { sql: v.sql, error: e.message });
+      sql = await questionToSql(question, { sql: v.sql, error: e.message }, fullContext, history);
     }
   }
 }

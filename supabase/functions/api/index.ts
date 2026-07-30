@@ -629,9 +629,17 @@ on('POST', '/api/ask', requireTab('ask', async (req) => {
   const body = await bodyOf(req);
   const question = String(body.question || '').trim();
   const context = String(body.context || '').trim() || null;
+  // Last few turns of this conversation, for follow-up questions ("now split
+  // that by month") — capped so the prompt doesn't grow unbounded.
+  const rawHistory = (body.history || []) as unknown[];
+  const history = Array.isArray(rawHistory)
+    ? rawHistory.filter((h): h is { question: string; sql: string } =>
+        !!h && typeof (h as { question?: unknown }).question === 'string' && typeof (h as { sql?: unknown }).sql === 'string')
+      .slice(-6)
+    : [];
   if (!question) return json({ error: 'Type a question first.' }, 400);
   try {
-    const { sql, rows } = await ask(question, context);
+    const { sql, rows } = await ask(question, context, history);
     return json({ sql, rows, count: rows.length });
   } catch (err) {
     console.error('[POST /api/ask]', (err as Error).message);

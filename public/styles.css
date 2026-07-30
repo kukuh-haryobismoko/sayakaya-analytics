@@ -344,6 +344,9 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 }
 .ask-bar input:focus { outline: 2px solid var(--amber); border-color: var(--amber); }
 .ask-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.ask-thread { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.ask-thread-item { font-size: 13px; color: var(--muted); }
+.ask-thread-item b { color: var(--ink); font-weight: 600; }
 #askAdvanced { margin-bottom: 16px; }
 #askAdvanced summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .ask-tables { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }

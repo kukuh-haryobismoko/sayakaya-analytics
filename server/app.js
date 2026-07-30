@@ -571,9 +571,15 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/ask', requireTab('ask'), async (req, res) => {
     const question = (req.body && req.body.question || '').trim();
     const context = (req.body && req.body.context || '').trim() || null;
+    // Last few turns of this conversation, for follow-up questions ("now split
+    // that by month") — capped so the prompt doesn't grow unbounded.
+    const rawHistory = (req.body && req.body.history) || [];
+    const history = Array.isArray(rawHistory)
+      ? rawHistory.filter((h) => h && typeof h.question === 'string' && typeof h.sql === 'string').slice(-6)
+      : [];
     if (!question) return res.status(400).json({ error: 'Type a question first.' });
     try {
-      const { sql, rows } = await ask(question, context);
+      const { sql, rows } = await ask(question, context, history);
       res.json({ sql, rows, count: rows.length });
     } catch (err) {
       console.error('[POST /api/ask]', err.message);

@@ -1524,6 +1524,31 @@ let askSqlCache = '';
 let askTablesLoaded = false;
 let askRowsCache = [];
 let lastAskQuestion = '';
+// Conversation history for follow-up questions ("now split that by month") —
+// sent back to the server so the model can see what "that" refers to.
+let askHistory = [];
+
+function renderAskThread() {
+  const el = $('#askThread');
+  el.innerHTML = '';
+  if (!askHistory.length) { el.classList.add('hidden'); $('#askNewChat').classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  $('#askNewChat').classList.remove('hidden');
+  askHistory.forEach((h) => {
+    const row = document.createElement('div');
+    row.className = 'ask-thread-item';
+    const b = document.createElement('b');
+    b.textContent = 'You: ';
+    row.appendChild(b);
+    row.appendChild(document.createTextNode(h.question));
+    el.appendChild(row);
+  });
+}
+
+function clearAskConversation() {
+  askHistory = [];
+  renderAskThread();
+}
 
 function setAskMsg(msg, cls) { const m = $('#askMsg'); m.textContent = msg || ''; m.className = 'sql-msg ' + (cls || ''); }
 
@@ -1565,7 +1590,7 @@ async function runAsk(q) {
     const res = await fetch(API_BASE + '/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ question, context: context || undefined }),
+      body: JSON.stringify({ question, context: context || undefined, history: askHistory }),
     });
     const data = await res.json().catch(() => ({}));
     // Show the generated SQL even if it was blocked, so the user can see it.
@@ -1575,7 +1600,9 @@ async function runAsk(q) {
     const c = data.count || 0;
     setAskMsg(`${num(c)} row${c === 1 ? '' : 's'}`, 'ok');
     $('#askCsv').disabled = $('#askXlsx').disabled = (data.rows || []).length === 0;
-    suggestAskChart(question, data.rows || []);
+    askHistory = [...askHistory, { question, sql: data.sql }].slice(-6);
+    renderAskThread();
+    prepareAskChart(data.rows || []);
   } catch (e) {
     $('#askResult').innerHTML = '';
     setAskMsg(e.message, 'err');
@@ -1607,7 +1634,7 @@ async function runAskSql() {
     renderGenericTable('#askResult', rows);
     setAskMsg(`${num(count)} row${count === 1 ? '' : 's'}`, 'ok');
     $('#askCsv').disabled = $('#askXlsx').disabled = rows.length === 0;
-    suggestAskChart(lastAskQuestion, rows);
+    prepareAskChart(rows);
   } catch (e) {
     $('#askResult').innerHTML = '';
     setAskMsg(e.message, 'err');
@@ -1655,8 +1682,25 @@ function renderAskChart() {
   paint('askChart', buildAskChartConfig(type, askRowsCache, x, y));
 }
 
-// Auto-suggests a chart via Claude whenever new rows arrive; `hint` carries
-// an optional free-text ask (e.g. "as a pie chart") from the Suggest button.
+// Caches new rows and reveals the chart controls, but does NOT call Claude —
+// charting only happens when the user clicks "Suggest" or picks a type by
+// hand, instead of firing an extra model call on every question automatically.
+function prepareAskChart(rows) {
+  askRowsCache = rows || [];
+  $('#askChartType').value = 'none';
+  if (!askRowsCache.length) {
+    $('#askChartControls').classList.add('hidden');
+    $('#askChartWrap').classList.add('hidden');
+    return;
+  }
+  $('#askChartControls').classList.remove('hidden');
+  populateAskChartFields(askRowsCache);
+  renderAskChart();
+}
+
+// Asks Claude to suggest a chart type/x/y for the current rows; only called
+// from the explicit "✨ Suggest" button, never automatically. `hint` carries
+// an optional free-text ask (e.g. "as a pie chart").
 async function suggestAskChart(question, rows, hint) {
   askRowsCache = rows || [];
   if (!askRowsCache.length) {
@@ -2155,6 +2199,7 @@ function wire() {
   $('#askAdvanced').addEventListener('toggle', (e) => { if (e.target.open) loadAskTables(); });
   $('#askBtn').addEventListener('click', () => runAsk());
   $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') runAsk(); });
+  $('#askNewChat').addEventListener('click', clearAskConversation);
   $('#askCopy').addEventListener('click', copyAskSql);
   $('#askEdit').addEventListener('click', () => setAskEditable($('#askSqlText').hasAttribute('readonly')));
   $('#askRun').addEventListener('click', () => runAskSql());
