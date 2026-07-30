@@ -514,20 +514,20 @@ function renderTopCitiesAum(rows) {
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 
-function kpi(label, value, sub, cls = '') {
-  return `<div class="kpi ${cls}"><div class="kpi-label">${label}</div>
+function kpi(label, value, sub, cls = '', icon = '') {
+  return `<div class="kpi ${cls}">${icon ? `<span class="kpi-icon">${icon}</span>` : ''}<div class="kpi-label">${label}</div>
     <div class="kpi-value">${value}</div><div class="kpi-sub">${sub || ''}</div></div>`;
 }
 function renderKpis(o) {
   $('#kpis').innerHTML = [
-    kpi('Platform AUM', idr(val(o.platform_aum)), `${num(val(o.investing_users))} investing users`, 'accent'),
-    kpi('Total users', num(val(o.total_users)), `${num(val(o.verified_users))} verified (${pct(val(o.verified_users), val(o.total_users))})`),
-    kpi('Buy volume (range)', idr(val(o.buy_volume)), `${num(val(o.buy_count))} completed buys`, 'accent'),
-    kpi('Sell volume (range)', idr(val(o.sell_volume)), `${num(val(o.sell_count))} completed sells`, 'warn'),
-    kpi('Active users (range)', num(val(o.active_users)), 'with ≥1 transaction'),
-    kpi('Transactions (range)', num(val(o.total_tx)), 'all statuses'),
-    kpi('Active funds', num(val(o.active_funds)), `${num(val(o.total_funds))} total in catalog`),
-    kpi('New users (30d)', num(val(o.new_users_30d)), 'rolling window'),
+    kpi('Platform AUM', idr(val(o.platform_aum)), `${num(val(o.investing_users))} investing users`, 'accent', '💰'),
+    kpi('Total users', num(val(o.total_users)), `${num(val(o.verified_users))} verified (${pct(val(o.verified_users), val(o.total_users))})`, '', '👥'),
+    kpi('Buy volume (range)', idr(val(o.buy_volume)), `${num(val(o.buy_count))} completed buys`, 'accent', '📈'),
+    kpi('Sell volume (range)', idr(val(o.sell_volume)), `${num(val(o.sell_count))} completed sells`, 'warn', '📉'),
+    kpi('Active users (range)', num(val(o.active_users)), 'with ≥1 transaction', 'amber', '⚡'),
+    kpi('Transactions (range)', num(val(o.total_tx)), 'all statuses', '', '🧾'),
+    kpi('Active funds', num(val(o.active_funds)), `${num(val(o.total_funds))} total in catalog`, 'amber', '🗂️'),
+    kpi('New users (30d)', num(val(o.new_users_30d)), 'rolling window', '', '✨'),
   ].join('');
 }
 
@@ -1916,7 +1916,7 @@ async function suggestAskChart(question, rows, hint) {
 // selectable here too.
 function allTabs() {
   return $$('.nav-link[data-tab]')
-    .filter((t) => !SUPERUSER_ONLY_TABS.includes(t.dataset.tab))
+    .filter((t) => !SUPERUSER_ONLY_TABS.includes(t.dataset.tab) && !ALWAYS_ALLOWED_TABS.includes(t.dataset.tab))
     .map((t) => ({ id: t.dataset.tab, label: t.textContent.trim() }));
 }
 
@@ -2109,10 +2109,33 @@ function wireChangePassword() {
 // ====================================================================
 // Set on login/session-restore (applyPermissions) — null until then.
 let currentUser = null;
+// Visible to every logged-in user regardless of their allowedTabs — it's a
+// plain-language help page, not sensitive data, so there's no reason to
+// gate it like the rest of the tabs.
+const ALWAYS_ALLOWED_TABS = ['docs'];
 function userCan(tab) {
   if (!currentUser) return false;
+  if (ALWAYS_ALLOWED_TABS.includes(tab)) return true;
   if (currentUser.isSuperuser) return true;
   return (currentUser.allowedTabs || []).includes(tab);
+}
+
+// Wraps each nav-link's trailing label text in its own <span> once, on init —
+// so CSS can hide just the text (not the icon) when the sidebar is collapsed
+// to icon-only mode, and so a title tooltip is available on hover then too.
+// The breadcrumb below reads from this same span, so there's one source of
+// truth for "this nav-link's label" instead of a parallel name-mapping table.
+function wrapNavLabels() {
+  $$('.nav-link').forEach((link) => {
+    const label = Array.from(link.childNodes)
+      .filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.textContent.trim()).join(' ');
+    Array.from(link.childNodes).forEach((n) => { if (n.nodeType === Node.TEXT_NODE) n.remove(); });
+    const span = document.createElement('span');
+    span.className = 'nav-label-text';
+    span.textContent = label;
+    link.appendChild(span);
+    link.title = label;
+  });
 }
 
 function switchTab(name) {
@@ -2122,6 +2145,11 @@ function switchTab(name) {
   $$('.nav-link').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === name));
   $('#appShell').classList.remove('nav-open'); // close the mobile drawer after navigating
+  // Navbar breadcrumb/page title — reuses the matching nav-link's own label.
+  const activeLink = $$('.nav-link').find((t) => t.dataset.tab === name);
+  if (activeLink) {
+    $('#pageTitle').textContent = activeLink.querySelector('.nav-label-text')?.textContent || '';
+  }
   if (name === 'explorer' && !ex.meta.length) loadExplorerMeta();
   if (name === 'aum' && !aumCache.length) loadAumHistory();
   if (name === 'performance' && !perfCache.length) loadPerformance();
@@ -2146,8 +2174,10 @@ const SUPERUSER_ONLY_TABS = ['admin', 'activity-log'];
 function applyPermissions(user) {
   currentUser = user;
   $('#userBadgeName').textContent = user.username + (user.isSuperuser ? ' (superuser)' : '');
+  $('#userAvatar').textContent = user.username.slice(0, 2).toUpperCase();
   $('#adminNavGroup').classList.toggle('hidden', !user.isSuperuser);
   $('#askActivityLogChip').classList.toggle('hidden', !user.isSuperuser);
+  $('#docsAdminSection').classList.toggle('hidden', !user.isSuperuser);
   $$('.nav-link[data-tab]').forEach((t) => {
     const allowed = SUPERUSER_ONLY_TABS.includes(t.dataset.tab) ? user.isSuperuser : userCan(t.dataset.tab);
     t.classList.toggle('hidden', !allowed);
@@ -2181,28 +2211,68 @@ function repaintActiveTab() {
   }
 }
 
-// ---------- theme toggle ----------
+// ---------- theme: Auto (follows the OS/browser setting) / Light / Dark ----------
 const THEME_KEY = 'sk_theme';
-function setThemeButtonLabel() {
-  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  $('#themeIcon').textContent = dark ? '☀️' : '🌙';
-  $('#themeLabel').textContent = dark ? 'Light mode' : 'Dark mode';
+const osDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
+const getThemeChoice = () => localStorage.getItem(THEME_KEY) || 'auto';
+const resolveTheme = (choice) => (choice === 'auto' ? (osDarkMedia.matches ? 'dark' : 'light') : choice);
+
+function syncThemeSeg(choice) {
+  $$('#themeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.themeChoice === choice));
 }
-function toggleTheme() {
-  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const next = dark ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem(THEME_KEY, next);
-  setThemeButtonLabel();
+function applyTheme(choice) {
+  document.documentElement.setAttribute('data-theme', resolveTheme(choice));
+  syncThemeSeg(choice);
   C = readThemeColors();
   applyChartDefaults();
   repaintActiveTab();
 }
+function setThemeChoice(choice) {
+  localStorage.setItem(THEME_KEY, choice);
+  applyTheme(choice);
+}
+// "Auto" means live-follow the OS, not just "whatever it was at page load" —
+// so flip with it if the user changes their system theme mid-session.
+osDarkMedia.addEventListener('change', () => { if (getThemeChoice() === 'auto') applyTheme('auto'); });
 
+// Collapsible sidebar groups (click the group label to fold it away) —
+// remembered per group across reloads, same localStorage pattern as the
+// sidebar-collapsed and theme choices above.
+const NAV_GROUPS_COLLAPSED_KEY = 'sk_nav_groups_collapsed';
+function loadCollapsedGroups() {
+  try { return new Set(JSON.parse(localStorage.getItem(NAV_GROUPS_COLLAPSED_KEY)) || []); } catch { return new Set(); }
+}
+function wireNavGroups() {
+  const collapsed = loadCollapsedGroups();
+  $$('.nav-group[data-group]').forEach((g) => {
+    if (collapsed.has(g.dataset.group)) g.classList.add('collapsed');
+    g.querySelector('.nav-label').addEventListener('click', () => {
+      g.classList.toggle('collapsed');
+      const now = loadCollapsedGroups();
+      if (g.classList.contains('collapsed')) now.add(g.dataset.group); else now.delete(g.dataset.group);
+      localStorage.setItem(NAV_GROUPS_COLLAPSED_KEY, JSON.stringify([...now]));
+    });
+  });
+}
+
+const SIDEBAR_COLLAPSED_KEY = 'sk_sidebar_collapsed';
 function wire() {
+  wrapNavLabels();
+  wireNavGroups();
   $$('.nav-link').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
-  $('#themeToggle').addEventListener('click', toggleTheme);
-  $('#navToggle').addEventListener('click', () => $('#appShell').classList.toggle('nav-open'));
+  $$('#themeSeg button').forEach((b) => b.addEventListener('click', () => setThemeChoice(b.dataset.themeChoice)));
+  // One hamburger, two jobs depending on viewport — a persistent icon-only
+  // sidebar on desktop (remembered across reloads, like the theme choice),
+  // an off-canvas drawer on mobile (never remembered — always starts closed).
+  if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1') $('#appShell').classList.add('sidebar-collapsed');
+  $('#navToggle').addEventListener('click', () => {
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      $('#appShell').classList.toggle('nav-open');
+    } else {
+      const collapsed = $('#appShell').classList.toggle('sidebar-collapsed');
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+    }
+  });
   // Tapping the dimmed backdrop (mobile drawer) closes it.
   $('#appShell').addEventListener('click', (e) => {
     if (e.target.id === 'appShell' || (!e.target.closest('.sidebar') && !e.target.closest('.nav-toggle'))) {
@@ -2511,7 +2581,7 @@ async function init() {
   $('#rev2From').value = r.from; $('#rev2To').value = r.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
-  setThemeButtonLabel();
+  syncThemeSeg(getThemeChoice());
   wire(); wireGate(); wireAdmin(); wireChangePassword();
 
   // Health is the one route that doesn't need a session — check it either way.

@@ -5,12 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sayakaya Analytics</title>
   <link rel="icon" type="image/png" href="favicon.png" />
-  <!-- Set the theme attribute before CSS paints, so there's no flash of the wrong theme. -->
+  <!-- Set the theme attribute before CSS paints, so there's no flash of the wrong theme.
+       Choice is one of auto|light|dark (default auto); "auto" resolves against the OS
+       preference right here too, so an auto user still gets the correct paint on first load. -->
   <script>
     (function () {
-      var t = localStorage.getItem('sk_theme');
-      if (!t) t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', t);
+      var choice = localStorage.getItem('sk_theme') || 'auto';
+      var resolved = choice === 'auto'
+        ? ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light')
+        : choice;
+      document.documentElement.setAttribute('data-theme', resolved);
     })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -49,22 +53,39 @@
         </div>
       </div>
 
-      <nav class="nav">
-        <div class="nav-group">
-          <div class="nav-label">Investor</div>
-          <button class="nav-link" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio (PWC)</button>
-          <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon">🧭</span>Portfolio Explorer (GS)</button>
-          <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
+      <div class="user-panel">
+        <span class="user-avatar" id="userAvatar">?</span>
+        <div class="user-panel-info">
+          <div class="user-panel-name" id="userBadgeName"></div>
+          <div class="user-panel-actions">
+            <button id="changePwBtn" type="button">Password</button>
+            <button id="logoutBtn" type="button">Log out</button>
+          </div>
         </div>
-        <div class="nav-group">
-          <div class="nav-label">Dashboards</div>
+      </div>
+      <div id="changePwPanel" class="hidden" style="margin: 10px 18px; padding:10px; border:1px solid var(--sidebar-line); border-radius:9px; background:var(--sidebar-bg-alt)">
+        <input type="password" id="changePwCurrent" placeholder="Current password" autocomplete="current-password" style="width:100%; box-sizing:border-box; margin-bottom:6px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
+        <input type="password" id="changePwNew" placeholder="New password" autocomplete="new-password" style="width:100%; box-sizing:border-box; margin-bottom:8px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
+        <button class="btn-primary" id="changePwSave" style="width:100%; padding:7px; font-size:12px">Update password</button>
+        <div id="changePwErr" class="gate-err" style="margin-top:6px; font-size:11px"></div>
+      </div>
+
+      <nav class="nav">
+        <div class="nav-group" data-group="dashboards">
+          <div class="nav-label"><span>Dashboards</span><span class="nav-group-caret"></span></div>
           <button class="nav-link active" data-tab="overview"><span class="nav-icon">📊</span>Overview</button>
           <button class="nav-link" data-tab="aum"><span class="nav-icon">📈</span>AUM history</button>
           <button class="nav-link" data-tab="performance"><span class="nav-icon">🎯</span>Performance</button>
           <button class="nav-link" data-tab="growth"><span class="nav-icon">🌱</span>Growth</button>
         </div>
-        <div class="nav-group">
-          <div class="nav-label">Operations</div>
+        <div class="nav-group" data-group="investor">
+          <div class="nav-label"><span>Investor</span><span class="nav-group-caret"></span></div>
+          <button class="nav-link" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio (PWC)</button>
+          <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon">🧭</span>Portfolio Explorer (GS)</button>
+          <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
+        </div>
+        <div class="nav-group" data-group="operations">
+          <div class="nav-label"><span>Operations &amp; Finance</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="reconciliation"><span class="nav-icon">🧮</span>Reconciliation</button>
           <button class="nav-link" data-tab="revenue"><span class="nav-icon">💰</span>Revenue (PWC)</button>
           <button class="nav-link" data-tab="revenue2"><span class="nav-icon">💹</span>Revenue (GS)</button>
@@ -73,52 +94,46 @@
           <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon">🧾</span>Remisier transactions</button>
           <button class="nav-link" data-tab="predict"><span class="nav-icon">🔮</span>Predict</button>
         </div>
-        <div class="nav-group">
-          <div class="nav-label">Tools</div>
+        <div class="nav-group" data-group="tools">
+          <div class="nav-label"><span>Tools</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="ask"><span class="nav-icon">💬</span>Ask</button>
           <button class="nav-link" data-tab="explorer"><span class="nav-icon">🔍</span>Data explorer</button>
           <button class="nav-link" data-tab="sql"><span class="nav-icon">🧪</span>SQL lab</button>
         </div>
-        <div class="nav-group hidden" id="adminNavGroup">
-          <div class="nav-label">Admin</div>
+        <div class="nav-group" data-group="help">
+          <div class="nav-label"><span>Help</span><span class="nav-group-caret"></span></div>
+          <button class="nav-link" data-tab="docs"><span class="nav-icon">📖</span>Documentations</button>
+        </div>
+        <div class="nav-group hidden" id="adminNavGroup" data-group="admin">
+          <div class="nav-label"><span>Admin</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="admin"><span class="nav-icon">🛡️</span>Manage users</button>
           <button class="nav-link" data-tab="activity-log"><span class="nav-icon">📜</span>Activity log</button>
         </div>
       </nav>
 
-      <div id="userBadge" class="conn-status" style="margin-bottom:0; flex-direction:column; align-items:stretch; gap:6px">
-        <span id="userBadgeName" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span>
-        <div style="display:flex; gap:6px">
-          <button id="changePwBtn" class="btn-ghost" type="button" style="flex:1; padding:11px 6px; font-size:12.5px; white-space:nowrap">Password</button>
-          <button id="logoutBtn" class="btn-ghost" type="button" style="flex:1; padding:11px 6px; font-size:12.5px; white-space:nowrap">Log out</button>
-        </div>
-      </div>
-      <div id="changePwPanel" class="hidden" style="margin: 0 12px 12px; padding:10px; border:1px solid var(--line); border-radius:9px; background:var(--surface-alt)">
-        <input type="password" id="changePwCurrent" placeholder="Current password" autocomplete="current-password" style="width:100%; box-sizing:border-box; margin-bottom:6px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
-        <input type="password" id="changePwNew" placeholder="New password" autocomplete="new-password" style="width:100%; box-sizing:border-box; margin-bottom:8px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
-        <button class="btn-primary" id="changePwSave" style="width:100%; padding:7px; font-size:12px">Update password</button>
-        <div id="changePwErr" class="gate-err" style="margin-top:6px; font-size:11px"></div>
-      </div>
-
-      <button id="themeToggle" class="theme-toggle" type="button">
-        <span class="switch"><span class="switch-knob" id="themeIcon">🌙</span></span>
-        <span id="themeLabel">Dark mode</span>
-      </button>
-
-      <div id="connStatus" class="conn-status" title="BigQuery connection">
-        <span class="conn-dot" id="connDot"></span>
-        <span id="connLabel">Checking…</span>
-      </div>
     </aside>
 
     <div class="main-col">
       <header class="topbar">
         <button id="navToggle" class="nav-toggle" aria-label="Menu">☰</button>
+        <span id="pageTitle" class="page-title">Overview</span>
 
         <div class="range">
           <label>From <input type="date" id="from" /></label>
           <label>To <input type="date" id="to" /></label>
           <button id="apply" class="btn-primary">Apply</button>
+        </div>
+
+        <div class="navbar-right">
+          <div id="connStatus" class="conn-status" title="BigQuery connection">
+            <span class="conn-dot" id="connDot"></span>
+            <span id="connLabel">Checking…</span>
+          </div>
+          <div class="seg" id="themeSeg">
+            <button data-theme-choice="auto" type="button">Auto</button>
+            <button data-theme-choice="light" type="button">Light</button>
+            <button data-theme-choice="dark" type="button">Dark</button>
+          </div>
         </div>
       </header>
 
@@ -895,6 +910,109 @@ ORDER BY n DESC"></textarea>
           <span id="sqlMsg" class="sql-msg"></span>
         </div>
         <div id="sqlResult" class="table-wrap tall"></div>
+      </div>
+    </section>
+
+    <!-- ===================== DOCUMENTATION (plain-language guide) ===================== -->
+    <section id="docs" class="view">
+      <div class="panel doc-intro">
+        <div class="panel-head"><h2>Getting started</h2></div>
+        <p>This dashboard shows live data pulled directly from the database — there's nothing to configure, just pick a section from the menu on the left. A few things that apply everywhere:</p>
+        <ol>
+          <li><b>Date range</b> — the "From / To" fields at the top of the page and the <b>Apply</b> button next to them control the time window for whichever dashboard you're looking at.</li>
+          <li><b>Menu (sidebar)</b> — click the <b>☰</b> button top-left to collapse it to icons-only (desktop) or open/close it (on phone/tablet). Click a section title (like "Dashboards") to fold that group away if you don't use it often.</li>
+          <li><b>Theme</b> — top-right: <b>Auto</b> follows your device's light/dark setting automatically, or pick <b>Light</b>/<b>Dark</b> to fix it.</li>
+          <li><b>Exporting</b> — wherever you see <b>CSV</b> or <b>Excel</b> buttons, that downloads exactly what's on screen as a file.</li>
+          <li><b>Your account</b> — your name is in the box under the logo; <b>Password</b> lets you change it, <b>Log out</b> signs you out.</li>
+        </ol>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Dashboards</h2></div>
+        <div class="doc-item">
+          <h3>📊 Overview</h3>
+          <p>The single-page snapshot of the whole business: total assets under management, user counts, buy/sell volume, a transaction trend chart, fund breakdowns, and a map of where investors are located across Indonesia.</p>
+        </div>
+        <div class="doc-item">
+          <h3>📈 AUM history</h3>
+          <p>How total assets under management (and the platform's own revenue) have moved over time.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🎯 Performance</h3>
+          <p>How each fund's price (NAV) has performed — pick a time window from 1 day up to 5 years and compare funds side by side.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🌱 Growth</h3>
+          <p>Marketing and growth numbers: how well promo campaigns performed, who's referring the most new investors, and which funds people switch between most.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Investor</h2></div>
+        <div class="doc-item">
+          <h3>👤 Portfolio (PWC)</h3>
+          <p>Look up one investor by their SID code, name, or email, then see exactly what funds they currently hold, how their money has grown over different periods, and their AUM history over time.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🧭 Portfolio Explorer (GS)</h3>
+          <p>Same idea as Portfolio (PWC) — search for an investor and see their holdings — but from a second data source, organized by the investor's savings goals, and viewable as of any past date.</p>
+        </div>
+        <div class="doc-item">
+          <h3>💎 HNWI</h3>
+          <p>"High-Net-Worth Individuals" — the list of investors holding above a chosen amount (you set the threshold) as of a chosen date, with a total-across-everyone summary and an export.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Operations &amp; Finance</h2></div>
+        <div class="doc-item">
+          <h3>🧮 Reconciliation</h3>
+          <p>A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.</p>
+        </div>
+        <div class="doc-item">
+          <h3>💰 Revenue (PWC) / 💹 Revenue (GS)</h3>
+          <p>How much revenue/fees Sayakaya itself has earned, broken down by fund and investment manager, from each of the two data sources the platform tracks (PWC and GS).</p>
+        </div>
+        <div class="doc-item">
+          <h3>🤝 Remisier sharing (GS) / (PWC)</h3>
+          <p>Calculates how much revenue-share is owed to remisiers (referral partners) based on the AUM they've brought in, from each data source.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🧾 Remisier transactions</h3>
+          <p>The underlying transaction-level detail behind the remisier sharing numbers, searchable and filterable.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🔮 Predict</h3>
+          <p>Machine-learning forecasts: projected AUM and transaction volume, which investors are at risk of leaving (churn), and retention trends over time.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Tools</h2></div>
+        <div class="doc-item">
+          <h3>💬 Ask</h3>
+          <p>Type a question in plain language — like "top 10 funds by AUM" — and get an answer with a chart, no technical knowledge needed. You can ask follow-up questions, exclude things by name, and request a specific chart type or color.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🔍 Data explorer</h3>
+          <p>Browse the underlying data tables directly with filters, for when you need to see the raw records themselves rather than a summarized dashboard.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🧪 SQL lab</h3>
+          <p>For technical users: write and run your own read-only database query.</p>
+        </div>
+      </div>
+
+      <div class="panel hidden" id="docsAdminSection">
+        <div class="panel-head"><h2>Admin (superuser only)</h2></div>
+        <div class="doc-item">
+          <h3>🛡️ Manage users</h3>
+          <p>Create dashboard login accounts for your team, and choose exactly which sections each person is allowed to see.</p>
+        </div>
+        <div class="doc-item">
+          <h3>📜 Activity log</h3>
+          <p>See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio, or changed an account — and when.</p>
+        </div>
       </div>
     </section>
 

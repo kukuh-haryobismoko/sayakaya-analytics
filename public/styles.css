@@ -21,6 +21,18 @@
   --heat-rgb: 20, 198, 135;
   --shadow: 0 1px 2px rgba(26,29,46,.06), 0 8px 24px rgba(26,29,46,.05);
   --radius: 12px;
+  /* AdminLTE-style shell: the sidebar stays dark-toned in BOTH themes (its
+     signature look) — only its own bg shade shifts a bit for depth against a
+     dark page; text/hover/line tokens are theme-independent, not redefined
+     below. Kept to a medium slate rather than near-black so nav text/icons
+     stay easy to read instead of feeling like a wall of black. */
+  --sidebar-bg: #2c3348;
+  --sidebar-bg-alt: #232a3d;
+  --sidebar-text: #b7bdd2;
+  --sidebar-text-active: #ffffff;
+  --sidebar-line: rgba(255,255,255,.09);
+  --sidebar-hover: rgba(255,255,255,.07);
+  --navbar-bg: var(--surface);
 }
 
 :root[data-theme="dark"] {
@@ -44,6 +56,13 @@
   --muted-tint: rgba(154,160,184,.14);
   --heat-rgb: 51, 234, 170;
   --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.4);
+  --sidebar-bg: #1f2438;
+  --sidebar-bg-alt: #191d2e;
+  --sidebar-line: rgba(255,255,255,.07);
+  --sidebar-hover: rgba(255,255,255,.06);
+  /* A touch lighter than --surface so the navbar reads as its own bar
+     instead of melting into the content behind it. */
+  --navbar-bg: #1d2136;
 }
 
 * { box-sizing: border-box; }
@@ -72,20 +91,43 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
 .app-shell { display: flex; min-height: 100vh; }
 
 .sidebar {
-  width: 240px; flex: 0 0 240px;
-  background: var(--surface);
-  border-right: 1px solid var(--line);
-  box-shadow: 1px 0 0 var(--line), 2px 0 12px rgba(0,0,0,.04);
+  width: 250px; flex: 0 0 250px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-line);
+  box-shadow: 2px 0 12px rgba(0,0,0,.25);
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; z-index: 30;
 }
-.sidebar .brand { padding: 20px 18px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.sidebar .brand { padding: 18px 18px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--sidebar-line); }
 .brand-mark {
   width: 38px; height: 38px; border-radius: 9px; flex: 0 0 38px;
   object-fit: cover;
 }
-.brand-name { font-family: "Space Grotesk"; font-weight: 700; font-size: 15px; line-height: 1.3; }
-.brand-sub { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; }
+.brand-name { font-family: "Space Grotesk"; font-weight: 700; font-size: 15px; line-height: 1.3; color: var(--sidebar-text-active); }
+.brand-sub { color: var(--sidebar-text); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; }
+
+/* ---------- Sidebar user panel (AdminLTE convention: avatar + name right
+   under the brand, above the nav tree) ---------- */
+.user-panel {
+  display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+  border-bottom: 1px solid var(--sidebar-line);
+}
+.user-avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex: 0 0 34px;
+  background: var(--indigo); color: #fff; display: grid; place-items: center;
+  font-family: "Space Grotesk"; font-weight: 700; font-size: 13px; letter-spacing: .3px;
+}
+.user-panel-info { flex: 1; min-width: 0; }
+.user-panel-name {
+  color: var(--sidebar-text-active); font-size: 13px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.user-panel-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.user-panel-actions button {
+  background: transparent; border: 1px solid var(--sidebar-line); color: var(--sidebar-text);
+  font-family: inherit; font-size: 11px; padding: 4px 8px; border-radius: 6px; cursor: pointer;
+}
+.user-panel-actions button:hover { border-color: var(--indigo); color: var(--sidebar-text-active); }
 
 /* min-height: 0 overrides the flex item's default min-height:auto, which
    would otherwise force it to at least its content's natural height (all nav
@@ -93,51 +135,46 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
    classic flexbox scroll bug. Without it, on short/mobile viewports the nav
    list spills into the user badge/theme toggle/connection status below it
    instead of scrolling in its own area. */
-.nav { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px; }
-.nav-group { margin-bottom: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.nav { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 12px; }
+.nav-group { margin-bottom: 14px; padding-top: 14px; border-top: 1px solid var(--sidebar-line); }
 .nav-group:first-child { padding-top: 0; border-top: 0; }
 .nav-label {
-  color: var(--muted); font-size: 10.5px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 1.1px; padding: 6px 10px 6px;
+  display: flex; align-items: center; justify-content: space-between;
+  color: var(--sidebar-text); font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1.1px; padding: 6px 10px 6px; opacity: .7;
+  cursor: pointer; user-select: none;
 }
+.nav-label:hover { opacity: 1; color: var(--sidebar-text-active); }
+/* A CSS-drawn triangle instead of a unicode glyph — renders crisp and
+   consistent at this size regardless of font/OS, where a small "▾" character
+   was reported as too faint/hard to notice. */
+.nav-group-caret {
+  width: 0; height: 0; flex: 0 0 auto;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--sidebar-text);
+  transition: transform .15s ease, border-top-color .15s ease;
+}
+.nav-label:hover .nav-group-caret { border-top-color: var(--sidebar-text-active); }
+.nav-group.collapsed .nav-group-caret { transform: rotate(-90deg); }
+.nav-group.collapsed .nav-link { display: none; }
 .nav-link {
   display: flex; align-items: center; width: 100%; text-align: left;
-  border: 0; border-left: 2px solid transparent; background: transparent; color: var(--muted);
+  border: 0; border-left: 3px solid transparent; background: transparent; color: var(--sidebar-text);
   font-family: inherit; font-size: 13.5px; font-weight: 500;
-  padding: 9px 10px; border-radius: 8px; cursor: pointer; margin-bottom: 2px;
+  padding: 9px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 2px;
   transition: background-color .15s, color .15s, border-color .15s, transform .15s;
 }
 .nav-icon { display: inline-flex; width: 20px; font-size: 13.5px; margin-right: 8px; opacity: .85; }
-.nav-link:hover { background: var(--hover-bg); color: var(--ink); transform: translateX(2px); }
+.nav-link:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); transform: translateX(2px); }
 .nav-link.active {
   background: var(--indigo); color: #fff; border-left-color: var(--amber);
   box-shadow: var(--shadow);
 }
 .nav-link.active .nav-icon { opacity: 1; }
 
-.theme-toggle {
-  display: flex; align-items: center; gap: 10px; width: calc(100% - 24px); margin: 8px 12px 16px;
-  border: 1px solid var(--line); background: var(--surface-alt); color: var(--ink);
-  font-family: inherit; font-size: 13px; font-weight: 500;
-  padding: 9px 12px; border-radius: 9px; cursor: pointer;
-}
-.theme-toggle:hover { border-color: var(--indigo); }
-
-.switch {
-  position: relative; flex: 0 0 36px; width: 36px; height: 20px; border-radius: 10px;
-  background: var(--line); transition: background .25s ease;
-}
-:root[data-theme="dark"] .switch { background: var(--indigo); }
-.switch-knob {
-  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
-  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3);
-  display: grid; place-items: center; font-size: 10px; line-height: 1;
-  transition: transform .25s ease;
-}
-:root[data-theme="dark"] .switch-knob { transform: translateX(16px); }
-
 .conn-status {
-  display: flex; align-items: center; gap: 8px; margin: 0 12px 16px; padding: 0 4px;
+  display: flex; align-items: center; gap: 8px; padding: 0 4px;
   font-size: 12px; color: var(--muted);
 }
 .conn-dot {
@@ -153,7 +190,8 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
 }
 
 .nav-toggle {
-  display: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
   font-size: 16px; width: 36px; height: 36px; border-radius: 8px; cursor: pointer;
 }
 
@@ -162,11 +200,13 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
 .topbar {
   display: flex; align-items: center; gap: 16px;
   padding: 12px 24px;
-  background: var(--surface);
+  background: var(--navbar-bg);
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 20;
   flex-wrap: wrap;
 }
+.page-title { font-family: "Space Grotesk"; font-weight: 600; font-size: 15px; color: var(--ink); white-space: nowrap; }
+.navbar-right { display: flex; align-items: center; gap: 14px; }
 .range { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .range label { color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
 .range input[type=date] {
@@ -195,34 +235,51 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 @keyframes view-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 .panel {
-  background: var(--surface); border: 1px solid var(--line);
+  background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--indigo);
   border-radius: var(--radius); box-shadow: var(--shadow);
   padding: 18px 20px; margin-bottom: 20px;
 }
-.panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin: 0 -20px 16px; padding: 0 20px 14px; border-bottom: 1px solid var(--line);
+}
 .panel-head h2 { font-size: 15px; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; }
+
+/* ---------- Documentation page ---------- */
+.doc-item { padding: 12px 0; border-top: 1px solid var(--line); }
+.doc-item:first-child { border-top: 0; padding-top: 0; }
+.doc-item h3 { font-size: 14px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.doc-item p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.doc-intro ol, .doc-intro ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.8; }
+.doc-intro li b { color: var(--ink); }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } .range { margin-left: 0; } }
 
-/* ---------- KPIs ---------- */
+/* ---------- KPIs (AdminLTE "small-box" style: tinted background, a large
+   watermark icon, colored accent bar) ---------- */
 .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
 @media (max-width: 1080px){ .kpi-grid { grid-template-columns: repeat(2,1fr);} }
 @media (max-width: 520px){ .kpi-grid { grid-template-columns: 1fr;} }
 .kpi {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--indigo-tint); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px 18px; box-shadow: var(--shadow); position: relative; overflow: hidden;
   transition: background-color .2s ease, border-color .2s ease, color .2s ease,
     box-shadow .15s ease, transform .15s ease;
 }
 .kpi:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(26,29,46,.08), 0 12px 28px rgba(26,29,46,.08); }
-.kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--amber); }
+.kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--indigo); }
+.kpi-icon { position: absolute; right: 10px; bottom: 2px; font-size: 46px; line-height: 1; opacity: .16; pointer-events: none; }
 .kpi-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-.kpi-value { font-family: "Space Grotesk"; font-weight: 700; font-size: 26px; margin-top: 6px; font-variant-numeric: tabular-nums; }
-.kpi-sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.kpi-value { font-family: "Space Grotesk"; font-weight: 700; font-size: 26px; margin-top: 6px; font-variant-numeric: tabular-nums; position: relative; }
+.kpi-sub { color: var(--muted); font-size: 12px; margin-top: 4px; position: relative; }
+.kpi.accent { background: var(--teal-tint); }
 .kpi.accent::before { background: var(--teal); }
+.kpi.warn { background: var(--rose-tint); }
 .kpi.warn::before { background: var(--rose); }
+.kpi.amber { background: var(--amber-tint); }
+.kpi.amber::before { background: var(--amber); }
 
 /* ---------- Charts ---------- */
 .chart-wrap { height: 320px; position: relative; }
@@ -401,9 +458,25 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 #retentionHeatmap table td.coh { text-align: left; font-weight: 600; color: var(--indigo); background: var(--surface-alt); position: sticky; left: 0; }
 .heat { color: var(--ink); }
 
+/* ---------- Desktop: collapse sidebar to icon-only (mini) mode ----------
+   Same #navToggle button as the mobile drawer below, branched by JS on
+   viewport width — on desktop it toggles this, on mobile the off-canvas
+   drawer instead, so there's one hamburger with two behaviors like AdminLTE. */
+@media (min-width: 901px) {
+  .app-shell.sidebar-collapsed .sidebar { width: 76px; flex: 0 0 76px; }
+  .app-shell.sidebar-collapsed .brand { padding: 18px 0; justify-content: center; }
+  .app-shell.sidebar-collapsed .brand > div,
+  .app-shell.sidebar-collapsed .user-panel-info,
+  .app-shell.sidebar-collapsed .nav-label,
+  .app-shell.sidebar-collapsed .nav-label-text { display: none; }
+  .app-shell.sidebar-collapsed .user-panel { justify-content: center; padding: 14px 0; }
+  .app-shell.sidebar-collapsed .nav-link { justify-content: center; padding: 10px 0; }
+  .app-shell.sidebar-collapsed .nav-icon { margin-right: 0; font-size: 16px; }
+  .app-shell.sidebar-collapsed .nav-link.active { border-left: 0; border-top: 3px solid var(--amber); }
+}
+
 /* ---------- Responsive: collapse sidebar to an off-canvas drawer ---------- */
 @media (max-width: 900px) {
-  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; }
   .sidebar {
     position: fixed; inset: 0 auto 0 0; transform: translateX(-100%);
     transition: transform .2s ease; box-shadow: var(--shadow);
@@ -416,6 +489,7 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   main { padding: 14px; }
   .topbar { padding: 10px 14px; gap: 10px; }
   .panel { padding: 14px; }
+  .panel-head { margin: 0 -14px 16px; padding: 0 14px 14px; }
   .chart-wrap { height: 240px; }
   .chart-wrap.sm { height: 200px; }
   .chart-wrap.geo { height: 260px; }
@@ -434,5 +508,6 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 @media (max-width: 480px) {
   .kpi-grid { gap: 10px; }
   .panel { padding: 12px; }
+  .panel-head { margin: 0 -12px 14px; padding: 0 12px 12px; }
   h2 { font-size: 14px; }
 }
