@@ -286,7 +286,7 @@ async function loadExplorerPortfolio() {
   if (!peSelected) return;
   const dateParam = $('#peDate').value ? `&date=${$('#peDate').value}` : '';
   try {
-    const { asOfDate, latestDate, holdings, byGoal } = await api(`/api/portfolio-explorer?userId=${encodeURIComponent(peSelected.userId)}${dateParam}`);
+    const { asOfDate, latestDate, holdings, byGoal } = await api(`/api/portfolio-explorer?userId=${encodeURIComponent(peSelected.userId)}&sid=${encodeURIComponent(peSelected.sid)}${dateParam}`);
     const asOf = val(asOfDate), latest = val(latestDate);
     peSelected.date = asOf || '';
     $('#peDate').value = asOf || '';
@@ -405,6 +405,90 @@ async function loadOverview() {
   api('/api/users/verification').then(renderVerifyChart).catch(() => {});
   api('/api/funds/types').then(renderFundTypeChart).catch(() => {});
   api('/api/funds/top?limit=10').then(renderTopFunds).catch(() => {});
+  api('/api/users/by-province').then(renderGeoChart).catch(() => {});
+  api('/api/users/top-cities?limit=15').then(renderTopCities).catch(() => {});
+}
+
+// ---- Investor distribution map (chartjs-chart-geo choropleth) -------------
+// Registered once — the plugin script (loaded via CDN, see index.html) attaches
+// its controllers to the shared Chart global but doesn't auto-register them.
+let geoControllersRegistered = false;
+function ensureGeoControllers() {
+  if (geoControllersRegistered) return;
+  Chart.register(ChartGeo.ChoroplethController, ChartGeo.GeoFeature, ChartGeo.ColorScale, ChartGeo.ProjectionScale);
+  geoControllersRegistered = true;
+}
+
+// Fetched once and cached — see public/data/README.md for what this file is
+// and the winding-order gotcha if it's ever regenerated.
+let indonesiaGeoJson = null;
+function loadIndonesiaGeoJson() {
+  if (indonesiaGeoJson) return Promise.resolve(indonesiaGeoJson);
+  return fetch('data/indonesia-provinces.json').then((r) => r.json()).then((d) => (indonesiaGeoJson = d));
+}
+
+// Sequential tint from the app's own indigo accent (light -> full color) —
+// keeps the map visually consistent with the rest of the dashboard's palette
+// instead of pulling in a separate colour scheme just for this one chart.
+function geoColor(t) {
+  const hex = (C.indigo || '#3a50ab').replace('#', '');
+  const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${(0.08 + t * 0.87).toFixed(3)})`;
+}
+
+async function renderGeoChart(rows) {
+  ensureGeoControllers();
+  let geo;
+  try { geo = await loadIndonesiaGeoJson(); } catch { return; }
+  const byProvince = {};
+  (rows || []).forEach((r) => {
+    byProvince[val(r.province_name)] = { investors: Number(val(r.investor_count)) || 0, aum: Number(val(r.total_aum)) || 0 };
+  });
+  paint('geoChart', {
+    type: 'choropleth',
+    data: {
+      labels: geo.features.map((f) => f.properties.province_name),
+      datasets: [{
+        label: 'Investors',
+        outline: geo,
+        data: geo.features.map((f) => {
+          const d = byProvince[f.properties.province_name];
+          return { feature: f, value: d ? d.investors : 0, aum: d ? d.aum : 0 };
+        }),
+      }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      showOutline: false,
+      showGraticule: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (c) => [`${c.raw.feature.properties.province_name}`,
+              `${num(c.raw.value)} investors`, `AUM ${idrFull(c.raw.aum)}`],
+          },
+        },
+      },
+      scales: {
+        projection: { axis: 'x', projection: 'mercator' },
+        color: { axis: 'x', quantize: 5, interpolate: geoColor, legend: { position: 'bottom-right', align: 'right' } },
+      },
+    },
+  });
+}
+
+function renderTopCities(rows) {
+  if (!rows.length) { $('#topCitiesTable').innerHTML = '<div class="empty">No data.</div>'; return; }
+  const body = rows.map((r, i) => `<tr>
+      <td class="num">${i + 1}</td>
+      <td>${val(r.city_name)}</td>
+      <td>${val(r.province_name)}</td>
+      <td class="num">${num(val(r.investor_count))}</td>
+    </tr>`).join('');
+  $('#topCitiesTable').innerHTML = `<table><thead><tr>
+      <th></th><th>City</th><th>Province</th><th class="num">Investors</th>
+    </tr></thead><tbody>${body}</tbody></table>`;
 }
 
 function kpi(label, value, sub, cls = '') {
@@ -1528,21 +1612,52 @@ let lastAskQuestion = '';
 // sent back to the server so the model can see what "that" refers to.
 let askHistory = [];
 
+const ASK_HINT_DEFAULT = 'Just use your mother language to get the data — no technical skills needed.';
+
+// Renders the running conversation as a numbered list of past questions, with
+// its own header explaining what's going on (this is the thing people found
+// confusing: a plain "New" button next to Ask, with no indication anything
+// was being remembered) and the reset action right there instead of off in
+// the ask-bar looking like a third, unrelated button.
 function renderAskThread() {
   const el = $('#askThread');
   el.innerHTML = '';
-  if (!askHistory.length) { el.classList.add('hidden'); $('#askNewChat').classList.add('hidden'); return; }
+  if (!askHistory.length) {
+    el.classList.add('hidden');
+    $('#askHint').textContent = ASK_HINT_DEFAULT;
+    return;
+  }
   el.classList.remove('hidden');
-  $('#askNewChat').classList.remove('hidden');
-  askHistory.forEach((h) => {
+  $('#askHint').textContent = `Follow-up mode: your next question can refer to "that"/"it" and it'll build on question ${askHistory.length} below.`;
+
+  const head = document.createElement('div');
+  head.className = 'ask-thread-head';
+  const title = document.createElement('span');
+  title.className = 'ask-thread-title';
+  title.textContent = `Conversation · ${askHistory.length} question${askHistory.length === 1 ? '' : 's'}`;
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'btn-ghost';
+  resetBtn.id = 'askNewChat';
+  resetBtn.title = 'Forget the above and ask something unrelated';
+  resetBtn.textContent = '↺ Start new conversation';
+  resetBtn.addEventListener('click', clearAskConversation);
+  head.appendChild(title);
+  head.appendChild(resetBtn);
+  el.appendChild(head);
+
+  const list = document.createElement('div');
+  list.className = 'ask-thread-list';
+  askHistory.forEach((h, i) => {
     const row = document.createElement('div');
     row.className = 'ask-thread-item';
-    const b = document.createElement('b');
-    b.textContent = 'You: ';
-    row.appendChild(b);
+    const n = document.createElement('span');
+    n.className = 'n';
+    n.textContent = `${i + 1}.`;
+    row.appendChild(n);
     row.appendChild(document.createTextNode(h.question));
-    el.appendChild(row);
+    list.appendChild(row);
   });
+  el.appendChild(list);
 }
 
 function clearAskConversation() {
@@ -1594,14 +1709,23 @@ async function runAsk(q) {
     });
     const data = await res.json().catch(() => ({}));
     // Show the generated SQL even if it was blocked, so the user can see it.
+    // Some answers (e.g. the dashboard's own activity log) never touch
+    // BigQuery at all, so there's no SQL — keep the box hidden for those.
     if (data.sql) { askSqlCache = data.sql; $('#askSqlText').value = data.sql; $('#askSql').classList.remove('hidden'); }
+    else { askSqlCache = ''; $('#askSql').classList.add('hidden'); }
     if (!res.ok) { $('#askResult').innerHTML = ''; setAskMsg(data.error || 'Request failed', 'err'); return; }
     renderGenericTable('#askResult', data.rows || []);
     const c = data.count || 0;
     setAskMsg(`${num(c)} row${c === 1 ? '' : 's'}`, 'ok');
-    $('#askCsv').disabled = $('#askXlsx').disabled = (data.rows || []).length === 0;
-    askHistory = [...askHistory, { question, sql: data.sql }].slice(-6);
-    renderAskThread();
+    // CSV/XLSX export re-runs askSqlCache server-side against BigQuery, so it
+    // can't work for a non-SQL answer even though there are rows to show.
+    $('#askCsv').disabled = $('#askXlsx').disabled = (data.rows || []).length === 0 || !data.sql;
+    // Only SQL-backed turns join the follow-up conversation — there's no SQL
+    // to hand back to the model as an assistant turn otherwise.
+    if (data.sql) {
+      askHistory = [...askHistory, { question, sql: data.sql }].slice(-6);
+      renderAskThread();
+    }
     prepareAskChart(data.rows || []);
   } catch (e) {
     $('#askResult').innerHTML = '';
@@ -1641,13 +1765,27 @@ async function runAskSql() {
   }
 }
 
-// ---- Chart: Claude picks a type/x/y, or the user overrides them by hand ----
-function buildAskChartConfig(type, rows, x, y, label) {
+// The four accent colors this app's theme actually defines (see readThemeColors
+// above) — an explicit allowlist rather than trusting a raw `C[key]` lookup,
+// since that would also resolve to inherited Object properties (e.g. a
+// "__proto__" key) for anything not a real palette entry.
+const ASK_CHART_COLOR_KEYS = ['indigo', 'amber', 'teal', 'rose'];
+function resolveAskChartColor(key) { return ASK_CHART_COLOR_KEYS.includes(key) ? C[key] : C.indigo; }
+function hexToRgba(hex, alpha) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  if (!m) return `rgba(30,42,74,${alpha})`;
+  const [r, g, b] = m.slice(1).map((h) => parseInt(h, 16));
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ---- Chart: Claude picks a type/x/y(/color), or the user overrides them by hand ----
+function buildAskChartConfig(type, rows, x, y, label, colorKey) {
   const capped = rows.slice(0, 50);
+  const color = resolveAskChartColor(colorKey);
   if (type === 'scatter') {
     return { type: 'scatter', data: { datasets: [{ label: label || `${y} vs ${x}`,
       data: capped.map((r) => ({ x: Number(val(r[x])) || 0, y: Number(val(r[y])) || 0 })),
-      backgroundColor: C.indigo }] },
+      backgroundColor: color }] },
       options: { maintainAspectRatio: false,
         scales: { x: { title: { display: true, text: x } }, y: { title: { display: true, text: y } } } } };
   }
@@ -1658,7 +1796,7 @@ function buildAskChartConfig(type, rows, x, y, label) {
       options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } } };
   }
   return { type, data: { labels, datasets: [{ label: label || y, data: values,
-      backgroundColor: type === 'bar' ? C.indigo : 'rgba(30,42,74,.08)', borderColor: C.indigo,
+      backgroundColor: type === 'bar' ? color : hexToRgba(color, .12), borderColor: color,
       fill: type === 'line', tension: .3 }] },
     options: { maintainAspectRatio: false,
       scales: { y: { grid: { color: C.grid } }, x: { grid: { display: false } } },
@@ -1674,12 +1812,24 @@ function populateAskChartFields(rows, spec) {
   if (spec && cols.includes(spec.y)) $('#askChartY').value = spec.y;
 }
 
+// Set by the last chart suggestion (if it named a color) and reused on every
+// re-render — e.g. dragging the X/Y dropdowns afterward keeps the requested
+// color instead of reverting to the default on the very next redraw.
+let askChartColor = null;
+
 function renderAskChart() {
   const type = $('#askChartType').value;
   const x = $('#askChartX').value, y = $('#askChartY').value;
   if (type === 'none' || !askRowsCache.length || !x || !y) { $('#askChartWrap').classList.add('hidden'); return; }
   $('#askChartWrap').classList.remove('hidden');
-  paint('askChart', buildAskChartConfig(type, askRowsCache, x, y));
+  paint('askChart', buildAskChartConfig(type, askRowsCache, x, y, undefined, askChartColor));
+}
+
+function setAskChartMsg(text, isProblem) {
+  const el = $('#askChartMsg');
+  el.textContent = text || '';
+  el.classList.toggle('hidden', !text);
+  el.classList.toggle('err', !!isProblem);
 }
 
 // Caches new rows and reveals the chart controls, but does NOT call Claude —
@@ -1688,6 +1838,8 @@ function renderAskChart() {
 function prepareAskChart(rows) {
   askRowsCache = rows || [];
   $('#askChartType').value = 'none';
+  askChartColor = null;
+  setAskChartMsg('');
   if (!askRowsCache.length) {
     $('#askChartControls').classList.add('hidden');
     $('#askChartWrap').classList.add('hidden');
@@ -1700,12 +1852,16 @@ function prepareAskChart(rows) {
 
 // Asks Claude to suggest a chart type/x/y for the current rows; only called
 // from the explicit "✨ Suggest" button, never automatically. `hint` carries
-// an optional free-text ask (e.g. "as a pie chart").
+// an optional free-text ask (e.g. "as a donut chart"). If the model can't
+// (or won't) honor the request, it always comes back with a plain-language
+// "reason" instead of silently doing nothing — show that instead of leaving
+// the person guessing why nothing changed.
 async function suggestAskChart(question, rows, hint) {
   askRowsCache = rows || [];
   if (!askRowsCache.length) {
     $('#askChartControls').classList.add('hidden');
     $('#askChartWrap').classList.add('hidden');
+    setAskChartMsg('');
     return;
   }
   $('#askChartControls').classList.remove('hidden');
@@ -1716,10 +1872,15 @@ async function suggestAskChart(question, rows, hint) {
       body: JSON.stringify({ question, rows: askRowsCache.slice(0, 50), hint }),
     });
     const validTypes = $$('#askChartType option').map((o) => o.value);
-    $('#askChartType').value = validTypes.includes(spec.type) ? spec.type : 'none';
+    const type = validTypes.includes(spec.type) ? spec.type : 'none';
+    $('#askChartType').value = type;
+    askChartColor = ASK_CHART_COLOR_KEYS.includes(spec.color) ? spec.color : null;
     populateAskChartFields(askRowsCache, spec);
-  } catch {
+    setAskChartMsg(spec.reason || '', type === 'none');
+  } catch (e) {
     $('#askChartType').value = 'none';
+    askChartColor = null;
+    setAskChartMsg(e.message || 'Could not get a chart suggestion — try again.', true);
   }
   renderAskChart();
 }
@@ -1851,12 +2012,30 @@ function toJakartaTime(v) {
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
 }
 
+let adminAuditUsersLoaded = false;
+
+// Populates the "filter by user" dropdown from the same account list the
+// Admin tab manages — cached like loadAskTables() so re-opening the tab
+// doesn't refetch it every time.
+async function loadAdminAuditUserOptions() {
+  if (adminAuditUsersLoaded) return;
+  adminAuditUsersLoaded = true;
+  try {
+    const users = await api('/api/admin/users');
+    const sel = $('#adminAuditUser');
+    const opts = users.map((u) => `<option value="${u.username}">${u.username}</option>`).join('');
+    sel.insertAdjacentHTML('beforeend', opts);
+  } catch { /* dropdown is a filter convenience; silently skip on failure */ }
+}
+
 async function loadAdminAuditLog() {
   $('#adminAuditTable').innerHTML = '<div class="loading">Loading activity…</div>';
   const qs = new URLSearchParams({ limit: 200 });
+  const user = $('#adminAuditUser').value;
   const search = $('#adminAuditSearch').value.trim();
   const from = $('#adminAuditFrom').value;
   const to = $('#adminAuditTo').value;
+  if (user) qs.set('user', user);
   if (search) qs.set('search', search);
   if (from) qs.set('from', from);
   if (to) qs.set('to', to);
@@ -1878,6 +2057,7 @@ function wireAdmin() {
   $('#adminCancelEditBtn').addEventListener('click', resetAdminForm);
   $('#adminAuditRefresh').addEventListener('click', loadAdminAuditLog);
   $('#adminAuditApply').addEventListener('click', loadAdminAuditLog);
+  $('#adminAuditUser').addEventListener('change', loadAdminAuditLog);
   $('#adminAuditSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAdminAuditLog(); });
 }
 
@@ -1932,7 +2112,7 @@ function switchTab(name) {
   if (name === 'overview' && !overviewLoaded) loadOverview();
   if (name === 'hnwi') loadHnwi();
   if (name === 'admin') loadAdminUsers();
-  if (name === 'activity-log') loadAdminAuditLog();
+  if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
 }
 
 // Called once after login/session-restore: hides nav links + the Admin group
@@ -1944,6 +2124,7 @@ function applyPermissions(user) {
   currentUser = user;
   $('#userBadgeName').textContent = user.username + (user.isSuperuser ? ' (superuser)' : '');
   $('#adminNavGroup').classList.toggle('hidden', !user.isSuperuser);
+  $('#askActivityLogChip').classList.toggle('hidden', !user.isSuperuser);
   $$('.nav-link[data-tab]').forEach((t) => {
     const allowed = SUPERUSER_ONLY_TABS.includes(t.dataset.tab) ? user.isSuperuser : userCan(t.dataset.tab);
     t.classList.toggle('hidden', !allowed);
@@ -2211,7 +2392,6 @@ function wire() {
   $('#askAdvanced').addEventListener('toggle', (e) => { if (e.target.open) loadAskTables(); });
   $('#askBtn').addEventListener('click', () => runAsk());
   $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') runAsk(); });
-  $('#askNewChat').addEventListener('click', clearAskConversation);
   $('#askCopy').addEventListener('click', copyAskSql);
   $('#askEdit').addEventListener('click', () => setAskEditable($('#askSqlText').hasAttribute('readonly')));
   $('#askRun').addEventListener('click', () => runAskSql());
@@ -2220,7 +2400,9 @@ function wire() {
   $('#askChartY').addEventListener('change', renderAskChart);
   $('#askChartSuggest').addEventListener('click', () =>
     suggestAskChart(lastAskQuestion, askRowsCache, $('#askChartHint').value.trim()));
-  $$('#ask .chip').forEach((c) => c.addEventListener('click', () => runAsk(c.textContent)));
+  // Example chips are standalone demo questions, not a continuation of
+  // whatever's currently being asked about — start a fresh conversation.
+  $$('#ask .chip').forEach((c) => c.addEventListener('click', () => { clearAskConversation(); runAsk(c.textContent); }));
   $('#askCsv').addEventListener('click', () => askSqlCache && download({ source: 'ask_result', format: 'csv', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.csv'));
   $('#askXlsx').addEventListener('click', () => askSqlCache && download({ source: 'ask_result', format: 'xlsx', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.xlsx'));
 
@@ -2280,7 +2462,10 @@ function wireGate() {
 // Runs once we know who's logged in (fresh login or a restored session).
 async function boot() {
   loadRemTxFilterOptions();
-  // Portfolio is the landing tab; nothing else to query until a SID is searched.
+  // Overview is the landing tab. If this user isn't allowed on it,
+  // applyPermissions() already switched to their first allowed tab (and
+  // triggered that tab's own loader) before boot() runs — don't double-load.
+  if (document.querySelector('.view.active')?.id === 'overview') loadOverview();
 }
 
 function setConnStatus(live) {

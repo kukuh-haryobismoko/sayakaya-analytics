@@ -866,6 +866,54 @@ export const aumByIncome = (): Query => ({
   params: {},
 });
 
+// ---- Geographic distribution (Overview map) ---------------------------------
+// user_profiles.id_address_city is NOT a free-text city name — it's the exact
+// Kemendagri/BPS administrative code (e.g. "31.71"), matching main.geo's
+// subdistrict_city_code one-for-one. main.geo is one row per *village*, so it's
+// deduped to one row per city code first; otherwise the join would fan out
+// every investor once per village in their city.
+const GEO = '`sayakaya.main.geo`';
+const CITY_LOOKUP_CTE = `city_lookup AS (
+      SELECT DISTINCT subdistrict_city_code AS city_code, city_name, province_name
+      FROM ${GEO}
+    )`;
+
+// One row per province — investor count + live AUM, for the Overview choropleth.
+// province_name here must exactly match the `province_name` property baked into
+// public/data/indonesia-provinces.json (see that file's generation notes).
+export const usersByProvince = (): Query => ({
+  sql: `WITH ${CITY_LOOKUP_CTE},
+    ${ACTIVE_CTE},
+    aum_by_user AS (
+      SELECT a.user_id, SUM(a.unit * f.latest_nav_value) AS aum
+      FROM active a JOIN ${FUNDS} f ON f.id = a.fund_id
+      GROUP BY a.user_id
+    )
+    SELECT cl.province_name,
+      COUNT(DISTINCT up.user_id) AS investor_count,
+      ROUND(SUM(IFNULL(abu.aum, 0))) AS total_aum
+    FROM ${USER_PROFILES} up
+    JOIN city_lookup cl ON cl.city_code = up.id_address_city
+    LEFT JOIN aum_by_user abu ON abu.user_id = up.user_id
+    GROUP BY cl.province_name
+    ORDER BY investor_count DESC`,
+  params: {},
+});
+
+// Top cities by investor count — the finer-grained companion to the province
+// map (508 distinct cities is too many to put on one map at a glance, so this
+// is a ranked list instead of a second map).
+export const topCitiesByInvestors = (limit: number | string = 15): Query => ({
+  sql: `WITH ${CITY_LOOKUP_CTE}
+    SELECT cl.city_name, cl.province_name, COUNT(DISTINCT up.user_id) AS investor_count
+    FROM ${USER_PROFILES} up
+    JOIN city_lookup cl ON cl.city_code = up.id_address_city
+    GROUP BY cl.city_name, cl.province_name
+    ORDER BY investor_count DESC
+    LIMIT @limit`,
+  params: { limit: parseInt(String(limit), 10) },
+});
+
 // Referral leaderboard: who brought in the most $ via referral_code/referrer_code.
 export const topReferrers = (limit: number | string = 20): Query => ({
   sql: `WITH vol AS (

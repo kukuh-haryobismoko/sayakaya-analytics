@@ -17,6 +17,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Choropleth controller/projection for the Overview investor-distribution map — same CDN-script pattern as Chart.js above, no bundler. -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-geo@4.3.6/build/index.umd.min.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -50,13 +52,13 @@
       <nav class="nav">
         <div class="nav-group">
           <div class="nav-label">Investor</div>
-          <button class="nav-link active" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio (PWC)</button>
+          <button class="nav-link" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio (PWC)</button>
           <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon">🧭</span>Portfolio Explorer (GS)</button>
           <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
         </div>
         <div class="nav-group">
           <div class="nav-label">Dashboards</div>
-          <button class="nav-link" data-tab="overview"><span class="nav-icon">📊</span>Overview</button>
+          <button class="nav-link active" data-tab="overview"><span class="nav-icon">📊</span>Overview</button>
           <button class="nav-link" data-tab="aum"><span class="nav-icon">📈</span>AUM history</button>
           <button class="nav-link" data-tab="performance"><span class="nav-icon">🎯</span>Performance</button>
           <button class="nav-link" data-tab="growth"><span class="nav-icon">🌱</span>Growth</button>
@@ -122,7 +124,7 @@
 
       <main>
     <!-- ===================== USER PORTFOLIO ===================== -->
-    <section id="portfolio" class="view active">
+    <section id="portfolio" class="view">
       <div class="panel">
         <div class="panel-head"><h2>Find investor</h2><span class="hint">Search by SID code, name, or email.</span></div>
         <div class="ask-bar">
@@ -258,7 +260,7 @@
     </section>
 
     <!-- ===================== OVERVIEW ===================== -->
-    <section id="overview" class="view">
+    <section id="overview" class="view active">
       <div id="kpis" class="kpi-grid"></div>
 
       <div class="panel">
@@ -292,6 +294,17 @@
         <div class="panel">
           <div class="panel-head"><h2>AUM by fund type</h2></div>
           <div class="chart-wrap sm"><canvas id="fundTypeChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><h2>Investor distribution by province</h2></div>
+          <div class="chart-wrap"><canvas id="geoChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Top cities by investors</h2></div>
+          <div id="topCitiesTable" class="table-wrap"></div>
         </div>
       </div>
 
@@ -787,7 +800,6 @@
             <input id="askInput" type="text" autocomplete="off"
               placeholder="e.g. top 10 funds by AUM, or total buy volume per month in 2025" />
             <button id="askBtn" class="btn-primary">Ask</button>
-            <button id="askNewChat" class="btn-ghost hidden" title="Start a new conversation">New</button>
           </div>
           <div class="ask-examples">
             <button class="chip">Top 10 funds by AUM</button>
@@ -795,6 +807,7 @@
             <button class="chip">Completed buy volume per month in 2025</button>
             <button class="chip">Transaction count by status</button>
             <button class="chip">Top 5 investment managers by fund count</button>
+            <button class="chip" id="askActivityLogChip">Who logged in today?</button>
           </div>
 
           <details id="askAdvanced">
@@ -835,6 +848,7 @@
             <input id="askChartHint" type="text" placeholder="Optional: describe the chart you want" style="flex:1; min-width:180px" />
             <button class="btn-ghost" id="askChartSuggest">✨ Suggest</button>
           </div>
+          <div id="askChartMsg" class="ask-chart-msg hidden"></div>
           <div id="askChartWrap" class="chart-wrap hidden"><canvas id="askChart"></canvas></div>
 
           <div id="askResult" class="table-wrap tall"></div>
@@ -909,7 +923,8 @@ ORDER BY n DESC"></textarea>
         <div class="panel-head wrap">
           <h2>Activity log</h2>
           <div class="filters">
-            <input type="text" id="adminAuditSearch" placeholder="Search user, action, or detail (wildcard)" style="min-width:240px" />
+            <select id="adminAuditUser"><option value="">All users</option></select>
+            <input type="text" id="adminAuditSearch" placeholder="Search action or detail (wildcard)" style="min-width:240px" />
             <label>From <input type="date" id="adminAuditFrom" /></label>
             <label>To <input type="date" id="adminAuditTo" /></label>
             <button class="btn-primary" id="adminAuditApply">Apply</button>
@@ -917,7 +932,7 @@ ORDER BY n DESC"></textarea>
             <button class="btn-ghost" id="adminAuditRefresh">Refresh</button>
           </div>
         </div>
-        <span class="hint">Logins and exports, most recent first. Search matches username, action, and export detail (e.g. "revenue" also finds revenue_detail exports) — leave blank to see everything.</span>
+        <span class="hint">Every login, export, Ask question, SQL Lab query, and admin account change, most recent first. Pick a user from the dropdown for an exact match; search matches action/detail as a wildcard (e.g. "revenue" also finds revenue_detail exports) — leave blank to see everything.</span>
         <div id="adminAuditTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>

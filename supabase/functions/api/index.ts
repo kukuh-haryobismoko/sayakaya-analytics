@@ -251,7 +251,7 @@ on('GET', '/api/admin/users', requireSuperuser(async () => {
   return json(rows.map((r) => A.publicUser({ ...r, password_hash: '' })));
 }));
 
-on('POST', '/api/admin/users', requireSuperuser(async (req) => {
+on('POST', '/api/admin/users', requireSuperuser(async (req, _params, _url, user) => {
   const body = await bodyOf(req);
   const username = body.username as string;
   const password = body.password as string;
@@ -263,10 +263,12 @@ on('POST', '/api/admin/users', requireSuperuser(async (req) => {
     isSuperuser: !!body.isSuperuser,
     allowedTabs: (body.allowedTabs as string[]) || [],
   });
+  await A.logEvent(user!.id, user!.username, 'admin_user_create',
+    `created dashboard user "${username}"${body.isSuperuser ? ' (superuser)' : ''}`);
   return json(A.publicUser(created));
 }));
 
-on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params) => {
+on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params, _url, user) => {
   const target = await A.findUserById(params.id);
   if (!target) return json({ error: 'User not found.' }, 404);
   const body = await bodyOf(req);
@@ -279,16 +281,23 @@ on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params) => {
     isSuperuser: body.isSuperuser as boolean | undefined,
     allowedTabs: body.allowedTabs as string[] | undefined,
   });
+  const changes: string[] = [];
+  if (body.password) changes.push('password reset');
+  if (body.isSuperuser !== undefined) changes.push(`superuser=${body.isSuperuser}`);
+  if (body.allowedTabs !== undefined) changes.push(`tabs=[${((body.allowedTabs as string[]) || []).join(',')}]`);
+  await A.logEvent(user!.id, user!.username, 'admin_user_update',
+    `updated "${target.username}": ${changes.join(', ') || 'no changes'}`);
   return json(A.publicUser(updated));
 }));
 
-on('DELETE', '/api/admin/users/:id', requireSuperuser(async (_req, params) => {
+on('DELETE', '/api/admin/users/:id', requireSuperuser(async (_req, params, _url, user) => {
   const target = await A.findUserById(params.id);
   if (!target) return json({ error: 'User not found.' }, 404);
   if (target.is_superuser && (await A.countSuperusers()) <= 1) {
     return json({ error: 'Cannot delete the last remaining superuser.' }, 400);
   }
   await A.deleteUser(params.id);
+  await A.logEvent(user!.id, user!.username, 'admin_user_delete', `deleted dashboard user "${target.username}"`);
   return json({ ok: true });
 }));
 
@@ -298,6 +307,7 @@ on('GET', '/api/admin/audit-log', requireSuperuser(async (_req, _params, url) =>
     search: qp(url, 'search'),
     from: qp(url, 'from'),
     to: qp(url, 'to'),
+    user: qp(url, 'user'),
   });
   return json(rows);
 }));
@@ -368,6 +378,14 @@ on('GET', '/api/users/verification', requireTab('overview', async () => {
   const q = Q.verificationBreakdown();
   return json(await runQuery(q.sql, q.params));
 }));
+on('GET', '/api/users/by-province', requireTab('overview', async () => {
+  const q = Q.usersByProvince();
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/users/top-cities', requireTab('overview', async (_req, _params, url) => {
+  const q = Q.topCitiesByInvestors(qp(url, 'limit'));
+  return json(await runQuery(q.sql, q.params));
+}));
 
 // ---- Transactions explorer ------------------------------------------------
 on('GET', '/api/transactions/filters', requireTab('remisier-tx', async () => {
@@ -398,7 +416,7 @@ on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer']
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
 }));
-on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url) => {
+on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url, user) => {
   const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
   if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
   const date = qp(url, 'date');
@@ -415,6 +433,9 @@ on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url) =
     runQuery(a.sql, a.params),
   ]);
   const latestDate = (dRows[0]?.latest_date as string) || null;
+  // A named individual's holdings, not aggregate BigQuery analytics — worth
+  // its own audit trail entry (who looked up which investor, and when).
+  await A.logEvent(user!.id, user!.username, 'view_portfolio', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   // Regular/bonus split is always current-live (portfolios/bonus_portfolios
   // don't have history), so it doesn't make sense to show it as if it were
   // "as of" a past date — omit it in that mode rather than show a misleading number.
@@ -422,7 +443,7 @@ on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url) =
 }));
 
 // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
-on('GET', '/api/portfolio-explorer', requireTab('portfolio-explorer', async (_req, _params, url) => {
+on('GET', '/api/portfolio-explorer', requireTab('portfolio-explorer', async (_req, _params, url, user) => {
   const userId = qp(url, 'userId');
   if (!userId) return json({ error: 'userId is required.' }, 400);
   // Always look up the latest available snapshot date, even when a specific
@@ -439,6 +460,7 @@ on('GET', '/api/portfolio-explorer', requireTab('portfolio-explorer', async (_re
     runQuery(h.sql, h.params),
     runQuery(b.sql, b.params),
   ]);
+  await A.logEvent(user!.id, user!.username, 'view_portfolio', `SID ${qp(url, 'sid') || userId} as of ${asOfDate} (explorer)`);
   return json({ asOfDate, latestDate, holdings, byGoal });
 }));
 
@@ -625,7 +647,7 @@ on('GET', '/api/explore/:dataset', requireTab('explorer', async (_req, params, u
 // ---- Ask (natural language -> SQL via Anthropic) --------------------------
 on('GET', '/api/ask/tables', requireTab('ask', () => json({ tables: TABLES })));
 
-on('POST', '/api/ask', requireTab('ask', async (req) => {
+on('POST', '/api/ask', requireTab('ask', async (req, _params, _url, user) => {
   const body = await bodyOf(req);
   const question = String(body.question || '').trim();
   const context = String(body.context || '').trim() || null;
@@ -639,10 +661,12 @@ on('POST', '/api/ask', requireTab('ask', async (req) => {
     : [];
   if (!question) return json({ error: 'Type a question first.' }, 400);
   try {
-    const { sql, rows } = await ask(question, context, history);
+    const { sql, rows } = await ask(question, context, history, user);
+    await A.logEvent(user!.id, user!.username, 'ask', `${question} (${rows.length} rows)`);
     return json({ sql, rows, count: rows.length });
   } catch (err) {
     console.error('[POST /api/ask]', (err as Error).message);
+    await A.logEvent(user!.id, user!.username, 'ask', `${question} — failed: ${(err as Error).message}`);
     return json({ error: (err as Error).message, sql: (err as { sql?: string }).sql || null }, 400);
   }
 }));
@@ -662,11 +686,12 @@ on('POST', '/api/sql/estimate', requireTab('sql', async (req) => {
   return json({ bytes, withinLimit: bytes <= Number(MAX_BYTES_BILLED) });
 }));
 
-on('POST', '/api/sql/run', requireTab('sql', async (req) => {
+on('POST', '/api/sql/run', requireTab('sql', async (req, _params, _url, user) => {
   const body = await bodyOf(req);
   const v = validateAdHoc(String(body.sql || ''));
   if (!v.ok) return json({ error: v.error }, 400);
   const rows = await runQuery(capRows(v.sql, (body.limit as number) || 5000), {});
+  await A.logEvent(user!.id, user!.username, 'sql_run', v.sql.slice(0, 300));
   return json({ rows, count: rows.length });
 }));
 

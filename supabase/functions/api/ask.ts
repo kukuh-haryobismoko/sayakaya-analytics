@@ -2,6 +2,7 @@
 // Anthropic API, so this needs no runtime rework beyond process.env ->
 // Deno.env.get and require/module.exports -> ES modules.
 import { runQuery, validateAdHoc, capRows } from './bigquery.ts';
+import * as Auth from './auth.ts';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = Deno.env.get('ANTHROPIC_MODEL') || 'claude-sonnet-5';
@@ -381,12 +382,111 @@ async function resolveEntityContext(question: string): Promise<string> {
 
 interface AskError extends Error { sql?: string }
 
+// ---- Activity log (the dashboard's own login/export/audit trail) --------
+// This is NOT BigQuery data — it's the dashboard_audit_log table in Supabase
+// Postgres, reached through Auth.listAuditLog()'s PostgREST filters, not SQL.
+// So a question about it can't go through questionToSql above at all; it's
+// routed here instead, before BigQuery is ever considered. Kept to a cheap
+// keyword check rather than an extra Claude call, since the phrasing that
+// means "the dashboard's own activity" is a small, distinctive set of words
+// that don't otherwise come up in questions about the investment platform.
+const ACTIVITY_LOG_HINT = /\b(activity log|audit log|audit trail|log(ged|ging)? ?in|logins?\b|sign(ed)? ?in|failed logins?|who exported|export history|export activity|recent exports?|password change|chang(e|ed|ing) (their|his|her|a) password|dashboard (user|account) activity|sql lab|who (ran|used) .{0,20}\bsql\b|who (asked|used ask)|ask (feature |questions? )?(usage|history|activity)|dashboard accounts? (was |were )?(created|added|deleted|removed|updated)|admin (user|account)s? (was |were )?(created|added|deleted|removed|updated))\b/i;
+
+function looksLikeActivityLogQuestion(question: string): boolean {
+  return ACTIVITY_LOG_HINT.test(question);
+}
+
+// Supabase stores created_at in UTC; the team reads this from Jakarta (see
+// the Activity log tab), so format it the same way here for consistency.
+function toJakartaTime(v: unknown): string {
+  const d = new Date(v as string);
+  if (Number.isNaN(d.getTime())) return String(v ?? '');
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d).reduce((o: Record<string, string>, p) => { o[p.type] = p.value; return o; }, {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} WIB`;
+}
+
+function activityLogFilterPrompt(): string {
+  return `Extract search filters for the dashboard's own login/export/audit activity log from this question.
+Today's date is ${new Date().toISOString().slice(0, 10)} (UTC).
+
+Columns available: created_at (when it happened), username (who did it),
+action (exactly one of: login_success, login_failure, password_change, export, ask, sql_run,
+  admin_user_create, admin_user_update, admin_user_delete, view_portfolio),
+detail (free text — the export's source/format/filename, the Ask question asked, the SQL run
+  (sql_run), which dashboard account and what changed (the admin_user_* actions), or the investor
+  SID looked up (view_portfolio)).
+
+Respond with ONLY a JSON object, no markdown, no explanation:
+{"search": "<one of the exact action values above if the question is about a specific kind of event
+  (e.g. "failed logins" -> "login_failure", "exports" -> "export", "ask questions" -> "ask", "sql queries"
+  -> "sql_run", "account changes" -> "admin_user_update", "portfolio lookups" -> "view_portfolio");
+  otherwise a username or other keyword from the question; otherwise null>",
+  "from": "<YYYY-MM-DD or null>", "to": "<YYYY-MM-DD or null>"}`;
+}
+
+interface ActivityLogFilter { search: string; from: string; to: string }
+
+async function questionToActivityLogFilter(question: string): Promise<ActivityLogFilter> {
+  const key = Deno.env.get('ANTHROPIC_API_KEY');
+  const empty: ActivityLogFilter = { search: '', from: '', to: '' };
+  if (!key) return empty;
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL, max_tokens: 200, system: activityLogFilterPrompt(),
+        messages: [{ role: 'user', content: question }],
+      }),
+    });
+    if (!res.ok) return empty;
+    const data = await res.json();
+    const text = (data.content || []).filter((b: { type: string }) => b.type === 'text').map((b: { text: string }) => b.text).join('').trim()
+      .replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```$/, '').trim();
+    const parsed = JSON.parse(text);
+    return {
+      search: typeof parsed.search === 'string' ? parsed.search : '',
+      from: typeof parsed.from === 'string' ? parsed.from : '',
+      to: typeof parsed.to === 'string' ? parsed.to : '',
+    };
+  } catch {
+    // Filter extraction failing just means an unfiltered (most-recent) log — never block the answer.
+    return empty;
+  }
+}
+
+// Mirrors ask()'s return shape ({ sql, rows }) so the frontend needs no special
+// case beyond sql being null — there's no SQL to show/edit/re-run for this,
+// since it never touched BigQuery.
+async function answerActivityLog(question: string): Promise<{ sql: null; rows: Record<string, unknown>[] }> {
+  const filter = await questionToActivityLogFilter(question);
+  const rows = await Auth.listAuditLog({ limit: 500, ...filter });
+  const shaped = rows.map((r) => ({
+    created_at: toJakartaTime(r.created_at), username: r.username, action: r.action, detail: r.detail,
+  }));
+  return { sql: null, rows: shaped };
+}
+
 /**
  * Full flow: question -> SQL -> validate (read-only) -> run -> rows.
  * BigQuery errors (e.g. a guessed column/table name that doesn't exist) are
  * fed back to the model once so it can self-correct before we give up.
+ *
+ * `user` (the authenticated dashboard account, from req.user) gates the
+ * activity-log path only — the same superuser restriction the Activity log
+ * tab itself enforces, since that data is every user's login/export history.
  */
-export async function ask(question: string, context?: string | null, history?: HistoryTurn[] | null): Promise<{ sql: string; rows: Record<string, unknown>[] }> {
+export async function ask(question: string, context?: string | null, history?: HistoryTurn[] | null, user?: Auth.DashboardUser | null): Promise<{ sql: string | null; rows: Record<string, unknown>[] }> {
+  if (looksLikeActivityLogQuestion(question)) {
+    if (!user || !user.is_superuser) {
+      throw new Error('Activity log data is restricted to superusers.');
+    }
+    return answerActivityLog(question);
+  }
+
   const resolved = await resolveEntityContext(question);
   const fullContext = [context, resolved].filter(Boolean).join('\n\n') || null;
   let sql = await questionToSql(question, null, fullContext, history);
@@ -422,20 +522,41 @@ function val(v: unknown): unknown { return v && typeof v === 'object' && 'value'
 function chartSystemPrompt(): string {
   return `You choose how to visualize a table of query results with Chart.js.
 Respond with ONLY a JSON object, no markdown, no explanation:
-{"type": "bar"|"line"|"pie"|"doughnut"|"scatter"|"none", "x": "<column name>", "y": "<column name>", "label": "<short chart title>"}
+{"type": "bar"|"line"|"pie"|"doughnut"|"scatter"|"none", "x": "<column name>", "y": "<column name>", "label": "<short chart title>", "color": "indigo"|"amber"|"teal"|"rose", "reason": "<one short, plain-language sentence>"}
+
 Rules:
 - "type" must be exactly one of: bar, line, pie, doughnut, scatter, none.
-- Use "none" if the data doesn't chart well (a single scalar/row, free-text-only columns, too many categories).
+- "x" and "y" must be exact column names from the sample given (omit for "none"), and "y" must be numeric.
+- Keep "label" under 40 characters.
+- "color" is OPTIONAL and only applies to a single-series chart (bar/line/scatter) — this app's palette has
+  exactly four accent colors: indigo (blue/purple), amber (orange/gold/yellow), teal (green), rose (red/pink).
+  If the user's request names or implies a color, map it to whichever of these four is closest and set
+  "color" to that key. Omit "color" entirely if no color was requested, or if type is pie/doughnut (those
+  already use a fixed multi-color palette, one per slice — a single "color" wouldn't mean anything there).
+- "reason" is always required — one short sentence a non-technical person would understand, explaining the
+  pick (or, for "none", exactly what's missing/wrong so the person knows what to change).
+
+If the user's visualization request names a specific chart type (bar/line/pie/doughnut/scatter), HONOR it
+whenever it's technically possible: a usable x column exists, and (for bar/line/pie/doughnut) at least one
+numeric y column exists, or (for scatter) at least two numeric columns exist. Someone who explicitly asked
+for a donut chart gets a donut chart even if it has many slices or isn't the "ideal" fit for the data —
+that is their call to make, not yours to override. Only fall back to "none" for a named request when it is
+genuinely impossible for this data (e.g. a line/time-series with no date-like column, a pie/donut with no
+numeric column to size slices by, a scatter with fewer than two numeric columns) — and say specifically what
+column/shape is missing in "reason".
+
+If the user did NOT name a chart type, pick the best fit yourself using these defaults:
 - "line" for a time series (a date/period-like x column). "bar" for comparing categories.
 - "pie"/"doughnut" for a small (<= 8) set of categories that sum to a whole.
 - "scatter" for two numeric columns with no natural category axis.
-- "x" and "y" must be exact column names from the sample given, and "y" must be numeric.
-- Keep "label" under 40 characters.`;
+- "none" only if nothing charts well at all (a single scalar/row, or every column is free text with no
+  numeric column to plot) — explain why in "reason".`;
 }
 
 export async function suggestChart(question: string | undefined, rows: Record<string, unknown>[], hint?: string): Promise<Record<string, unknown>> {
   const key = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!key || !Array.isArray(rows) || !rows.length) return { type: 'none' };
+  if (!key) return { type: 'none', reason: 'Ask is not configured on the server.' };
+  if (!Array.isArray(rows) || !rows.length) return { type: 'none', reason: 'There are no rows to chart yet.' };
 
   const columns = Object.keys(rows[0]);
   const sample = rows.slice(0, 5).map((r) => Object.fromEntries(columns.map((c) => [c, val(r[c])])));
@@ -456,20 +577,22 @@ export async function suggestChart(question: string | undefined, rows: Record<st
         messages: [{ role: 'user', content: userContent }],
       }),
     });
-    if (!res.ok) return { type: 'none' };
+    if (!res.ok) return { type: 'none', reason: 'Could not reach the chart suggestion model — try again.' };
     const data = await res.json();
     text = (data.content || []).filter((b: { type: string }) => b.type === 'text').map((b: { text: string }) => b.text).join('').trim()
       .replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```$/, '').trim();
   } catch {
-    return { type: 'none' };
+    return { type: 'none', reason: 'Could not reach the chart suggestion model — try again.' };
   }
 
   try {
     const spec = JSON.parse(text);
-    if (!CHART_TYPES.includes(spec.type)) return { type: 'none' };
-    if (spec.type !== 'none' && (!columns.includes(spec.x) || !columns.includes(spec.y))) return { type: 'none' };
+    if (!CHART_TYPES.includes(spec.type)) return { type: 'none', reason: 'Got an unexpected response — try again.' };
+    if (spec.type !== 'none' && (!columns.includes(spec.x) || !columns.includes(spec.y))) {
+      return { type: 'none', reason: spec.reason || 'Could not match the suggested columns to this result.' };
+    }
     return spec;
   } catch {
-    return { type: 'none' };
+    return { type: 'none', reason: 'Got an unreadable response — try again.' };
   }
 }

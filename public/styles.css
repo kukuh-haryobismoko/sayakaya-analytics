@@ -344,9 +344,17 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 }
 .ask-bar input:focus { outline: 2px solid var(--amber); border-color: var(--amber); }
 .ask-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-.ask-thread { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-.ask-thread-item { font-size: 13px; color: var(--muted); }
-.ask-thread-item b { color: var(--ink); font-weight: 600; }
+.ask-thread {
+  border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 12px;
+  background: var(--input-bg);
+}
+.ask-thread-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.ask-thread-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.ask-thread-list { display: flex; flex-direction: column; gap: 5px; }
+.ask-chart-msg { color: var(--muted); font-size: 12px; margin: -6px 0 12px; }
+.ask-chart-msg.err { color: var(--rose); }
+.ask-thread-item { display: flex; gap: 6px; font-size: 13px; color: var(--ink); }
+.ask-thread-item .n { color: var(--muted); flex-shrink: 0; }
 #askAdvanced { margin-bottom: 16px; }
 #askAdvanced summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .ask-tables { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }

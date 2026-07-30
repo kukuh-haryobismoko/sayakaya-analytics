@@ -187,6 +187,8 @@ function createApp({ serveStatic = true } = {}) {
     const existing = await Auth.findUserByUsername(username);
     if (existing) return res.status(409).json({ error: 'That username is already taken.' });
     const created = await Auth.createUser({ username, password, isSuperuser: !!isSuperuser, allowedTabs: allowedTabs || [] });
+    await Auth.logEvent(req.user.id, req.user.username, 'admin_user_create',
+      `created dashboard user "${username}"${isSuperuser ? ' (superuser)' : ''}`);
     res.json(Auth.publicUser(created));
   }));
 
@@ -198,6 +200,12 @@ function createApp({ serveStatic = true } = {}) {
       return res.status(400).json({ error: 'Cannot remove the last remaining superuser.' });
     }
     const updated = await Auth.updateUser(req.params.id, req.body || {});
+    const changes = [];
+    if (req.body.password) changes.push('password reset');
+    if (req.body.isSuperuser !== undefined) changes.push(`superuser=${req.body.isSuperuser}`);
+    if (req.body.allowedTabs !== undefined) changes.push(`tabs=[${(req.body.allowedTabs || []).join(',')}]`);
+    await Auth.logEvent(req.user.id, req.user.username, 'admin_user_update',
+      `updated "${target.username}": ${changes.join(', ') || 'no changes'}`);
     res.json(Auth.publicUser(updated));
   }));
 
@@ -208,12 +216,13 @@ function createApp({ serveStatic = true } = {}) {
       return res.status(400).json({ error: 'Cannot delete the last remaining superuser.' });
     }
     await Auth.deleteUser(req.params.id);
+    await Auth.logEvent(req.user.id, req.user.username, 'admin_user_delete', `deleted dashboard user "${target.username}"`);
     res.json({ ok: true });
   }));
 
   app.get('/api/admin/audit-log', requireSuperuser, handler(async (req, res) => {
-    const { limit, search, from, to } = req.query;
-    const rows = await Auth.listAuditLog({ limit, search, from, to });
+    const { limit, search, from, to, user } = req.query;
+    const rows = await Auth.listAuditLog({ limit, search, from, to, user });
     res.json(rows);
   }));
 
@@ -305,6 +314,14 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.verificationBreakdown();
     res.json(await runQuery(q.sql, q.params));
   }));
+  app.get('/api/users/by-province', requireTab('overview'), handler(async (_req, res) => {
+    const q = Q.usersByProvince();
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/users/top-cities', requireTab('overview'), handler(async (req, res) => {
+    const q = Q.topCitiesByInvestors(req.query.limit);
+    res.json(await runQuery(q.sql, q.params));
+  }));
 
   // ---- Transactions explorer ------------------------------------------------
   app.get('/api/transactions/filters', requireTab('remisier-tx'), handler(async (_req, res) => {
@@ -359,11 +376,14 @@ function createApp({ serveStatic = true } = {}) {
     // don't have history), so it doesn't make sense to show it as if it were
     // "as of" a past date — omit it in that mode rather than show a misleading number.
     res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+    // A named individual's holdings, not aggregate BigQuery analytics — worth
+    // its own audit trail entry (who looked up which investor, and when).
+    await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
   // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
   app.get('/api/portfolio-explorer', requireTab('portfolio-explorer'), handler(async (req, res) => {
-    const { userId } = req.query;
+    const { userId, sid } = req.query;
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
     // Always look up the latest available snapshot date, even when a specific
     // date was requested — the UI shows it alongside asOfDate so it's obvious
@@ -380,6 +400,7 @@ function createApp({ serveStatic = true } = {}) {
       runQuery(b.sql, b.params),
     ]);
     res.json({ asOfDate, latestDate, holdings, byGoal });
+    await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio', `SID ${sid || userId} as of ${asOfDate} (explorer)`);
   }));
 
   // ---- HNWI (High Net Worth Individual): investors above an AUM threshold,
@@ -579,10 +600,12 @@ function createApp({ serveStatic = true } = {}) {
       : [];
     if (!question) return res.status(400).json({ error: 'Type a question first.' });
     try {
-      const { sql, rows } = await ask(question, context, history);
+      const { sql, rows } = await ask(question, context, history, req.user);
+      await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question} (${rows.length} rows)`);
       res.json({ sql, rows, count: rows.length });
     } catch (err) {
       console.error('[POST /api/ask]', err.message);
+      await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question} — failed: ${err.message}`);
       res.status(400).json({ error: err.message, sql: err.sql || null });
     }
   });
@@ -604,6 +627,7 @@ function createApp({ serveStatic = true } = {}) {
     const v = validateAdHoc(req.body.sql);
     if (!v.ok) return res.status(400).json({ error: v.error });
     const rows = await runQuery(capRows(v.sql, req.body.limit || 5000), {});
+    await Auth.logEvent(req.user.id, req.user.username, 'sql_run', v.sql.slice(0, 300));
     res.json({ rows, count: rows.length });
   }));
 
