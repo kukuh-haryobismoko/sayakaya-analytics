@@ -227,6 +227,10 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 /* ---------- Charts ---------- */
 .chart-wrap { height: 320px; position: relative; }
 .chart-wrap.sm { height: 240px; }
+/* Indonesia's real bbox is ~2.7:1 (wide, short) — sized so the full-width
+   map panel fills horizontally with minimal top/bottom dead space instead
+   of using the generic square-ish chart height. */
+.chart-wrap.geo { height: 440px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; background: var(--surface); padding: 6px 12px; font-family: inherit; font-size: 12px; cursor: pointer; color: var(--muted); }
 .seg button.on { background: var(--indigo); color: #fff; }
@@ -414,6 +418,7 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   .panel { padding: 14px; }
   .chart-wrap { height: 240px; }
   .chart-wrap.sm { height: 200px; }
+  .chart-wrap.geo { height: 260px; }
   .kpi-value { font-size: 22px; }
 
   /* A right-anchored absolute panel can overflow off the left edge of a

@@ -883,19 +883,33 @@ const usersByProvince = () => ({
   params: {},
 });
 
-// Top cities by investor count — the finer-grained companion to the province
-// map (508 distinct cities is too many to put on one map at a glance, so this
-// is a ranked list instead of a second map).
-const topCitiesByInvestors = (limit = 15) => ({
-  sql: `WITH ${CITY_LOOKUP_CTE}
-    SELECT cl.city_name, cl.province_name, COUNT(DISTINCT up.user_id) AS investor_count
-    FROM ${USER_PROFILES} up
-    JOIN city_lookup cl ON cl.city_code = up.id_address_city
-    GROUP BY cl.city_name, cl.province_name
-    ORDER BY investor_count DESC
-    LIMIT @limit`,
-  params: { limit: parseInt(limit, 10) },
-});
+// Top cities by investor count, and separately by AUM — the finer-grained
+// companion to the province map (508 distinct cities is too many to put on
+// one map at a glance, so these are ranked lists instead of a second map).
+// Same join/shape for both, ordered differently — hence the shared builder.
+function topCitiesQuery(limit, orderBy) {
+  return {
+    sql: `WITH ${CITY_LOOKUP_CTE},
+      ${ACTIVE_CTE},
+      aum_by_user AS (
+        SELECT a.user_id, SUM(a.unit * f.latest_nav_value) AS aum
+        FROM active a JOIN ${FUNDS} f ON f.id = a.fund_id
+        GROUP BY a.user_id
+      )
+      SELECT cl.city_name, cl.province_name,
+        COUNT(DISTINCT up.user_id) AS investor_count,
+        ROUND(SUM(IFNULL(abu.aum, 0))) AS total_aum
+      FROM ${USER_PROFILES} up
+      JOIN city_lookup cl ON cl.city_code = up.id_address_city
+      LEFT JOIN aum_by_user abu ON abu.user_id = up.user_id
+      GROUP BY cl.city_name, cl.province_name
+      ORDER BY ${orderBy} DESC
+      LIMIT @limit`,
+    params: { limit: parseInt(limit, 10) },
+  };
+}
+const topCitiesByInvestors = (limit = 15) => topCitiesQuery(limit, 'investor_count');
+const topCitiesByAum = (limit = 15) => topCitiesQuery(limit, 'total_aum');
 
 // Referral leaderboard: who brought in the most $ via referral_code/referrer_code.
 const topReferrers = (limit = 20) => ({
@@ -1568,7 +1582,7 @@ module.exports = {
   hnwiLatestDate, hnwiTotal, hnwiByFund,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
   campaignPerformance, switchingTopPairs, aumByManager,
-  aumByRisk, aumByIncome, usersByProvince, topCitiesByInvestors, topReferrers, reconciliationDaily,
+  aumByRisk, aumByIncome, usersByProvince, topCitiesByInvestors, topCitiesByAum, topReferrers, reconciliationDaily,
   revenueDetail, revenueMonthlySummary,
   revenueV2Detail, revenueV2MonthlySummary,
   remisierUsers, remisierRevenueDetail, remisierRevenueSummary,

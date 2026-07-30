@@ -322,6 +322,10 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.topCitiesByInvestors(req.query.limit);
     res.json(await runQuery(q.sql, q.params));
   }));
+  app.get('/api/users/top-cities-aum', requireTab('overview'), handler(async (req, res) => {
+    const q = Q.topCitiesByAum(req.query.limit);
+    res.json(await runQuery(q.sql, q.params));
+  }));
 
   // ---- Transactions explorer ------------------------------------------------
   app.get('/api/transactions/filters', requireTab('remisier-tx'), handler(async (_req, res) => {

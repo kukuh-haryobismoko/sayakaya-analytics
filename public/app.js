@@ -407,6 +407,7 @@ async function loadOverview() {
   api('/api/funds/top?limit=10').then(renderTopFunds).catch(() => {});
   api('/api/users/by-province').then(renderGeoChart).catch(() => {});
   api('/api/users/top-cities?limit=15').then(renderTopCities).catch(() => {});
+  api('/api/users/top-cities-aum?limit=15').then(renderTopCitiesAum).catch(() => {});
 }
 
 // ---- Investor distribution map (chartjs-chart-geo choropleth) -------------
@@ -427,13 +428,18 @@ function loadIndonesiaGeoJson() {
   return fetch('data/indonesia-provinces.json').then((r) => r.json()).then((d) => (indonesiaGeoJson = d));
 }
 
-// Sequential tint from the app's own indigo accent (light -> full color) —
-// keeps the map visually consistent with the rest of the dashboard's palette
-// instead of pulling in a separate colour scheme just for this one chart.
+// Sequential OPAQUE tint from a pale neutral up to the app's own indigo accent.
+// Deliberately opaque (not rgba alpha-blended over the panel background) —
+// an alpha-based fill picks up whatever's behind it, which is exactly why the
+// zero-investor provinces used to nearly vanish in dark mode (a faint tint
+// over a dark panel reads as "nothing"). Opaque colors look identical in
+// both themes since there's nothing behind them to blend with.
 function geoColor(t) {
   const hex = (C.indigo || '#3a50ab').replace('#', '');
-  const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${(0.08 + t * 0.87).toFixed(3)})`;
+  const r2 = parseInt(hex.slice(0, 2), 16), g2 = parseInt(hex.slice(2, 4), 16), b2 = parseInt(hex.slice(4, 6), 16);
+  const r1 = 223, g1 = 227, b1 = 240; // pale indigo-tinted gray — the "0" end, still visible as a shape
+  const mix = (a, b) => Math.round(a + (b - a) * t);
+  return `rgb(${mix(r1, r2)},${mix(g1, g2)},${mix(b1, b2)})`;
 }
 
 async function renderGeoChart(rows) {
@@ -451,6 +457,10 @@ async function renderGeoChart(rows) {
       datasets: [{
         label: 'Investors',
         outline: geo,
+        // Fixed, opaque, theme-independent border — province boundaries stay
+        // legible regardless of fill color or light/dark mode.
+        borderColor: '#7c8aa5',
+        borderWidth: 1,
         data: geo.features.map((f) => {
           const d = byProvince[f.properties.province_name];
           return { feature: f, value: d ? d.investors : 0, aum: d ? d.aum : 0 };
@@ -488,6 +498,19 @@ function renderTopCities(rows) {
     </tr>`).join('');
   $('#topCitiesTable').innerHTML = `<table><thead><tr>
       <th></th><th>City</th><th>Province</th><th class="num">Investors</th>
+    </tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderTopCitiesAum(rows) {
+  if (!rows.length) { $('#topCitiesAumTable').innerHTML = '<div class="empty">No data.</div>'; return; }
+  const body = rows.map((r, i) => `<tr>
+      <td class="num">${i + 1}</td>
+      <td>${val(r.city_name)}</td>
+      <td>${val(r.province_name)}</td>
+      <td class="num">${idrFull(val(r.total_aum))}</td>
+    </tr>`).join('');
+  $('#topCitiesAumTable').innerHTML = `<table><thead><tr>
+      <th></th><th>City</th><th>Province</th><th class="num">AUM</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 
