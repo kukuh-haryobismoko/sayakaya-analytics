@@ -177,6 +177,9 @@ export async function logEvent(userId: string | null, username: string, action: 
 // search is a case-insensitive wildcard match across username, action, and
 // detail (so e.g. typing an export source/filename finds it too, not just a
 // username) — from/to filter on created_at, inclusive of the whole "to" day.
+// The team reads/picks these dates in Jakarta (GMT+7), so the day boundaries
+// are anchored to +07:00, not UTC midnight — otherwise "today" would miss the
+// first 7 hours of the Jakarta day and bleed into the next one at the end.
 export function listAuditLog(opts: { limit?: number | string; search?: string; from?: string; to?: string } = {}): Promise<AuditLogRow[]> {
   const { limit = 200, search = '', from = '', to = '' } = opts;
   const params = [`select=*`, `order=created_at.desc`, `limit=${Number(limit) || 200}`];
@@ -184,8 +187,8 @@ export function listAuditLog(opts: { limit?: number | string; search?: string; f
     const term = `*${search}*`;
     params.push(`or=(username.ilike.${encodeURIComponent(term)},action.ilike.${encodeURIComponent(term)},detail.ilike.${encodeURIComponent(term)})`);
   }
-  if (from) params.push(`created_at=gte.${encodeURIComponent(from + 'T00:00:00')}`);
-  if (to) params.push(`created_at=lte.${encodeURIComponent(to + 'T23:59:59.999')}`);
+  if (from) params.push(`created_at=gte.${encodeURIComponent(from + 'T00:00:00+07:00')}`);
+  if (to) params.push(`created_at=lte.${encodeURIComponent(to + 'T23:59:59.999+07:00')}`);
   return rest(`/dashboard_audit_log?${params.join('&')}`);
 }
 

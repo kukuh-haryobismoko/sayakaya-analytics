@@ -1839,6 +1839,18 @@ async function saveAdminUser() {
   } catch (e) { $('#adminFormErr').textContent = e.message; }
 }
 
+// Supabase stores created_at in UTC; the team reads the activity log from
+// Jakarta, so render it in Asia/Jakarta (GMT+7) instead of raw UTC.
+function toJakartaTime(v) {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v ?? '');
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d).reduce((o, p) => { o[p.type] = p.value; return o; }, {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
 async function loadAdminAuditLog() {
   $('#adminAuditTable').innerHTML = '<div class="loading">Loading activity…</div>';
   const qs = new URLSearchParams({ limit: 200 });
@@ -1850,9 +1862,9 @@ async function loadAdminAuditLog() {
   if (to) qs.set('to', to);
   try {
     const rows = await api(`/api/admin/audit-log?${qs}`);
-    const mapped = rows.map((r) => ({ ...r, created_at: String(val(r.created_at)).replace('T', ' ').slice(0, 16) }));
+    const mapped = rows.map((r) => ({ ...r, created_at: toJakartaTime(val(r.created_at)) }));
     genTable('#adminAuditTable', mapped, [
-      { key: 'created_at', label: 'Time' },
+      { key: 'created_at', label: 'Time (WIB)' },
       { key: 'username', label: 'User' },
       { key: 'action', label: 'Action' },
       { key: 'detail', label: 'Detail' },
