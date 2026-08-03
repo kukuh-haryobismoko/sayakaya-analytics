@@ -346,6 +346,24 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 .dropdown-multi-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
 .exp { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* ---------- Row action menu (e.g. Admin users table) ---------- */
+.dropdown-multi-panel.menu-sm { width: 170px; padding: 6px; }
+.row-menu-item {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  padding: 8px 10px; border-radius: 6px; font: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
+}
+.row-menu-item:hover { background: var(--hover-bg); }
+.row-menu-item.danger { color: var(--rose); }
+.access-list { display: flex; flex-wrap: wrap; gap: 4px; white-space: normal; max-width: 460px; }
+
+/* ---------- Admin modal (native <dialog>) ---------- */
+.admin-modal {
+  background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--indigo);
+  border-radius: var(--radius); box-shadow: var(--shadow); color: var(--ink);
+  padding: 18px 20px; width: 640px; max-width: calc(100vw - 32px);
+}
+.admin-modal::backdrop { background: rgba(10, 12, 30, .5); }
+
 /* ---------- SQL lab ---------- */
 #sqlInput {
   width: 100%; min-height: 160px; resize: vertical;

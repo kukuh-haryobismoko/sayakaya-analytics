@@ -179,7 +179,14 @@ async function questionToSql(question: string, priorAttempt: PriorAttempt | null
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 800,
+      // Sonnet 5 spends an unpredictable, un-opted-in chunk of this budget on
+      // its own internal reasoning before ever writing SQL — for a hard
+      // analytical question that reasoning alone can burn 600-800+ tokens.
+      // At 800 total that leaves zero room for the actual query text, which
+      // surfaced as "The generated query was blocked: Query is empty."
+      // (stop_reason "max_tokens" with 0 output text). Comfortably over-budget
+      // instead of chasing the exact reasoning cost per question.
+      max_tokens: 4096,
       system: systemPrompt(),
       messages,
     }),
@@ -493,9 +500,17 @@ export async function ask(question: string, context?: string | null, history?: H
   for (let attempt = 0; ; attempt++) {
     const v = validateAdHoc(sql);
     if (!v.ok) {
-      const err: AskError = new Error(`The generated query was blocked: ${v.error}`);
-      err.sql = sql;
-      throw err;
+      if (attempt >= 1) {
+        const err: AskError = new Error(`The generated query was blocked: ${v.error}`);
+        err.sql = sql;
+        throw err;
+      }
+      // A malformed/empty first attempt (e.g. the model returned no SQL at
+      // all) gets the same one self-correction retry a runtime BigQuery
+      // error already gets below — an empty response isn't fed back as an
+      // empty assistant turn, which the Anthropic API rejects.
+      sql = await questionToSql(question, { sql: sql || '(empty response)', error: v.error }, fullContext, history);
+      continue;
     }
     try {
       const rows = await runQuery(capRows(v.sql, 1000), {});

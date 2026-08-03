@@ -1737,6 +1737,7 @@ async function runAsk(q) {
     if (data.sql) { askSqlCache = data.sql; $('#askSqlText').value = data.sql; $('#askSql').classList.remove('hidden'); }
     else { askSqlCache = ''; $('#askSql').classList.add('hidden'); }
     if (!res.ok) { $('#askResult').innerHTML = ''; setAskMsg(data.error || 'Request failed', 'err'); return; }
+    $('#askInput').value = '';
     renderGenericTable('#askResult', data.rows || []);
     const c = data.count || 0;
     setAskMsg(`${num(c)} row${c === 1 ? '' : 's'}`, 'ok');
@@ -1933,7 +1934,6 @@ function resetAdminForm() {
   editingUserId = null;
   $('#adminFormTitle').textContent = 'Add user';
   $('#adminSaveBtn').textContent = 'Create user';
-  $('#adminCancelEditBtn').classList.add('hidden');
   $('#adminUsername').value = '';
   $('#adminUsername').disabled = false;
   $('#adminPassword').value = '';
@@ -1947,7 +1947,6 @@ function startEditUser(user) {
   editingUserId = user.id;
   $('#adminFormTitle').textContent = `Edit ${user.username}`;
   $('#adminSaveBtn').textContent = 'Save changes';
-  $('#adminCancelEditBtn').classList.remove('hidden');
   $('#adminUsername').value = user.username;
   $('#adminUsername').disabled = true; // username is immutable once created
   $('#adminPassword').value = '';
@@ -1955,20 +1954,31 @@ function startEditUser(user) {
   $('#adminIsSuperuser').checked = user.isSuperuser;
   $('#adminFormErr').textContent = '';
   renderAdminTabsPicker(user.allowedTabs || []);
-  $('#adminFormTitle').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 let adminUsersCache = [];
 
 function renderAdminUsers(users) {
+  const labelFor = (id) => (allTabs().find((t) => t.id === id) || {}).label || id;
+  const accessCell = (u) => {
+    if (u.isSuperuser) return '<span class="tag completed">Superuser</span>';
+    const tabs = u.allowedTabs || [];
+    if (!tabs.length) return '—';
+    return `<div class="access-list">${tabs.map((id) => `<span class="tag other">${labelFor(id)}</span>`).join('')}</div>`;
+  };
   const body = users.map((u) => `
     <tr>
       <td>${u.username}</td>
-      <td>${u.isSuperuser ? 'Superuser' : (u.allowedTabs || []).join(', ') || '—'}</td>
+      <td>${accessCell(u)}</td>
       <td class="mono">${String(u.createdAt || '').slice(0, 10)}</td>
       <td>
-        <button class="btn-ghost" data-edit="${u.id}">Edit</button>
-        <button class="btn-ghost" data-delete="${u.id}" data-username="${u.username}">Delete</button>
+        <div class="dropdown-multi row-actions">
+          <button type="button" class="dropdown-multi-btn row-menu-btn" data-row-menu="${u.id}" aria-label="Actions">⚙</button>
+          <div class="dropdown-multi-panel menu-sm">
+            <button type="button" class="row-menu-item" data-edit="${u.id}">Edit access</button>
+            <button type="button" class="row-menu-item danger" data-delete="${u.id}" data-username="${u.username}">Delete</button>
+          </div>
+        </div>
       </td>
     </tr>`).join('');
   $('#adminUsersTable').innerHTML = `<table>
@@ -1976,9 +1986,16 @@ function renderAdminUsers(users) {
     <tbody>${body}</tbody>
   </table>`;
   adminUsersCache = users;
+  $$('#adminUsersTable .row-menu-btn').forEach((b) => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const panel = b.nextElementSibling;
+    const wasOpen = panel.classList.contains('open');
+    $$('#adminUsersTable .dropdown-multi-panel.open').forEach((p) => p.classList.remove('open'));
+    if (!wasOpen) panel.classList.add('open');
+  }));
   $$('#adminUsersTable [data-edit]').forEach((b) => b.addEventListener('click', () => {
     const u = adminUsersCache.find((x) => x.id === b.dataset.edit);
-    if (u) startEditUser(u);
+    if (u) { startEditUser(u); $('#adminUserModal').showModal(); }
   }));
   $$('#adminUsersTable [data-delete]').forEach((b) => b.addEventListener('click', async () => {
     if (!confirm(`Delete user "${b.dataset.username}"? This can't be undone.`)) return;
@@ -2018,6 +2035,7 @@ async function saveAdminUser() {
       await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, password, isSuperuser, allowedTabs }) });
       toast('User created');
     }
+    $('#adminUserModal').close();
     resetAdminForm();
     loadAdminUsers();
   } catch (e) { $('#adminFormErr').textContent = e.message; }
@@ -2076,8 +2094,18 @@ async function loadAdminAuditLog() {
 
 function wireAdmin() {
   renderAdminTabsPicker([]);
+  $('#adminAddUserBtn').addEventListener('click', () => {
+    resetAdminForm();
+    $('#adminUserModal').showModal();
+  });
   $('#adminSaveBtn').addEventListener('click', saveAdminUser);
-  $('#adminCancelEditBtn').addEventListener('click', resetAdminForm);
+  $('#adminCancelEditBtn').addEventListener('click', () => $('#adminUserModal').close());
+  $('#adminUserModal').addEventListener('close', resetAdminForm);
+  // Click on the backdrop (the dialog element itself, outside its content box) dismisses it.
+  $('#adminUserModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.row-actions')) $$('#adminUsersTable .dropdown-multi-panel.open').forEach((p) => p.classList.remove('open'));
+  });
   $('#adminAuditRefresh').addEventListener('click', loadAdminAuditLog);
   $('#adminAuditApply').addEventListener('click', loadAdminAuditLog);
   $('#adminAuditUser').addEventListener('change', loadAdminAuditLog);

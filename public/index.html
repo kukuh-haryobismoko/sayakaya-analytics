@@ -1019,6 +1019,14 @@ ORDER BY n DESC"></textarea>
     <!-- ===================== ADMIN (superuser only) ===================== -->
     <section id="admin" class="view">
       <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Users</h2>
+          <button class="btn-primary" id="adminAddUserBtn">+ Add user</button>
+        </div>
+        <div id="adminUsersTable" class="table-wrap"></div>
+      </div>
+
+      <dialog id="adminUserModal" class="admin-modal">
         <div class="panel-head wrap"><h2 id="adminFormTitle">Add user</h2></div>
         <span class="hint">Choose which sections this person can access. Superusers always see everything.</span>
         <div class="filters" style="margin-top:12px">
@@ -1029,15 +1037,10 @@ ORDER BY n DESC"></textarea>
         <div id="adminTabsPicker" class="ask-tables" style="margin-top:12px"></div>
         <div class="exp" style="margin-top:14px">
           <button class="btn-primary" id="adminSaveBtn">Create user</button>
-          <button class="btn-ghost hidden" id="adminCancelEditBtn">Cancel edit</button>
+          <button class="btn-ghost" id="adminCancelEditBtn">Cancel</button>
         </div>
         <div id="adminFormErr" class="gate-err"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head wrap"><h2>Users</h2></div>
-        <div id="adminUsersTable" class="table-wrap"></div>
-      </div>
+      </dialog>
     </section>
 
     <!-- ===================== ACTIVITY LOG (superuser only) ===================== -->
