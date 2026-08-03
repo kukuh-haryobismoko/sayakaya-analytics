@@ -1643,8 +1643,6 @@ let lastAskQuestion = '';
 // sent back to the server so the model can see what "that" refers to.
 let askHistory = [];
 
-const ASK_HINT_DEFAULT = 'Just use your mother language to get the data — no technical skills needed.';
-
 // Renders the running conversation as a numbered list of past questions, with
 // its own header explaining what's going on (this is the thing people found
 // confusing: a plain "New" button next to Ask, with no indication anything
@@ -1655,22 +1653,22 @@ function renderAskThread() {
   el.innerHTML = '';
   if (!askHistory.length) {
     el.classList.add('hidden');
-    $('#askHint').textContent = ASK_HINT_DEFAULT;
+    $('#askHint').textContent = t('ask_hint_default');
     return;
   }
   el.classList.remove('hidden');
-  $('#askHint').textContent = `Follow-up mode: your next question can refer to "that"/"it" and it'll build on question ${askHistory.length} below.`;
+  $('#askHint').textContent = t('ask_hint_followup').replace('{n}', askHistory.length);
 
   const head = document.createElement('div');
   head.className = 'ask-thread-head';
   const title = document.createElement('span');
   title.className = 'ask-thread-title';
-  title.textContent = `Conversation · ${askHistory.length} question${askHistory.length === 1 ? '' : 's'}`;
+  title.textContent = t('ask_conversation_count').replace('{n}', askHistory.length).replace('{s}', askHistory.length === 1 ? '' : 's');
   const resetBtn = document.createElement('button');
   resetBtn.className = 'btn-ghost';
   resetBtn.id = 'askNewChat';
-  resetBtn.title = 'Forget the above and ask something unrelated';
-  resetBtn.textContent = '↺ Start new conversation';
+  resetBtn.title = t('ask_new_chat_title');
+  resetBtn.textContent = t('ask_new_chat_btn');
   resetBtn.addEventListener('click', clearAskConversation);
   head.appendChild(title);
   head.appendChild(resetBtn);
@@ -1964,12 +1962,12 @@ let editingUserId = null;
 
 function resetAdminForm() {
   editingUserId = null;
-  $('#adminFormTitle').textContent = 'Add user';
-  $('#adminSaveBtn').textContent = 'Create user';
+  $('#adminFormTitle').textContent = t('admin_add_user_title');
+  $('#adminSaveBtn').textContent = t('admin_create_user');
   $('#adminUsername').value = '';
   $('#adminUsername').disabled = false;
   $('#adminPassword').value = '';
-  $('#adminPassword').placeholder = 'Password';
+  $('#adminPassword').placeholder = t('gate_password_ph');
   $('#adminIsSuperuser').checked = false;
   $('#adminFormErr').textContent = '';
   renderAdminTabsPicker([]);
@@ -1977,12 +1975,12 @@ function resetAdminForm() {
 
 function startEditUser(user) {
   editingUserId = user.id;
-  $('#adminFormTitle').textContent = `Edit ${user.username}`;
-  $('#adminSaveBtn').textContent = 'Save changes';
+  $('#adminFormTitle').textContent = `${t('admin_edit_user_prefix')} ${user.username}`;
+  $('#adminSaveBtn').textContent = t('admin_save_changes');
   $('#adminUsername').value = user.username;
   $('#adminUsername').disabled = true; // username is immutable once created
   $('#adminPassword').value = '';
-  $('#adminPassword').placeholder = 'Leave blank to keep current password';
+  $('#adminPassword').placeholder = t('admin_password_keep_current_ph');
   $('#adminIsSuperuser').checked = user.isSuperuser;
   $('#adminFormErr').textContent = '';
   renderAdminTabsPicker(user.allowedTabs || []);
@@ -2664,7 +2662,7 @@ function setConnStatus(live) {
 }
 // i18n.js calls this after a language switch, to re-render text this app
 // builds dynamically in JS rather than via a static data-i18n attribute.
-window.onLanguageChange = () => setConnStatus(lastConnLive);
+window.onLanguageChange = () => { setConnStatus(lastConnLive); renderAskThread(); };
 
 async function pollHealth() {
   try {

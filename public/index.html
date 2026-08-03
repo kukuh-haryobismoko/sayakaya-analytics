@@ -145,10 +145,10 @@
     <!-- ===================== USER PORTFOLIO ===================== -->
     <section id="portfolio" class="view">
       <div class="panel">
-        <div class="panel-head"><h2>Find investor</h2><span class="hint">Search by SID code, name, or email.</span></div>
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
         <div class="ask-bar">
-          <input id="pfSearchInput" type="text" autocomplete="off" placeholder="e.g. SID code" />
-          <button id="pfSearchBtn" class="btn-primary">Search</button>
+          <input id="pfSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
+          <button id="pfSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
         </div>
         <div id="pfResults" class="table-wrap"></div>
       </div>
@@ -158,18 +158,18 @@
           <div class="panel-head wrap">
             <h2 id="pfUserName">—</h2>
             <div class="exp">
-              <label>As of <input type="date" id="pfDate" /></label>
-              <button class="btn-primary" id="pfDateApply">Go</button>
-              <button class="btn-ghost" id="pfCsv">CSV</button>
-              <button class="btn-ghost" id="pfXlsx">Excel (portfolio + performance, all types)</button>
+              <label><span data-i18n="common_as_of">As of</span> <input type="date" id="pfDate" /></label>
+              <button class="btn-primary" id="pfDateApply" data-i18n="common_go">Go</button>
+              <button class="btn-ghost" id="pfCsv" data-i18n="common_csv">CSV</button>
+              <button class="btn-ghost" id="pfXlsx" data-i18n="common_xlsx_portfolio_full">Excel (portfolio + performance, all types)</button>
               <div class="dropdown-multi" id="pfPdfColsDropdown">
-                <button type="button" class="dropdown-multi-btn" id="pfPdfColsBtn">Columns</button>
+                <button type="button" class="dropdown-multi-btn" id="pfPdfColsBtn" data-i18n="common_columns">Columns</button>
                 <div class="dropdown-multi-panel" id="pfPdfColsPanel">
                   <div id="pfPdfCols" class="dropdown-multi-list"></div>
                 </div>
               </div>
-              <button class="btn-ghost" id="pfPdfOnly">PDF (portfolio only)</button>
-              <button class="btn-ghost" id="pfPdf">PDF (with performance)</button>
+              <button class="btn-ghost" id="pfPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
+              <button class="btn-ghost" id="pfPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
             </div>
           </div>
           <span class="hint" id="pfUserSub"></span><br>
@@ -178,17 +178,17 @@
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h2>AUM over time</h2></div>
+          <div class="panel-head"><h2 data-i18n="port_aum_over_time">AUM over time</h2></div>
           <div class="chart-wrap"><canvas id="pfAumChart"></canvas></div>
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h2>Holdings</h2></div>
+          <div class="panel-head"><h2 data-i18n="port_holdings">Holdings</h2></div>
           <div id="pfHoldings" class="table-wrap"></div>
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h2>AUM performance</h2><span class="hint">% change in total portfolio value, from mi_fee_logs.portfolio_with_code.</span></div>
+          <div class="panel-head"><h2 data-i18n="port_aum_performance">AUM performance</h2><span class="hint" data-i18n="port_aum_performance_hint">% change in total portfolio value, from mi_fee_logs.portfolio_with_code.</span></div>
           <div id="pfPerformance" class="table-wrap"></div>
         </div>
       </div>
@@ -197,10 +197,10 @@
     <!-- ===================== PORTFOLIO EXPLORER (goal_snapshots) ===================== -->
     <section id="portfolio-explorer" class="view">
       <div class="panel">
-        <div class="panel-head"><h2>Find investor</h2><span class="hint">Search by SID code, name, or email.</span></div>
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
         <div class="ask-bar">
-          <input id="peSearchInput" type="text" autocomplete="off" placeholder="e.g. SID code" />
-          <button id="peSearchBtn" class="btn-primary">Search</button>
+          <input id="peSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
+          <button id="peSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
         </div>
         <div id="peResults" class="table-wrap"></div>
       </div>
@@ -210,18 +210,18 @@
           <div class="panel-head wrap">
             <h2 id="peUserName">—</h2>
             <div class="exp">
-              <label>As of <input type="date" id="peDate" /></label>
-              <button class="btn-primary" id="peDateApply">Go</button>
-              <button class="btn-ghost" id="peCsv">CSV</button>
-              <button class="btn-ghost" id="peXlsx">Excel (portfolio + performance, all types)</button>
+              <label><span data-i18n="common_as_of">As of</span> <input type="date" id="peDate" /></label>
+              <button class="btn-primary" id="peDateApply" data-i18n="common_go">Go</button>
+              <button class="btn-ghost" id="peCsv" data-i18n="common_csv">CSV</button>
+              <button class="btn-ghost" id="peXlsx" data-i18n="common_xlsx_portfolio_full">Excel (portfolio + performance, all types)</button>
               <div class="dropdown-multi" id="pePdfColsDropdown">
-                <button type="button" class="dropdown-multi-btn" id="pePdfColsBtn">Columns</button>
+                <button type="button" class="dropdown-multi-btn" id="pePdfColsBtn" data-i18n="common_columns">Columns</button>
                 <div class="dropdown-multi-panel" id="pePdfColsPanel">
                   <div id="pePdfCols" class="dropdown-multi-list"></div>
                 </div>
               </div>
-              <button class="btn-ghost" id="pePdfOnly">PDF (portfolio only)</button>
-              <button class="btn-ghost" id="pePdf">PDF (with performance)</button>
+              <button class="btn-ghost" id="pePdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
+              <button class="btn-ghost" id="pePdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
             </div>
           </div>
           <span class="hint" id="peUserSub"></span><br>
@@ -230,12 +230,12 @@
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h2>Holdings by fund</h2><span class="hint">Merged across all goals, as of the picked date.</span></div>
+          <div class="panel-head"><h2 data-i18n="pe_holdings_by_fund">Holdings by fund</h2><span class="hint" data-i18n="pe_holdings_by_fund_hint">Merged across all goals, as of the picked date.</span></div>
           <div id="peHoldings" class="table-wrap"></div>
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h2>Holdings by goal</h2><span class="hint">Preview only — exports stay merged across goals.</span></div>
+          <div class="panel-head"><h2 data-i18n="pe_holdings_by_goal">Holdings by goal</h2><span class="hint" data-i18n="pe_holdings_by_goal_hint">Preview only — exports stay merged across goals.</span></div>
           <div id="peByGoal"></div>
         </div>
       </div>
@@ -245,22 +245,22 @@
     <section id="hnwi" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Filters</h2>
+          <h2 data-i18n="common_filters">Filters</h2>
           <div class="range">
-            <label>As of <input type="date" id="hnwiDate" /></label>
-            <label>Min AUM (Rp) <input type="number" id="hnwiMinAum" placeholder="e.g. 5000000000" step="1000000" style="width:180px" /></label>
-            <button id="hnwiApply" class="btn-primary">Apply</button>
+            <label><span data-i18n="common_as_of">As of</span> <input type="date" id="hnwiDate" /></label>
+            <label><span data-i18n="hnwi_min_aum">Min AUM (Rp)</span> <input type="number" id="hnwiMinAum" placeholder="e.g. 5000000000" step="1000000" style="width:180px" /></label>
+            <button id="hnwiApply" class="btn-primary" data-i18n="apply">Apply</button>
           </div>
         </div>
-        <span class="hint">From mi_fee_logs.portfolio_with_code, one day before its own created_at (its created_at is a day ahead of the AUM date it represents). Leave Min AUM blank to see everyone, sorted highest AUM first.</span>
+        <span class="hint" data-i18n="hnwi_filters_hint">From mi_fee_logs.portfolio_with_code, one day before its own created_at (its created_at is a day ahead of the AUM date it represents). Leave Min AUM blank to see everyone, sorted highest AUM first.</span>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>AUM per investor (total)</h2>
+          <h2 data-i18n="hnwi_total_per_investor">AUM per investor (total)</h2>
           <div class="exp">
-            <button class="btn-ghost" id="hnwiTotalCsv">CSV</button>
-            <button class="btn-ghost" id="hnwiTotalXlsx">Excel</button>
+            <button class="btn-ghost" id="hnwiTotalCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="hnwiTotalXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="hnwiTotalTable" class="table-wrap tall" style="margin-top:14px"></div>
@@ -268,10 +268,10 @@
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>AUM per investor per fund</h2>
+          <h2 data-i18n="hnwi_per_fund">AUM per investor per fund</h2>
           <div class="exp">
-            <button class="btn-ghost" id="hnwiByFundCsv">CSV</button>
-            <button class="btn-ghost" id="hnwiByFundXlsx">Excel</button>
+            <button class="btn-ghost" id="hnwiByFundCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="hnwiByFundXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="hnwiByFundTable" class="table-wrap tall" style="margin-top:14px"></div>
@@ -284,11 +284,11 @@
 
       <div class="panel">
         <div class="panel-head">
-          <h2>Transaction volume</h2>
+          <h2 data-i18n="ov_transaction_volume">Transaction volume</h2>
           <div class="seg" id="gran">
-            <button data-g="day">Day</button>
-            <button data-g="week">Week</button>
-            <button class="on" data-g="month">Month</button>
+            <button data-g="day" data-i18n="common_day">Day</button>
+            <button data-g="week" data-i18n="common_week">Week</button>
+            <button class="on" data-g="month" data-i18n="common_month">Month</button>
           </div>
         </div>
         <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
@@ -296,48 +296,48 @@
 
       <div class="grid-2">
         <div class="panel">
-          <div class="panel-head"><h2>By transaction type</h2></div>
+          <div class="panel-head"><h2 data-i18n="ov_by_tx_type">By transaction type</h2></div>
           <div class="chart-wrap sm"><canvas id="typeChart"></canvas></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2>By status</h2></div>
+          <div class="panel-head"><h2 data-i18n="ov_by_status">By status</h2></div>
           <div class="chart-wrap sm"><canvas id="statusChart"></canvas></div>
         </div>
       </div>
 
       <div class="grid-2">
         <div class="panel">
-          <div class="panel-head"><h2>User verification</h2></div>
+          <div class="panel-head"><h2 data-i18n="ov_user_verification">User verification</h2></div>
           <div class="chart-wrap sm"><canvas id="verifyChart"></canvas></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2>AUM by fund type</h2></div>
+          <div class="panel-head"><h2 data-i18n="ov_aum_by_fund_type">AUM by fund type</h2></div>
           <div class="chart-wrap sm"><canvas id="fundTypeChart"></canvas></div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Investor distribution by province</h2></div>
+        <div class="panel-head"><h2 data-i18n="ov_investor_distribution">Investor distribution by province</h2></div>
         <div class="chart-wrap geo"><canvas id="geoChart"></canvas></div>
       </div>
 
       <div class="grid-2">
         <div class="panel">
-          <div class="panel-head"><h2>Top cities by investors</h2></div>
+          <div class="panel-head"><h2 data-i18n="ov_top_cities_investors">Top cities by investors</h2></div>
           <div id="topCitiesTable" class="table-wrap"></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2>Top cities by AUM</h2></div>
+          <div class="panel-head"><h2 data-i18n="ov_top_cities_aum">Top cities by AUM</h2></div>
           <div id="topCitiesAumTable" class="table-wrap"></div>
         </div>
       </div>
 
       <div class="panel">
         <div class="panel-head">
-          <h2>Largest funds by AUM</h2>
+          <h2 data-i18n="ov_largest_funds">Largest funds by AUM</h2>
           <div class="exp">
-            <button class="btn-ghost" data-export="topfunds" data-fmt="csv">CSV</button>
-            <button class="btn-ghost" data-export="topfunds" data-fmt="xlsx">Excel</button>
+            <button class="btn-ghost" data-export="topfunds" data-fmt="csv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" data-export="topfunds" data-fmt="xlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="topFunds" class="table-wrap"></div>
@@ -348,22 +348,22 @@
     <section id="aum" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>AUM &amp; revenue history</h2>
+          <h2 data-i18n="aum_history_title">AUM &amp; revenue history</h2>
           <div class="filters">
             <div class="seg" id="aumGran">
-              <button data-g="day">Day</button>
-              <button class="on" data-g="month">Month</button>
+              <button data-g="day" data-i18n="common_day">Day</button>
+              <button class="on" data-g="month" data-i18n="common_month">Month</button>
             </div>
             <span class="divider"></span>
-            <button class="btn-ghost" id="aumCsv">CSV</button>
-            <button class="btn-ghost" id="aumXlsx">Excel</button>
+            <button class="btn-ghost" id="aumCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="aumXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">End-of-period AUM (point-in-time) and revenue (aperd_share, summed). Uses the date range above. Source: mi_fee_logs.mi_fee.</span>
+        <span class="hint" data-i18n="aum_history_hint">End-of-period AUM (point-in-time) and revenue (aperd_share, summed). Uses the date range above. Source: mi_fee_logs.mi_fee.</span>
         <div class="chart-wrap" style="margin-top:14px"><canvas id="aumChart"></canvas></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Detail</h2></div>
+        <div class="panel-head"><h2 data-i18n="common_detail">Detail</h2></div>
         <div id="aumTable" class="table-wrap tall"></div>
       </div>
     </section>
@@ -372,9 +372,9 @@
     <section id="performance" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Fund performance trend</h2>
+          <h2 data-i18n="perf_trend_title">Fund performance trend</h2>
           <div class="filters">
-            <select id="perfTrendType"><option value="">All fund types</option></select>
+            <select id="perfTrendType"><option value="" data-i18n="common_all_fund_types">All fund types</option></select>
             <select id="perfTrendPeriod">
               <option value="1M">1M</option>
               <option value="3M">3M</option>
@@ -384,44 +384,44 @@
               <option value="5Y">5Y</option>
             </select>
             <select id="perfTrendLimit">
-              <option value="3">Top 3</option>
-              <option value="5" selected>Top 5</option>
-              <option value="10">Top 10</option>
+              <option value="3" data-i18n="common_top3">Top 3</option>
+              <option value="5" selected data-i18n="common_top5">Top 5</option>
+              <option value="10" data-i18n="common_top10">Top 10</option>
             </select>
             <div class="dropdown-multi" id="perfTrendFundsDropdown">
-              <button type="button" class="dropdown-multi-btn" id="perfTrendFundsBtn">Pick funds</button>
+              <button type="button" class="dropdown-multi-btn" id="perfTrendFundsBtn" data-i18n="common_pick_funds">Pick funds</button>
               <div class="dropdown-multi-panel" id="perfTrendFundsPanel">
-                <input id="perfTrendFundSearch" type="text" placeholder="Search funds…" />
+                <input id="perfTrendFundSearch" type="text" data-i18n-placeholder="common_search_funds_ph" placeholder="Search funds…" />
                 <div id="perfTrendFunds" class="dropdown-multi-list"></div>
               </div>
             </div>
           </div>
         </div>
-        <span class="hint">Daily NAV (actual price). Pick funds to compare them directly, or leave none picked to show the top performers by % change. Source: sayakaya.main.snapshots.</span>
+        <span class="hint" data-i18n="perf_trend_hint">Daily NAV (actual price). Pick funds to compare them directly, or leave none picked to show the top performers by % change. Source: sayakaya.main.snapshots.</span>
         <div class="chart-wrap" style="margin-top:14px"><canvas id="perfTrendChart"></canvas></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Fund performance by type</h2>
+          <h2 data-i18n="perf_by_type_title">Fund performance by type</h2>
           <div class="exp">
-            <button class="btn-ghost" id="perfCsv">CSV</button>
-            <button class="btn-ghost" id="perfXlsx">Excel</button>
+            <button class="btn-ghost" id="perfCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="perfXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">% change in NAV per fund type, averaged across funds of that type. Source: sayakaya.main.snapshots/funds.</span>
+        <span class="hint" data-i18n="perf_by_type_hint">% change in NAV per fund type, averaged across funds of that type. Source: sayakaya.main.snapshots/funds.</span>
         <div id="perfTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Fund detail</h2>
+          <h2 data-i18n="perf_detail_title">Fund detail</h2>
           <div class="filters">
-            <input id="perfDetailSearch" type="text" placeholder="Search funds…" style="min-width:160px" />
-            <select id="perfTypeFilter"><option value="">All fund types</option></select>
+            <input id="perfDetailSearch" type="text" data-i18n-placeholder="common_search_funds_ph" placeholder="Search funds…" style="min-width:160px" />
+            <select id="perfTypeFilter"><option value="" data-i18n="common_all_fund_types">All fund types</option></select>
             <span class="divider"></span>
-            <button class="btn-ghost" id="perfDetailCsv">CSV</button>
-            <button class="btn-ghost" id="perfDetailXlsx">Excel (one sheet per type)</button>
+            <button class="btn-ghost" id="perfDetailCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="perfDetailXlsx" data-i18n="perf_xlsx_per_type">Excel (one sheet per type)</button>
           </div>
         </div>
         <div id="perfDetailTable" class="table-wrap tall"></div>
@@ -432,53 +432,53 @@
     <section id="growth" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Campaign performance</h2>
+          <h2 data-i18n="growth_campaign_title">Campaign performance</h2>
           <div class="exp">
-            <button class="btn-ghost" id="campCsv">CSV</button>
-            <button class="btn-ghost" id="campXlsx">Excel</button>
+            <button class="btn-ghost" id="campCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="campXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">Redemption % = used_quota / quota. Est. cost = used_quota × bonus_amount. Source: main.campaigns.</span>
+        <span class="hint" data-i18n="growth_campaign_hint">Redemption % = used_quota / quota. Est. cost = used_quota × bonus_amount. Source: main.campaigns.</span>
         <div id="campTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Top referrers</h2>
+          <h2 data-i18n="growth_top_referrers">Top referrers</h2>
           <div class="exp">
-            <button class="btn-ghost" id="refCsv">CSV</button>
-            <button class="btn-ghost" id="refXlsx">Excel</button>
+            <button class="btn-ghost" id="refCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="refXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">Ranked by completed buy volume from the users they referred.</span>
+        <span class="hint" data-i18n="growth_top_referrers_hint">Ranked by completed buy volume from the users they referred.</span>
         <div id="refTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Fund switching flow</h2>
+          <h2 data-i18n="growth_switching_title">Fund switching flow</h2>
           <div class="exp">
-            <button class="btn-ghost" id="switchCsv">CSV</button>
-            <button class="btn-ghost" id="switchXlsx">Excel</button>
+            <button class="btn-ghost" id="switchCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="switchXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">Top origin → destination fund pairs by completed switching amount.</span>
+        <span class="hint" data-i18n="growth_switching_hint">Top origin → destination fund pairs by completed switching amount.</span>
         <div id="switchTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
       <div class="grid-2">
         <div class="panel">
-          <div class="panel-head"><h2>AUM by investment manager</h2></div>
+          <div class="panel-head"><h2 data-i18n="growth_aum_by_manager">AUM by investment manager</h2></div>
           <div class="chart-wrap sm"><canvas id="managerChart"></canvas></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2>Platform AUM by risk tolerance</h2></div>
+          <div class="panel-head"><h2 data-i18n="growth_aum_by_risk">Platform AUM by risk tolerance</h2></div>
           <div class="chart-wrap sm"><canvas id="riskChart"></canvas></div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Platform AUM by income bracket</h2></div>
+        <div class="panel-head"><h2 data-i18n="growth_aum_by_income">Platform AUM by income bracket</h2></div>
         <div id="incomeTable" class="table-wrap"></div>
       </div>
     </section>
@@ -487,13 +487,13 @@
     <section id="reconciliation" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>App ledger vs custodian feed</h2>
+          <h2 data-i18n="recon_title">App ledger vs custodian feed</h2>
           <div class="exp">
-            <button class="btn-ghost" id="recCsv">CSV</button>
-            <button class="btn-ghost" id="recXlsx">Excel</button>
+            <button class="btn-ghost" id="recCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="recXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">Daily completed-transaction totals by type: main.transactions.completed_at (app) vs sinvest.trx_history.Input_Date (custodian), matched on transaction type. "ALL" is the per-day total across types; the backoffice doesn't yet book Liquidation/Transfer/Unit Adjustment, so those types may show custodian-only rows. Uses the date range above. A large amount_diff flags a day worth investigating.</span>
+        <span class="hint" data-i18n="recon_hint">Daily completed-transaction totals by type: main.transactions.completed_at (app) vs sinvest.trx_history.Input_Date (custodian), matched on transaction type. "ALL" is the per-day total across types; the backoffice doesn't yet book Liquidation/Transfer/Unit Adjustment, so those types may show custodian-only rows. Uses the date range above. A large amount_diff flags a day worth investigating.</span>
         <div id="recTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
@@ -502,53 +502,53 @@
     <section id="revenue" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Period</h2>
+          <h2 data-i18n="common_period">Period</h2>
           <div class="range">
             <div class="seg" id="revGran">
-              <button data-g="day">Day</button>
-              <button data-g="week">Week</button>
-              <button class="on" data-g="month">Month</button>
+              <button data-g="day" data-i18n="common_day">Day</button>
+              <button data-g="week" data-i18n="common_week">Week</button>
+              <button class="on" data-g="month" data-i18n="common_month">Month</button>
             </div>
-            <label>From <input type="date" id="revFrom" /></label>
-            <label>To <input type="date" id="revTo" /></label>
-            <button id="revApply" class="btn-primary">Apply</button>
+            <label><span data-i18n="range_from">From</span> <input type="date" id="revFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="revTo" /></label>
+            <button id="revApply" class="btn-primary" data-i18n="apply">Apply</button>
           </div>
         </div>
         <div class="filters" style="margin-top:10px">
-          <input type="text" id="revFund" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
-          <input type="text" id="revMi" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
+          <input type="text" id="revFund" data-i18n-placeholder="common_fund_wildcard_ph" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
+          <input type="text" id="revMi" data-i18n-placeholder="common_mi_wildcard_ph" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
         </div>
-        <span class="hint">Date filter for this section only — independent of the date range above. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches (e.g. "equity" matches any fund with "equity" in its name or code).</span>
+        <span class="hint" data-i18n="rev_filters_hint">Date filter for this section only — independent of the date range above. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches (e.g. "equity" matches any fund with "equity" in its name or code).</span>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Revenue trend</h2></div>
+        <div class="panel-head"><h2 data-i18n="rev_trend">Revenue trend</h2></div>
         <div class="chart-wrap"><canvas id="revTrendChart"></canvas></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Management fee revenue (per fund, per period)</h2>
+          <h2 data-i18n="rev_detail_title">Management fee revenue (per fund, per period)</h2>
           <div class="exp">
             <select id="revSplitBy" title="Excel sheet split">
-              <option value="">Excel: single sheet</option>
-              <option value="fund">Excel: one sheet per fund</option>
-              <option value="mi">Excel: one sheet per MI</option>
+              <option value="" data-i18n="common_xlsx_single_sheet">Excel: single sheet</option>
+              <option value="fund" data-i18n="common_xlsx_per_fund">Excel: one sheet per fund</option>
+              <option value="mi" data-i18n="common_xlsx_per_mi">Excel: one sheet per MI</option>
             </select>
-            <button class="btn-ghost" id="revDetailCsv">CSV</button>
-            <button class="btn-ghost" id="revDetailXlsx">Excel</button>
+            <button class="btn-ghost" id="revDetailCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="revDetailXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">Management fee accrued daily from AUM (portfolio_with_code), split into AperD/MI share, summed per fund per period.</span>
+        <span class="hint" data-i18n="rev_detail_hint">Management fee accrued daily from AUM (portfolio_with_code), split into AperD/MI share, summed per fund per period.</span>
         <div id="revDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Period summary (all funds)</h2>
+          <h2 data-i18n="common_period_summary">Period summary (all funds)</h2>
           <div class="exp">
-            <button class="btn-ghost" id="revSummaryCsv">CSV</button>
-            <button class="btn-ghost" id="revSummaryXlsx">Excel</button>
+            <button class="btn-ghost" id="revSummaryCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="revSummaryXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="revSummaryTable" class="table-wrap" style="margin-top:14px"></div>
@@ -559,53 +559,53 @@
     <section id="revenue2" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Period</h2>
+          <h2 data-i18n="common_period">Period</h2>
           <div class="range">
             <div class="seg" id="rev2Gran">
-              <button data-g="day">Day</button>
-              <button data-g="week">Week</button>
-              <button class="on" data-g="month">Month</button>
+              <button data-g="day" data-i18n="common_day">Day</button>
+              <button data-g="week" data-i18n="common_week">Week</button>
+              <button class="on" data-g="month" data-i18n="common_month">Month</button>
             </div>
-            <label>From <input type="date" id="rev2From" /></label>
-            <label>To <input type="date" id="rev2To" /></label>
-            <button id="rev2Apply" class="btn-primary">Apply</button>
+            <label><span data-i18n="range_from">From</span> <input type="date" id="rev2From" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="rev2To" /></label>
+            <button id="rev2Apply" class="btn-primary" data-i18n="apply">Apply</button>
           </div>
         </div>
         <div class="filters" style="margin-top:10px">
-          <input type="text" id="rev2Fund" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
-          <input type="text" id="rev2Mi" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
+          <input type="text" id="rev2Fund" data-i18n-placeholder="common_fund_wildcard_ph" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
+          <input type="text" id="rev2Mi" data-i18n-placeholder="common_mi_wildcard_ph" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
         </div>
-        <span class="hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches.</span>
+        <span class="hint" data-i18n="rev2_filters_hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches.</span>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Revenue trend</h2></div>
+        <div class="panel-head"><h2 data-i18n="rev_trend">Revenue trend</h2></div>
         <div class="chart-wrap"><canvas id="rev2TrendChart"></canvas></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Management fee revenue (per fund, per period)</h2>
+          <h2 data-i18n="rev_detail_title">Management fee revenue (per fund, per period)</h2>
           <div class="exp">
             <select id="rev2SplitBy" title="Excel sheet split">
-              <option value="">Excel: single sheet</option>
-              <option value="fund">Excel: one sheet per fund</option>
-              <option value="mi">Excel: one sheet per MI</option>
+              <option value="" data-i18n="common_xlsx_single_sheet">Excel: single sheet</option>
+              <option value="fund" data-i18n="common_xlsx_per_fund">Excel: one sheet per fund</option>
+              <option value="mi" data-i18n="common_xlsx_per_mi">Excel: one sheet per MI</option>
             </select>
-            <button class="btn-ghost" id="rev2DetailCsv">CSV</button>
-            <button class="btn-ghost" id="rev2DetailXlsx">Excel</button>
+            <button class="btn-ghost" id="rev2DetailCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="rev2DetailXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">Management fee accrued daily from AUM (goal_snapshots), split into AperD/MI share, summed per fund per period.</span>
+        <span class="hint" data-i18n="rev2_detail_hint">Management fee accrued daily from AUM (goal_snapshots), split into AperD/MI share, summed per fund per period.</span>
         <div id="rev2DetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Period summary (all funds)</h2>
+          <h2 data-i18n="common_period_summary">Period summary (all funds)</h2>
           <div class="exp">
-            <button class="btn-ghost" id="rev2SummaryCsv">CSV</button>
-            <button class="btn-ghost" id="rev2SummaryXlsx">Excel</button>
+            <button class="btn-ghost" id="rev2SummaryCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="rev2SummaryXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="rev2SummaryTable" class="table-wrap" style="margin-top:14px"></div>
@@ -621,43 +621,43 @@
             <option value="sales_code">users.sales_code</option>
             <option value="referrer_code">users.referrer_code</option>
           </select>
-          <input id="remCode" type="text" autocomplete="off" placeholder="Remisier code (partial match, e.g. CE matches CELIA/CENIA)" />
-          <label>Remisier portion (%) <input id="remPortion" type="number" min="0" max="100" step="0.1" value="60" style="width:80px" /></label>
-          <label>From <input type="date" id="remFrom" /></label>
-          <label>To <input type="date" id="remTo" /></label>
+          <input id="remCode" type="text" autocomplete="off" data-i18n-placeholder="common_remisier_code_ph" placeholder="Remisier code (partial match, e.g. CE matches CELIA/CENIA)" />
+          <label><span data-i18n="common_remisier_portion">Remisier portion (%)</span> <input id="remPortion" type="number" min="0" max="100" step="0.1" value="60" style="width:80px" /></label>
+          <label><span data-i18n="range_from">From</span> <input type="date" id="remFrom" /></label>
+          <label><span data-i18n="range_to">To</span> <input type="date" id="remTo" /></label>
           <div class="seg" id="remGran">
-            <button data-g="day" class="on">Daily</button>
-            <button data-g="month">Monthly</button>
-            <button data-g="quarter">Quarterly</button>
+            <button data-g="day" class="on" data-i18n="common_daily">Daily</button>
+            <button data-g="month" data-i18n="common_monthly">Monthly</button>
+            <button data-g="quarter" data-i18n="common_quarterly">Quarterly</button>
           </div>
-          <button id="remRun" class="btn-primary">Run</button>
+          <button id="remRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint">Remisier's fee is a portion of the AperD share (not the raw management fee) — e.g. Sayakaya 40% / remisier 60% of AperD share.</span>
+        <span class="hint" data-i18n="rem_gs_hint">Remisier's fee is a portion of the AperD share (not the raw management fee) — e.g. Sayakaya 40% / remisier 60% of AperD share.</span>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Users under this remisier</h2></div>
+        <div class="panel-head"><h2 data-i18n="common_users_under_remisier">Users under this remisier</h2></div>
         <div id="remUsersTable" class="table-wrap"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Revenue detail (per fund)</h2>
+          <h2 data-i18n="common_rev_detail_per_fund">Revenue detail (per fund)</h2>
           <div class="exp">
-            <button class="btn-ghost" id="remDetailCsv">CSV</button>
-            <button class="btn-ghost" id="remDetailXlsx">Excel</button>
+            <button class="btn-ghost" id="remDetailCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="remDetailXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">Management fee accrued daily from goal_snapshots AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya — summed per fund per period.</span>
+        <span class="hint" data-i18n="rem_gs_detail_hint">Management fee accrued daily from goal_snapshots AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya — summed per fund per period.</span>
         <div id="remDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Revenue summary (all funds)</h2>
+          <h2 data-i18n="common_rev_summary_all_funds">Revenue summary (all funds)</h2>
           <div class="exp">
-            <button class="btn-ghost" id="remSummaryCsv">CSV</button>
-            <button class="btn-ghost" id="remSummaryXlsx">Excel</button>
+            <button class="btn-ghost" id="remSummaryCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="remSummaryXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="remSummaryTable" class="table-wrap" style="margin-top:14px"></div>
@@ -673,43 +673,43 @@
             <option value="sales_code">users.sales_code</option>
             <option value="referrer_code">users.referrer_code</option>
           </select>
-          <input id="remPwcCode" type="text" autocomplete="off" placeholder="Remisier code (partial match, e.g. CE matches CELIA/CENIA)" />
-          <label>Remisier portion (%) <input id="remPwcPortion" type="number" min="0" max="100" step="0.1" value="60" style="width:80px" /></label>
-          <label>From <input type="date" id="remPwcFrom" /></label>
-          <label>To <input type="date" id="remPwcTo" /></label>
+          <input id="remPwcCode" type="text" autocomplete="off" data-i18n-placeholder="common_remisier_code_ph" placeholder="Remisier code (partial match, e.g. CE matches CELIA/CENIA)" />
+          <label><span data-i18n="common_remisier_portion">Remisier portion (%)</span> <input id="remPwcPortion" type="number" min="0" max="100" step="0.1" value="60" style="width:80px" /></label>
+          <label><span data-i18n="range_from">From</span> <input type="date" id="remPwcFrom" /></label>
+          <label><span data-i18n="range_to">To</span> <input type="date" id="remPwcTo" /></label>
           <div class="seg" id="remPwcGran">
-            <button data-g="day" class="on">Daily</button>
-            <button data-g="month">Monthly</button>
-            <button data-g="quarter">Quarterly</button>
+            <button data-g="day" class="on" data-i18n="common_daily">Daily</button>
+            <button data-g="month" data-i18n="common_monthly">Monthly</button>
+            <button data-g="quarter" data-i18n="common_quarterly">Quarterly</button>
           </div>
-          <button id="remPwcRun" class="btn-primary">Run</button>
+          <button id="remPwcRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint">Same remisier/Sayakaya AperD-share split as the goal_snapshots tab, but AUM comes from mi_fee_logs.portfolio_with_code (the original Revenue tab's source) — compare the two side by side.</span>
+        <span class="hint" data-i18n="rem_pwc_hint">Same remisier/Sayakaya AperD-share split as the goal_snapshots tab, but AUM comes from mi_fee_logs.portfolio_with_code (the original Revenue tab's source) — compare the two side by side.</span>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Users under this remisier</h2></div>
+        <div class="panel-head"><h2 data-i18n="common_users_under_remisier">Users under this remisier</h2></div>
         <div id="remPwcUsersTable" class="table-wrap"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Revenue detail (per fund)</h2>
+          <h2 data-i18n="common_rev_detail_per_fund">Revenue detail (per fund)</h2>
           <div class="exp">
-            <button class="btn-ghost" id="remPwcDetailCsv">CSV</button>
-            <button class="btn-ghost" id="remPwcDetailXlsx">Excel</button>
+            <button class="btn-ghost" id="remPwcDetailCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="remPwcDetailXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint">Management fee accrued daily from portfolio_with_code AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya — summed per fund per period.</span>
+        <span class="hint" data-i18n="rem_pwc_detail_hint">Management fee accrued daily from portfolio_with_code AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya — summed per fund per period.</span>
         <div id="remPwcDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Revenue summary (all funds)</h2>
+          <h2 data-i18n="common_rev_summary_all_funds">Revenue summary (all funds)</h2>
           <div class="exp">
-            <button class="btn-ghost" id="remPwcSummaryCsv">CSV</button>
-            <button class="btn-ghost" id="remPwcSummaryXlsx">Excel</button>
+            <button class="btn-ghost" id="remPwcSummaryCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="remPwcSummaryXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="remPwcSummaryTable" class="table-wrap" style="margin-top:14px"></div>
@@ -721,37 +721,37 @@
       <div class="panel">
         <div class="panel-head wrap"><h2>Remisier transactions</h2></div>
         <div class="ask-bar" style="flex-wrap:wrap">
-          <input id="remTxReferrerCodes" type="text" autocomplete="off" placeholder="referrer_code(s), partial match, comma separated" />
-          <input id="remTxSalesCodes" type="text" autocomplete="off" placeholder="sales_code(s), partial match, comma separated" />
-          <select id="remTxType"><option value="">All types</option></select>
-          <select id="remTxStatus"><option value="">All statuses</option></select>
-          <label>From <input type="date" id="remTxFrom" /></label>
-          <label>To <input type="date" id="remTxTo" /></label>
-          <button id="remTxRun" class="btn-primary">Run</button>
+          <input id="remTxReferrerCodes" type="text" autocomplete="off" data-i18n-placeholder="remtx_referrer_ph" placeholder="referrer_code(s), partial match, comma separated" />
+          <input id="remTxSalesCodes" type="text" autocomplete="off" data-i18n-placeholder="remtx_sales_ph" placeholder="sales_code(s), partial match, comma separated" />
+          <select id="remTxType"><option value="" data-i18n="common_all_types">All types</option></select>
+          <select id="remTxStatus"><option value="" data-i18n="common_all_statuses">All statuses</option></select>
+          <label><span data-i18n="range_from">From</span> <input type="date" id="remTxFrom" /></label>
+          <label><span data-i18n="range_to">To</span> <input type="date" id="remTxTo" /></label>
+          <button id="remTxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint">Filtered by transaction date. Each code is a case-insensitive partial match (e.g. CE matches CELIA/CENIA) — fill one field for a single filter, or both to match either, and either field accepts multiple comma-separated codes.</span>
+        <span class="hint" data-i18n="remtx_filters_hint">Filtered by transaction date. Each code is a case-insensitive partial match (e.g. CE matches CELIA/CENIA) — fill one field for a single filter, or both to match either, and either field accepts multiple comma-separated codes.</span>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Transaction detail</h2>
+          <h2 data-i18n="common_tx_detail">Transaction detail</h2>
           <div class="exp">
-            <button class="btn-ghost" id="remTxCsv">CSV</button>
-            <button class="btn-ghost" id="remTxXlsx">Excel</button>
+            <button class="btn-ghost" id="remTxCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="remTxXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="remTxTable" class="table-wrap tall" style="margin-top:14px"></div>
         <div class="pager">
-          <button id="remTxPrev" class="btn-ghost">← Prev</button>
+          <button id="remTxPrev" class="btn-ghost" data-i18n="common_prev">← Prev</button>
           <span id="remTxPageinfo" class="mono"></span>
-          <button id="remTxNext" class="btn-ghost">Next →</button>
+          <button id="remTxNext" class="btn-ghost" data-i18n="common_next">Next →</button>
         </div>
       </div>
     </section>
 
     <!-- ===================== PREDICT (ML) ===================== -->
     <section id="predict" class="view">
-      <div id="mlBanner" class="panel hidden" style="border-color:var(--amber)">
+      <div id="mlBanner" class="panel hidden" style="border-color:var(--amber)" data-i18n-html="predict_ml_banner">
         <strong>Forecasts &amp; churn scoring need the models.</strong>
         Run <code>setup/ml_models.sql</code> once in BigQuery (see PREDICTIVE-MODELS.md), then reload.
         The retention and churn-rate sections below work without it.
@@ -760,7 +760,7 @@
       <div class="grid-2">
         <div class="panel" id="aumFcPanel">
           <div class="panel-head wrap">
-            <h2>AUM forecast</h2>
+            <h2 data-i18n="predict_aum_forecast">AUM forecast</h2>
             <div class="seg" id="fcHorizon">
               <button data-h="30" class="on">30d</button>
               <button data-h="60">60d</button>
@@ -770,17 +770,17 @@
           <div class="chart-wrap"><canvas id="aumFcChart"></canvas></div>
         </div>
         <div class="panel" id="txFcPanel">
-          <div class="panel-head"><h2>Transaction (buy volume) forecast</h2></div>
+          <div class="panel-head"><h2 data-i18n="predict_tx_forecast">Transaction (buy volume) forecast</h2></div>
           <div class="chart-wrap"><canvas id="txFcChart"></canvas></div>
         </div>
       </div>
 
       <div class="panel" id="churnPanel">
         <div class="panel-head wrap">
-          <h2>Churn risk (current holders)</h2>
+          <h2 data-i18n="predict_churn_risk">Churn risk (current holders)</h2>
           <div class="exp">
-            <button class="btn-ghost" id="churnCsv">CSV</button>
-            <button class="btn-ghost" id="churnXlsx">Excel</button>
+            <button class="btn-ghost" id="churnCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="churnXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
         <div id="churnCards" class="kpi-grid" style="margin-bottom:16px"></div>
@@ -789,22 +789,22 @@
 
       <div class="grid-2">
         <div class="panel">
-          <div class="panel-head"><h2>Churn rate by tenure</h2></div>
+          <div class="panel-head"><h2 data-i18n="predict_churn_by_tenure">Churn rate by tenure</h2></div>
           <div id="churnTenure" class="table-wrap"></div>
         </div>
         <div class="panel">
-          <div class="panel-head"><h2>Churn overview</h2></div>
+          <div class="panel-head"><h2 data-i18n="predict_churn_overview">Churn overview</h2></div>
           <div id="churnOverviewCards" class="kpi-grid" style="grid-template-columns:1fr"></div>
         </div>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Retention cohorts</h2><span class="hint">% of each month's first-time investors still transacting in later months.</span></div>
+        <div class="panel-head"><h2 data-i18n="predict_retention_cohorts">Retention cohorts</h2><span class="hint" data-i18n="predict_retention_hint">% of each month's first-time investors still transacting in later months.</span></div>
         <div id="retentionHeatmap" class="table-wrap tall"></div>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>AUM retention cohorts</h2><span class="hint">Cohort = first month a sid had AUM (mi_fee_logs.portfolios). % retained = cumulative netflow (buy − redeem, transactions) since month 0 is still ≥ 0. Cell shows cumulative netflow.</span></div>
+        <div class="panel-head"><h2 data-i18n="predict_aum_retention_cohorts">AUM retention cohorts</h2><span class="hint" data-i18n="predict_aum_retention_hint">Cohort = first month a sid had AUM (mi_fee_logs.portfolios). % retained = cumulative netflow (buy − redeem, transactions) since month 0 is still ≥ 0. Cell shows cumulative netflow.</span></div>
         <div id="aumRetentionHeatmap" class="table-wrap tall"></div>
       </div>
     </section>
@@ -813,7 +813,7 @@
       <div class="panel">
         <div class="panel-head"><h2>Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data — no technical skills needed.</span></div>
 
-        <div id="askDisabled" class="empty hidden">
+        <div id="askDisabled" class="empty hidden" data-i18n-html="ask_disabled">
           The Ask feature is off because no Anthropic API key is set on the server.
           Add an <code>ANTHROPIC_API_KEY</code> environment variable and restart to enable it.
         </div>
@@ -821,39 +821,39 @@
         <div id="askBox">
           <div id="askThread" class="ask-thread hidden"></div>
           <div class="ask-bar">
-            <input id="askInput" type="text" autocomplete="off"
+            <input id="askInput" type="text" autocomplete="off" data-i18n-placeholder="ask_input_ph"
               placeholder="e.g. top 10 funds by AUM, or total buy volume per month in 2025" />
-            <button id="askBtn" class="btn-primary">Ask</button>
+            <button id="askBtn" class="btn-primary" data-i18n="ask_button">Ask</button>
           </div>
           <div id="askUnredactRow" class="sql-bar hidden">
-            <label><input type="checkbox" id="askUnredact"> Include restricted columns (password, KYC, etc. — superuser only)</label>
-            <input type="password" id="askUnredactPassword" class="hidden" placeholder="Confirm your password" autocomplete="current-password">
+            <label><input type="checkbox" id="askUnredact"> <span data-i18n="common_include_restricted">Include restricted columns (password, KYC, etc. — superuser only)</span></label>
+            <input type="password" id="askUnredactPassword" class="hidden" data-i18n-placeholder="common_confirm_password_ph" placeholder="Confirm your password" autocomplete="current-password">
           </div>
           <div class="ask-examples">
-            <button class="chip">Top 10 funds by AUM</button>
-            <button class="chip">How many verified users do we have?</button>
-            <button class="chip">Completed buy volume per month in 2025</button>
-            <button class="chip">Transaction count by status</button>
-            <button class="chip">Top 5 investment managers by fund count</button>
-            <button class="chip" id="askActivityLogChip">Who logged in today?</button>
+            <button class="chip" data-i18n="ask_ex1">Top 10 funds by AUM</button>
+            <button class="chip" data-i18n="ask_ex2">How many verified users do we have?</button>
+            <button class="chip" data-i18n="ask_ex3">Completed buy volume per month in 2025</button>
+            <button class="chip" data-i18n="ask_ex4">Transaction count by status</button>
+            <button class="chip" data-i18n="ask_ex5">Top 5 investment managers by fund count</button>
+            <button class="chip" id="askActivityLogChip" data-i18n="ask_ex_activity">Who logged in today?</button>
           </div>
 
           <details id="askAdvanced">
-            <summary>Advanced (optional)</summary>
+            <summary data-i18n="common_advanced_optional">Advanced (optional)</summary>
             <div id="askTables" class="ask-tables"></div>
-            <textarea id="askContext" rows="3"
+            <textarea id="askContext" rows="3" data-i18n-placeholder="ask_context_ph"
               placeholder="Optional: a related SQL query to use as extra context"></textarea>
           </details>
 
           <div id="askSql" class="ask-sql hidden">
             <div class="ask-sql-head">
-              <span>Generated SQL</span>
+              <span data-i18n="ask_generated_sql">Generated SQL</span>
               <div class="exp">
-                <button class="btn-ghost" id="askCopy">Copy</button>
-                <button class="btn-ghost" id="askEdit">Edit</button>
-                <button class="btn-ghost" id="askRun">Run</button>
-                <button class="btn-ghost" id="askCsv" disabled>CSV</button>
-                <button class="btn-ghost" id="askXlsx" disabled>Excel</button>
+                <button class="btn-ghost" id="askCopy" data-i18n="common_copy">Copy</button>
+                <button class="btn-ghost" id="askEdit" data-i18n="common_edit">Edit</button>
+                <button class="btn-ghost" id="askRun" data-i18n="common_run">Run</button>
+                <button class="btn-ghost" id="askCsv" disabled data-i18n="common_csv">CSV</button>
+                <button class="btn-ghost" id="askXlsx" disabled data-i18n="common_excel">Excel</button>
               </div>
             </div>
             <textarea id="askSqlText" class="mono" rows="6" spellcheck="false" readonly></textarea>
@@ -863,18 +863,18 @@
 
           <div id="askChartControls" class="filters hidden" style="margin-bottom:12px">
             <select id="askChartType">
-              <option value="none">No chart</option>
-              <option value="bar">Bar</option>
-              <option value="line">Line</option>
-              <option value="pie">Pie</option>
-              <option value="doughnut">Doughnut</option>
-              <option value="scatter">Scatter</option>
+              <option value="none" data-i18n="chart_none">No chart</option>
+              <option value="bar" data-i18n="chart_bar">Bar</option>
+              <option value="line" data-i18n="chart_line">Line</option>
+              <option value="pie" data-i18n="chart_pie">Pie</option>
+              <option value="doughnut" data-i18n="chart_doughnut">Doughnut</option>
+              <option value="scatter" data-i18n="chart_scatter">Scatter</option>
             </select>
             <select id="askChartX"></select>
-            <span class="hint">vs</span>
+            <span class="hint" data-i18n="common_vs">vs</span>
             <select id="askChartY"></select>
-            <input id="askChartHint" type="text" placeholder="Optional: describe the chart you want" style="flex:1; min-width:180px" />
-            <button class="btn-ghost" id="askChartSuggest">✨ Suggest</button>
+            <input id="askChartHint" type="text" data-i18n-placeholder="ask_chart_hint_ph" placeholder="Optional: describe the chart you want" style="flex:1; min-width:180px" />
+            <button class="btn-ghost" id="askChartSuggest" data-i18n="common_suggest">✨ Suggest</button>
           </div>
           <div id="askChartMsg" class="ask-chart-msg hidden"></div>
           <div id="askChartWrap" class="chart-wrap hidden"><canvas id="askChart"></canvas></div>
@@ -891,11 +891,11 @@
           <h2 id="exTitle">Explorer</h2>
           <div class="filters" id="exFilters"></div>
         </div>
-        <div id="exTable" class="table-wrap tall"><div class="loading">Loading…</div></div>
+        <div id="exTable" class="table-wrap tall"><div class="loading" data-i18n="common_loading">Loading…</div></div>
         <div class="pager">
-          <button id="exPrev" class="btn-ghost">← Prev</button>
+          <button id="exPrev" class="btn-ghost" data-i18n="common_prev">← Prev</button>
           <span id="exPageinfo" class="mono"></span>
-          <button id="exNext" class="btn-ghost">Next →</button>
+          <button id="exNext" class="btn-ghost" data-i18n="common_next">Next →</button>
         </div>
       </div>
     </section>
@@ -903,22 +903,22 @@
     <!-- ===================== SQL LAB ===================== -->
     <section id="sql" class="view">
       <div class="panel">
-        <div class="panel-head"><h2>SQL lab</h2><span class="hint">Read-only. SELECT / WITH only. Results capped to 5,000 rows.</span></div>
+        <div class="panel-head"><h2 data-i18n="sql_lab_title">SQL lab</h2><span class="hint" data-i18n="sql_lab_hint">Read-only. SELECT / WITH only. Results capped to 5,000 rows.</span></div>
         <textarea id="sqlInput" spellcheck="false" placeholder="SELECT type, COUNT(*) AS n
 FROM `sayakaya.main.transactions`
 WHERE status = 'completed'
 GROUP BY type
 ORDER BY n DESC"></textarea>
         <div id="sqlUnredactRow" class="sql-bar hidden">
-          <label><input type="checkbox" id="sqlUnredact"> Include restricted columns (password, KYC, etc. — superuser only)</label>
-          <input type="password" id="sqlUnredactPassword" class="hidden" placeholder="Confirm your password" autocomplete="current-password">
+          <label><input type="checkbox" id="sqlUnredact"> <span data-i18n="common_include_restricted">Include restricted columns (password, KYC, etc. — superuser only)</span></label>
+          <input type="password" id="sqlUnredactPassword" class="hidden" data-i18n-placeholder="common_confirm_password_ph" placeholder="Confirm your password" autocomplete="current-password">
         </div>
         <div class="sql-bar">
-          <button id="sqlRun" class="btn-primary">Run</button>
-          <button id="sqlEst" class="btn-ghost">Estimate cost</button>
+          <button id="sqlRun" class="btn-primary" data-i18n="common_run">Run</button>
+          <button id="sqlEst" class="btn-ghost" data-i18n="sql_estimate_cost">Estimate cost</button>
           <span class="divider"></span>
-          <button id="sqlCsv" class="btn-ghost" disabled>CSV</button>
-          <button id="sqlXlsx" class="btn-ghost" disabled>Excel</button>
+          <button id="sqlCsv" class="btn-ghost" disabled data-i18n="common_csv">CSV</button>
+          <button id="sqlXlsx" class="btn-ghost" disabled data-i18n="common_excel">Excel</button>
           <span id="sqlMsg" class="sql-msg"></span>
         </div>
         <div id="sqlResult" class="table-wrap tall"></div>
@@ -1040,24 +1040,24 @@ ORDER BY n DESC"></textarea>
     <section id="admin" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Users</h2>
-          <button class="btn-primary" id="adminAddUserBtn">+ Add user</button>
+          <h2 data-i18n="admin_users">Users</h2>
+          <button class="btn-primary" id="adminAddUserBtn" data-i18n="admin_add_user">+ Add user</button>
         </div>
         <div id="adminUsersTable" class="table-wrap"></div>
       </div>
 
       <dialog id="adminUserModal" class="admin-modal">
         <div class="panel-head wrap"><h2 id="adminFormTitle">Add user</h2></div>
-        <span class="hint">Choose which sections this person can access. Superusers always see everything.</span>
+        <span class="hint" data-i18n="admin_modal_hint">Choose which sections this person can access. Superusers always see everything.</span>
         <div class="filters" style="margin-top:12px">
-          <input type="text" id="adminUsername" placeholder="Username" style="min-width:160px" />
-          <input type="password" id="adminPassword" placeholder="Password" style="min-width:220px" autocomplete="new-password" />
-          <label class="ask-table-chk"><input type="checkbox" id="adminIsSuperuser" /> Superuser (full access)</label>
+          <input type="text" id="adminUsername" data-i18n-placeholder="gate_username_ph" placeholder="Username" style="min-width:160px" />
+          <input type="password" id="adminPassword" data-i18n-placeholder="gate_password_ph" placeholder="Password" style="min-width:220px" autocomplete="new-password" />
+          <label class="ask-table-chk"><input type="checkbox" id="adminIsSuperuser" /> <span data-i18n="admin_superuser_full_access">Superuser (full access)</span></label>
         </div>
         <div id="adminTabsPicker" class="ask-tables" style="margin-top:12px"></div>
         <div class="exp" style="margin-top:14px">
           <button class="btn-primary" id="adminSaveBtn">Create user</button>
-          <button class="btn-ghost" id="adminCancelEditBtn">Cancel</button>
+          <button class="btn-ghost" id="adminCancelEditBtn" data-i18n="common_cancel">Cancel</button>
         </div>
         <div id="adminFormErr" class="gate-err"></div>
       </dialog>
@@ -1067,18 +1067,18 @@ ORDER BY n DESC"></textarea>
     <section id="activity-log" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Activity log</h2>
+          <h2 data-i18n="admin_activity_log">Activity log</h2>
           <div class="filters">
-            <select id="adminAuditUser"><option value="">All users</option></select>
-            <input type="text" id="adminAuditSearch" placeholder="Search action or detail (wildcard)" style="min-width:240px" />
-            <label>From <input type="date" id="adminAuditFrom" /></label>
-            <label>To <input type="date" id="adminAuditTo" /></label>
-            <button class="btn-primary" id="adminAuditApply">Apply</button>
+            <select id="adminAuditUser"><option value="" data-i18n="admin_all_users">All users</option></select>
+            <input type="text" id="adminAuditSearch" data-i18n-placeholder="admin_search_action_ph" placeholder="Search action or detail (wildcard)" style="min-width:240px" />
+            <label><span data-i18n="range_from">From</span> <input type="date" id="adminAuditFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="adminAuditTo" /></label>
+            <button class="btn-primary" id="adminAuditApply" data-i18n="apply">Apply</button>
             <span class="divider"></span>
-            <button class="btn-ghost" id="adminAuditRefresh">Refresh</button>
+            <button class="btn-ghost" id="adminAuditRefresh" data-i18n="common_refresh">Refresh</button>
           </div>
         </div>
-        <span class="hint">Every login, export, Ask question, SQL Lab query, and admin account change, most recent first. Pick a user from the dropdown for an exact match; search matches action/detail as a wildcard (e.g. "revenue" also finds revenue_detail exports) — leave blank to see everything.</span>
+        <span class="hint" data-i18n="admin_activity_hint">Every login, export, Ask question, SQL Lab query, and admin account change, most recent first. Pick a user from the dropdown for an exact match; search matches action/detail as a wildcard (e.g. "revenue" also finds revenue_detail exports) — leave blank to see everything.</span>
         <div id="adminAuditTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
