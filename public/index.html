@@ -821,6 +821,10 @@
               placeholder="e.g. top 10 funds by AUM, or total buy volume per month in 2025" />
             <button id="askBtn" class="btn-primary">Ask</button>
           </div>
+          <div id="askUnredactRow" class="sql-bar hidden">
+            <label><input type="checkbox" id="askUnredact"> Include restricted columns (password, KYC, etc. — superuser only)</label>
+            <input type="password" id="askUnredactPassword" class="hidden" placeholder="Confirm your password" autocomplete="current-password">
+          </div>
           <div class="ask-examples">
             <button class="chip">Top 10 funds by AUM</button>
             <button class="chip">How many verified users do we have?</button>

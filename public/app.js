@@ -1714,10 +1714,24 @@ function selectedAskTables() {
   return $$('#askTables input:checked').map((el) => el.value);
 }
 
+// Reads the Ask tab's superuser-only "include restricted columns" control.
+// Shared by runAsk (the LLM-generated query) and runAskSql (the edited
+// re-run), since both ultimately hit an ask-redaction-aware endpoint.
+function askUnredactBody() {
+  const unredact = $('#askUnredact').checked;
+  const password = $('#askUnredactPassword').value;
+  return unredact ? { unredact: true, password } : {};
+}
+
 async function runAsk(q) {
   const question = (q != null ? q : $('#askInput').value).trim();
   if (!question) return;
   if (q != null) $('#askInput').value = question;
+  const unredactBody = askUnredactBody();
+  if (unredactBody.unredact && !unredactBody.password) {
+    setAskMsg('Enter your password to include restricted columns.', 'err');
+    return;
+  }
   lastAskQuestion = question;
   setAskMsg('Thinking…', '');
   $('#askResult').innerHTML = '<div class="loading">Generating SQL and querying BigQuery…</div>';
@@ -1736,7 +1750,7 @@ async function runAsk(q) {
     const res = await fetch(API_BASE + '/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ question, context: context || undefined, history: askHistory }),
+      body: JSON.stringify({ question, context: context || undefined, history: askHistory, ...unredactBody }),
     });
     const data = await res.json().catch(() => ({}));
     // Show the generated SQL even if it was blocked, so the user can see it.
@@ -1762,6 +1776,9 @@ async function runAsk(q) {
   } catch (e) {
     $('#askResult').innerHTML = '';
     setAskMsg(e.message, 'err');
+  } finally {
+    // Never keep a typed password around longer than the one request it authorized.
+    $('#askUnredactPassword').value = '';
   }
 }
 
@@ -1781,12 +1798,17 @@ function copyAskSql() {
 async function runAskSql() {
   const sql = $('#askSqlText').value.trim();
   if (!sql) return;
+  const unredactBody = askUnredactBody();
+  if (unredactBody.unredact && !unredactBody.password) {
+    setAskMsg('Enter your password to include restricted columns.', 'err');
+    return;
+  }
   askSqlCache = sql;
   setAskMsg('Running…', '');
   $('#askResult').innerHTML = '<div class="loading">Executing query…</div>';
   $('#askCsv').disabled = $('#askXlsx').disabled = true;
   try {
-    const { rows, count } = await api('/api/sql/run', { method: 'POST', body: JSON.stringify({ sql }) });
+    const { rows, count } = await api('/api/sql/run', { method: 'POST', body: JSON.stringify({ sql, ...unredactBody }) });
     renderGenericTable('#askResult', rows);
     setAskMsg(`${num(count)} row${count === 1 ? '' : 's'}`, 'ok');
     $('#askCsv').disabled = $('#askXlsx').disabled = rows.length === 0;
@@ -1794,6 +1816,8 @@ async function runAskSql() {
   } catch (e) {
     $('#askResult').innerHTML = '';
     setAskMsg(e.message, 'err');
+  } finally {
+    $('#askUnredactPassword').value = '';
   }
 }
 
@@ -2238,6 +2262,7 @@ function applyPermissions(user) {
   $('#askActivityLogChip').classList.toggle('hidden', !user.isSuperuser);
   $('#docsAdminSection').classList.toggle('hidden', !user.isSuperuser);
   $('#sqlUnredactRow').classList.toggle('hidden', !user.isSuperuser);
+  $('#askUnredactRow').classList.toggle('hidden', !user.isSuperuser);
   $$('.nav-link[data-tab]').forEach((t) => {
     const allowed = SUPERUSER_ONLY_TABS.includes(t.dataset.tab) ? user.isSuperuser : userCan(t.dataset.tab);
     t.classList.toggle('hidden', !allowed);
@@ -2565,6 +2590,10 @@ function wire() {
   $('#sqlUnredact').addEventListener('change', (e) => {
     $('#sqlUnredactPassword').classList.toggle('hidden', !e.target.checked);
     if (!e.target.checked) $('#sqlUnredactPassword').value = '';
+  });
+  $('#askUnredact').addEventListener('change', (e) => {
+    $('#askUnredactPassword').classList.toggle('hidden', !e.target.checked);
+    if (!e.target.checked) $('#askUnredactPassword').value = '';
   });
   $('#sqlInput').addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') runSql(); });
   $('#sqlCsv').addEventListener('click', () => download({ source: 'sql', format: 'csv', filename: 'query_result', sql: $('#sqlInput').value, limit: 100000 }, 'query_result.csv'));

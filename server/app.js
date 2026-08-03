@@ -603,9 +603,20 @@ function createApp({ serveStatic = true } = {}) {
       ? rawHistory.filter((h) => h && typeof h.question === 'string' && typeof h.sql === 'string').slice(-6)
       : [];
     if (!question) return res.status(400).json({ error: 'Type a question first.' });
+    // Same step-up check as /api/sql/run: a superuser can lift column
+    // redaction for one question, but only by re-proving their password on
+    // this specific request.
+    let redact = true;
+    if (req.body && req.body.unredact) {
+      if (!req.user.is_superuser) return res.status(403).json({ error: 'Only a superuser can include restricted columns.' });
+      if (!req.body.password || !Auth.verifyPassword(req.body.password, req.user.password_hash)) {
+        return res.status(401).json({ error: 'Incorrect password.' });
+      }
+      redact = false;
+    }
     try {
-      const { sql, rows } = await ask(question, context, history, req.user);
-      await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question} (${rows.length} rows)`);
+      const { sql, rows } = await ask(question, context, history, req.user, { redact });
+      await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question} (${rows.length} rows)` + (redact ? '' : ' [unredacted]'));
       res.json({ sql, rows, count: rows.length });
     } catch (err) {
       console.error('[POST /api/ask]', err.message);

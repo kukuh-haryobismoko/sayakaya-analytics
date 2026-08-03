@@ -474,7 +474,7 @@ async function answerActivityLog(question) {
  * activity-log path only — the same superuser restriction the Activity log
  * tab itself enforces, since that data is every user's login/export history.
  */
-async function ask(question, context, history, user) {
+async function ask(question, context, history, user, { redact = true } = {}) {
   if (looksLikeActivityLogQuestion(question)) {
     if (!user || !user.is_superuser) {
       throw new Error('Activity log data is restricted to superusers.');
@@ -501,7 +501,7 @@ async function ask(question, context, history, user) {
       continue;
     }
     try {
-      const rows = await runQuery(capRows(v.sql, 1000), {});
+      const rows = await runQuery(capRows(v.sql, 1000), {}, { redact });
       return { sql: v.sql, rows };
     } catch (e) {
       if (attempt >= 1) {
