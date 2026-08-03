@@ -184,9 +184,9 @@ function renderPfKpis(holdings, split) {
   // split is null in "as of date" mode — portfolios/bonus_portfolios only
   // have a live split, not a historical one, so there's nothing real to show.
   $('#pfKpis').innerHTML = [
-    kpi('Total AUM', idrFull(totalAum), `${holdings.length} holding${holdings.length === 1 ? '' : 's'}`, 'accent'),
-    kpi('Regular portfolio', split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : 'not available for a past date'),
-    kpi('Bonus portfolio', split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : 'not available for a past date'),
+    kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -303,8 +303,8 @@ function renderPeKpis(holdings, byGoal) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   const goalCount = new Set(byGoal.map((r) => val(r.goal))).size;
   $('#peKpis').innerHTML = [
-    kpi('Total AUM (as of date)', idrFull(totalAum), `${holdings.length} holding${holdings.length === 1 ? '' : 's'}`, 'accent'),
-    kpi('Goals', num(goalCount), 'goal_snapshots (main.goals)'),
+    kpi(t('kpi_total_aum_as_of'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_goals'), num(goalCount), 'goal_snapshots (main.goals)'),
   ].join('');
 }
 
@@ -520,14 +520,14 @@ function kpi(label, value, sub, cls = '', icon = '') {
 }
 function renderKpis(o) {
   $('#kpis').innerHTML = [
-    kpi('Platform AUM', idr(val(o.platform_aum)), `${num(val(o.investing_users))} investing users`, 'accent', '💰'),
-    kpi('Total users', num(val(o.total_users)), `${num(val(o.verified_users))} verified (${pct(val(o.verified_users), val(o.total_users))})`, '', '👥'),
-    kpi('Buy volume (range)', idr(val(o.buy_volume)), `${num(val(o.buy_count))} completed buys`, 'accent', '📈'),
-    kpi('Sell volume (range)', idr(val(o.sell_volume)), `${num(val(o.sell_count))} completed sells`, 'warn', '📉'),
-    kpi('Active users (range)', num(val(o.active_users)), 'with ≥1 transaction', 'amber', '⚡'),
-    kpi('Transactions (range)', num(val(o.total_tx)), 'all statuses', '', '🧾'),
-    kpi('Active funds', num(val(o.active_funds)), `${num(val(o.total_funds))} total in catalog`, 'amber', '🗂️'),
-    kpi('New users (30d)', num(val(o.new_users_30d)), 'rolling window', '', '✨'),
+    kpi(t('kpi_platform_aum'), idr(val(o.platform_aum)), `${num(val(o.investing_users))} ${t('kpi_investing_users')}`, 'accent', '💰'),
+    kpi(t('kpi_total_users'), num(val(o.total_users)), `${num(val(o.verified_users))} ${t('kpi_verified')} (${pct(val(o.verified_users), val(o.total_users))})`, '', '👥'),
+    kpi(t('kpi_buy_volume'), idr(val(o.buy_volume)), `${num(val(o.buy_count))} ${t('kpi_completed_buys')}`, 'accent', '📈'),
+    kpi(t('kpi_sell_volume'), idr(val(o.sell_volume)), `${num(val(o.sell_count))} ${t('kpi_completed_sells')}`, 'warn', '📉'),
+    kpi(t('kpi_active_users'), num(val(o.active_users)), t('kpi_ge1_tx'), 'amber', '⚡'),
+    kpi(t('kpi_transactions'), num(val(o.total_tx)), t('kpi_all_statuses'), '', '🧾'),
+    kpi(t('kpi_active_funds'), num(val(o.active_funds)), `${num(val(o.total_funds))} ${t('kpi_total_in_catalog')}`, 'amber', '🗂️'),
+    kpi(t('kpi_new_users_30d'), num(val(o.new_users_30d)), t('kpi_rolling_window'), '', '✨'),
   ].join('');
 }
 
@@ -539,9 +539,9 @@ async function loadTrends(gran) {
     paint('trendChart', {
       type: 'bar',
       data: { labels, datasets: [
-        { label: 'Buy volume', data: data.map((d) => val(d.buy_volume)), backgroundColor: C.teal, borderRadius: 4, order: 2 },
-        { label: 'Sell volume', data: data.map((d) => val(d.sell_volume)), backgroundColor: C.rose, borderRadius: 4, order: 2 },
-        { label: 'Active users', data: data.map((d) => val(d.active_users)), type: 'line', yAxisID: 'y1',
+        { label: t('chart_buy_volume'), data: data.map((d) => val(d.buy_volume)), backgroundColor: C.teal, borderRadius: 4, order: 2 },
+        { label: t('chart_sell_volume'), data: data.map((d) => val(d.sell_volume)), backgroundColor: C.rose, borderRadius: 4, order: 2 },
+        { label: t('chart_active_users'), data: data.map((d) => val(d.active_users)), type: 'line', yAxisID: 'y1',
           borderColor: C.indigo, backgroundColor: C.indigo, tension: .3, pointRadius: 2, order: 1 },
       ] },
       options: {
@@ -660,10 +660,10 @@ async function loadChurn() {
   try {
     const { summary, top } = await api('/api/predict/churn?limit=100');
     $('#churnCards').innerHTML = [
-      kpi('High risk', num(val(summary.high_risk)), '≥ 50% churn probability', 'warn'),
-      kpi('Medium risk', num(val(summary.medium_risk)), '20–50%'),
-      kpi('Low risk', num(val(summary.low_risk)), '< 20%', 'accent'),
-      kpi('Avg probability', (val(summary.avg_prob) != null ? (val(summary.avg_prob) * 100).toFixed(1) + '%' : '—'), `${num(val(summary.scored))} holders scored`),
+      kpi(t('kpi_high_risk'), num(val(summary.high_risk)), t('kpi_ge50_churn_prob'), 'warn'),
+      kpi(t('kpi_medium_risk'), num(val(summary.medium_risk)), '20–50%'),
+      kpi(t('kpi_low_risk'), num(val(summary.low_risk)), '< 20%', 'accent'),
+      kpi(t('kpi_avg_probability'), (val(summary.avg_prob) != null ? (val(summary.avg_prob) * 100).toFixed(1) + '%' : '—'), `${num(val(summary.scored))} ${t('kpi_holders_scored')}`),
     ].join('');
     renderChurnTable(top);
   } catch (e) { $('#churnTable').innerHTML = `<div class="empty">${e.message}</div>`; }
@@ -698,8 +698,8 @@ async function loadChurnOverview() {
     const { overall, byTenure } = await api('/api/churn/overview');
     const churnRate = val(overall.total_investors) ? (val(overall.churned) / val(overall.total_investors) * 100).toFixed(1) : '—';
     $('#churnOverviewCards').innerHTML = [
-      kpi('Overall churn rate', churnRate + '%', `${num(val(overall.churned))} of ${num(val(overall.total_investors))} investors fully redeemed`, 'warn'),
-      kpi('Active holders', num(val(overall.active_holders)), 'currently hold ≥1 fund', 'accent'),
+      kpi(t('kpi_overall_churn_rate'), churnRate + '%', t('kpi_investors_fully_redeemed').replace('{churned}', num(val(overall.churned))).replace('{total}', num(val(overall.total_investors))), 'warn'),
+      kpi(t('kpi_active_holders'), num(val(overall.active_holders)), t('kpi_currently_hold_1fund'), 'accent'),
     ].join('');
     const body = byTenure.map((r) => `<tr>
         <td>${val(r.tenure_bucket)}</td>
@@ -2662,7 +2662,7 @@ function setConnStatus(live) {
 }
 // i18n.js calls this after a language switch, to re-render text this app
 // builds dynamically in JS rather than via a static data-i18n attribute.
-window.onLanguageChange = () => { setConnStatus(lastConnLive); renderAskThread(); };
+window.onLanguageChange = () => { setConnStatus(lastConnLive); renderAskThread(); repaintActiveTab(); };
 
 async function pollHealth() {
   try {
