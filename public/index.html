@@ -31,14 +31,14 @@
     <div class="gate-card">
       <img class="gate-mark" src="logo.png" alt="Sayakaya" />
       <h1>Sayakaya Analytics</h1>
-      <p>Sign in to continue.</p>
+      <p data-i18n="sign_in_subtitle">Sign in to continue.</p>
       <div class="gate-field">
-        <input id="gate-username" type="text" placeholder="Username" autocomplete="username" />
+        <input id="gate-username" type="text" data-i18n-placeholder="gate_username_ph" placeholder="Username" autocomplete="username" />
       </div>
       <div class="gate-field">
-        <input id="gate-input" type="password" placeholder="Password" autocomplete="current-password" />
+        <input id="gate-input" type="password" data-i18n-placeholder="gate_password_ph" placeholder="Password" autocomplete="current-password" />
       </div>
-      <button id="gate-btn" class="btn-primary gate-submit">Sign in</button>
+      <button id="gate-btn" class="btn-primary gate-submit" data-i18n="sign_in">Sign in</button>
       <div id="gate-err" class="gate-err"></div>
     </div>
   </div>
@@ -58,34 +58,34 @@
         <div class="user-panel-info">
           <div class="user-panel-name" id="userBadgeName"></div>
           <div class="user-panel-actions">
-            <button id="changePwBtn" type="button">Password</button>
-            <button id="logoutBtn" type="button">Log out</button>
+            <button id="changePwBtn" type="button" data-i18n="password_btn">Password</button>
+            <button id="logoutBtn" type="button" data-i18n="logout_btn">Log out</button>
           </div>
         </div>
       </div>
       <div id="changePwPanel" class="hidden" style="margin: 10px 18px; padding:10px; border:1px solid var(--sidebar-line); border-radius:9px; background:var(--sidebar-bg-alt)">
-        <input type="password" id="changePwCurrent" placeholder="Current password" autocomplete="current-password" style="width:100%; box-sizing:border-box; margin-bottom:6px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
-        <input type="password" id="changePwNew" placeholder="New password" autocomplete="new-password" style="width:100%; box-sizing:border-box; margin-bottom:8px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
-        <button class="btn-primary" id="changePwSave" style="width:100%; padding:7px; font-size:12px">Update password</button>
+        <input type="password" id="changePwCurrent" data-i18n-placeholder="change_pw_current_ph" placeholder="Current password" autocomplete="current-password" style="width:100%; box-sizing:border-box; margin-bottom:6px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
+        <input type="password" id="changePwNew" data-i18n-placeholder="change_pw_new_ph" placeholder="New password" autocomplete="new-password" style="width:100%; box-sizing:border-box; margin-bottom:8px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
+        <button class="btn-primary" id="changePwSave" style="width:100%; padding:7px; font-size:12px" data-i18n="change_pw_save">Update password</button>
         <div id="changePwErr" class="gate-err" style="margin-top:6px; font-size:11px"></div>
       </div>
 
       <nav class="nav">
         <div class="nav-group" data-group="dashboards">
-          <div class="nav-label"><span>Dashboards</span><span class="nav-group-caret"></span></div>
+          <div class="nav-label"><span data-i18n="nav_group_dashboards">Dashboards</span><span class="nav-group-caret"></span></div>
           <button class="nav-link active" data-tab="overview"><span class="nav-icon">📊</span>Overview</button>
           <button class="nav-link" data-tab="aum"><span class="nav-icon">📈</span>AUM history</button>
           <button class="nav-link" data-tab="performance"><span class="nav-icon">🎯</span>Performance</button>
           <button class="nav-link" data-tab="growth"><span class="nav-icon">🌱</span>Growth</button>
         </div>
         <div class="nav-group" data-group="investor">
-          <div class="nav-label"><span>Investor</span><span class="nav-group-caret"></span></div>
+          <div class="nav-label"><span data-i18n="nav_group_investor">Investor</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio (PWC)</button>
           <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon">🧭</span>Portfolio Explorer (GS)</button>
           <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
         </div>
         <div class="nav-group" data-group="operations">
-          <div class="nav-label"><span>Operations &amp; Finance</span><span class="nav-group-caret"></span></div>
+          <div class="nav-label"><span data-i18n="nav_group_operations">Operations &amp; Finance</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="reconciliation"><span class="nav-icon">🧮</span>Reconciliation</button>
           <button class="nav-link" data-tab="revenue"><span class="nav-icon">💰</span>Revenue (PWC)</button>
           <button class="nav-link" data-tab="revenue2"><span class="nav-icon">💹</span>Revenue (GS)</button>
@@ -101,11 +101,11 @@
           <button class="nav-link" data-tab="sql"><span class="nav-icon">🧪</span>SQL lab</button>
         </div>
         <div class="nav-group" data-group="help">
-          <div class="nav-label"><span>Help</span><span class="nav-group-caret"></span></div>
+          <div class="nav-label"><span data-i18n="nav_group_help">Help</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="docs"><span class="nav-icon">📖</span>Documentations</button>
         </div>
         <div class="nav-group hidden" id="adminNavGroup" data-group="admin">
-          <div class="nav-label"><span>Admin</span><span class="nav-group-caret"></span></div>
+          <div class="nav-label"><span data-i18n="nav_group_admin">Admin</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="admin"><span class="nav-icon">🛡️</span>Manage users</button>
           <button class="nav-link" data-tab="activity-log"><span class="nav-icon">📜</span>Activity log</button>
         </div>
@@ -119,20 +119,24 @@
         <span id="pageTitle" class="page-title">Overview</span>
 
         <div class="range">
-          <label>From <input type="date" id="from" /></label>
-          <label>To <input type="date" id="to" /></label>
-          <button id="apply" class="btn-primary">Apply</button>
+          <label><span data-i18n="range_from">From</span> <input type="date" id="from" /></label>
+          <label><span data-i18n="range_to">To</span> <input type="date" id="to" /></label>
+          <button id="apply" class="btn-primary" data-i18n="apply">Apply</button>
         </div>
 
         <div class="navbar-right">
           <div id="connStatus" class="conn-status" title="BigQuery connection">
             <span class="conn-dot" id="connDot"></span>
-            <span id="connLabel">Checking…</span>
+            <span id="connLabel" data-i18n="conn_checking">Checking…</span>
+          </div>
+          <div class="seg" id="langSeg">
+            <button data-lang="en" type="button">🇬🇧 EN</button>
+            <button data-lang="id" type="button">🇮🇩 ID</button>
           </div>
           <div class="seg" id="themeSeg">
-            <button data-theme-choice="auto" type="button">Auto</button>
-            <button data-theme-choice="light" type="button">Light</button>
-            <button data-theme-choice="dark" type="button">Dark</button>
+            <button data-theme-choice="auto" type="button" data-i18n="theme_auto">Auto</button>
+            <button data-theme-choice="light" type="button" data-i18n="theme_light">Light</button>
+            <button data-theme-choice="dark" type="button" data-i18n="theme_dark">Dark</button>
           </div>
         </div>
       </header>
@@ -924,39 +928,43 @@ ORDER BY n DESC"></textarea>
     <!-- ===================== DOCUMENTATION (plain-language guide) ===================== -->
     <section id="docs" class="view">
       <div class="panel doc-intro">
-        <div class="panel-head"><h2>Getting started</h2></div>
-        <p>This dashboard shows live data pulled directly from the database — there's nothing to configure, just pick a section from the menu on the left. A few things that apply everywhere:</p>
+        <div class="panel-head"><h2 data-i18n="docs_getting_started">Getting started</h2></div>
+        <p data-i18n="docs_intro">This dashboard shows live data pulled directly from the database — there's nothing to configure, just pick a section from the menu on the left. A few things that apply everywhere:</p>
         <ol>
-          <li><b>Date range</b> — the "From / To" fields at the top of the page and the <b>Apply</b> button next to them control the time window for whichever dashboard you're looking at.</li>
-          <li><b>Menu (sidebar)</b> — click the <b>☰</b> button top-left to collapse it to icons-only (desktop) or open/close it (on phone/tablet). Click a section title (like "Dashboards") to fold that group away if you don't use it often.</li>
-          <li><b>Theme</b> — top-right: <b>Auto</b> follows your device's light/dark setting automatically, or pick <b>Light</b>/<b>Dark</b> to fix it.</li>
-          <li><b>Exporting</b> — wherever you see <b>CSV</b> or <b>Excel</b> buttons, that downloads exactly what's on screen as a file.</li>
-          <li><b>Your account</b> — your name is in the box under the logo; <b>Password</b> lets you change it, <b>Log out</b> signs you out.</li>
+          <li data-i18n-html="docs_li_date_range"><b>Date range</b> — the "From / To" fields at the top of the page and the <b>Apply</b> button next to them control the time window for whichever dashboard you're looking at.</li>
+          <li data-i18n-html="docs_li_menu"><b>Menu (sidebar)</b> — click the <b>☰</b> button top-left to collapse it to icons-only (desktop) or open/close it (on phone/tablet). Click a section title (like "Dashboards") to fold that group away if you don't use it often.</li>
+          <li data-i18n-html="docs_li_theme"><b>Theme</b> — top-right: <b>Auto</b> follows your device's light/dark setting automatically, or pick <b>Light</b>/<b>Dark</b> to fix it.</li>
+          <li data-i18n-html="docs_li_export"><b>Exporting</b> — wherever you see <b>CSV</b> or <b>Excel</b> buttons, that downloads exactly what's on screen as a file.</li>
+          <li data-i18n-html="docs_li_account"><b>Your account</b> — your name is in the box under the logo; <b>Password</b> lets you change it, <b>Log out</b> signs you out.</li>
+          <li data-i18n-html="docs_li_language"><b>Language</b> — top-right: switch between English and Bahasa Indonesia at any time; your choice is remembered.</li>
         </ol>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2>Dashboards</h2></div>
+        <div class="panel-head"><h2 data-i18n="docs_panel_dashboards">Dashboards</h2></div>
         <div class="doc-item">
           <h3>📊 Overview</h3>
-          <p>The single-page snapshot of the whole business: total assets under management, user counts, buy/sell volume, a transaction trend chart, fund breakdowns, and a map of where investors are located across Indonesia.</p>
+          <p data-i18n="docs_overview_desc">The single-page snapshot of the whole business: total assets under management, user counts, buy/sell volume, a transaction trend chart, fund breakdowns, and a map of where investors are located across Indonesia.</p>
         </div>
         <div class="doc-item">
           <h3>📈 AUM history</h3>
-          <p>How total assets under management (and the platform's own revenue) have moved over time.</p>
+          <p data-i18n="docs_aum_desc">How total assets under management (and the platform's own revenue) have moved over time.</p>
         </div>
         <div class="doc-item">
           <h3>🎯 Performance</h3>
-          <p>How each fund's price (NAV) has performed — pick a time window from 1 day up to 5 years and compare funds side by side.</p>
+          <p data-i18n="docs_performance_desc">How each fund's price (NAV) has performed — pick a time window from 1 day up to 5 years and compare funds side by side.</p>
         </div>
         <div class="doc-item">
           <h3>🌱 Growth</h3>
-          <p>Marketing and growth numbers: how well promo campaigns performed, who's referring the most new investors, and which funds people switch between most.</p>
+          <p data-i18n="docs_growth_desc">Marketing and growth numbers: how well promo campaigns performed, who's referring the most new investors, and which funds people switch between most.</p>
         </div>
       </div>
 
+      <!-- Portfolio (PWC) / Portfolio Explorer (GS) doc-items are intentionally
+           left untranslated (English only), same product decision as the Tools
+           panel below. -->
       <div class="panel">
-        <div class="panel-head"><h2>Investor</h2></div>
+        <div class="panel-head"><h2 data-i18n="docs_panel_investor">Investor</h2></div>
         <div class="doc-item">
           <h3>👤 Portfolio (PWC)</h3>
           <p>Look up one investor by their SID code, name, or email, then see exactly what funds they currently hold, how their money has grown over different periods, and their AUM history over time.</p>
@@ -967,19 +975,21 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3>💎 HNWI</h3>
-          <p>"High-Net-Worth Individuals" — the list of investors holding above a chosen amount (you set the threshold) as of a chosen date, with a total-across-everyone summary and an export.</p>
+          <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding above a chosen amount (you set the threshold) as of a chosen date, with a total-across-everyone summary and an export.</p>
         </div>
       </div>
 
+      <!-- Remisier sharing / Remisier transactions doc-items are intentionally
+           left untranslated (English only), same product decision as above. -->
       <div class="panel">
-        <div class="panel-head"><h2>Operations &amp; Finance</h2></div>
+        <div class="panel-head"><h2 data-i18n="docs_panel_operations">Operations &amp; Finance</h2></div>
         <div class="doc-item">
           <h3>🧮 Reconciliation</h3>
-          <p>A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.</p>
+          <p data-i18n="docs_reconciliation_desc">A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.</p>
         </div>
         <div class="doc-item">
           <h3>💰 Revenue (PWC) / 💹 Revenue (GS)</h3>
-          <p>How much revenue/fees Sayakaya itself has earned, broken down by fund and investment manager, from each of the two data sources the platform tracks (PWC and GS).</p>
+          <p data-i18n="docs_revenue_desc">How much revenue/fees Sayakaya itself has earned, broken down by fund and investment manager, from each of the two data sources the platform tracks (PWC and GS).</p>
         </div>
         <div class="doc-item">
           <h3>🤝 Remisier sharing (GS) / (PWC)</h3>
@@ -991,10 +1001,12 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3>🔮 Predict</h3>
-          <p>Machine-learning forecasts: projected AUM and transaction volume, which investors are at risk of leaving (churn), and retention trends over time.</p>
+          <p data-i18n="docs_predict_desc">Machine-learning forecasts: projected AUM and transaction volume, which investors are at risk of leaving (churn), and retention trends over time.</p>
         </div>
       </div>
 
+      <!-- Tools panel is intentionally left entirely untranslated (English
+           only) — product decision, these are technical/analyst tools. -->
       <div class="panel">
         <div class="panel-head"><h2>Tools</h2></div>
         <div class="doc-item">
@@ -1012,14 +1024,14 @@ ORDER BY n DESC"></textarea>
       </div>
 
       <div class="panel hidden" id="docsAdminSection">
-        <div class="panel-head"><h2>Admin (superuser only)</h2></div>
+        <div class="panel-head"><h2 data-i18n="docs_panel_admin">Admin (superuser only)</h2></div>
         <div class="doc-item">
           <h3>🛡️ Manage users</h3>
-          <p>Create dashboard login accounts for your team, and choose exactly which sections each person is allowed to see.</p>
+          <p data-i18n="docs_manage_users_desc">Create dashboard login accounts for your team, and choose exactly which sections each person is allowed to see.</p>
         </div>
         <div class="doc-item">
           <h3>📜 Activity log</h3>
-          <p>See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio, or changed an account — and when.</p>
+          <p data-i18n="docs_activity_log_desc">See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio, or changed an account — and when.</p>
         </div>
       </div>
     </section>
@@ -1076,6 +1088,7 @@ ORDER BY n DESC"></textarea>
 
   <div id="toast" class="toast"></div>
   <div id="navTooltip" class="nav-tooltip"></div>
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

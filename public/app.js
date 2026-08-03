@@ -2346,6 +2346,7 @@ function wire() {
   wireNavGroups();
   $$('.nav-link').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
   $$('#themeSeg button').forEach((b) => b.addEventListener('click', () => setThemeChoice(b.dataset.themeChoice)));
+  $$('#langSeg button').forEach((b) => b.addEventListener('click', () => setLang(b.dataset.lang)));
   // One hamburger, two jobs depending on viewport — a persistent icon-only
   // sidebar on desktop (remembered across reloads, like the theme choice),
   // an off-canvas drawer on mobile (never remembered — always starts closed).
@@ -2654,11 +2655,16 @@ async function boot() {
   if (document.querySelector('.view.active')?.id === 'overview') loadOverview();
 }
 
+let lastConnLive = null;
 function setConnStatus(live) {
+  lastConnLive = live;
   $('#connDot').classList.toggle('live', live === true);
   $('#connDot').classList.toggle('down', live === false);
-  $('#connLabel').textContent = live === true ? 'BigQuery live' : live === false ? 'Connection down' : 'Checking…';
+  $('#connLabel').textContent = live === true ? t('conn_live') : live === false ? t('conn_down') : t('conn_checking');
 }
+// i18n.js calls this after a language switch, to re-render text this app
+// builds dynamically in JS rather than via a static data-i18n attribute.
+window.onLanguageChange = () => setConnStatus(lastConnLive);
 
 async function pollHealth() {
   try {
@@ -2675,6 +2681,8 @@ async function init() {
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   syncThemeSeg(getThemeChoice());
+  translatePage();
+  syncLangSeg(getLang());
   wire(); wireGate(); wireAdmin(); wireChangePassword();
 
   // Health is the one route that doesn't need a session — check it either way.
