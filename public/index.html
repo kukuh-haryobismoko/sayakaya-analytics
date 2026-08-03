@@ -901,6 +901,10 @@ FROM `sayakaya.main.transactions`
 WHERE status = 'completed'
 GROUP BY type
 ORDER BY n DESC"></textarea>
+        <div id="sqlUnredactRow" class="sql-bar hidden">
+          <label><input type="checkbox" id="sqlUnredact"> Include restricted columns (password, KYC, etc. — superuser only)</label>
+          <input type="password" id="sqlUnredactPassword" class="hidden" placeholder="Confirm your password" autocomplete="current-password">
+        </div>
         <div class="sql-bar">
           <button id="sqlRun" class="btn-primary">Run</button>
           <button id="sqlEst" class="btn-ghost">Estimate cost</button>

@@ -630,8 +630,22 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/sql/run', requireTab('sql'), handler(async (req, res) => {
     const v = validateAdHoc(req.body.sql);
     if (!v.ok) return res.status(400).json({ error: v.error });
-    const rows = await runQuery(capRows(v.sql, req.body.limit || 5000), {});
-    await Auth.logEvent(req.user.id, req.user.username, 'sql_run', v.sql.slice(0, 300));
+    // Restricted columns (password, KYC fields, etc.) are redacted from every
+    // result by default (see runQuery/redactSensitiveColumns in bigquery.js).
+    // A superuser can lift that for one query, but only by re-proving their
+    // identity with their current password on this specific request — being
+    // logged in as a superuser alone isn't enough, since a bypass this wide
+    // deserves its own step-up check, not just a role flag.
+    let redact = true;
+    if (req.body.unredact) {
+      if (!req.user.is_superuser) return res.status(403).json({ error: 'Only a superuser can include restricted columns.' });
+      if (!req.body.password || !Auth.verifyPassword(req.body.password, req.user.password_hash)) {
+        return res.status(401).json({ error: 'Incorrect password.' });
+      }
+      redact = false;
+    }
+    const rows = await runQuery(capRows(v.sql, req.body.limit || 5000), {}, { redact });
+    await Auth.logEvent(req.user.id, req.user.username, 'sql_run', v.sql.slice(0, 300) + (redact ? '' : ' [unredacted]'));
     res.json({ rows, count: rows.length });
   }));
 

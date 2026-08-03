@@ -1517,11 +1517,16 @@ let sqlCache = [];
 
 async function runSql() {
   const sql = $('#sqlInput').value;
+  const unredact = $('#sqlUnredact').checked;
+  const password = $('#sqlUnredactPassword').value;
+  if (unredact && !password) { setSqlMsg('Enter your password to include restricted columns.', 'err'); return; }
   setSqlMsg('Running…', '');
   $('#sqlResult').innerHTML = '<div class="loading">Executing query…</div>';
   $('#sqlCsv').disabled = $('#sqlXlsx').disabled = true;
   try {
-    const { rows, count } = await api('/api/sql/run', { method: 'POST', body: JSON.stringify({ sql }) });
+    const body = { sql };
+    if (unredact) { body.unredact = true; body.password = password; }
+    const { rows, count } = await api('/api/sql/run', { method: 'POST', body: JSON.stringify(body) });
     sqlCache = rows;
     renderGenericTable('#sqlResult', rows);
     setSqlMsg(`${num(count)} row${count === 1 ? '' : 's'}`, 'ok');
@@ -1529,6 +1534,9 @@ async function runSql() {
   } catch (e) {
     $('#sqlResult').innerHTML = '';
     setSqlMsg(e.message, 'err');
+  } finally {
+    // Never keep a typed password around longer than the one request it authorized.
+    $('#sqlUnredactPassword').value = '';
   }
 }
 
@@ -2229,6 +2237,7 @@ function applyPermissions(user) {
   $('#adminNavGroup').classList.toggle('hidden', !user.isSuperuser);
   $('#askActivityLogChip').classList.toggle('hidden', !user.isSuperuser);
   $('#docsAdminSection').classList.toggle('hidden', !user.isSuperuser);
+  $('#sqlUnredactRow').classList.toggle('hidden', !user.isSuperuser);
   $$('.nav-link[data-tab]').forEach((t) => {
     const allowed = SUPERUSER_ONLY_TABS.includes(t.dataset.tab) ? user.isSuperuser : userCan(t.dataset.tab);
     t.classList.toggle('hidden', !allowed);
@@ -2553,6 +2562,10 @@ function wire() {
   // sql lab
   $('#sqlRun').addEventListener('click', runSql);
   $('#sqlEst').addEventListener('click', estimateSql);
+  $('#sqlUnredact').addEventListener('change', (e) => {
+    $('#sqlUnredactPassword').classList.toggle('hidden', !e.target.checked);
+    if (!e.target.checked) $('#sqlUnredactPassword').value = '';
+  });
   $('#sqlInput').addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') runSql(); });
   $('#sqlCsv').addEventListener('click', () => download({ source: 'sql', format: 'csv', filename: 'query_result', sql: $('#sqlInput').value, limit: 100000 }, 'query_result.csv'));
   $('#sqlXlsx').addEventListener('click', () => download({ source: 'sql', format: 'xlsx', filename: 'query_result', sql: $('#sqlInput').value, limit: 100000 }, 'query_result.xlsx'));

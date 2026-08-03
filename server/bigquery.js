@@ -28,11 +28,34 @@ function buildClient() {
 
 const bq = buildClient();
 
+// Belt-and-suspenders redaction: strip these columns out of EVERY query
+// result, regardless of dataset/table, so a `SELECT *` — from the SQL Lab or
+// from SQL the Ask LLM writes — can never leak a credential or KYC identity
+// field even though no curated query (queries.js/explore.js) ever selects
+// them on purpose. Matched by column name only, so it's a free no-op for the
+// curated queries that don't touch these columns at all.
+// NOTE: 'address'/'full_address'/'home_address' are best-guess names for the
+// "full home address" field mentioned in explore.js's comment — verify
+// against the actual user_profiles schema and adjust if the real column is
+// named differently.
+const SENSITIVE_COLUMN_RE = /^(password|password_hash|id_number|mothers_maiden_name|address|full_address|home_address)$|_photo_url$|signature/i;
+
+function redactSensitiveColumns(rows) {
+  if (!rows.length) return rows;
+  const hit = Object.keys(rows[0]).filter((k) => SENSITIVE_COLUMN_RE.test(k));
+  if (!hit.length) return rows;
+  return rows.map((row) => {
+    const clean = { ...row };
+    for (const k of hit) delete clean[k];
+    return clean;
+  });
+}
+
 /**
  * Run a parameterized query that this app controls (trusted SQL, untrusted params).
  * Always prefer named parameters for any user-supplied value.
  */
-async function runQuery(sql, params = {}, { maxBytes = MAX_BYTES_BILLED } = {}) {
+async function runQuery(sql, params = {}, { maxBytes = MAX_BYTES_BILLED, redact = true } = {}) {
   const [job] = await bq.createQueryJob({
     query: sql,
     params,
@@ -41,7 +64,7 @@ async function runQuery(sql, params = {}, { maxBytes = MAX_BYTES_BILLED } = {}) 
     useQueryCache: false, // every report must reflect live table state, not BigQuery's cached job results
   });
   const [rows] = await job.getQueryResults();
-  return rows;
+  return redact ? redactSensitiveColumns(rows) : rows;
 }
 
 /**
@@ -116,4 +139,17 @@ module.exports = {
   dryRun,
   validateAdHoc,
   capRows,
+  redactSensitiveColumns,
 };
+
+// Self-check: `node server/bigquery.js` — does not touch BigQuery, only
+// exercises the redaction regex/filter used by runQuery above.
+if (require.main === module) {
+  const assert = require('assert');
+  const out = redactSensitiveColumns([
+    { user_id: 1, email: 'a@b.com', password: 'x', id_number: '123', ktp_photo_url: 'u', signature_url: 'u', id_address_city: 'Jakarta' },
+  ]);
+  assert.deepStrictEqual(out, [{ user_id: 1, email: 'a@b.com', id_address_city: 'Jakarta' }]);
+  assert.deepStrictEqual(redactSensitiveColumns([]), []);
+  console.log('bigquery.js redaction self-check passed');
+}
