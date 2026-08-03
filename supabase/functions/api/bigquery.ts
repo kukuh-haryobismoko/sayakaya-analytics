@@ -145,7 +145,12 @@ function parseRows(schema: { fields: { name: string; type: string; mode?: string
   return (rows || []).map((row) => {
     const out: Record<string, unknown> = {};
     fields.forEach((field, i) => {
-      out[field.name] = coerceValue(field.type, row.f[i]?.v);
+      const raw = row.f[i]?.v;
+      // REPEATED fields (e.g. ARRAY_AGG) come back as an array of {v: ...}
+      // wrapper objects, not plain scalars — unwrap each element too.
+      out[field.name] = field.mode === 'REPEATED'
+        ? ((raw as { v: unknown }[] | null) || []).map((item) => coerceValue(field.type, item.v))
+        : coerceValue(field.type, raw);
     });
     return out;
   });
