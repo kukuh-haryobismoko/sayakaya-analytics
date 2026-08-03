@@ -412,6 +412,19 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   background: #1c1d3a; color: #fff; padding: 11px 18px; border-radius: 9px; font-size: 13px;
   opacity: 0; transition: .25s; pointer-events: none; z-index: 60; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- Collapsed-sidebar nav tooltip ---------- */
+/* .nav's overflow-y:auto (for the long tab list) clips overflow-x too, so an
+   absolutely-positioned tooltip anchored inside it would be invisible —
+   position:fixed against the viewport via JS side-steps that instead. */
+.nav-tooltip {
+  position: fixed; z-index: 70; pointer-events: none;
+  background: #1c1d3a; color: #fff; font-size: 12.5px; font-weight: 600;
+  padding: 6px 11px; border-radius: 6px; white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(0,0,0,.3);
+  opacity: 0; transition: opacity .12s ease;
+}
+.nav-tooltip.show { opacity: 1; }
 .empty { padding: 28px; text-align: center; color: var(--muted); }
 .loading { padding: 28px; text-align: center; color: var(--muted); font-family: "JetBrains Mono"; font-size: 12px; }
 

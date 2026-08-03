@@ -2150,9 +2150,9 @@ function userCan(tab) {
 
 // Wraps each nav-link's trailing label text in its own <span> once, on init —
 // so CSS can hide just the text (not the icon) when the sidebar is collapsed
-// to icon-only mode, and so a title tooltip is available on hover then too.
-// The breadcrumb below reads from this same span, so there's one source of
-// truth for "this nav-link's label" instead of a parallel name-mapping table.
+// to icon-only mode, and so a hover tooltip can show it then too. The
+// breadcrumb below reads from this same span, so there's one source of truth
+// for "this nav-link's label" instead of a parallel name-mapping table.
 function wrapNavLabels() {
   $$('.nav-link').forEach((link) => {
     const label = Array.from(link.childNodes)
@@ -2162,9 +2162,32 @@ function wrapNavLabels() {
     span.className = 'nav-label-text';
     span.textContent = label;
     link.appendChild(span);
-    link.title = label;
+    link.setAttribute('aria-label', label);
+    link.addEventListener('mouseenter', () => showNavTooltip(link, label));
+    link.addEventListener('mouseleave', hideNavTooltip);
   });
 }
+
+// Only meaningful when the sidebar is icon-only (mini) mode — the label is
+// already visible next to the icon otherwise. Positioned with the viewport
+// (not the link's own offset parent) because .nav's overflow-y:auto for the
+// scrollable tab list also clips horizontal overflow, which would hide an
+// absolutely-positioned tooltip poking out past the sidebar's edge.
+function showNavTooltip(link, label) {
+  // The collapsed class persists across sessions regardless of viewport, but
+  // icon-only mode (and thus the need for a tooltip) is desktop-only — on a
+  // narrow screen the sidebar reverts to its normal full-label drawer.
+  if (window.matchMedia('(max-width: 900px)').matches) return;
+  if (!$('#appShell').classList.contains('sidebar-collapsed')) return;
+  const r = link.getBoundingClientRect();
+  const tip = $('#navTooltip');
+  tip.textContent = label;
+  tip.style.left = `${r.right + 10}px`;
+  tip.style.top = `${r.top + r.height / 2}px`;
+  tip.style.transform = 'translateY(-50%)';
+  tip.classList.add('show');
+}
+function hideNavTooltip() { $('#navTooltip').classList.remove('show'); }
 
 function switchTab(name) {
   // Real enforcement is the backend 403 on every route — this is just UX
