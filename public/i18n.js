@@ -595,3 +595,12 @@ function setLang(lang) {
   syncLangSeg(lang);
   if (typeof window.onLanguageChange === 'function') window.onLanguageChange(lang);
 }
+
+// Called on logout (see clearAuth() in app.js) so a shared/kiosk computer
+// always hands the next login a clean English default, regardless of
+// what language a previous session was left on.
+function resetLangToDefault() {
+  localStorage.removeItem(LANG_KEY);
+  translatePage();
+  syncLangSeg(getLang());
+}

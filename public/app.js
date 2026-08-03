@@ -9,7 +9,11 @@ function getAuth() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY)); } catch { return null; }
 }
 function setAuth(auth) { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); }
-function clearAuth() { localStorage.removeItem(AUTH_KEY); }
+// Also resets the language back to English — a shared/kiosk computer
+// shouldn't hand the next person to log in whatever language the last
+// person happened to leave it on. Still persists normally for as long as
+// the current session stays logged in (reloads, other tabs).
+function clearAuth() { localStorage.removeItem(AUTH_KEY); resetLangToDefault(); }
 
 // On Netlify this is served same-origin, so relative /api/* paths just work.
 // GitHub Pages is static-only — it can't run a backend — so this mirror calls
