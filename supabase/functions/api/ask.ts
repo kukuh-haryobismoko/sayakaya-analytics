@@ -486,7 +486,8 @@ async function answerActivityLog(question: string): Promise<{ sql: null; rows: R
  * activity-log path only — the same superuser restriction the Activity log
  * tab itself enforces, since that data is every user's login/export history.
  */
-export async function ask(question: string, context?: string | null, history?: HistoryTurn[] | null, user?: Auth.DashboardUser | null): Promise<{ sql: string | null; rows: Record<string, unknown>[] }> {
+export async function ask(question: string, context?: string | null, history?: HistoryTurn[] | null, user?: Auth.DashboardUser | null, opts?: { redact?: boolean }): Promise<{ sql: string | null; rows: Record<string, unknown>[] }> {
+  const redact = opts?.redact ?? true;
   if (looksLikeActivityLogQuestion(question)) {
     if (!user || !user.is_superuser) {
       throw new Error('Activity log data is restricted to superusers.');
@@ -513,7 +514,7 @@ export async function ask(question: string, context?: string | null, history?: H
       continue;
     }
     try {
-      const rows = await runQuery(capRows(v.sql, 1000), {});
+      const rows = await runQuery(capRows(v.sql, 1000), {}, { redact });
       return { sql: v.sql, rows };
     } catch (e) {
       if (attempt >= 1) {

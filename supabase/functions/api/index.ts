@@ -664,9 +664,20 @@ on('POST', '/api/ask', requireTab('ask', async (req, _params, _url, user) => {
       .slice(-6)
     : [];
   if (!question) return json({ error: 'Type a question first.' }, 400);
+  // Same step-up check as /api/sql/run: a superuser can lift column
+  // redaction for one question, but only by re-proving their password on
+  // this specific request.
+  let redact = true;
+  if (body.unredact) {
+    if (!user!.is_superuser) return json({ error: 'Only a superuser can include restricted columns.' }, 403);
+    if (!body.password || !A.verifyPassword(String(body.password), user!.password_hash)) {
+      return json({ error: 'Incorrect password.' }, 401);
+    }
+    redact = false;
+  }
   try {
-    const { sql, rows } = await ask(question, context, history, user);
-    await A.logEvent(user!.id, user!.username, 'ask', `${question} (${rows.length} rows)`);
+    const { sql, rows } = await ask(question, context, history, user, { redact });
+    await A.logEvent(user!.id, user!.username, 'ask', `${question} (${rows.length} rows)` + (redact ? '' : ' [unredacted]'));
     return json({ sql, rows, count: rows.length });
   } catch (err) {
     console.error('[POST /api/ask]', (err as Error).message);
@@ -694,8 +705,20 @@ on('POST', '/api/sql/run', requireTab('sql', async (req, _params, _url, user) =>
   const body = await bodyOf(req);
   const v = validateAdHoc(String(body.sql || ''));
   if (!v.ok) return json({ error: v.error }, 400);
-  const rows = await runQuery(capRows(v.sql, (body.limit as number) || 5000), {});
-  await A.logEvent(user!.id, user!.username, 'sql_run', v.sql.slice(0, 300));
+  // Restricted columns (password, KYC fields, etc.) are redacted from every
+  // result by default (see runQuery/redactSensitiveColumns in bigquery.ts).
+  // A superuser can lift that for one query, but only by re-proving their
+  // identity with their current password on this specific request.
+  let redact = true;
+  if (body.unredact) {
+    if (!user!.is_superuser) return json({ error: 'Only a superuser can include restricted columns.' }, 403);
+    if (!body.password || !A.verifyPassword(String(body.password), user!.password_hash)) {
+      return json({ error: 'Incorrect password.' }, 401);
+    }
+    redact = false;
+  }
+  const rows = await runQuery(capRows(v.sql, (body.limit as number) || 5000), {}, { redact });
+  await A.logEvent(user!.id, user!.username, 'sql_run', v.sql.slice(0, 300) + (redact ? '' : ' [unredacted]'));
   return json({ rows, count: rows.length });
 }));
 
