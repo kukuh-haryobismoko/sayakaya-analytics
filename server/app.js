@@ -744,7 +744,7 @@ function createApp({ serveStatic = true } = {}) {
       if (format === 'pdf') {
         const { includePerformance = true, columns } = req.body;
         const c = Q.userContact(userId);
-        const [contact] = await runQuery(c.sql, c.params);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
         const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
         return sendPdf(res, buf, filename, username);
@@ -775,7 +775,7 @@ function createApp({ serveStatic = true } = {}) {
       if (format === 'pdf') {
         const { includePerformance = true, columns } = req.body;
         const c = Q.userContact(userId);
-        const [contact] = await runQuery(c.sql, c.params);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
         const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
         return sendPdf(res, buf, filename, username);

@@ -172,8 +172,9 @@ async function bqFetch(path: string, body: Record<string, unknown>) {
 // result, regardless of dataset/table, so a `SELECT *` — from the SQL Lab or
 // from SQL the Ask LLM writes — can never leak a credential or KYC identity
 // field even though no curated query (queries.ts/explore.ts) ever selects
-// them on purpose. Matched by column name only, so it's a free no-op for the
-// curated queries that don't touch these columns at all. Mirrors
+// them on purpose. Matched by column name only — a curated query that
+// legitimately needs one of these columns (e.g. Q.userContact's `address`
+// for the PDF letterhead) must call runQuery with { redact: false }. Mirrors
 // server/bigquery.js's redactSensitiveColumns — keep both in sync.
 const SENSITIVE_COLUMN_RE = /^(password|password_hash|id_number|mothers_maiden_name|address|full_address|home_address)$|_photo_url$|signature/i;
 

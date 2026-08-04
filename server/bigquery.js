@@ -32,12 +32,9 @@ const bq = buildClient();
 // result, regardless of dataset/table, so a `SELECT *` — from the SQL Lab or
 // from SQL the Ask LLM writes — can never leak a credential or KYC identity
 // field even though no curated query (queries.js/explore.js) ever selects
-// them on purpose. Matched by column name only, so it's a free no-op for the
-// curated queries that don't touch these columns at all.
-// NOTE: 'address'/'full_address'/'home_address' are best-guess names for the
-// "full home address" field mentioned in explore.js's comment — verify
-// against the actual user_profiles schema and adjust if the real column is
-// named differently.
+// them on purpose. Matched by column name only — a curated query that
+// legitimately needs one of these columns (e.g. Q.userContact's `address`
+// for the PDF letterhead) must call runQuery with { redact: false }.
 const SENSITIVE_COLUMN_RE = /^(password|password_hash|id_number|mothers_maiden_name|address|full_address|home_address)$|_photo_url$|signature/i;
 
 function redactSensitiveColumns(rows) {

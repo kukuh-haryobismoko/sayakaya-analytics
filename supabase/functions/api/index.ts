@@ -777,7 +777,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const includePerformance = body.includePerformance !== false;
       const columns = body.columns as string[] | undefined;
       const c = Q.userContact(userId);
-      const [contact] = await runQuery(c.sql, c.params);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
       const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
       // Buffer (Node) satisfies BodyInit (a Uint8Array) at runtime, but the
@@ -816,7 +816,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const includePerformance = body.includePerformance !== false;
       const columns = body.columns as string[] | undefined;
       const c = Q.userContact(userId);
-      const [contact] = await runQuery(c.sql, c.params);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
       const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
       return new Response(new Uint8Array(buf), {
