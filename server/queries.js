@@ -445,6 +445,64 @@ const userHoldings = (userId) => ({
   params: { userId },
 });
 
+// Same shape as userHoldings() above, but avg_buy_price is derived from the
+// real transaction ledger instead of portfolios.initial_price (which can
+// silently drift from the actual buy price — see the IDD031084165546 case).
+// Weighted-average cost method: only "incoming" transaction types set the
+// average (buy, SWITCH_IN, reinvestment, transfer_in); sells/switch-outs/
+// transfers-out/liquidation/unit_adjustment reduce units only and never move
+// the average. Bonus units have no transaction trail, so they keep using
+// bonus_portfolios.average_nav, same as userHoldings().
+const userHoldingsFromTx = (userId) => ({
+  sql: `WITH incoming_tx AS (
+      SELECT fund_id, unit, value_per_unit
+      FROM ${TX}
+      WHERE user_id = @userId
+        AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in')
+        AND status IN ('completed', 'completed_payment', 'verified')
+    ),
+    regular_avg AS (
+      SELECT fund_id, SAFE_DIVIDE(SUM(unit * value_per_unit), SUM(unit)) AS avg_price
+      FROM incoming_tx
+      GROUP BY fund_id
+    ),
+    regular_current AS (
+      SELECT fund_id, SUM(unit) AS unit, MIN(created_at) AS opened_at
+      FROM ${PORT}
+      WHERE deleted_at IS NULL AND unit > 0 AND user_id = @userId
+      GROUP BY fund_id
+    ),
+    holdings AS (
+      SELECT rc.fund_id, rc.unit, ra.avg_price AS avg_buy_price, rc.opened_at
+      FROM regular_current rc
+      LEFT JOIN regular_avg ra ON ra.fund_id = rc.fund_id
+      UNION ALL
+      SELECT bp.fund_id, bp.unit, bp.average_nav AS avg_buy_price, bp.created_at AS opened_at
+      FROM ${BONUS_PORT} bp
+      WHERE bp.status = 'on_going' AND bp.user_id = @userId
+    ),
+    merged AS (
+      SELECT fund_id, SUM(unit) AS unit,
+        SAFE_DIVIDE(SUM(unit * avg_buy_price), SUM(unit)) AS avg_buy_price,
+        MIN(opened_at) AS opened_at
+      FROM holdings
+      GROUP BY fund_id
+    )
+    SELECT *, value - fund_value AS gain_loss,
+      SAFE_DIVIDE(value - fund_value, fund_value) * 100 AS gain_pct
+    FROM (
+      SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
+        f.latest_nav_value AS nav, f.latest_nav_date AS nav_date,
+        ROUND(m.unit * m.avg_buy_price) AS fund_value,
+        ROUND(m.unit * f.latest_nav_value) AS value,
+        m.opened_at
+      FROM merged m
+      JOIN ${FUNDS} f ON f.id = m.fund_id
+    )
+    ORDER BY value DESC`,
+  params: { userId },
+});
+
 // Regular vs bonus AUM split for the dashboard KPIs only — the per-fund
 // holdings table/exports stay merged; this is purely for the breakdown card.
 const userPortfolioSplit = (userId) => ({
@@ -1655,6 +1713,7 @@ module.exports = {
   userSearch, userContact, userHoldings, userPortfolioSplit, userPerformance, userAumHistory,
   userHoldingsLatestDate, userHoldingsAsOf,
   userPerformanceFix, userAumHistoryFix, userHoldingsLatestDateFix, userHoldingsAsOfFix,
+  userHoldingsFromTx,
   hnwiLatestDate, hnwiTotal, hnwiByFund,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
   campaignPerformance, switchingTopPairs, aumByManager,

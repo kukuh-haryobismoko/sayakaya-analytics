@@ -26,6 +26,7 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   portfolio_full: 'portfolio',
   portfolio_explorer_full: 'portfolio-explorer',
   portfolio_fix_full: 'portfolio-fix',
+  portfolio_tx_full: 'portfolio-tx',
   explore: 'explorer',
   campaigns_performance: 'growth',
   switching_pairs: 'growth',
@@ -417,7 +418,7 @@ on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
 }));
 
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix'], async (_req, _params, url) => {
+on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -470,6 +471,29 @@ on('GET', '/api/portfolio-fix', requireTab('portfolio-fix', async (_req, _params
   const latestDate = (dRows[0]?.latest_date as string) || null;
   await A.logEvent(user!.id, user!.username, 'view_portfolio_fix', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+}));
+
+// ---- Portfolio (TX): live-only holdings, avg_buy_price computed straight
+// from the transaction ledger (see userHoldingsFromTx in queries.ts) instead
+// of trusting portfolios.initial_price. No as-of-date picker — reconstructing
+// historical holdings purely from transactions is future scope; AUM
+// chart/performance reuse portfolio_fix, since that data (market value, not
+// cost basis) was never wrong.
+on('GET', '/api/portfolio-tx', requireTab('portfolio-tx', async (_req, _params, url, user) => {
+  const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
+  if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
+  const h = Q.userHoldingsFromTx(userId);
+  const s = Q.userPortfolioSplit(userId);
+  const p = Q.userPerformanceFix(sid);
+  const a = Q.userAumHistoryFix(sid);
+  const [holdings, splitRows, performance, history] = await Promise.all([
+    runQuery(h.sql, h.params),
+    runQuery(s.sql, s.params),
+    runQuery(p.sql, p.params),
+    runQuery(a.sql, a.params),
+  ]);
+  await A.logEvent(user!.id, user!.username, 'view_portfolio_tx', `SID ${sid}`);
+  return json({ holdings, split: splitRows[0], performance, history });
 }));
 
 // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
@@ -824,12 +848,18 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const userId = body.userId as string; const sid = body.sid as string;
     if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
     const date = body.date as string | undefined;
+    const excludeFunds = body.excludeFunds as string[] | undefined;
     const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
     const pq = Q.productPerformanceDetail();
-    const [holdings, detail] = await Promise.all([
+    const [holdingsRaw, detail] = await Promise.all([
       runQuery(h.sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
+    // Client-side checklist for excluding dust/unwanted holdings (e.g. a
+    // leftover 1-unit balance) from the export without hiding them on screen.
+    const holdings = Array.isArray(excludeFunds) && excludeFunds.length
+      ? holdingsRaw.filter((r) => !excludeFunds.includes(r.fund as string))
+      : holdingsRaw;
     if (format === 'pdf') {
       const includePerformance = body.includePerformance !== false;
       const columns = body.columns as string[] | undefined;
@@ -847,6 +877,38 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(fixSheets, filename, username);
     rows = fixSheets[0].rows; // CSV has no sheets — holdings only
+  } else if (source === 'portfolio_tx_full') {
+    // Same as portfolio_full, but holdings come from userHoldingsFromTx
+    // (avg_buy_price derived from the transaction ledger). Live-only — no date.
+    const userId = body.userId as string;
+    if (!userId) return json({ error: 'userId is required.' }, 400);
+    const excludeFundsTx = body.excludeFunds as string[] | undefined;
+    const h = Q.userHoldingsFromTx(userId);
+    const pq = Q.productPerformanceDetail();
+    const [holdingsRawTx, detail] = await Promise.all([
+      runQuery(h.sql, h.params),
+      runQuery(pq.sql, pq.params),
+    ]);
+    const holdings = Array.isArray(excludeFundsTx) && excludeFundsTx.length
+      ? holdingsRawTx.filter((r) => !excludeFundsTx.includes(r.fund as string))
+      : holdingsRawTx;
+    if (format === 'pdf') {
+      const includePerformance = body.includePerformance !== false;
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
+      const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
+      return new Response(new Uint8Array(buf), {
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
+        },
+      });
+    }
+    const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+    if (format === 'xlsx') return xlsxMultiResponse(txSheets, filename, username);
+    rows = txSheets[0].rows; // CSV has no sheets — holdings only
   } else if (source === 'portfolio_explorer_full') {
     // Same shape/columns as portfolio_full, sourced from goal_snapshots as of
     // a given date instead of the live portfolios/bonus_portfolios tables —

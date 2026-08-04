@@ -83,6 +83,7 @@
           <button class="nav-link" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio (PWC)</button>
           <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon">🧭</span>Portfolio Explorer (GS)</button>
           <button class="nav-link" data-tab="portfolio-fix"><span class="nav-icon">🛠️</span>Portfolio Explorer (Main)</button>
+          <button class="nav-link" data-tab="portfolio-tx"><span class="nav-icon">🧾</span>Portfolio (TX)</button>
           <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
         </div>
         <div class="nav-group" data-group="operations">
@@ -243,6 +244,56 @@
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_aum_performance">AUM performance</h2><span class="hint" data-i18n="portfix_aum_performance_hint">% change in total portfolio value, from mi_fee_logs.portfolio_fix.</span></div>
           <div id="pfxPerformance" class="table-wrap"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== PORTFOLIO (TX) — live holdings, avg buy price from the transaction ledger, no as-of-date ===================== -->
+    <section id="portfolio-tx" class="view">
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
+        <div class="ask-bar">
+          <input id="ptxSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
+          <button id="ptxSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
+        </div>
+        <div id="ptxResults" class="table-wrap"></div>
+      </div>
+
+      <div id="ptxDetail" class="hidden">
+        <div class="panel">
+          <div class="panel-head wrap">
+            <h2 id="ptxUserName">—</h2>
+            <div class="exp">
+              <button class="btn-ghost" id="ptxCsv" data-i18n="common_csv">CSV</button>
+              <button class="btn-ghost" id="ptxXlsx" data-i18n="common_xlsx_portfolio_full">Excel (portfolio + performance, all types)</button>
+              <div class="dropdown-multi" id="ptxPdfColsDropdown">
+                <button type="button" class="dropdown-multi-btn" id="ptxPdfColsBtn" data-i18n="common_columns">Columns</button>
+                <div class="dropdown-multi-panel" id="ptxPdfColsPanel">
+                  <div id="ptxPdfCols" class="dropdown-multi-list"></div>
+                </div>
+              </div>
+              <button class="btn-ghost" id="ptxPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
+              <button class="btn-ghost" id="ptxPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
+            </div>
+          </div>
+          <span class="hint" id="ptxUserSub"></span><br>
+          <span class="hint">Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).</span>
+          <div id="ptxKpis" class="kpi-grid" style="margin-top:14px"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_aum_over_time">AUM over time</h2></div>
+          <div class="chart-wrap"><canvas id="ptxAumChart"></canvas></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_holdings">Holdings</h2></div>
+          <div id="ptxHoldings" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_aum_performance">AUM performance</h2><span class="hint" data-i18n="portfix_aum_performance_hint">% change in total portfolio value, from mi_fee_logs.portfolio_fix.</span></div>
+          <div id="ptxPerformance" class="table-wrap"></div>
         </div>
       </div>
     </section>
@@ -1029,6 +1080,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3>🛠️ Portfolio Explorer (Main)</h3>
           <p>Same as Portfolio (PWC) — same as-of-date snapshot feature — but sourced from a corrected daily table (mi_fee_logs.portfolio_fix) whose average buy price is weighted by unit instead of averaged per lot, fixing a cost-basis bug in the original portfolio_with_code pipeline.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🧾 Portfolio (TX)</h3>
+          <p>Live-only investor lookup whose average buy price is computed directly from the transaction ledger, not from portfolios.initial_price — only completed buy/SWITCH_IN/reinvestment/transfer_in transactions affect the average; sells never change it. Lets you uncheck individual fund rows (e.g. dust balances) before exporting.</p>
         </div>
         <div class="doc-item">
           <h3>💎 HNWI</h3>

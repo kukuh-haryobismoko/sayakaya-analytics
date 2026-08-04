@@ -196,7 +196,11 @@ function renderPfKpis(holdings, split) {
 
 // Shared by the Portfolio tab and Portfolio Explorer — both feed rows of the
 // same shape (fund, fund_type, unit, avg_buy_price, nav, value, ...).
-function holdingsTableHtml(rows) {
+// opts.selectable adds a per-row "include in export" checkbox (used by
+// Portfolio (Fix) so dust holdings can be excluded from CSV/XLSX/PDF without
+// hiding them from the on-screen table); opts.excluded is the Set of fund
+// names currently unchecked.
+function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = {}) {
   const gl = (v) => {
     if (v == null) return '<td class="num">—</td>';
     const n = Number(v);
@@ -215,8 +219,13 @@ function holdingsTableHtml(rows) {
     const fundValue = avg == null ? null : Math.round(Number(val(h.unit)) * avg);
     const gain = fundValue == null ? null : market - fundValue;
     const pct = fundValue ? (gain / fundValue) * 100 : null;
+    const fund = val(h.fund);
+    const chkTd = selectable
+      ? `<td><input type="checkbox" class="hld-export-chk" data-fund="${String(fund).replace(/"/g, '&quot;')}" ${excluded.has(fund) ? '' : 'checked'}></td>`
+      : '';
     return `<tr>
-      <td>${val(h.fund)}</td>
+      ${chkTd}
+      <td>${fund}</td>
       <td><span class="tag other">${val(h.fund_type)}</span></td>
       <td class="num">${Number(val(h.unit)).toFixed(4)}</td>
       <td class="num">${avg == null ? '—' : num(avg)}</td>
@@ -227,8 +236,9 @@ function holdingsTableHtml(rows) {
       ${glPct(pct)}
     </tr>`;
   }).join('');
+  const chkTh = selectable ? '<th>Export</th>' : '';
   return `<table><thead><tr>
-      <th>Fund</th><th>Type</th><th class="num">Unit Balance</th><th class="num">Average NAV</th><th class="num">Close NAV</th><th class="num">Fund Value</th><th class="num">Market Value</th><th class="num">Unrealized G/L</th><th class="num">%</th>
+      ${chkTh}<th>Fund</th><th>Type</th><th class="num">Unit Balance</th><th class="num">Average NAV</th><th class="num">Close NAV</th><th class="num">Fund Value</th><th class="num">Market Value</th><th class="num">Unrealized G/L</th><th class="num">%</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 
@@ -291,6 +301,7 @@ async function loadPfxUser() {
   $('#pfxKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#pfxHoldings').innerHTML = '';
   $('#pfxPerformance').innerHTML = '';
+  pfxSelected.excludedFunds = null; // re-derive dust defaults for whatever holdings this load returns
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
     const { holdings, split, performance, history, asOfDate, latestDate } = await api(`/api/portfolio-fix?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
@@ -336,7 +347,16 @@ function renderPfxKpis(holdings, split) {
 
 function renderPfxHoldings(rows) {
   if (!rows.length) { $('#pfxHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
-  $('#pfxHoldings').innerHTML = holdingsTableHtml(rows);
+  // Dust-sized holdings (≤1 unit) default excluded from export — still shown
+  // on screen, just unchecked, since a leftover 1 unit is effectively "not held".
+  if (!pfxSelected.excludedFunds) {
+    pfxSelected.excludedFunds = new Set(rows.filter((h) => Number(val(h.unit)) <= 1).map((h) => val(h.fund)));
+  }
+  $('#pfxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: pfxSelected.excludedFunds });
+  $$('#pfxHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
+    if (chk.checked) pfxSelected.excludedFunds.delete(chk.dataset.fund);
+    else pfxSelected.excludedFunds.add(chk.dataset.fund);
+  }));
 }
 
 function renderPfxPerformance(rows) {
@@ -348,6 +368,111 @@ function renderPfxPerformance(rows) {
     return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
   }).join('');
   $('#pfxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
+}
+
+// ====================================================================
+//  PORTFOLIO (TX) — live-only holdings, avg_buy_price computed from the
+//  transaction ledger instead of portfolios.initial_price. No as-of-date
+//  picker; AUM chart/performance reuse portfolio_fix (market-value history,
+//  never affected by the cost-basis bug).
+// ====================================================================
+async function searchPtxUsers() {
+  const q = $('#ptxSearchInput').value.trim();
+  if (!q) return;
+  $('#ptxResults').innerHTML = '<div class="loading">Searching…</div>';
+  try {
+    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    renderPtxResults(rows);
+  } catch (e) { $('#ptxResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPtxResults(rows) {
+  if (!rows.length) { $('#ptxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  const body = rows.map((r) => `<tr class="ptx-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
+      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+    </tr>`).join('');
+  $('#ptxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $$('#ptxResults .ptx-row').forEach((tr) => tr.addEventListener('click', () =>
+    selectPtxUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+}
+
+let ptxSelected = null; // { userId, sid, name, excludedFunds } — used by the export buttons
+
+async function selectPtxUser(userId, sid, name, email) {
+  ptxSelected = { userId, sid, name: name || sid, excludedFunds: null };
+  $('#ptxDetail').classList.remove('hidden');
+  $('#ptxUserName').textContent = name || sid;
+  $('#ptxUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
+  await loadPtxUser();
+}
+
+async function loadPtxUser() {
+  if (!ptxSelected) return;
+  const { userId, sid } = ptxSelected;
+  $('#ptxKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
+  $('#ptxHoldings').innerHTML = '';
+  $('#ptxPerformance').innerHTML = '';
+  ptxSelected.excludedFunds = null;
+  try {
+    const { holdings, split, performance, history } = await api(`/api/portfolio-tx?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}`);
+    renderPtxKpis(holdings, split);
+    renderPtxHoldings(holdings);
+    renderPtxPerformance(performance);
+    renderPtxAumChart(history);
+  } catch (e) { $('#ptxKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPtxAumChart(rows) {
+  if (!rows.length) { return; }
+  paint('ptxAumChart', {
+    type: 'line',
+    data: {
+      labels: rows.map((d) => val(d.bucket)),
+      datasets: [{ label: 'AUM', data: rows.map((d) => Number(val(d.amount))),
+        borderColor: C.indigo, backgroundColor: 'rgba(30,42,74,.08)', fill: true, tension: .3, pointRadius: 0 }],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { y: { grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } },
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (c) => idrFull(c.raw) } } },
+    },
+  });
+}
+
+function renderPtxKpis(holdings, split) {
+  const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  $('#ptxKpis').innerHTML = [
+    kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', 'portfolios'),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', 'bonus_portfolios (on_going)'),
+  ].join('');
+}
+
+function renderPtxHoldings(rows) {
+  if (!rows.length) { $('#ptxHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  // Dust-sized holdings (≤1 unit) default excluded from export — still shown
+  // on screen, just unchecked, since a leftover 1 unit is effectively "not held".
+  if (!ptxSelected.excludedFunds) {
+    ptxSelected.excludedFunds = new Set(rows.filter((h) => Number(val(h.unit)) <= 1).map((h) => val(h.fund)));
+  }
+  $('#ptxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: ptxSelected.excludedFunds });
+  $$('#ptxHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
+    if (chk.checked) ptxSelected.excludedFunds.delete(chk.dataset.fund);
+    else ptxSelected.excludedFunds.add(chk.dataset.fund);
+  }));
+}
+
+function renderPtxPerformance(rows) {
+  if (!rows.length) { $('#ptxPerformance').innerHTML = '<div class="empty">No AUM history for this SID.</div>'; return; }
+  const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
+  const cells = rows.map((r) => {
+    const pct = val(r.pct_change);
+    if (pct == null) return '<td class="num">—</td>';
+    return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
+  }).join('');
+  $('#ptxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
 }
 
 // ====================================================================
@@ -2398,6 +2523,7 @@ function repaintActiveTab() {
     case 'performance': renderPerfTrendChart(perfTrendCache); break;
     case 'portfolio': if (pfSelected) loadPortfolioUser(); break;
     case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
+    case 'portfolio-tx': if (ptxSelected) loadPtxUser(); break;
   }
 }
 
@@ -2505,7 +2631,11 @@ function wire() {
   $('#pfxSearchBtn').addEventListener('click', searchPfxUsers);
   $('#pfxSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPfxUsers(); });
   const pfxFilename = () => `portfolio_fix_${pfxSelected.sid}${pfxSelected.date ? '_' + pfxSelected.date : ''}`;
-  const pfxExportBody = () => ({ userId: pfxSelected.userId, sid: pfxSelected.sid, ...(pfxSelected.date ? { date: pfxSelected.date } : {}) });
+  const pfxExportBody = () => ({
+    userId: pfxSelected.userId, sid: pfxSelected.sid,
+    ...(pfxSelected.date ? { date: pfxSelected.date } : {}),
+    ...(pfxSelected.excludedFunds && pfxSelected.excludedFunds.size ? { excludeFunds: [...pfxSelected.excludedFunds] } : {}),
+  });
   $('#pfxCsv').addEventListener('click', () => pfxSelected && download(
     { source: 'portfolio_fix_full', format: 'csv', filename: pfxFilename(), ...pfxExportBody() },
     `${pfxFilename()}.csv`));
@@ -2528,6 +2658,36 @@ function wire() {
     { source: 'portfolio_fix_full', format: 'pdf', filename: pfxFilename(), ...pfxExportBody(), includePerformance: false, columns: selectedPdfColumns() },
     `${pfxFilename()}.pdf`));
   $('#pfxDateApply').addEventListener('click', loadPfxUser);
+
+  // portfolio (tx) — live-only, no date/Go button; export carries the fund checklist
+  $('#ptxSearchBtn').addEventListener('click', searchPtxUsers);
+  $('#ptxSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPtxUsers(); });
+  const ptxFilename = () => `portfolio_tx_${ptxSelected.sid}`;
+  const ptxExportBody = () => ({
+    userId: ptxSelected.userId, sid: ptxSelected.sid,
+    ...(ptxSelected.excludedFunds && ptxSelected.excludedFunds.size ? { excludeFunds: [...ptxSelected.excludedFunds] } : {}),
+  });
+  $('#ptxCsv').addEventListener('click', () => ptxSelected && download(
+    { source: 'portfolio_tx_full', format: 'csv', filename: ptxFilename(), ...ptxExportBody() },
+    `${ptxFilename()}.csv`));
+  $('#ptxXlsx').addEventListener('click', () => ptxSelected && download(
+    { source: 'portfolio_tx_full', format: 'xlsx', filename: ptxFilename(), ...ptxExportBody() },
+    `${ptxFilename()}.xlsx`));
+  renderPdfColumnPicker('ptxPdfCols');
+  $('#ptxPdfCols').addEventListener('change', () => savePdfColumnPrefs('ptxPdfCols'));
+  $('#ptxPdfColsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#ptxPdfColsPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#ptxPdfColsDropdown')) $('#ptxPdfColsPanel').classList.remove('open');
+  });
+  $('#ptxPdf').addEventListener('click', () => ptxSelected && download(
+    { source: 'portfolio_tx_full', format: 'pdf', filename: ptxFilename(), ...ptxExportBody(), columns: selectedPdfColumns() },
+    `${ptxFilename()}.pdf`));
+  $('#ptxPdfOnly').addEventListener('click', () => ptxSelected && download(
+    { source: 'portfolio_tx_full', format: 'pdf', filename: ptxFilename(), ...ptxExportBody(), includePerformance: false, columns: selectedPdfColumns() },
+    `${ptxFilename()}.pdf`));
 
   // portfolio explorer (goal_snapshots)
   $('#peSearchBtn').addEventListener('click', searchExplorerUsers);

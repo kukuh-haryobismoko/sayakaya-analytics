@@ -31,6 +31,7 @@ const EXPORT_SOURCE_TAB = {
   portfolio_full: 'portfolio',
   portfolio_explorer_full: 'portfolio-explorer',
   portfolio_fix_full: 'portfolio-fix',
+  portfolio_tx_full: 'portfolio-tx',
   explore: 'explorer',
   campaigns_performance: 'growth',
   switching_pairs: 'growth',
@@ -352,9 +353,9 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-  // Shared by Portfolio, Portfolio Explorer, and Portfolio (Fix) — allow any.
+  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), and Portfolio (TX) — allow any.
   const requireAnyPortfolio = (req, res, next) => {
-    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix')) return next();
+    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx')) return next();
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/users/search', requireAnyPortfolio, handler(async (req, res) => {
@@ -408,6 +409,29 @@ function createApp({ serveStatic = true } = {}) {
     const latestDate = dRows[0]?.latest_date || null;
     res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_fix', `SID ${sid}${date ? ` as of ${date}` : ''}`);
+  }));
+
+  // ---- Portfolio (TX): live-only holdings, avg_buy_price computed straight
+  // from the transaction ledger (see userHoldingsFromTx in queries.js) instead
+  // of trusting portfolios.initial_price. No as-of-date picker — reconstructing
+  // historical holdings purely from transactions is future scope; AUM
+  // chart/performance reuse portfolio_fix, since that data (market value, not
+  // cost basis) was never wrong.
+  app.get('/api/portfolio-tx', requireTab('portfolio-tx'), handler(async (req, res) => {
+    const { userId, sid } = req.query;
+    if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+    const h = Q.userHoldingsFromTx(userId);
+    const s = Q.userPortfolioSplit(userId);
+    const p = Q.userPerformanceFix(sid);
+    const a = Q.userAumHistoryFix(sid);
+    const [holdings, splitRows, performance, history] = await Promise.all([
+      runQuery(h.sql, h.params),
+      runQuery(s.sql, s.params),
+      runQuery(p.sql, p.params),
+      runQuery(a.sql, a.params),
+    ]);
+    res.json({ holdings, split: splitRows[0], performance, history });
+    await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_tx', `SID ${sid}`);
   }));
 
   // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
@@ -780,14 +804,19 @@ function createApp({ serveStatic = true } = {}) {
     } else if (source === 'portfolio_fix_full') {
       // Same as portfolio_full, sourced from portfolio_fix instead of
       // portfolio_with_code for the as-of-date snapshot (see userHoldingsAsOfFix).
-      const { userId, sid, date } = req.body;
+      const { userId, sid, date, excludeFunds } = req.body;
       if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
       const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
       const pq = Q.productPerformanceDetail();
-      const [holdings, detail] = await Promise.all([
+      const [holdingsRaw, detail] = await Promise.all([
         runQuery(h.sql, h.params),
         runQuery(pq.sql, pq.params),
       ]);
+      // Client-side checklist for excluding dust/unwanted holdings (e.g. a
+      // leftover 1-unit balance) from the export without hiding them on screen.
+      const holdings = Array.isArray(excludeFunds) && excludeFunds.length
+        ? holdingsRaw.filter((r) => !excludeFunds.includes(r.fund))
+        : holdingsRaw;
       if (format === 'pdf') {
         const { includePerformance = true, columns } = req.body;
         const c = Q.userContact(userId);
@@ -799,6 +828,31 @@ function createApp({ serveStatic = true } = {}) {
       const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, fixSheets, filename, username);
       rows = fixSheets[0].rows; // CSV has no sheets — holdings only
+    } else if (source === 'portfolio_tx_full') {
+      // Same as portfolio_full, but holdings come from userHoldingsFromTx
+      // (avg_buy_price derived from the transaction ledger). Live-only — no date.
+      const { userId, excludeFunds } = req.body;
+      if (!userId) return res.status(400).json({ error: 'userId is required.' });
+      const h = Q.userHoldingsFromTx(userId);
+      const pq = Q.productPerformanceDetail();
+      const [holdingsRaw, detail] = await Promise.all([
+        runQuery(h.sql, h.params),
+        runQuery(pq.sql, pq.params),
+      ]);
+      const holdings = Array.isArray(excludeFunds) && excludeFunds.length
+        ? holdingsRaw.filter((r) => !excludeFunds.includes(r.fund))
+        : holdingsRaw;
+      if (format === 'pdf') {
+        const { includePerformance = true, columns } = req.body;
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
+        return sendPdf(res, buf, filename, username);
+      }
+      const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+      if (format === 'xlsx') return sendXlsxMulti(res, txSheets, filename, username);
+      rows = txSheets[0].rows; // CSV has no sheets — holdings only
     } else if (source === 'portfolio_explorer_full') {
       // Same shape/columns as portfolio_full, sourced from goal_snapshots as
       // of a given date instead of the live portfolios/bonus_portfolios
