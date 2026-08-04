@@ -30,6 +30,7 @@ const EXPORT_SOURCE_TAB = {
   product_performance_detail: 'performance',
   portfolio_full: 'portfolio',
   portfolio_explorer_full: 'portfolio-explorer',
+  portfolio_fix_full: 'portfolio-fix',
   explore: 'explorer',
   campaigns_performance: 'growth',
   switching_pairs: 'growth',
@@ -351,9 +352,9 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-  // Shared by Portfolio and Portfolio Explorer — allow either.
+  // Shared by Portfolio, Portfolio Explorer, and Portfolio (Fix) — allow any.
   const requireAnyPortfolio = (req, res, next) => {
-    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer')) return next();
+    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix')) return next();
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/users/search', requireAnyPortfolio, handler(async (req, res) => {
@@ -383,6 +384,30 @@ function createApp({ serveStatic = true } = {}) {
     // A named individual's holdings, not aggregate BigQuery analytics — worth
     // its own audit trail entry (who looked up which investor, and when).
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio', `SID ${sid}${date ? ` as of ${date}` : ''}`);
+  }));
+
+  // ---- Portfolio (Fix): same as Portfolio (PWC) above, but the as-of-date
+  // snapshot is read from portfolio_fix instead of portfolio_with_code (see
+  // userHoldingsAsOfFix in queries.js for why). Live (no date) holdings are
+  // identical to Portfolio (PWC) — both read the same real-time userHoldings().
+  app.get('/api/portfolio-fix', requireTab('portfolio-fix'), handler(async (req, res) => {
+    const { userId, sid, date } = req.query;
+    if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+    const d = Q.userHoldingsLatestDateFix(sid);
+    const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
+    const s = Q.userPortfolioSplit(userId);
+    const p = Q.userPerformanceFix(sid);
+    const a = Q.userAumHistoryFix(sid);
+    const [dRows, holdings, splitRows, performance, history] = await Promise.all([
+      runQuery(d.sql, d.params),
+      runQuery(h.sql, h.params),
+      runQuery(s.sql, s.params),
+      runQuery(p.sql, p.params),
+      runQuery(a.sql, a.params),
+    ]);
+    const latestDate = dRows[0]?.latest_date || null;
+    res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+    await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_fix', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
   // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
@@ -752,6 +777,28 @@ function createApp({ serveStatic = true } = {}) {
       const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, sheets, filename, username);
       rows = sheets[0].rows; // CSV has no sheets — holdings only
+    } else if (source === 'portfolio_fix_full') {
+      // Same as portfolio_full, sourced from portfolio_fix instead of
+      // portfolio_with_code for the as-of-date snapshot (see userHoldingsAsOfFix).
+      const { userId, sid, date } = req.body;
+      if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+      const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
+      const pq = Q.productPerformanceDetail();
+      const [holdings, detail] = await Promise.all([
+        runQuery(h.sql, h.params),
+        runQuery(pq.sql, pq.params),
+      ]);
+      if (format === 'pdf') {
+        const { includePerformance = true, columns } = req.body;
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
+        return sendPdf(res, buf, filename, username);
+      }
+      const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+      if (format === 'xlsx') return sendXlsxMulti(res, fixSheets, filename, username);
+      rows = fixSheets[0].rows; // CSV has no sheets — holdings only
     } else if (source === 'portfolio_explorer_full') {
       // Same shape/columns as portfolio_full, sourced from goal_snapshots as
       // of a given date instead of the live portfolios/bonus_portfolios

@@ -132,6 +132,7 @@ const I18N = {
     port_holdings: `Holdings`,
     port_aum_performance: `AUM performance`,
     port_aum_performance_hint: `% change in total portfolio value, from mi_fee_logs.portfolio_with_code.`,
+    portfix_aum_performance_hint: `% change in total portfolio value, from mi_fee_logs.portfolio_fix.`,
 
     pe_holdings_by_fund: `Holdings by fund`,
     pe_holdings_by_fund_hint: `Merged across all goals, as of the picked date.`,
@@ -404,6 +405,7 @@ const I18N = {
     port_holdings: `Kepemilikan`,
     port_aum_performance: `Performa AUM`,
     port_aum_performance_hint: `Perubahan % nilai total portofolio, dari mi_fee_logs.portfolio_with_code.`,
+    portfix_aum_performance_hint: `Perubahan % nilai total portofolio, dari mi_fee_logs.portfolio_fix.`,
 
     pe_holdings_by_fund: `Kepemilikan per produk`,
     pe_holdings_by_fund_hint: `Digabung dari semua goal, per tanggal yang dipilih.`,

@@ -718,6 +718,81 @@ export const userHoldingsAsOf = (sid: string, date: string): Query => ({
   params: { sid, date },
 });
 
+// ---- Portfolio (Fix): same as the PWC block above, but sourced from
+// portfolio_fix — a corrected daily snapshot (same schema as
+// portfolio_with_code) whose scheduled query weights avg_buy_price/buy_amount
+// by unit instead of taking a plain AVG(price) across lots. Kept as a
+// separate table/section rather than replacing PWC in place, so the two can
+// be compared until portfolio_with_code's own pipeline is fixed.
+const PORT_FIX = '`sayakaya.mi_fee_logs.portfolio_fix`';
+
+export const userAumHistoryFix = (sid: string): Query => ({
+  sql: `SELECT FORMAT_DATE('%Y-%m-%d', DATE(created_at)) AS bucket, SUM(amount) AS amount
+    FROM ${PORT_FIX}
+    WHERE sid_code = @sid
+    GROUP BY bucket ORDER BY bucket`,
+  params: { sid },
+});
+
+export const userPerformanceFix = (sid: string): Query => ({
+  sql: `WITH daily AS (
+      SELECT DATE(created_at) AS d, SUM(amount) AS amount
+      FROM ${PORT_FIX}
+      WHERE sid_code = @sid
+      GROUP BY d
+    ),
+    latest AS (
+      SELECT ARRAY_AGG(STRUCT(amount AS v, d AS d) ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_snap
+      FROM daily
+    ),
+    periods AS (
+      SELECT l.latest_snap, pr.period, pr.ord, pr.target
+      FROM latest l, UNNEST(${periodTargets('l.latest_snap.d')}) AS pr
+    ),
+    snaps AS (
+      SELECT p.period, p.ord, p.latest_snap,
+        ARRAY_AGG(IF(daily.d <= p.target, STRUCT(daily.amount AS v, daily.d AS d), NULL) IGNORE NULLS ORDER BY daily.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
+      FROM periods p CROSS JOIN daily
+      GROUP BY p.period, p.ord, p.latest_snap
+    )
+    SELECT period, ord,
+      latest_snap.v AS latest_amount, asof_snap.v AS base_amount,
+      ROUND(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100, 2) AS pct_change
+    FROM snaps
+    ORDER BY ord`,
+  params: { sid },
+});
+
+export const userHoldingsLatestDateFix = (sid: string): Query => ({
+  sql: `SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS latest_date FROM ${PORT_FIX} WHERE sid_code = @sid`,
+  params: { sid },
+});
+
+export const userHoldingsAsOfFix = (sid: string, date: string): Query => ({
+  sql: `WITH pwc AS (
+      SELECT id AS fund_id, fund, fund_type, total_unit AS unit, avg_buy_price,
+        buy_amount, latest_nav_value,
+        DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS nav_date
+      FROM ${PORT_FIX}
+      WHERE sid_code = @sid AND DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND total_unit > 0
+    ),
+    canon_nav AS (
+      SELECT product_id AS fund_id, value AS nav
+      FROM ${SNAPSHOTS}
+      WHERE type = 'NAV' AND DATE(created_at) = @date
+    )
+    SELECT p.fund, p.fund_type, p.unit, p.avg_buy_price,
+      COALESCE(cn.nav, p.latest_nav_value) AS nav, p.nav_date,
+      ROUND(p.buy_amount) AS fund_value,
+      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value)) AS value,
+      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value)) - ROUND(p.buy_amount) AS gain_loss,
+      SAFE_DIVIDE(ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value)) - ROUND(p.buy_amount), ROUND(p.buy_amount)) * 100 AS gain_pct
+    FROM pwc p
+    LEFT JOIN canon_nav cn ON cn.fund_id = p.fund_id
+    ORDER BY value DESC`,
+  params: { sid, date },
+});
+
 // ---- HNWI (High Net Worth Individual): investors at/above an AUM threshold,
 // as of a specific date, from portfolio_with_code — same -1 day correction as
 // the rest of this section (created_at is a day ahead of the AUM date it

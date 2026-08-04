@@ -25,6 +25,7 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   product_performance_detail: 'performance',
   portfolio_full: 'portfolio',
   portfolio_explorer_full: 'portfolio-explorer',
+  portfolio_fix_full: 'portfolio-fix',
   explore: 'explorer',
   campaigns_performance: 'growth',
   switching_pairs: 'growth',
@@ -416,7 +417,7 @@ on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
 }));
 
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer'], async (_req, _params, url) => {
+on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -443,6 +444,31 @@ on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url, u
   // Regular/bonus split is always current-live (portfolios/bonus_portfolios
   // don't have history), so it doesn't make sense to show it as if it were
   // "as of" a past date — omit it in that mode rather than show a misleading number.
+  return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+}));
+
+// ---- Portfolio (Fix): same as Portfolio (PWC) above, but the as-of-date
+// snapshot is read from portfolio_fix instead of portfolio_with_code (see
+// userHoldingsAsOfFix in queries.ts for why). Live (no date) holdings are
+// identical to Portfolio (PWC) — both read the same real-time userHoldings().
+on('GET', '/api/portfolio-fix', requireTab('portfolio-fix', async (_req, _params, url, user) => {
+  const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
+  if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
+  const date = qp(url, 'date');
+  const d = Q.userHoldingsLatestDateFix(sid);
+  const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
+  const s = Q.userPortfolioSplit(userId);
+  const p = Q.userPerformanceFix(sid);
+  const a = Q.userAumHistoryFix(sid);
+  const [dRows, holdings, splitRows, performance, history] = await Promise.all([
+    runQuery(d.sql, d.params),
+    runQuery(h.sql, h.params),
+    runQuery(s.sql, s.params),
+    runQuery(p.sql, p.params),
+    runQuery(a.sql, a.params),
+  ]);
+  const latestDate = (dRows[0]?.latest_date as string) || null;
+  await A.logEvent(user!.id, user!.username, 'view_portfolio_fix', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
 }));
 
@@ -792,6 +818,35 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);
     rows = sheets[0].rows; // CSV has no sheets — holdings only
+  } else if (source === 'portfolio_fix_full') {
+    // Same as portfolio_full, sourced from portfolio_fix instead of
+    // portfolio_with_code for the as-of-date snapshot (see userHoldingsAsOfFix).
+    const userId = body.userId as string; const sid = body.sid as string;
+    if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
+    const date = body.date as string | undefined;
+    const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
+    const pq = Q.productPerformanceDetail();
+    const [holdings, detail] = await Promise.all([
+      runQuery(h.sql, h.params),
+      runQuery(pq.sql, pq.params),
+    ]);
+    if (format === 'pdf') {
+      const includePerformance = body.includePerformance !== false;
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
+      const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
+      return new Response(new Uint8Array(buf), {
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
+        },
+      });
+    }
+    const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+    if (format === 'xlsx') return xlsxMultiResponse(fixSheets, filename, username);
+    rows = fixSheets[0].rows; // CSV has no sheets — holdings only
   } else if (source === 'portfolio_explorer_full') {
     // Same shape/columns as portfolio_full, sourced from goal_snapshots as of
     // a given date instead of the live portfolios/bonus_portfolios tables —

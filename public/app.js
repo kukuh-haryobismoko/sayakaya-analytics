@@ -249,6 +249,108 @@ function renderPfPerformance(rows) {
 }
 
 // ====================================================================
+//  PORTFOLIO (FIX) — same feature/logic as Portfolio (PWC) above, but the
+//  as-of-date snapshot reads from mi_fee_logs.portfolio_fix (unit-weighted
+//  avg_buy_price) instead of portfolio_with_code.
+// ====================================================================
+async function searchPfxUsers() {
+  const q = $('#pfxSearchInput').value.trim();
+  if (!q) return;
+  $('#pfxResults').innerHTML = '<div class="loading">Searching…</div>';
+  try {
+    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    renderPfxResults(rows);
+  } catch (e) { $('#pfxResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPfxResults(rows) {
+  if (!rows.length) { $('#pfxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  const body = rows.map((r) => `<tr class="pfx-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
+      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+    </tr>`).join('');
+  $('#pfxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $$('#pfxResults .pfx-row').forEach((tr) => tr.addEventListener('click', () =>
+    selectPfxUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+}
+
+let pfxSelected = null; // { userId, sid, name, date } — used by the export buttons
+
+async function selectPfxUser(userId, sid, name, email) {
+  pfxSelected = { userId, sid, name: name || sid, date: '' };
+  $('#pfxDetail').classList.remove('hidden');
+  $('#pfxUserName').textContent = name || sid;
+  $('#pfxUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
+  $('#pfxDate').value = '';
+  await loadPfxUser();
+}
+
+async function loadPfxUser() {
+  if (!pfxSelected) return;
+  const { userId, sid } = pfxSelected;
+  const dateVal = $('#pfxDate').value;
+  $('#pfxKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
+  $('#pfxHoldings').innerHTML = '';
+  $('#pfxPerformance').innerHTML = '';
+  try {
+    const dateParam = dateVal ? `&date=${dateVal}` : '';
+    const { holdings, split, performance, history, asOfDate, latestDate } = await api(`/api/portfolio-fix?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    pfxSelected.date = val(asOfDate) || '';
+    const asOf = val(asOfDate), latest = val(latestDate);
+    $('#pfxSnapshotInfo').textContent = asOf
+      ? `Snapshot date: ${asOf}${latest && latest !== asOf ? ` (latest available: ${latest})` : ''} — from mi_fee_logs.portfolio_fix.`
+      : `Live holdings (current units × today's NAV).${latest ? ` Latest historical snapshot available: ${latest}.` : ''}`;
+    renderPfxKpis(holdings, split);
+    renderPfxHoldings(holdings);
+    renderPfxPerformance(performance);
+    renderPfxAumChart(history);
+  } catch (e) { $('#pfxKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPfxAumChart(rows) {
+  if (!rows.length) { return; }
+  paint('pfxAumChart', {
+    type: 'line',
+    data: {
+      labels: rows.map((d) => val(d.bucket)),
+      datasets: [{ label: 'AUM', data: rows.map((d) => Number(val(d.amount))),
+        borderColor: C.indigo, backgroundColor: 'rgba(30,42,74,.08)', fill: true, tension: .3, pointRadius: 0 }],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { y: { grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } },
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (c) => idrFull(c.raw) } } },
+    },
+  });
+}
+
+function renderPfxKpis(holdings, split) {
+  const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  $('#pfxKpis').innerHTML = [
+    kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+  ].join('');
+}
+
+function renderPfxHoldings(rows) {
+  if (!rows.length) { $('#pfxHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  $('#pfxHoldings').innerHTML = holdingsTableHtml(rows);
+}
+
+function renderPfxPerformance(rows) {
+  if (!rows.length) { $('#pfxPerformance').innerHTML = '<div class="empty">No AUM history for this SID.</div>'; return; }
+  const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
+  const cells = rows.map((r) => {
+    const pct = val(r.pct_change);
+    if (pct == null) return '<td class="num">—</td>';
+    return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
+  }).join('');
+  $('#pfxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
+}
+
+// ====================================================================
 //  PORTFOLIO EXPLORER (goal_snapshots — point-in-time holdings by date,
 //  merged by fund and also broken out by goal for the preview only)
 // ====================================================================
@@ -2295,6 +2397,7 @@ function repaintActiveTab() {
     case 'predict': predictLoaded = false; loadPredict(); break;
     case 'performance': renderPerfTrendChart(perfTrendCache); break;
     case 'portfolio': if (pfSelected) loadPortfolioUser(); break;
+    case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
   }
 }
 
@@ -2397,6 +2500,34 @@ function wire() {
     { source: 'portfolio_full', format: 'pdf', filename: pfFilename(), ...pfExportBody(), includePerformance: false, columns: selectedPdfColumns() },
     `${pfFilename()}.pdf`));
   $('#pfDateApply').addEventListener('click', loadPortfolioUser);
+
+  // portfolio (fix) — same wiring as portfolio (pwc) above, different source table
+  $('#pfxSearchBtn').addEventListener('click', searchPfxUsers);
+  $('#pfxSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPfxUsers(); });
+  const pfxFilename = () => `portfolio_fix_${pfxSelected.sid}${pfxSelected.date ? '_' + pfxSelected.date : ''}`;
+  const pfxExportBody = () => ({ userId: pfxSelected.userId, sid: pfxSelected.sid, ...(pfxSelected.date ? { date: pfxSelected.date } : {}) });
+  $('#pfxCsv').addEventListener('click', () => pfxSelected && download(
+    { source: 'portfolio_fix_full', format: 'csv', filename: pfxFilename(), ...pfxExportBody() },
+    `${pfxFilename()}.csv`));
+  $('#pfxXlsx').addEventListener('click', () => pfxSelected && download(
+    { source: 'portfolio_fix_full', format: 'xlsx', filename: pfxFilename(), ...pfxExportBody() },
+    `${pfxFilename()}.xlsx`));
+  renderPdfColumnPicker('pfxPdfCols');
+  $('#pfxPdfCols').addEventListener('change', () => savePdfColumnPrefs('pfxPdfCols'));
+  $('#pfxPdfColsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#pfxPdfColsPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#pfxPdfColsDropdown')) $('#pfxPdfColsPanel').classList.remove('open');
+  });
+  $('#pfxPdf').addEventListener('click', () => pfxSelected && download(
+    { source: 'portfolio_fix_full', format: 'pdf', filename: pfxFilename(), ...pfxExportBody(), columns: selectedPdfColumns() },
+    `${pfxFilename()}.pdf`));
+  $('#pfxPdfOnly').addEventListener('click', () => pfxSelected && download(
+    { source: 'portfolio_fix_full', format: 'pdf', filename: pfxFilename(), ...pfxExportBody(), includePerformance: false, columns: selectedPdfColumns() },
+    `${pfxFilename()}.pdf`));
+  $('#pfxDateApply').addEventListener('click', loadPfxUser);
 
   // portfolio explorer (goal_snapshots)
   $('#peSearchBtn').addEventListener('click', searchExplorerUsers);
