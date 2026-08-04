@@ -165,13 +165,15 @@ const PERF_COLS = (width) => [
 const DISCLAIMER = 'Dokumen ini dipersiapkan oleh PT SAYAKAYA LAHIR BATIN dan hanya bisa digunakan untuk kepentingan investor tersebut di atas dan tidak untuk pihak lainnya. Laporan ini bukan merupakan konfirmasi dari PT SAYAKAYA LAHIR BATIN dan tidak untuk menggantikan laporan yang wajib diterbitkan oleh Bank Kustodian, jika ada perbedaan antara laporan ini dengan laporan Bank Kustodian, maka laporan Bank Kustodian adalah yang benar. Laporan ini diproses oleh komputer dan tidak memerlukan tandatangan.';
 const OJK_LINE = 'PT SAYAKAYA LAHIR BATIN terdaftar dan diawasi oleh OJK, dengan nomor registrasi KEP-17/PM.21/2021';
 
+const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
 // Statement date is the latest NAV date across the holdings (NAV publishes
-// H-1, so "today's" statement is dated yesterday). Formatted d/m/yyyy.
+// H-1, so "today's" statement is dated yesterday). Formatted like "4 Agustus 2025".
 function statementDate(holdings) {
   const latest = holdings.map((h) => String(val(h.nav_date) || '')).filter(Boolean).sort().pop();
   if (!latest) return '—';
   const [y, m, d] = latest.slice(0, 10).split('-').map(Number);
-  return `${d}/${m}/${y}`;
+  return `${d} ${MONTHS_ID[m - 1]} ${y}`;
 }
 
 // contact: { name, sid, ifua, address, ... }
@@ -210,7 +212,7 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
     y += Math.max(13, doc.heightOfString(text, { width: valueW }) + 2);
   });
   doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text('CUSTOMER PORTFOLIO', rightX, blockY, { width: rightW, align: 'center' });
-  doc.font('Helvetica').fontSize(9).fillColor(INK).text('DATE', rightX, blockY + 19, { width: rightW });
+  doc.font('Helvetica').fontSize(9).fillColor(INK).text('CLOSE NAV', rightX, blockY + 19, { width: rightW });
   doc.text(statementDate(holdings), rightX, blockY + 19, { width: rightW, align: 'right' });
   doc.x = left;
   doc.y = y + 24;
