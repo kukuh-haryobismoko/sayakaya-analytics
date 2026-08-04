@@ -32,6 +32,7 @@ const EXPORT_SOURCE_TAB = {
   portfolio_explorer_full: 'portfolio-explorer',
   portfolio_fix_full: 'portfolio-fix',
   portfolio_tx_full: 'portfolio-tx',
+  portfolio_sinvest_full: 'portfolio-sinvest',
   explore: 'explorer',
   campaigns_performance: 'growth',
   switching_pairs: 'growth',
@@ -46,6 +47,7 @@ const EXPORT_SOURCE_TAB = {
   remisier_revenue_pwc_detail: 'remisier-pwc',
   remisier_revenue_pwc_summary: 'remisier-pwc',
   remisier_transactions: 'remisier-tx',
+  sinvest_transactions: 'sinvest-tx',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
 };
@@ -345,6 +347,17 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
 
+  // ---- SInvest transactions (raw KSEI/SInvest custodian feed, paged) --------
+  app.get('/api/sinvest-transactions', requireTab('sinvest-tx'), handler(async (req, res) => {
+    const { from, to, type, sid, search, limit, offset } = req.query;
+    const q = Q.sinvestTransactions({ from, to, type, sid, search, limit: limit || 50, offset: offset || 0 });
+    const [rows, countRows] = await Promise.all([
+      runQuery(q.sql, q.params),
+      runQuery(q.countSql, q.params),
+    ]);
+    res.json({ rows, total: Number(countRows[0]?.total || 0) });
+  }));
+
   // ---- AUM history (mi_fee_logs.mi_fee) -------------------------------------
   app.get('/api/aum-history', requireTab('aum'), handler(async (req, res) => {
     const { from, to, granularity } = req.query;
@@ -353,9 +366,9 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), and Portfolio (TX) — allow any.
+  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), Portfolio (TX), and Portfolio (SInvest) — allow any.
   const requireAnyPortfolio = (req, res, next) => {
-    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx')) return next();
+    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx') || Auth.userCan(req.user, 'portfolio-sinvest')) return next();
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/users/search', requireAnyPortfolio, handler(async (req, res) => {
@@ -411,16 +424,18 @@ function createApp({ serveStatic = true } = {}) {
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_fix', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
-  // ---- Portfolio (TX): live-only holdings, avg_buy_price computed straight
-  // from the transaction ledger (see userHoldingsFromTx in queries.js) instead
-  // of trusting portfolios.initial_price. No as-of-date picker — reconstructing
-  // historical holdings purely from transactions is future scope; AUM
+  // ---- Portfolio (TX): holdings with avg_buy_price computed straight from
+  // the transaction ledger (see userHoldingsFromTx in queries.js) instead of
+  // trusting portfolios.initial_price. An as-of-date reconstructs holdings
+  // purely from transactions up to that date (userHoldingsFromTxAsOf) —
+  // bonus units are excluded in that mode since bonus_portfolios has no
+  // history to reconstruct from (see its comment in queries.js). AUM
   // chart/performance reuse portfolio_fix, since that data (market value, not
   // cost basis) was never wrong.
   app.get('/api/portfolio-tx', requireTab('portfolio-tx'), handler(async (req, res) => {
-    const { userId, sid } = req.query;
+    const { userId, sid, date } = req.query;
     if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
-    const h = Q.userHoldingsFromTx(userId);
+    const h = date ? Q.userHoldingsFromTxAsOf(userId, date) : Q.userHoldingsFromTx(userId);
     const s = Q.userPortfolioSplit(userId);
     const p = Q.userPerformanceFix(sid);
     const a = Q.userAumHistoryFix(sid);
@@ -430,8 +445,30 @@ function createApp({ serveStatic = true } = {}) {
       runQuery(p.sql, p.params),
       runQuery(a.sql, a.params),
     ]);
-    res.json({ holdings, split: splitRows[0], performance, history });
-    await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_tx', `SID ${sid}`);
+    res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null });
+    await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_tx', `SID ${sid}${date ? ` as of ${date}` : ''}`);
+  }));
+
+  // ---- Portfolio (SInvest): same as Portfolio (TX), but holdings are built
+  // entirely from the custodian feed (sinvest.trx_history) instead of the
+  // app's own transactions table (see sinvestHoldings/sinvestHoldingsAsOf in
+  // queries.js). split/performance/history still come from the app's own
+  // live state and portfolio_fix — those aren't sourced from sinvest.
+  app.get('/api/portfolio-sinvest', requireTab('portfolio-sinvest'), handler(async (req, res) => {
+    const { userId, sid, date } = req.query;
+    if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+    const h = date ? Q.sinvestHoldingsAsOf(sid, date) : Q.sinvestHoldings(sid);
+    const s = Q.userPortfolioSplit(userId);
+    const p = Q.userPerformanceFix(sid);
+    const a = Q.userAumHistoryFix(sid);
+    const [holdings, splitRows, performance, history] = await Promise.all([
+      runQuery(h.sql, h.params),
+      runQuery(s.sql, s.params),
+      runQuery(p.sql, p.params),
+      runQuery(a.sql, a.params),
+    ]);
+    res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null });
+    await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_sinvest', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
   // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
@@ -829,11 +866,11 @@ function createApp({ serveStatic = true } = {}) {
       if (format === 'xlsx') return sendXlsxMulti(res, fixSheets, filename, username);
       rows = fixSheets[0].rows; // CSV has no sheets — holdings only
     } else if (source === 'portfolio_tx_full') {
-      // Same as portfolio_full, but holdings come from userHoldingsFromTx
-      // (avg_buy_price derived from the transaction ledger). Live-only — no date.
-      const { userId, excludeFunds } = req.body;
+      // Same as portfolio_full, but holdings come from userHoldingsFromTx /
+      // userHoldingsFromTxAsOf (avg_buy_price derived from the transaction ledger).
+      const { userId, date, excludeFunds } = req.body;
       if (!userId) return res.status(400).json({ error: 'userId is required.' });
-      const h = Q.userHoldingsFromTx(userId);
+      const h = date ? Q.userHoldingsFromTxAsOf(userId, date) : Q.userHoldingsFromTx(userId);
       const pq = Q.productPerformanceDetail();
       const [holdingsRaw, detail] = await Promise.all([
         runQuery(h.sql, h.params),
@@ -853,6 +890,31 @@ function createApp({ serveStatic = true } = {}) {
       const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, txSheets, filename, username);
       rows = txSheets[0].rows; // CSV has no sheets — holdings only
+    } else if (source === 'portfolio_sinvest_full') {
+      // Same as portfolio_tx_full, but holdings come from the custodian feed
+      // (sinvestHoldings / sinvestHoldingsAsOf) instead of main.transactions.
+      const { userId, sid, date, excludeFunds } = req.body;
+      if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+      const h = date ? Q.sinvestHoldingsAsOf(sid, date) : Q.sinvestHoldings(sid);
+      const pq = Q.productPerformanceDetail();
+      const [holdingsRawSi, detail] = await Promise.all([
+        runQuery(h.sql, h.params),
+        runQuery(pq.sql, pq.params),
+      ]);
+      const holdingsSi = Array.isArray(excludeFunds) && excludeFunds.length
+        ? holdingsRawSi.filter((r) => !excludeFunds.includes(r.fund))
+        : holdingsRawSi;
+      if (format === 'pdf') {
+        const { includePerformance = true, columns } = req.body;
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+        const buf = await PDF.portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username });
+        return sendPdf(res, buf, filename, username);
+      }
+      const siSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdingsSi) }, ...pivotPerformanceByType(detail)];
+      if (format === 'xlsx') return sendXlsxMulti(res, siSheets, filename, username);
+      rows = siSheets[0].rows; // CSV has no sheets — holdings only
     } else if (source === 'portfolio_explorer_full') {
       // Same shape/columns as portfolio_full, sourced from goal_snapshots as
       // of a given date instead of the live portfolios/bonus_portfolios
@@ -936,6 +998,9 @@ function createApp({ serveStatic = true } = {}) {
       const salesCodes = req.body.salesCodes || [];
       if (!referrerCodes.length && !salesCodes.length) return res.status(400).json({ error: 'At least one referrer_code or sales_code is required.' });
       const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: req.body.type, status: req.body.status, from: req.body.from, to: req.body.to, limit: limit || 100000, offset: 0 });
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'sinvest_transactions') {
+      const q = Q.sinvestTransactions({ from: req.body.from, to: req.body.to, type: req.body.type, sid: req.body.sid, search: req.body.search, limit: limit || 100000, offset: 0 });
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'hnwi_total') {
       if (!req.body.date) return res.status(400).json({ error: 'date is required.' });

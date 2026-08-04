@@ -472,7 +472,11 @@ export const userHoldings = (userId: string): Query => ({
 // bonus_portfolios.average_nav, same as userHoldings().
 export const userHoldingsFromTx = (userId: string): Query => ({
   sql: `WITH incoming_tx AS (
-      SELECT fund_id, unit, value_per_unit
+      -- unit is FLOAT64 on transactions (unlike portfolios/bonus_portfolios,
+      -- which are NUMERIC) — cast so the weighted average below is computed
+      -- in exact decimal arithmetic, same as every other portfolio query,
+      -- instead of picking up FLOAT64 binary-representation noise.
+      SELECT fund_id, CAST(unit AS NUMERIC) AS unit, value_per_unit
       FROM ${TX}
       WHERE user_id = @userId
         AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in')
@@ -518,6 +522,80 @@ export const userHoldingsFromTx = (userId: string): Query => ({
     )
     ORDER BY value DESC`,
   params: { userId },
+});
+
+// Same as userHoldingsFromTx() above, but every transaction after @date is
+// ignored — both for setting the average (incoming) and for netting the
+// current unit count (incoming - outgoing), so this reconstructs exactly
+// what userHoldingsFromTx would have shown had it been run on that day.
+// Historical NAV comes from sayakaya.main.snapshots (same canonical source
+// used by userHoldingsAsOf/goalUserHoldings), falling back to the fund's
+// live NAV if that date has no snapshot. Bonus units are NOT included here —
+// bonus_portfolios has no history at all, so there is no correct "as of a
+// past date" bonus figure to show; the live view (userHoldingsFromTx) is the
+// only place bonus holdings appear. net_unit is compared against a small
+// epsilon rather than > 0, since a fund fully switched/sold out historically
+// can net to a tiny nonzero float (e.g. 1e-9) instead of exactly 0.
+export const userHoldingsFromTxAsOf = (userId: string, date: string): Query => ({
+  sql: `WITH incoming_tx AS (
+      -- unit is FLOAT64 on transactions (unlike portfolios/bonus_portfolios,
+      -- which are NUMERIC) — cast so unit and the weighted average below are
+      -- computed in exact decimal arithmetic, same as every other portfolio
+      -- query, instead of picking up FLOAT64 binary-representation noise.
+      SELECT fund_id, CAST(unit AS NUMERIC) AS unit, value_per_unit, created_at
+      FROM ${TX}
+      WHERE user_id = @userId
+        AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in')
+        AND status IN ('completed', 'completed_payment', 'verified')
+        AND DATE(created_at) <= @date
+    ),
+    outgoing_tx AS (
+      SELECT fund_id, CAST(unit AS NUMERIC) AS unit
+      FROM ${TX}
+      WHERE user_id = @userId
+        AND type IN ('sell', 'SWITCH_OUT', 'transfer_out', 'liquidation', 'unit_adjustment')
+        AND status IN ('completed', 'completed_payment', 'verified')
+        AND DATE(created_at) <= @date
+    ),
+    regular_avg AS (
+      SELECT fund_id, SAFE_DIVIDE(SUM(unit * value_per_unit), SUM(unit)) AS avg_price, MIN(created_at) AS opened_at
+      FROM incoming_tx
+      GROUP BY fund_id
+    ),
+    regular_net_all AS (
+      SELECT fund_id, SUM(unit) AS net_unit
+      FROM (
+        SELECT fund_id, unit FROM incoming_tx
+        UNION ALL
+        SELECT fund_id, -unit FROM outgoing_tx
+      )
+      GROUP BY fund_id
+    ),
+    merged AS (
+      SELECT rn.fund_id, rn.net_unit AS unit, ra.avg_price AS avg_buy_price, ra.opened_at
+      FROM regular_net_all rn
+      JOIN regular_avg ra ON ra.fund_id = rn.fund_id
+      WHERE rn.net_unit > 0.0001
+    ),
+    canon_nav AS (
+      SELECT product_id AS fund_id, value AS nav
+      FROM ${SNAPSHOTS}
+      WHERE type = 'NAV' AND DATE(created_at) = @date
+    )
+    SELECT *, value - fund_value AS gain_loss,
+      SAFE_DIVIDE(value - fund_value, fund_value) * 100 AS gain_pct
+    FROM (
+      SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
+        COALESCE(cn.nav, f.latest_nav_value) AS nav, @date AS nav_date,
+        ROUND(m.unit * m.avg_buy_price) AS fund_value,
+        ROUND(m.unit * COALESCE(cn.nav, f.latest_nav_value)) AS value,
+        m.opened_at
+      FROM merged m
+      JOIN ${FUNDS} f ON f.id = m.fund_id
+      LEFT JOIN canon_nav cn ON cn.fund_id = m.fund_id
+    )
+    ORDER BY value DESC`,
+  params: { userId, date },
 });
 
 // Regular vs bonus AUM split for the dashboard KPIs only — the per-fund
@@ -1086,6 +1164,14 @@ export const topReferrers = (limit: number | string = 20): Query => ({
 // formatted numbers) — the raw KSEI/SInvest export, never cleaned.
 const SINVEST = '`sayakaya.sinvest.trx_history`';
 
+// Transaction_Type is a numeric-code string ('1'..'9') for KSEI/SInvest's
+// Subscription/Redemption/Switch In/Switch Out/Reinvestment/Liquidation/
+// Transfer In/Transfer Out/Unit Adjustment.
+const RECON_TYPE_CASE = `CASE Transaction_Type
+        WHEN '1' THEN 'BUY' WHEN '2' THEN 'SELL' WHEN '3' THEN 'SWITCH_IN' WHEN '4' THEN 'SWITCH_OUT'
+        WHEN '5' THEN 'REINVESTMENT' WHEN '6' THEN 'LIQUIDATION' WHEN '7' THEN 'TRANSFER_IN'
+        WHEN '8' THEN 'TRANSFER_OUT' WHEN '9' THEN 'UNIT_ADJUSTMENT' ELSE 'OTHER' END`;
+
 export const reconciliationDaily = (from?: string, to?: string): Query => {
   const r = range(from, to);
   return {
@@ -1110,6 +1196,170 @@ export const reconciliationDaily = (from?: string, to?: string): Query => {
       WHERE COALESCE(s.d, a.d) BETWEEN @from AND @to
       ORDER BY bucket DESC`,
     params: r,
+  };
+};
+
+// ---- SInvest transactions explorer (paged, filtered) -----------------------
+// Every column in trx_history is STRING, including the two date columns
+// (Transaction_Date/Input_Date, both 'YYYYMMDD') and the numeric-looking ones
+// — this is the raw, uncleaned KSEI/SInvest export. Dates are reformatted to
+// ISO ('YYYY-MM-DD') and amounts SAFE_CAST to NUMERIC for display; filtering
+// stays on the raw YYYYMMDD string (zero-padded, so it sorts/compares
+// correctly as text without parsing).
+const sinvestTxColumns = `
+      FORMAT_DATE('%Y-%m-%d', SAFE.PARSE_DATE('%Y%m%d', Transaction_Date)) AS transaction_date,
+      ${RECON_TYPE_CASE} AS type,
+      SID AS sid,
+      Investor_Fund_Unit_A_C_Name AS investor_name,
+      Fund_Code AS fund_code,
+      Fund_Name AS fund_name,
+      SAFE_CAST(Number_of_Units AS NUMERIC) AS unit,
+      SAFE_CAST(NAV_per_Unit AS NUMERIC) AS nav_per_unit,
+      SAFE_CAST(Gross_Transaction_Amount AS NUMERIC) AS gross_amount,
+      SAFE_CAST(Transaction_Fee__Nominal AS NUMERIC) AS fee,
+      SAFE_CAST(Net_Transaction_Amount AS NUMERIC) AS net_amount,
+      FORMAT_DATE('%Y-%m-%d', SAFE.PARSE_DATE('%Y%m%d', Input_Date)) AS input_date,
+      Reference_No AS reference_no`;
+
+export function sinvestTransactions(
+  { from, to, type, sid, search, limit = 50, offset = 0 }:
+  { from?: string; to?: string; type?: string; sid?: string; search?: string; limit?: number | string; offset?: number | string },
+): Query {
+  const r = range(from, to);
+  const params: Record<string, unknown> = {
+    fromYmd: r.from.replace(/-/g, ''), toYmd: r.to.replace(/-/g, ''),
+    limit: parseInt(String(limit), 10), offset: parseInt(String(offset), 10),
+  };
+  let where = 'Transaction_Date BETWEEN @fromYmd AND @toYmd';
+  if (type) { where += ` AND ${RECON_TYPE_CASE} = @type`; params.type = type; }
+  if (sid) { where += ' AND SID = @sid'; params.sid = sid; }
+  if (search) {
+    where += ' AND (SID = @search OR Reference_No = @search OR LOWER(Investor_Fund_Unit_A_C_Name) LIKE @searchLike)';
+    params.search = search;
+    params.searchLike = `%${search.toLowerCase()}%`;
+  }
+  return {
+    sql: `SELECT ${sinvestTxColumns} FROM ${SINVEST} WHERE ${where}
+          ORDER BY Transaction_Date DESC, Reference_No DESC LIMIT @limit OFFSET @offset`,
+    params,
+    countSql: `SELECT COUNT(*) AS total FROM ${SINVEST} WHERE ${where}`,
+  };
+}
+
+// ---- Portfolio (SInvest): same shape/logic as userHoldingsFromTx(), but
+// sourced entirely from the custodian feed (sinvest.trx_history) instead of
+// the app's own transactions table — keyed by SID (trx_history has no
+// user_id), joined to funds via funds.sinvest_code = Fund_Code. trx_history
+// has no status column (every row is the custodian's own settled record, no
+// pending/cancelled states), so unlike userHoldingsFromTx there's no status
+// filter. Same weighted-average-cost rule: only incoming transaction types
+// (BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN, codes 1/3/5/7) set the average;
+// outgoing types (SELL/SWITCH_OUT/LIQUIDATION/TRANSFER_OUT/UNIT_ADJUSTMENT,
+// codes 2/4/6/8/9) only reduce units.
+export const sinvestHoldings = (sid: string): Query => ({
+  sql: `WITH incoming_tx AS (
+      SELECT Fund_Code AS fund_code, SAFE_CAST(Number_of_Units AS NUMERIC) AS unit,
+        SAFE_CAST(NAV_per_Unit AS NUMERIC) AS price, SAFE.PARSE_DATE('%Y%m%d', Transaction_Date) AS d
+      FROM ${SINVEST}
+      WHERE SID = @sid AND Transaction_Type IN ('1', '3', '5', '7')
+    ),
+    outgoing_tx AS (
+      SELECT Fund_Code AS fund_code, SAFE_CAST(Number_of_Units AS NUMERIC) AS unit
+      FROM ${SINVEST}
+      WHERE SID = @sid AND Transaction_Type IN ('2', '4', '6', '8', '9')
+    ),
+    regular_avg AS (
+      SELECT fund_code, SAFE_DIVIDE(SUM(unit * price), SUM(unit)) AS avg_price, MIN(d) AS opened_at
+      FROM incoming_tx
+      GROUP BY fund_code
+    ),
+    regular_net_all AS (
+      SELECT fund_code, SUM(unit) AS net_unit
+      FROM (
+        SELECT fund_code, unit FROM incoming_tx
+        UNION ALL
+        SELECT fund_code, -unit FROM outgoing_tx
+      )
+      GROUP BY fund_code
+    ),
+    merged AS (
+      SELECT rn.fund_code, rn.net_unit AS unit, ra.avg_price AS avg_buy_price, ra.opened_at
+      FROM regular_net_all rn
+      JOIN regular_avg ra ON ra.fund_code = rn.fund_code
+      WHERE rn.net_unit > 0.0001
+    )
+    SELECT *, value - fund_value AS gain_loss,
+      SAFE_DIVIDE(value - fund_value, fund_value) * 100 AS gain_pct
+    FROM (
+      SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
+        f.latest_nav_value AS nav, f.latest_nav_date AS nav_date,
+        ROUND(m.unit * m.avg_buy_price) AS fund_value,
+        ROUND(m.unit * f.latest_nav_value) AS value,
+        m.opened_at
+      FROM merged m
+      JOIN ${FUNDS} f ON f.sinvest_code = m.fund_code
+    )
+    ORDER BY value DESC`,
+  params: { sid },
+});
+
+// Same as sinvestHoldings() above, but every transaction after @date is
+// ignored (both for the average and for netting units) — same idea as
+// userHoldingsFromTxAsOf(). Historical NAV comes from sayakaya.main.snapshots,
+// falling back to the fund's live NAV if that date has no snapshot.
+export const sinvestHoldingsAsOf = (sid: string, date: string): Query => {
+  const dateYmd = date.replace(/-/g, '');
+  return {
+    sql: `WITH incoming_tx AS (
+      SELECT Fund_Code AS fund_code, SAFE_CAST(Number_of_Units AS NUMERIC) AS unit,
+        SAFE_CAST(NAV_per_Unit AS NUMERIC) AS price, SAFE.PARSE_DATE('%Y%m%d', Transaction_Date) AS d
+      FROM ${SINVEST}
+      WHERE SID = @sid AND Transaction_Type IN ('1', '3', '5', '7') AND Transaction_Date <= @dateYmd
+    ),
+    outgoing_tx AS (
+      SELECT Fund_Code AS fund_code, SAFE_CAST(Number_of_Units AS NUMERIC) AS unit
+      FROM ${SINVEST}
+      WHERE SID = @sid AND Transaction_Type IN ('2', '4', '6', '8', '9') AND Transaction_Date <= @dateYmd
+    ),
+    regular_avg AS (
+      SELECT fund_code, SAFE_DIVIDE(SUM(unit * price), SUM(unit)) AS avg_price, MIN(d) AS opened_at
+      FROM incoming_tx
+      GROUP BY fund_code
+    ),
+    regular_net_all AS (
+      SELECT fund_code, SUM(unit) AS net_unit
+      FROM (
+        SELECT fund_code, unit FROM incoming_tx
+        UNION ALL
+        SELECT fund_code, -unit FROM outgoing_tx
+      )
+      GROUP BY fund_code
+    ),
+    merged AS (
+      SELECT rn.fund_code, rn.net_unit AS unit, ra.avg_price AS avg_buy_price, ra.opened_at
+      FROM regular_net_all rn
+      JOIN regular_avg ra ON ra.fund_code = rn.fund_code
+      WHERE rn.net_unit > 0.0001
+    ),
+    canon_nav AS (
+      SELECT product_id AS fund_id, value AS nav
+      FROM ${SNAPSHOTS}
+      WHERE type = 'NAV' AND DATE(created_at) = @date
+    )
+    SELECT *, value - fund_value AS gain_loss,
+      SAFE_DIVIDE(value - fund_value, fund_value) * 100 AS gain_pct
+    FROM (
+      SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
+        COALESCE(cn.nav, f.latest_nav_value) AS nav, @date AS nav_date,
+        ROUND(m.unit * m.avg_buy_price) AS fund_value,
+        ROUND(m.unit * COALESCE(cn.nav, f.latest_nav_value)) AS value,
+        m.opened_at
+      FROM merged m
+      JOIN ${FUNDS} f ON f.sinvest_code = m.fund_code
+      LEFT JOIN canon_nav cn ON cn.fund_id = f.id
+    )
+    ORDER BY value DESC`,
+    params: { sid, date, dateYmd },
   };
 };
 

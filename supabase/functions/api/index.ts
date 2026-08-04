@@ -27,6 +27,7 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   portfolio_explorer_full: 'portfolio-explorer',
   portfolio_fix_full: 'portfolio-fix',
   portfolio_tx_full: 'portfolio-tx',
+  portfolio_sinvest_full: 'portfolio-sinvest',
   explore: 'explorer',
   campaigns_performance: 'growth',
   switching_pairs: 'growth',
@@ -41,6 +42,7 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   remisier_revenue_pwc_detail: 'remisier-pwc',
   remisier_revenue_pwc_summary: 'remisier-pwc',
   remisier_transactions: 'remisier-tx',
+  sinvest_transactions: 'sinvest-tx',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
 };
@@ -411,6 +413,20 @@ on('GET', '/api/transactions', requireTab('remisier-tx', async (_req, _params, u
   return json({ rows, total: Number(countRows[0]?.total || 0) });
 }));
 
+// ---- SInvest transactions (raw KSEI/SInvest custodian feed, paged) --------
+on('GET', '/api/sinvest-transactions', requireTab('sinvest-tx', async (_req, _params, url) => {
+  const q = Q.sinvestTransactions({
+    from: qp(url, 'from'), to: qp(url, 'to'),
+    type: qp(url, 'type'), sid: qp(url, 'sid'), search: qp(url, 'search'),
+    limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
+  });
+  const [rows, countRows] = await Promise.all([
+    runQuery(q.sql, q.params),
+    runQuery(q.countSql!, q.params),
+  ]);
+  return json({ rows, total: Number(countRows[0]?.total || 0) });
+}));
+
 // ---- AUM history (mi_fee_logs.mi_fee) -------------------------------------
 on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
   const q = Q.aumHistory(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
@@ -418,7 +434,7 @@ on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
 }));
 
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx'], async (_req, _params, url) => {
+on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -473,16 +489,19 @@ on('GET', '/api/portfolio-fix', requireTab('portfolio-fix', async (_req, _params
   return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
 }));
 
-// ---- Portfolio (TX): live-only holdings, avg_buy_price computed straight
-// from the transaction ledger (see userHoldingsFromTx in queries.ts) instead
-// of trusting portfolios.initial_price. No as-of-date picker — reconstructing
-// historical holdings purely from transactions is future scope; AUM
-// chart/performance reuse portfolio_fix, since that data (market value, not
-// cost basis) was never wrong.
+// ---- Portfolio (TX): holdings with avg_buy_price computed straight from
+// the transaction ledger (see userHoldingsFromTx in queries.ts) instead of
+// trusting portfolios.initial_price. An as-of-date reconstructs holdings
+// purely from transactions up to that date (userHoldingsFromTxAsOf) — bonus
+// units are excluded in that mode since bonus_portfolios has no history to
+// reconstruct from (see its comment in queries.ts). AUM chart/performance
+// reuse portfolio_fix, since that data (market value, not cost basis) was
+// never wrong.
 on('GET', '/api/portfolio-tx', requireTab('portfolio-tx', async (_req, _params, url, user) => {
   const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
   if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
-  const h = Q.userHoldingsFromTx(userId);
+  const date = qp(url, 'date');
+  const h = date ? Q.userHoldingsFromTxAsOf(userId, date) : Q.userHoldingsFromTx(userId);
   const s = Q.userPortfolioSplit(userId);
   const p = Q.userPerformanceFix(sid);
   const a = Q.userAumHistoryFix(sid);
@@ -492,8 +511,31 @@ on('GET', '/api/portfolio-tx', requireTab('portfolio-tx', async (_req, _params, 
     runQuery(p.sql, p.params),
     runQuery(a.sql, a.params),
   ]);
-  await A.logEvent(user!.id, user!.username, 'view_portfolio_tx', `SID ${sid}`);
-  return json({ holdings, split: splitRows[0], performance, history });
+  await A.logEvent(user!.id, user!.username, 'view_portfolio_tx', `SID ${sid}${date ? ` as of ${date}` : ''}`);
+  return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null });
+}));
+
+// ---- Portfolio (SInvest): same as Portfolio (TX), but holdings are built
+// entirely from the custodian feed (sinvest.trx_history) instead of the
+// app's own transactions table (see sinvestHoldings/sinvestHoldingsAsOf in
+// queries.ts). split/performance/history still come from the app's own live
+// state and portfolio_fix — those aren't sourced from sinvest.
+on('GET', '/api/portfolio-sinvest', requireTab('portfolio-sinvest', async (_req, _params, url, user) => {
+  const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
+  if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
+  const date = qp(url, 'date');
+  const h = date ? Q.sinvestHoldingsAsOf(sid, date) : Q.sinvestHoldings(sid);
+  const s = Q.userPortfolioSplit(userId);
+  const p = Q.userPerformanceFix(sid);
+  const a = Q.userAumHistoryFix(sid);
+  const [holdings, splitRows, performance, history] = await Promise.all([
+    runQuery(h.sql, h.params),
+    runQuery(s.sql, s.params),
+    runQuery(p.sql, p.params),
+    runQuery(a.sql, a.params),
+  ]);
+  await A.logEvent(user!.id, user!.username, 'view_portfolio_sinvest', `SID ${sid}${date ? ` as of ${date}` : ''}`);
+  return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null });
 }));
 
 // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
@@ -878,12 +920,13 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     if (format === 'xlsx') return xlsxMultiResponse(fixSheets, filename, username);
     rows = fixSheets[0].rows; // CSV has no sheets — holdings only
   } else if (source === 'portfolio_tx_full') {
-    // Same as portfolio_full, but holdings come from userHoldingsFromTx
-    // (avg_buy_price derived from the transaction ledger). Live-only — no date.
+    // Same as portfolio_full, but holdings come from userHoldingsFromTx /
+    // userHoldingsFromTxAsOf (avg_buy_price derived from the transaction ledger).
     const userId = body.userId as string;
     if (!userId) return json({ error: 'userId is required.' }, 400);
+    const dateTx = body.date as string | undefined;
     const excludeFundsTx = body.excludeFunds as string[] | undefined;
-    const h = Q.userHoldingsFromTx(userId);
+    const h = dateTx ? Q.userHoldingsFromTxAsOf(userId, dateTx) : Q.userHoldingsFromTx(userId);
     const pq = Q.productPerformanceDetail();
     const [holdingsRawTx, detail] = await Promise.all([
       runQuery(h.sql, h.params),
@@ -909,6 +952,39 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(txSheets, filename, username);
     rows = txSheets[0].rows; // CSV has no sheets — holdings only
+  } else if (source === 'portfolio_sinvest_full') {
+    // Same as portfolio_tx_full, but holdings come from the custodian feed
+    // (sinvestHoldings / sinvestHoldingsAsOf) instead of main.transactions.
+    const userId = body.userId as string; const sid = body.sid as string;
+    if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
+    const dateSi = body.date as string | undefined;
+    const excludeFundsSi = body.excludeFunds as string[] | undefined;
+    const h = dateSi ? Q.sinvestHoldingsAsOf(sid, dateSi) : Q.sinvestHoldings(sid);
+    const pq = Q.productPerformanceDetail();
+    const [holdingsRawSi, detail] = await Promise.all([
+      runQuery(h.sql, h.params),
+      runQuery(pq.sql, pq.params),
+    ]);
+    const holdingsSi = Array.isArray(excludeFundsSi) && excludeFundsSi.length
+      ? holdingsRawSi.filter((r) => !excludeFundsSi.includes(r.fund as string))
+      : holdingsRawSi;
+    if (format === 'pdf') {
+      const includePerformance = body.includePerformance !== false;
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
+      const perf = includePerformance ? pivotPerformanceByType(detail) : [];
+      const buf = await portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username });
+      return new Response(new Uint8Array(buf), {
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
+        },
+      });
+    }
+    const siSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdingsSi) }, ...pivotPerformanceByType(detail)];
+    if (format === 'xlsx') return xlsxMultiResponse(siSheets, filename, username);
+    rows = siSheets[0].rows; // CSV has no sheets — holdings only
   } else if (source === 'portfolio_explorer_full') {
     // Same shape/columns as portfolio_full, sourced from goal_snapshots as of
     // a given date instead of the live portfolios/bonus_portfolios tables —
@@ -1001,6 +1077,9 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const salesCodes = (body.salesCodes as string[]) || [];
     if (!referrerCodes.length && !salesCodes.length) return json({ error: 'At least one referrer_code or sales_code is required.' }, 400);
     const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'sinvest_transactions') {
+    const q = Q.sinvestTransactions({ from: body.from as string, to: body.to as string, type: body.type as string, sid: body.sid as string, search: body.search as string, limit: limit || 100000, offset: 0 });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'hnwi_total') {
     if (!body.date) return json({ error: 'date is required.' }, 400);

@@ -371,10 +371,12 @@ function renderPfxPerformance(rows) {
 }
 
 // ====================================================================
-//  PORTFOLIO (TX) — live-only holdings, avg_buy_price computed from the
-//  transaction ledger instead of portfolios.initial_price. No as-of-date
-//  picker; AUM chart/performance reuse portfolio_fix (market-value history,
-//  never affected by the cost-basis bug).
+//  PORTFOLIO (TX) — holdings with avg_buy_price computed from the
+//  transaction ledger instead of portfolios.initial_price. As-of-date
+//  reconstructs units/average purely from transactions up to that date;
+//  bonus holdings only ever show in the live view (no bonus history exists).
+//  AUM chart/performance reuse portfolio_fix (market-value history, never
+//  affected by the cost-basis bug).
 // ====================================================================
 async function searchPtxUsers() {
   const q = $('#ptxSearchInput').value.trim();
@@ -399,22 +401,30 @@ function renderPtxResults(rows) {
 let ptxSelected = null; // { userId, sid, name, excludedFunds } — used by the export buttons
 
 async function selectPtxUser(userId, sid, name, email) {
-  ptxSelected = { userId, sid, name: name || sid, excludedFunds: null };
+  ptxSelected = { userId, sid, name: name || sid, date: '', excludedFunds: null };
   $('#ptxDetail').classList.remove('hidden');
   $('#ptxUserName').textContent = name || sid;
   $('#ptxUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
+  $('#ptxDate').value = '';
   await loadPtxUser();
 }
 
 async function loadPtxUser() {
   if (!ptxSelected) return;
   const { userId, sid } = ptxSelected;
+  const dateVal = $('#ptxDate').value;
   $('#ptxKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#ptxHoldings').innerHTML = '';
   $('#ptxPerformance').innerHTML = '';
   ptxSelected.excludedFunds = null;
   try {
-    const { holdings, split, performance, history } = await api(`/api/portfolio-tx?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}`);
+    const dateParam = dateVal ? `&date=${dateVal}` : '';
+    const { holdings, split, performance, history, asOfDate } = await api(`/api/portfolio-tx?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    ptxSelected.date = val(asOfDate) || '';
+    const asOf = val(asOfDate);
+    $('#ptxSnapshotInfo').textContent = asOf
+      ? `As of ${asOf}: units and average buy price reconstructed from transactions up to that date; bonus holdings excluded (no historical data). Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.`
+      : `Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).`;
     renderPtxKpis(holdings, split);
     renderPtxHoldings(holdings);
     renderPtxPerformance(performance);
@@ -443,10 +453,12 @@ function renderPtxAumChart(rows) {
 
 function renderPtxKpis(holdings, split) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  // split (and bonus units generally) is only available live — bonus_portfolios
+  // has no history, so an as-of-date view can't show a real bonus figure.
   $('#ptxKpis').innerHTML = [
     kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', 'portfolios'),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', 'bonus_portfolios (on_going)'),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -473,6 +485,117 @@ function renderPtxPerformance(rows) {
     return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
   }).join('');
   $('#ptxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
+}
+
+// ====================================================================
+//  PORTFOLIO (SINVEST) — same as Portfolio (TX) above, but holdings are
+//  built entirely from the KSEI/SInvest custodian feed (sinvest.trx_history)
+//  instead of the app's own transactions table. AUM chart/performance still
+//  reuse portfolio_fix, same as Portfolio (TX).
+// ====================================================================
+async function searchPsiUsers() {
+  const q = $('#psiSearchInput').value.trim();
+  if (!q) return;
+  $('#psiResults').innerHTML = '<div class="loading">Searching…</div>';
+  try {
+    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    renderPsiResults(rows);
+  } catch (e) { $('#psiResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPsiResults(rows) {
+  if (!rows.length) { $('#psiResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  const body = rows.map((r) => `<tr class="psi-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
+      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+    </tr>`).join('');
+  $('#psiResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $$('#psiResults .psi-row').forEach((tr) => tr.addEventListener('click', () =>
+    selectPsiUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+}
+
+let psiSelected = null; // { userId, sid, name, date, excludedFunds } — used by the export buttons
+
+async function selectPsiUser(userId, sid, name, email) {
+  psiSelected = { userId, sid, name: name || sid, date: '', excludedFunds: null };
+  $('#psiDetail').classList.remove('hidden');
+  $('#psiUserName').textContent = name || sid;
+  $('#psiUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
+  $('#psiDate').value = '';
+  await loadPsiUser();
+}
+
+async function loadPsiUser() {
+  if (!psiSelected) return;
+  const { userId, sid } = psiSelected;
+  const dateVal = $('#psiDate').value;
+  $('#psiKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
+  $('#psiHoldings').innerHTML = '';
+  $('#psiPerformance').innerHTML = '';
+  psiSelected.excludedFunds = null;
+  try {
+    const dateParam = dateVal ? `&date=${dateVal}` : '';
+    const { holdings, split, performance, history, asOfDate } = await api(`/api/portfolio-sinvest?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    psiSelected.date = val(asOfDate) || '';
+    const asOf = val(asOfDate);
+    $('#psiSnapshotInfo').textContent = asOf
+      ? `As of ${asOf}: units and average buy price reconstructed from the SInvest custodian feed up to that date; bonus holdings excluded (no historical data). Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.`
+      : `Live holdings (current units × today's NAV), built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table. Average buy price only reflects completed BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN rows — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.`;
+    renderPsiKpis(holdings, split);
+    renderPsiHoldings(holdings);
+    renderPsiPerformance(performance);
+    renderPsiAumChart(history);
+  } catch (e) { $('#psiKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderPsiAumChart(rows) {
+  if (!rows.length) { return; }
+  paint('psiAumChart', {
+    type: 'line',
+    data: {
+      labels: rows.map((d) => val(d.bucket)),
+      datasets: [{ label: 'AUM', data: rows.map((d) => Number(val(d.amount))),
+        borderColor: C.indigo, backgroundColor: 'rgba(30,42,74,.08)', fill: true, tension: .3, pointRadius: 0 }],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { y: { grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } },
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (c) => idrFull(c.raw) } } },
+    },
+  });
+}
+
+function renderPsiKpis(holdings, split) {
+  const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
+  $('#psiKpis').innerHTML = [
+    kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+  ].join('');
+}
+
+function renderPsiHoldings(rows) {
+  if (!rows.length) { $('#psiHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  if (!psiSelected.excludedFunds) {
+    psiSelected.excludedFunds = new Set(rows.filter((h) => Number(val(h.unit)) <= 1).map((h) => val(h.fund)));
+  }
+  $('#psiHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: psiSelected.excludedFunds });
+  $$('#psiHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
+    if (chk.checked) psiSelected.excludedFunds.delete(chk.dataset.fund);
+    else psiSelected.excludedFunds.add(chk.dataset.fund);
+  }));
+}
+
+function renderPsiPerformance(rows) {
+  if (!rows.length) { $('#psiPerformance').innerHTML = '<div class="empty">No AUM history for this SID.</div>'; return; }
+  const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
+  const cells = rows.map((r) => {
+    const pct = val(r.pct_change);
+    if (pct == null) return '<td class="num">—</td>';
+    return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
+  }).join('');
+  $('#psiPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
 }
 
 // ====================================================================
@@ -1620,6 +1743,55 @@ async function loadRemTx() {
   } catch (e) { $('#remTxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
+// ---- nested: SInvest transactions (raw KSEI/SInvest custodian feed) -------
+const sitx = { limit: 50, offset: 0, total: 0 };
+let sitxLoaded = false;
+
+function sitxParams() {
+  return {
+    sid: $('#sitxSid').value.trim(),
+    search: $('#sitxSearch').value.trim(),
+    type: $('#sitxType').value,
+    from: $('#sitxFrom').value,
+    to: $('#sitxTo').value,
+  };
+}
+
+async function loadSitx() {
+  sitxLoaded = true;
+  const p = sitxParams();
+  $('#sitxTable').innerHTML = '<div class="loading">Loading…</div>';
+  const qs = new URLSearchParams();
+  if (p.sid) qs.set('sid', p.sid);
+  if (p.search) qs.set('search', p.search);
+  if (p.type) qs.set('type', p.type);
+  if (p.from) qs.set('from', p.from);
+  if (p.to) qs.set('to', p.to);
+  qs.set('limit', sitx.limit); qs.set('offset', sitx.offset);
+  try {
+    const { rows, total } = await api(`/api/sinvest-transactions?${qs}`);
+    sitx.total = total;
+    genTable('#sitxTable', rows, [
+      { key: 'transaction_date', label: 'Date', type: 'date' },
+      { key: 'type', label: 'Type' },
+      { key: 'sid', label: 'SID' }, { key: 'investor_name', label: 'Investor' },
+      { key: 'fund_code', label: 'Fund code' }, { key: 'fund_name', label: 'Fund' },
+      { key: 'unit', label: 'Unit', type: 'num' },
+      { key: 'nav_per_unit', label: 'NAV', type: 'num' },
+      { key: 'gross_amount', label: 'Gross amount', type: 'idr' },
+      { key: 'fee', label: 'Fee', type: 'idr' },
+      { key: 'net_amount', label: 'Net amount', type: 'idr' },
+      { key: 'input_date', label: 'Input date', type: 'date' },
+      { key: 'reference_no', label: 'Reference #' },
+    ], 'No transactions match these filters.');
+    const start = total ? sitx.offset + 1 : 0;
+    const end = Math.min(sitx.offset + sitx.limit, total);
+    $('#sitxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
+    $('#sitxPrev').disabled = sitx.offset === 0;
+    $('#sitxNext').disabled = end >= total;
+  } catch (e) { $('#sitxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
 // ====================================================================
 //  EXPLORER (multi-table)
 // ====================================================================
@@ -2469,6 +2641,7 @@ function switchTab(name) {
   if (name === 'performance' && !perfTrendLoaded) { loadPerfTrendTypes(); loadPerfTrendFunds(); loadPerfTrend(); }
   if (name === 'growth' && !growthLoaded) loadGrowth();
   if (name === 'reconciliation') loadReconciliation();
+  if (name === 'sinvest-tx' && !sitxLoaded) loadSitx();
   if (name === 'revenue') loadRevenue();
   if (name === 'revenue2') loadRevenue2();
   if (name === 'predict' && !predictLoaded) loadPredict();
@@ -2524,6 +2697,7 @@ function repaintActiveTab() {
     case 'portfolio': if (pfSelected) loadPortfolioUser(); break;
     case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
     case 'portfolio-tx': if (ptxSelected) loadPtxUser(); break;
+    case 'portfolio-sinvest': if (psiSelected) loadPsiUser(); break;
   }
 }
 
@@ -2659,12 +2833,13 @@ function wire() {
     `${pfxFilename()}.pdf`));
   $('#pfxDateApply').addEventListener('click', loadPfxUser);
 
-  // portfolio (tx) — live-only, no date/Go button; export carries the fund checklist
+  // portfolio (tx) — export carries the as-of date (if any) plus the fund checklist
   $('#ptxSearchBtn').addEventListener('click', searchPtxUsers);
   $('#ptxSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPtxUsers(); });
-  const ptxFilename = () => `portfolio_tx_${ptxSelected.sid}`;
+  const ptxFilename = () => `portfolio_tx_${ptxSelected.sid}${ptxSelected.date ? '_' + ptxSelected.date : ''}`;
   const ptxExportBody = () => ({
     userId: ptxSelected.userId, sid: ptxSelected.sid,
+    ...(ptxSelected.date ? { date: ptxSelected.date } : {}),
     ...(ptxSelected.excludedFunds && ptxSelected.excludedFunds.size ? { excludeFunds: [...ptxSelected.excludedFunds] } : {}),
   });
   $('#ptxCsv').addEventListener('click', () => ptxSelected && download(
@@ -2688,6 +2863,39 @@ function wire() {
   $('#ptxPdfOnly').addEventListener('click', () => ptxSelected && download(
     { source: 'portfolio_tx_full', format: 'pdf', filename: ptxFilename(), ...ptxExportBody(), includePerformance: false, columns: selectedPdfColumns() },
     `${ptxFilename()}.pdf`));
+  $('#ptxDateApply').addEventListener('click', loadPtxUser);
+
+  // portfolio (sinvest) — same wiring as portfolio (tx), sourced from the custodian feed
+  $('#psiSearchBtn').addEventListener('click', searchPsiUsers);
+  $('#psiSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPsiUsers(); });
+  const psiFilename = () => `portfolio_sinvest_${psiSelected.sid}${psiSelected.date ? '_' + psiSelected.date : ''}`;
+  const psiExportBody = () => ({
+    userId: psiSelected.userId, sid: psiSelected.sid,
+    ...(psiSelected.date ? { date: psiSelected.date } : {}),
+    ...(psiSelected.excludedFunds && psiSelected.excludedFunds.size ? { excludeFunds: [...psiSelected.excludedFunds] } : {}),
+  });
+  $('#psiCsv').addEventListener('click', () => psiSelected && download(
+    { source: 'portfolio_sinvest_full', format: 'csv', filename: psiFilename(), ...psiExportBody() },
+    `${psiFilename()}.csv`));
+  $('#psiXlsx').addEventListener('click', () => psiSelected && download(
+    { source: 'portfolio_sinvest_full', format: 'xlsx', filename: psiFilename(), ...psiExportBody() },
+    `${psiFilename()}.xlsx`));
+  renderPdfColumnPicker('psiPdfCols');
+  $('#psiPdfCols').addEventListener('change', () => savePdfColumnPrefs('psiPdfCols'));
+  $('#psiPdfColsBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#psiPdfColsPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#psiPdfColsDropdown')) $('#psiPdfColsPanel').classList.remove('open');
+  });
+  $('#psiPdf').addEventListener('click', () => psiSelected && download(
+    { source: 'portfolio_sinvest_full', format: 'pdf', filename: psiFilename(), ...psiExportBody(), columns: selectedPdfColumns() },
+    `${psiFilename()}.pdf`));
+  $('#psiPdfOnly').addEventListener('click', () => psiSelected && download(
+    { source: 'portfolio_sinvest_full', format: 'pdf', filename: psiFilename(), ...psiExportBody(), includePerformance: false, columns: selectedPdfColumns() },
+    `${psiFilename()}.pdf`));
+  $('#psiDateApply').addEventListener('click', loadPsiUser);
 
   // portfolio explorer (goal_snapshots)
   $('#peSearchBtn').addEventListener('click', searchExplorerUsers);
@@ -2843,6 +3051,15 @@ function wire() {
   $('#remTxXlsx').addEventListener('click', () => download(
     { source: 'remisier_transactions', format: 'xlsx', filename: 'remisier_transactions', ...remTxParams() }, 'remisier_transactions.xlsx'));
 
+  // sinvest transactions
+  $('#sitxRun').addEventListener('click', () => { sitx.offset = 0; loadSitx(); });
+  $('#sitxPrev').addEventListener('click', () => { sitx.offset = Math.max(0, sitx.offset - sitx.limit); loadSitx(); });
+  $('#sitxNext').addEventListener('click', () => { sitx.offset += sitx.limit; loadSitx(); });
+  $('#sitxCsv').addEventListener('click', () => download(
+    { source: 'sinvest_transactions', format: 'csv', filename: 'sinvest_transactions', ...sitxParams() }, 'sinvest_transactions.csv'));
+  $('#sitxXlsx').addEventListener('click', () => download(
+    { source: 'sinvest_transactions', format: 'xlsx', filename: 'sinvest_transactions', ...sitxParams() }, 'sinvest_transactions.xlsx'));
+
   $('#gran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $$('#gran button').forEach((x) => x.classList.toggle('on', x === b));
@@ -2973,6 +3190,7 @@ async function init() {
   $('#rev2From').value = r.from; $('#rev2To').value = r.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
+  $('#sitxFrom').value = r.from; $('#sitxTo').value = r.to;
   syncThemeSeg(getThemeChoice());
   translatePage();
   syncLangSeg(getLang());
