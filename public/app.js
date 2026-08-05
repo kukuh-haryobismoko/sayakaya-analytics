@@ -758,7 +758,7 @@ async function loadOverview() {
   api('/api/breakdown/status' + qs).then(renderStatusChart).catch(() => {});
   api('/api/users/verification').then(renderVerifyChart).catch(() => {});
   api('/api/funds/types').then(renderFundTypeChart).catch(() => {});
-  api('/api/funds/top?limit=10').then(renderTopFunds).catch(() => {});
+  loadTopFunds();
   api('/api/users/by-province').then(renderGeoChart).catch(() => {});
   api('/api/users/top-cities?limit=15').then(renderTopCities).catch(() => {});
   api('/api/users/top-cities-aum?limit=15').then(renderTopCitiesAum).catch(() => {});
@@ -929,20 +929,22 @@ const renderVerifyChart = (rows) => doughnut('verifyChart', rows, 'label', 'coun
 const renderFundTypeChart = (rows) => doughnut('fundTypeChart', rows, 'label', 'aum', idrFull);
 
 let topFundsCache = [];
+let topFundsGroup = 'fund';
 function renderTopFunds(rows) {
   topFundsCache = rows;
   if (!rows.length) { $('#topFunds').innerHTML = '<div class="empty">No funds.</div>'; return; }
+  const nameCol = topFundsGroup === 'manager' ? 'Investment manager' : 'Fund';
   const body = rows.map((f) => `<tr>
-      <td>${val(f.name)}</td>
-      <td><span class="tag other">${val(f.type)}</span></td>
-      <td>${f.is_sharia ? 'Sharia' : '—'}</td>
-      <td class="num">${num(val(f.latest_nav_value))}</td>
-      <td class="num">${idrFull(val(f.latest_aum_value))}</td>
-      <td class="num">${val(f.management_fee)}%</td>
+      <td>${val(f.label)}</td>
+      <td class="num">${idrFull(val(f.aum))}</td>
+      <td class="num">${num(val(f.investors))}</td>
     </tr>`).join('');
   $('#topFunds').innerHTML = `<table><thead><tr>
-      <th>Fund</th><th>Type</th><th>Class</th><th class="num">NAV</th><th class="num">AUM</th><th class="num">Mgmt fee</th>
+      <th>${nameCol}</th><th class="num">AUM</th><th class="num">Investors</th>
     </tr></thead><tbody>${body}</tbody></table>`;
+}
+function loadTopFunds() {
+  api(`/api/funds/top?limit=10&groupBy=${topFundsGroup}`).then(renderTopFunds).catch(() => {});
 }
 
 // ====================================================================
@@ -2945,6 +2947,13 @@ function wire() {
   $('#churnCsv').addEventListener('click', () => download({ source: 'churn_risk', format: 'csv', filename: 'churn_risk', limit: 5000 }, 'churn_risk.csv'));
   $('#churnXlsx').addEventListener('click', () => download({ source: 'churn_risk', format: 'xlsx', filename: 'churn_risk', limit: 5000 }, 'churn_risk.xlsx'));
 
+  // largest funds by AUM — by fund / by investment manager
+  $('#topFundsGroup').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#topFundsGroup button').forEach((x) => x.classList.toggle('on', x === b));
+    topFundsGroup = b.dataset.g; loadTopFunds();
+  });
+
   // aum history
   $('#aumGran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -3074,7 +3083,7 @@ function wire() {
   // not raw client SQL, so this doesn't need SQL Lab-level access)
   $$('[data-export="topfunds"]').forEach((b) => b.addEventListener('click', () => {
     const fmt = b.dataset.fmt;
-    download({ source: 'growth_top_funds', format: fmt, filename: 'top_funds' }, `top_funds.${fmt}`);
+    download({ source: 'growth_top_funds', format: fmt, filename: 'top_funds', groupBy: topFundsGroup }, `top_funds.${fmt}`);
   }));
 
   // ask

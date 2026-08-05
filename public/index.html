@@ -493,14 +493,20 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head">
+        <div class="panel-head wrap">
           <h2 data-i18n="ov_largest_funds">Largest funds by AUM</h2>
-          <div class="exp">
+          <div class="filters">
+            <div class="seg" id="topFundsGroup">
+              <button data-g="fund" class="on" data-i18n="ov_by_fund">By fund</button>
+              <button data-g="manager" data-i18n="ov_by_manager">By investment manager</button>
+            </div>
+            <span class="divider"></span>
             <button class="btn-ghost" data-export="topfunds" data-fmt="csv" data-i18n="common_csv">CSV</button>
             <button class="btn-ghost" data-export="topfunds" data-fmt="xlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <div id="topFunds" class="table-wrap"></div>
+        <span class="hint" data-i18n="ov_largest_funds_hint">Live holdings as of the latest daily snapshot. AUM = sum of holding value, investors = distinct investors holding a position. Source: mi_fee_logs.portfolio_fix.</span>
+        <div id="topFunds" class="table-wrap" style="margin-top:14px"></div>
       </div>
     </section>
 

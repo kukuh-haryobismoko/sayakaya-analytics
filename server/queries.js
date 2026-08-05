@@ -125,14 +125,6 @@ const breakdownBy = (column, from, to) => {
 
 // ---- Funds ------------------------------------------------------------------
 
-const topFunds = (limit = 10) => ({
-  sql: `SELECT name, type, is_sharia, latest_nav_value, latest_aum_value, management_fee, latest_aum_date
-    FROM ${FUNDS}
-    WHERE latest_aum_value IS NOT NULL AND listing_status='ACTIVE'
-    ORDER BY latest_aum_value DESC LIMIT @limit`,
-  params: { limit: parseInt(limit, 10) },
-});
-
 const fundTypes = () => ({
   sql: `SELECT type AS label, COUNT(*) AS count, SUM(IFNULL(latest_aum_value,0)) AS aum
     FROM ${FUNDS}
@@ -1011,6 +1003,32 @@ const aumByManager = (limit = 15) => ({
     ORDER BY aum DESC LIMIT @limit`,
   params: { limit: parseInt(limit, 10) },
 });
+
+// Overview "Largest funds by AUM": live holdings from portfolio_fix (latest
+// daily batch), not funds.latest_aum_value/snapshots — those lag the actual
+// book. AUM = SUM(amount) of that batch; investors = COUNT(DISTINCT
+// sid_code). groupBy switches the rollup between fund and investment manager.
+const largestFundsAum = (groupBy = 'fund', limit = 10) => {
+  const label = groupBy === 'manager' ? 'COALESCE(im.common_name, im.name)' : 'f.name';
+  return {
+    sql: `WITH latest AS (
+        SELECT sid_code, id AS fund_id, amount
+        FROM ${PORT_FIX}
+        WHERE DATE(created_at) = (SELECT MAX(DATE(created_at)) FROM ${PORT_FIX})
+          AND total_unit > 0
+      )
+      SELECT ${label} AS label,
+        ROUND(SUM(l.amount)) AS aum,
+        COUNT(DISTINCT l.sid_code) AS investors
+      FROM latest l
+      JOIN ${FUNDS} f ON f.id = l.fund_id
+      LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+      GROUP BY label
+      ORDER BY aum DESC
+      LIMIT @limit`,
+    params: { limit: parseInt(limit, 10) || 10 },
+  };
+};
 
 // Platform AUM (live holdings, same definition as the Overview KPI) split by
 // investor demographic — risk tolerance and income bracket.
@@ -1942,7 +1960,7 @@ function remisierTransactions({ referrerCodes = [], salesCodes = [], type, statu
 
 module.exports = {
   overviewUsers, overviewAum, overviewTx, overviewFunds,
-  trends, breakdownBy, topFunds, fundTypes, aumHistory,
+  trends, breakdownBy, fundTypes, aumHistory,
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail, fundNavTrend, fundList,
@@ -1952,7 +1970,7 @@ module.exports = {
   userHoldingsFromTx, userHoldingsFromTxAsOf,
   hnwiLatestDate, hnwiTotal, hnwiByFund,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
-  campaignPerformance, switchingTopPairs, aumByManager,
+  campaignPerformance, switchingTopPairs, aumByManager, largestFundsAum,
   aumByRisk, aumByIncome, usersByProvince, topCitiesByInvestors, topCitiesByAum, topReferrers, reconciliationDaily,
   sinvestTransactions, sinvestHoldings, sinvestHoldingsAsOf,
   revenueDetail, revenueMonthlySummary,

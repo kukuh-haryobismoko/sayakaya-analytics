@@ -153,6 +153,9 @@ const I18N = {
     ov_top_cities_investors: `Top cities by investors`,
     ov_top_cities_aum: `Top cities by AUM`,
     ov_largest_funds: `Largest funds by AUM`,
+    ov_by_fund: `By fund`,
+    ov_by_manager: `By investment manager`,
+    ov_largest_funds_hint: `Live holdings as of the latest daily snapshot. AUM = sum of holding value, investors = distinct investors holding a position. Source: mi_fee_logs.portfolio_fix.`,
 
     aum_history_title: `AUM & revenue history`,
     aum_history_hint: `End-of-period AUM (point-in-time) and revenue (aperd_share, summed). Uses the date range above. Source: mi_fee_logs.mi_fee.`,
@@ -426,6 +429,9 @@ const I18N = {
     ov_top_cities_investors: `Kota teratas berdasarkan jumlah investor`,
     ov_top_cities_aum: `Kota teratas berdasarkan AUM`,
     ov_largest_funds: `Produk terbesar berdasarkan AUM`,
+    ov_by_fund: `Berdasarkan produk`,
+    ov_by_manager: `Berdasarkan manajer investasi`,
+    ov_largest_funds_hint: `Kepemilikan aktif per snapshot harian terbaru. AUM = total nilai kepemilikan, investor = jumlah investor unik yang memiliki posisi. Sumber: mi_fee_logs.portfolio_fix.`,
 
     aum_history_title: `Riwayat AUM & pendapatan`,
     aum_history_hint: `AUM akhir periode (point-in-time) dan pendapatan (aperd_share, dijumlahkan). Menggunakan rentang tanggal di atas. Sumber: mi_fee_logs.mi_fee.`,

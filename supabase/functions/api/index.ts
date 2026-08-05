@@ -361,7 +361,7 @@ on('GET', '/api/breakdown/:dimension', requireTab('overview', async (_req, param
 
 // ---- Funds ----------------------------------------------------------------
 on('GET', '/api/funds/top', requireTab('overview', async (_req, _params, url) => {
-  const q = Q.topFunds(qp(url, 'limit') || 10);
+  const q = Q.largestFundsAum(qp(url, 'groupBy') || 'fund', qp(url, 'limit') || 10);
   return json(await runQuery(q.sql, q.params));
 }));
 on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance'], async () => {
@@ -834,7 +834,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     if (!v.ok) return json({ error: v.error }, 400);
     rows = await runQuery(capRows(v.sql, limit || 100000), {});
   } else if (source === 'growth_top_funds') {
-    const q = Q.topFunds(50);
+    const q = Q.largestFundsAum((body.groupBy as string) || 'fund', 50);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'transactions') {
     const filters = (body.filters as Record<string, unknown>) || {};

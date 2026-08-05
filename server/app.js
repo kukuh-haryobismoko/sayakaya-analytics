@@ -292,7 +292,7 @@ function createApp({ serveStatic = true } = {}) {
 
   // ---- Funds ----------------------------------------------------------------
   app.get('/api/funds/top', requireTab('overview'), handler(async (req, res) => {
-    const q = Q.topFunds(req.query.limit || 10);
+    const q = Q.largestFundsAum(req.query.groupBy, req.query.limit || 10);
     res.json(await runQuery(q.sql, q.params));
   }));
   // Shared by Overview and Performance — allow either.
@@ -798,7 +798,7 @@ function createApp({ serveStatic = true } = {}) {
       if (!v.ok) return res.status(400).json({ error: v.error });
       rows = await runQuery(capRows(v.sql, limit || 100000), {});
     } else if (source === 'growth_top_funds') {
-      const q = Q.topFunds(50);
+      const q = Q.largestFundsAum(req.body.groupBy, 50);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'transactions') {
       const q = Q.transactions({ ...req.body.filters, limit: limit || 100000, offset: 0 });
