@@ -120,7 +120,7 @@ function toQueryParameter(name: string, value: unknown) {
 // keyed by column name, coercing to native JS types where that's lossless.
 // NUMERIC/BIGNUMERIC stay as strings (preserves full precision — the same
 // reason the Node SDK returns those as big.js instances instead of numbers).
-function coerceValue(type: string, v: unknown): unknown {
+export function coerceValue(type: string, v: unknown): unknown {
   if (v === null || v === undefined) return null;
   switch (type) {
     case 'INTEGER':
@@ -134,8 +134,15 @@ function coerceValue(type: string, v: unknown): unknown {
     case 'RECORD':
     case 'STRUCT':
       return v; // not used by this app's final SELECT output; pass through
+    case 'TIMESTAMP':
+      // Unlike DATE/DATETIME (already plain "YYYY-MM-DD[ HH:MM:SS]" strings),
+      // the REST API returns TIMESTAMP as a string of seconds-since-epoch
+      // (sometimes in scientific notation, e.g. "1.784864119E9"). Convert to
+      // the same ISO 8601 string the Node SDK's BigQueryTimestamp produces,
+      // so frontend code doing String(v).slice(0, 10) gets a real date.
+      return typeof v === 'string' ? new Date(Number(v) * 1000).toISOString() : v;
     default:
-      // STRING, NUMERIC, BIGNUMERIC, DATE, DATETIME, TIMESTAMP, TIME, BYTES
+      // STRING, NUMERIC, BIGNUMERIC, DATE, DATETIME, TIME, BYTES
       return v;
   }
 }
@@ -303,6 +310,14 @@ if (import.meta.main) {
   ]);
   assertEquals(out, [{ user_id: 1, email: 'a@b.com', id_address_city: 'Jakarta' }]);
   assertEquals(redactSensitiveColumns([]), []);
+
+  // TIMESTAMP coercion: REST API returns epoch-seconds strings, sometimes in
+  // scientific notation — must become an ISO string, not pass through raw.
+  assertEquals(coerceValue('TIMESTAMP', '1784864119.234'), '2026-07-24T03:35:19.234Z');
+  assertEquals(coerceValue('TIMESTAMP', '1.784864119E9'), '2026-07-24T03:35:19.000Z');
+  assertEquals(coerceValue('DATE', '2026-07-24'), '2026-07-24');
+  assertEquals(coerceValue('TIMESTAMP', null), null);
+
   console.log('bigquery.ts redaction self-check passed');
 }
 
