@@ -1004,18 +1004,32 @@ const aumByManager = (limit = 15) => ({
   params: { limit: parseInt(limit, 10) },
 });
 
-// Overview "Largest funds by AUM": live holdings from portfolio_fix (latest
-// daily batch), not funds.latest_aum_value/snapshots — those lag the actual
-// book. AUM = SUM(amount) of that batch; investors = COUNT(DISTINCT
-// sid_code). groupBy switches the rollup between fund and investment manager.
-const largestFundsAum = (groupBy = 'fund', limit = 10) => {
+// Overview "Largest funds by AUM": one daily batch from portfolio_with_code
+// (one row per sid_code+fund+day), not funds.latest_aum_value/snapshots —
+// those lag the actual book, and not portfolio_fix — that only has history
+// back to early August, and this panel needs to backtrace older dates too.
+// Same -1 day correction as the rest of the portfolio_with_code queries in
+// this file (created_at's date is a day ahead of the AUM date it
+// represents). AUM = SUM(amount) of that batch; investors = COUNT(DISTINCT
+// sid_code). groupBy switches the rollup between fund and investment
+// manager; excludeFunds drops those funds before the rollup so an MI's total
+// reflects the exclusion too. Shows every fund/MI — no LIMIT.
+const largestFundsLatestDate = () => ({
+  sql: `SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS latest_date FROM ${PORT_WITH_CODE}`,
+  params: {},
+});
+
+const largestFundsAum = (groupBy = 'fund', date, excludeFunds = []) => {
   const label = groupBy === 'manager' ? 'COALESCE(im.common_name, im.name)' : 'f.name';
+  const names = (Array.isArray(excludeFunds) ? excludeFunds : []).filter(Boolean);
+  const params = { date };
+  let excludeFilter = '';
+  if (names.length) { excludeFilter = 'WHERE f.name NOT IN UNNEST(@excludeFunds)'; params.excludeFunds = names; }
   return {
     sql: `WITH latest AS (
         SELECT sid_code, id AS fund_id, amount
-        FROM ${PORT_FIX}
-        WHERE DATE(created_at) = (SELECT MAX(DATE(created_at)) FROM ${PORT_FIX})
-          AND total_unit > 0
+        FROM ${PORT_WITH_CODE}
+        WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND total_unit > 0
       )
       SELECT ${label} AS label,
         ROUND(SUM(l.amount)) AS aum,
@@ -1023,10 +1037,10 @@ const largestFundsAum = (groupBy = 'fund', limit = 10) => {
       FROM latest l
       JOIN ${FUNDS} f ON f.id = l.fund_id
       LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+      ${excludeFilter}
       GROUP BY label
-      ORDER BY aum DESC
-      LIMIT @limit`,
-    params: { limit: parseInt(limit, 10) || 10 },
+      ORDER BY aum DESC`,
+    params,
   };
 };
 
@@ -1970,7 +1984,7 @@ module.exports = {
   userHoldingsFromTx, userHoldingsFromTxAsOf,
   hnwiLatestDate, hnwiTotal, hnwiByFund,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
-  campaignPerformance, switchingTopPairs, aumByManager, largestFundsAum,
+  campaignPerformance, switchingTopPairs, aumByManager, largestFundsAum, largestFundsLatestDate,
   aumByRisk, aumByIncome, usersByProvince, topCitiesByInvestors, topCitiesByAum, topReferrers, reconciliationDaily,
   sinvestTransactions, sinvestHoldings, sinvestHoldingsAsOf,
   revenueDetail, revenueMonthlySummary,

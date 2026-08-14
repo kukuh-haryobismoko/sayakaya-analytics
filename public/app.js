@@ -930,6 +930,7 @@ const renderFundTypeChart = (rows) => doughnut('fundTypeChart', rows, 'label', '
 
 let topFundsCache = [];
 let topFundsGroup = 'fund';
+let topFundsDateDefaulted = false;
 function renderTopFunds(rows) {
   topFundsCache = rows;
   if (!rows.length) { $('#topFunds').innerHTML = '<div class="empty">No funds.</div>'; return; }
@@ -943,8 +944,54 @@ function renderTopFunds(rows) {
       <th>${nameCol}</th><th class="num">AUM</th><th class="num">Investors</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }
-function loadTopFunds() {
-  api(`/api/funds/top?limit=10&groupBy=${topFundsGroup}`).then(renderTopFunds).catch(() => {});
+// Fund checklist for the "Select funds" dropdown — every fund starts
+// checked (included); unchecking one drops it from the numbers below.
+// Rebuilt from the unfiltered by-fund list whenever the date changes,
+// preserving whichever funds were already unchecked (by name) across the
+// rebuild.
+async function loadTopFundsOptions(date) {
+  const prevExcluded = new Set(topFundsExcluded());
+  let rows = [];
+  try { rows = await api(`/api/funds/top?groupBy=fund&date=${date}`); } catch { return; }
+  $('#topFundsExcludeList').innerHTML = rows.map((f) => {
+    const name = val(f.label);
+    return `<label class="ask-table-chk"><input type="checkbox" value="${name}"${prevExcluded.has(name) ? '' : ' checked'}> ${name}</label>`;
+  }).join('');
+  updateTopFundsExcludeBtn();
+}
+function topFundsExcluded() {
+  return $$('#topFundsExcludeList input:not(:checked)').map((el) => el.value);
+}
+function updateTopFundsExcludeBtn() {
+  const total = $$('#topFundsExcludeList input').length;
+  const checked = total - topFundsExcluded().length;
+  $('#topFundsExcludeBtn').textContent = checked === total ? 'Select funds' : `${checked} of ${total} selected`;
+}
+function filterTopFundsExclude() {
+  const q = $('#topFundsExcludeSearch').value.trim().toLowerCase();
+  $$('#topFundsExcludeList label').forEach((lbl) => {
+    lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+function loadTopFundsTable() {
+  const date = $('#topFundsDate').value;
+  if (!date) { $('#topFunds').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  const exclude = topFundsExcluded();
+  const qs = `groupBy=${topFundsGroup}&date=${date}` + (exclude.length ? `&excludeFunds=${encodeURIComponent(exclude.join(','))}` : '');
+  api(`/api/funds/top?${qs}`).then(renderTopFunds).catch(() => {});
+}
+async function loadTopFunds() {
+  if (!topFundsDateDefaulted) {
+    topFundsDateDefaulted = true;
+    try {
+      const { latestDate } = await api('/api/funds/top/latest-date');
+      if (latestDate && !$('#topFundsDate').value) $('#topFundsDate').value = val(latestDate);
+    } catch { /* leave blank — user can still pick a date manually */ }
+  }
+  const date = $('#topFundsDate').value;
+  if (!date) { $('#topFunds').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  await loadTopFundsOptions(date);
+  loadTopFundsTable();
 }
 
 // ====================================================================
@@ -2947,11 +2994,22 @@ function wire() {
   $('#churnCsv').addEventListener('click', () => download({ source: 'churn_risk', format: 'csv', filename: 'churn_risk', limit: 5000 }, 'churn_risk.csv'));
   $('#churnXlsx').addEventListener('click', () => download({ source: 'churn_risk', format: 'xlsx', filename: 'churn_risk', limit: 5000 }, 'churn_risk.xlsx'));
 
-  // largest funds by AUM — by fund / by investment manager
+  // largest funds by AUM — by fund / by investment manager, as of a date,
+  // with an exclude-funds menu (also affects the MI rollup)
   $('#topFundsGroup').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $$('#topFundsGroup button').forEach((x) => x.classList.toggle('on', x === b));
-    topFundsGroup = b.dataset.g; loadTopFunds();
+    topFundsGroup = b.dataset.g; loadTopFundsTable();
+  });
+  $('#topFundsApply').addEventListener('click', () => loadTopFunds());
+  $('#topFundsExcludeList').addEventListener('change', () => { updateTopFundsExcludeBtn(); loadTopFundsTable(); });
+  $('#topFundsExcludeSearch').addEventListener('input', filterTopFundsExclude);
+  $('#topFundsExcludeBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#topFundsExcludePanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#topFundsExcludeDropdown')) $('#topFundsExcludePanel').classList.remove('open');
   });
 
   // aum history
@@ -3083,7 +3141,9 @@ function wire() {
   // not raw client SQL, so this doesn't need SQL Lab-level access)
   $$('[data-export="topfunds"]').forEach((b) => b.addEventListener('click', () => {
     const fmt = b.dataset.fmt;
-    download({ source: 'growth_top_funds', format: fmt, filename: 'top_funds', groupBy: topFundsGroup }, `top_funds.${fmt}`);
+    const date = $('#topFundsDate').value;
+    if (!date) { toast('Pick a date first.'); return; }
+    download({ source: 'growth_top_funds', format: fmt, filename: 'top_funds', groupBy: topFundsGroup, date, excludeFunds: topFundsExcluded() }, `top_funds.${fmt}`);
   }));
 
   // ask

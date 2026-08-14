@@ -359,9 +359,19 @@ on('GET', '/api/breakdown/:dimension', requireTab('overview', async (_req, param
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Funds ----------------------------------------------------------------
+// ---- Funds ------------------------------------------------------------
+// Largest funds/MI by AUM, as of a date, from portfolio_with_code -------
+on('GET', '/api/funds/top/latest-date', requireTab('overview', async () => {
+  const d = Q.largestFundsLatestDate();
+  const [row] = await runQuery(d.sql, d.params);
+  return json({ latestDate: (row?.latest_date as string) || null });
+}));
 on('GET', '/api/funds/top', requireTab('overview', async (_req, _params, url) => {
-  const q = Q.largestFundsAum(qp(url, 'groupBy') || 'fund', qp(url, 'limit') || 10);
+  const date = qp(url, 'date');
+  if (!date) return json({ error: 'date is required.' }, 400);
+  const excludeFunds = qp(url, 'excludeFunds');
+  const exclude = excludeFunds ? excludeFunds.split(',').filter(Boolean) : [];
+  const q = Q.largestFundsAum(qp(url, 'groupBy') || 'fund', date, exclude);
   return json(await runQuery(q.sql, q.params));
 }));
 on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance'], async () => {
@@ -834,7 +844,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     if (!v.ok) return json({ error: v.error }, 400);
     rows = await runQuery(capRows(v.sql, limit || 100000), {});
   } else if (source === 'growth_top_funds') {
-    const q = Q.largestFundsAum((body.groupBy as string) || 'fund', 50);
+    const q = Q.largestFundsAum((body.groupBy as string) || 'fund', body.date as string, body.excludeFunds as string[]);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'transactions') {
     const filters = (body.filters as Record<string, unknown>) || {};

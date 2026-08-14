@@ -505,7 +505,18 @@
             <button class="btn-ghost" data-export="topfunds" data-fmt="xlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint" data-i18n="ov_largest_funds_hint">Live holdings as of the latest daily snapshot. AUM = sum of holding value, investors = distinct investors holding a position. Source: mi_fee_logs.portfolio_fix.</span>
+        <div class="filters" style="margin-top:10px">
+          <label><span data-i18n="common_as_of">As of</span> <input type="date" id="topFundsDate" /></label>
+          <div class="dropdown-multi" id="topFundsExcludeDropdown">
+            <button type="button" class="dropdown-multi-btn" id="topFundsExcludeBtn" data-i18n="ov_select_funds">Select funds</button>
+            <div class="dropdown-multi-panel" id="topFundsExcludePanel">
+              <input id="topFundsExcludeSearch" type="text" data-i18n-placeholder="common_search_funds_ph" placeholder="Search funds…" />
+              <div id="topFundsExcludeList" class="dropdown-multi-list"></div>
+            </div>
+          </div>
+          <button id="topFundsApply" class="btn-primary" data-i18n="apply">Apply</button>
+        </div>
+        <span class="hint" data-i18n="ov_largest_funds_hint">Every fund/MI holding a position on the chosen date (not just the top 10). AUM = sum of holding value, investors = distinct investors holding a position. Deselect a fund to drop it from the numbers below — its MI's total reflects the removal too. Source: mi_fee_logs.portfolio_with_code, one day before its own created_at — this goes back further than portfolio_fix, which only starts in early August.</span>
         <div id="topFunds" class="table-wrap" style="margin-top:14px"></div>
       </div>
     </section>
