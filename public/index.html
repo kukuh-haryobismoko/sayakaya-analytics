@@ -93,6 +93,8 @@
           <button class="nav-link" data-tab="sinvest-tx"><span class="nav-icon">📇</span>SInvest transactions</button>
           <button class="nav-link" data-tab="revenue"><span class="nav-icon">💰</span>Revenue (PWC)</button>
           <button class="nav-link" data-tab="revenue2"><span class="nav-icon">💹</span>Revenue (GS)</button>
+          <button class="nav-link" data-tab="user-lifetime"><span class="nav-icon">⏳</span>User lifetime</button>
+          <button class="nav-link" data-tab="campaign-revenue"><span class="nav-icon">🎯</span>Campaign revenue</button>
           <button class="nav-link" data-tab="remisier"><span class="nav-icon">🤝</span>Remisier sharing (GS)</button>
           <button class="nav-link" data-tab="remisier-pwc"><span class="nav-icon">🤝</span>Remisier sharing (PWC)</button>
           <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon">🧾</span>Remisier transactions</button>
@@ -833,6 +835,141 @@
       </div>
     </section>
 
+    <!-- ===================== USER LIFETIME (portfolio_with_code, per investor) ===================== -->
+    <section id="user-lifetime" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <div class="seg" id="ulGran">
+              <button data-g="day" data-i18n="common_day">Day</button>
+              <button data-g="week" data-i18n="common_week">Week</button>
+              <button class="on" data-g="month" data-i18n="common_month">Month</button>
+            </div>
+            <label><span data-i18n="range_from">From</span> <input type="date" id="ulFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="ulTo" /></label>
+            <button id="ulApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="filters" style="margin-top:10px">
+          <input type="text" id="ulFund" data-i18n-placeholder="common_fund_wildcard_ph" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
+          <input type="text" id="ulMi" data-i18n-placeholder="common_mi_wildcard_ph" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
+          <input type="text" id="ulSid" data-i18n-placeholder="ul_sid_ph" placeholder="SID (exact, optional)" style="min-width:200px" />
+          <input type="number" id="ulLimit" value="200" min="1" max="2000" style="width:110px" title="Max investors" />
+        </div>
+        <span class="hint" data-i18n="ul_filters_hint">Same daily management-fee accrual as Revenue (PWC), grouped per investor instead of per fund. Money columns cover the selected range; lifetime columns (registered, first buy, holding lifetime) come from the full transaction history, which reaches much further back than the portfolio_with_code feed.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="ul_trend">Revenue &amp; investors over time</h2></div>
+        <div class="chart-wrap"><canvas id="ulTrendChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="ul_users_title">Revenue &amp; lifetime per investor</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="ulUsersCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="ulUsersXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="ul_users_hint">Ordered by the platform's own take (AperD share), highest first. Click a row for that investor's month-by-month, fund-by-fund breakdown. "First/last hold" are snapshot-feed dates and only go back as far as the feed does — use "First buy" and "Holding lifetime" for the real lifetime.</span>
+        <div id="ulUsersTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel hidden" id="ulDetailPanel">
+        <div class="panel-head wrap">
+          <div>
+            <h2 id="ulDetailName">Investor</h2>
+            <span class="hint" id="ulDetailSub"></span>
+          </div>
+          <div class="exp">
+            <button class="btn-ghost" id="ulDetailCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="ulDetailXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <div id="ulDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period_summary">Period summary (all investors)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="ulSummaryCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="ulSummaryXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <div id="ulSummaryTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ===================== CAMPAIGN REVENUE (bonus_portfolios) ===================== -->
+    <section id="campaign-revenue" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <div class="seg" id="crGran">
+              <button data-g="day" data-i18n="common_day">Day</button>
+              <button data-g="week" data-i18n="common_week">Week</button>
+              <button class="on" data-g="month" data-i18n="common_month">Month</button>
+            </div>
+            <label><span data-i18n="range_from">From</span> <input type="date" id="crFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="crTo" /></label>
+            <button id="crApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="filters" style="margin-top:10px">
+          <input type="text" id="crPromo" data-i18n-placeholder="cr_promo_ph" placeholder="Promo code (wildcard)" style="min-width:220px" />
+        </div>
+        <span class="hint" data-i18n="cr_filters_hint">Estimated management-fee revenue earned on the units each promo locked up. A buy settled with a promo code creates a bonus_portfolios row; those units earn a fee while they stay invested. on_going runs to today, redeemed stops at the redemption date, and succeeded runs until the transaction ledger shows those units sold out of the same goal and fund.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="cr_trend">Campaign revenue trend</h2></div>
+        <div class="chart-wrap"><canvas id="crTrendChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="cr_campaigns_title">Per campaign (whole range)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="crCampaignsCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="crCampaignsXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="cr_campaigns_hint">One row per promo code. "Est. cost" is the campaign's bonus payout (bonus amount × used quota), so "Net vs cost" shows whether the fee earned on the locked units covered what the promo paid out.</span>
+        <div id="crCampaignsTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="cr_detail_title">Per campaign, per period</h2>
+          <div class="exp">
+            <select id="crSplitBy" title="Excel sheet split">
+              <option value="" data-i18n="common_xlsx_single_sheet">Excel: single sheet</option>
+              <option value="promo" data-i18n="cr_xlsx_per_promo">Excel: one sheet per campaign</option>
+            </select>
+            <button class="btn-ghost" id="crDetailCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="crDetailXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="cr_detail_hint">"AperD (alt)" is the same revenue under the opposite assumption about which units a sell consumes first — the headline column assumes the campaign's units go first, the alt column assumes they go last. The gap between them is the uncertainty in the estimate.</span>
+        <div id="crDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period_summary">Period summary (all campaigns)</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="crSummaryCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="crSummaryXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <div id="crSummaryTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
     <!-- ===================== REMISIER SHARING (goal_snapshots) ===================== -->
     <section id="remisier" class="view">
       <div class="panel">
@@ -1227,6 +1364,14 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3>💰 Revenue (PWC) / 💹 Revenue (GS)</h3>
           <p data-i18n="docs_revenue_desc">How much revenue/fees Sayakaya itself has earned, broken down by fund and investment manager, from each of the two data sources the platform tracks (PWC and GS).</p>
+        </div>
+        <div class="doc-item">
+          <h3>⏳ User lifetime</h3>
+          <p data-i18n="docs_user_lifetime_desc">The same fee revenue as Revenue (PWC), but answered per investor instead of per fund: what each one earns the platform, next to how long they've been with us — when they registered, when they first bought, and how long they've stayed invested. Click any investor for their month-by-month, fund-by-fund breakdown.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🎯 Campaign revenue</h3>
+          <p data-i18n="docs_campaign_revenue_desc">What each promo campaign earned back. A buy settled with a promo code locks those units up, and this estimates the management fee they earn while they stay invested — until the investor redeems early, or sells them after the holding period ends. Shown next to the campaign's bonus payout so you can see which promos paid for themselves.</p>
         </div>
         <div class="doc-item">
           <h3>🤝 Remisier sharing (GS) / (PWC)</h3>

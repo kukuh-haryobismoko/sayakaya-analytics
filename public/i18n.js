@@ -66,6 +66,8 @@ const I18N = {
     docs_panel_operations: `Operations & Finance`,
     docs_reconciliation_desc: `A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.`,
     docs_revenue_desc: `How much revenue/fees Sayakaya itself has earned, broken down by fund and investment manager, from each of the two data sources the platform tracks (PWC and GS).`,
+    docs_user_lifetime_desc: `The same fee revenue as Revenue (PWC), but answered per investor instead of per fund: what each one earns the platform, next to how long they've been with us — when they registered, when they first bought, and how long they've stayed invested. Click any investor for their month-by-month, fund-by-fund breakdown.`,
+    docs_campaign_revenue_desc: `What each promo campaign earned back. A buy settled with a promo code locks those units up, and this estimates the management fee they earn while they stay invested — until the investor redeems early, or sells them after the holding period ends. Shown next to the campaign's bonus payout so you can see which promos paid for themselves.`,
     docs_predict_desc: `Machine-learning forecasts: projected AUM and transaction volume, which investors are at risk of leaving (churn), and retention trends over time.`,
 
     docs_panel_admin: `Admin (superuser only)`,
@@ -187,6 +189,21 @@ const I18N = {
     rev_detail_hint: `Management fee accrued daily from AUM (portfolio_with_code), split into AperD/MI share, summed per fund per period.`,
     rev2_filters_hint: `Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches.`,
     rev2_detail_hint: `Management fee accrued daily from AUM (goal_snapshots), split into AperD/MI share, summed per fund per period.`,
+
+    ul_sid_ph: `SID (exact, optional)`,
+    ul_filters_hint: `Same daily management-fee accrual as Revenue (PWC), grouped per investor instead of per fund. Money columns cover the selected range; lifetime columns (registered, first buy, holding lifetime) come from the full transaction history, which reaches much further back than the portfolio_with_code feed.`,
+    ul_trend: `Revenue & investors over time`,
+    ul_users_title: `Revenue & lifetime per investor`,
+    ul_users_hint: `Ordered by the platform's own take (AperD share), highest first. Click a row for that investor's month-by-month, fund-by-fund breakdown. "First/last hold" are snapshot-feed dates and only go back as far as the feed does — use "First buy" and "Holding lifetime" for the real lifetime.`,
+
+    cr_promo_ph: `Promo code (wildcard)`,
+    cr_filters_hint: `Estimated management-fee revenue earned on the units each promo locked up. A buy settled with a promo code creates a bonus_portfolios row; those units earn a fee while they stay invested. on_going runs to today, redeemed stops at the redemption date, and succeeded runs until the transaction ledger shows those units sold out of the same goal and fund.`,
+    cr_trend: `Campaign revenue trend`,
+    cr_campaigns_title: `Per campaign (whole range)`,
+    cr_campaigns_hint: `One row per promo code. "Est. cost" is the campaign's bonus payout (bonus amount × used quota), so "Net vs cost" shows whether the fee earned on the locked units covered what the promo paid out.`,
+    cr_detail_title: `Per campaign, per period`,
+    cr_detail_hint: `"AperD (alt)" is the same revenue under the opposite assumption about which units a sell consumes first — the headline column assumes the campaign's units go first, the alt column assumes they go last. The gap between them is the uncertainty in the estimate.`,
+    cr_xlsx_per_promo: `Excel: one sheet per campaign`,
 
     rem_gs_hint: `Remisier's fee is a portion of the AperD share (not the raw management fee) — e.g. Sayakaya 40% / remisier 60% of AperD share.`,
     rem_gs_detail_hint: `Management fee accrued daily from goal_snapshots AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya — summed per fund per period.`,
@@ -343,6 +360,8 @@ const I18N = {
     docs_panel_operations: `Operasional & Keuangan`,
     docs_reconciliation_desc: `Pengecekan harian untuk memastikan angka di berbagai sistem sudah cocok — gunakan ini untuk menangkap selisih sebelum menjadi masalah nyata.`,
     docs_revenue_desc: `Berapa banyak pendapatan/fee yang diperoleh Sayakaya, dirinci per produk dan manajer investasi, dari masing-masing dari dua sumber data yang dilacak platform (PWC dan GS).`,
+    docs_user_lifetime_desc: `Pendapatan fee yang sama seperti Revenue (PWC), tapi dijawab per nasabah, bukan per produk: berapa yang dihasilkan masing-masing untuk platform, berdampingan dengan berapa lama mereka bertahan — kapan mendaftar, kapan pertama membeli, dan berapa lama tetap berinvestasi. Klik nasabah mana pun untuk melihat rinciannya per bulan dan per produk.`,
+    docs_campaign_revenue_desc: `Berapa yang dihasilkan kembali oleh setiap campaign promo. Pembelian yang settle memakai kode promo mengunci unit tersebut, dan bagian ini mengestimasi management fee yang dihasilkan selama unit itu tetap diinvestasikan — sampai nasabah redeem lebih awal, atau menjualnya setelah masa holding berakhir. Ditampilkan bersama biaya bonus campaign sehingga terlihat promo mana yang menutup biayanya sendiri.`,
     docs_predict_desc: `Prediksi berbasis machine learning: proyeksi AUM dan volume transaksi, investor mana yang berisiko keluar (churn), dan tren retensi dari waktu ke waktu.`,
 
     docs_panel_admin: `Admin (khusus superuser)`,
@@ -464,6 +483,21 @@ const I18N = {
     rev_detail_hint: `Management fee yang bertambah harian dari AUM (portfolio_with_code), dibagi menjadi porsi AperD/MI, dijumlahkan per produk per periode.`,
     rev2_filters_hint: `Perhitungan sama seperti Revenue, tapi AUM berasal dari goal_snapshots, bukan mi_fee_logs.portfolio_with_code — tidak perlu koreksi selisih hari, sehingga seharusnya lebih akurat. Dipisahkan dari Revenue untuk perbandingan berdampingan. Toggle Hari/Minggu/Bulan mengatur ukuran bucket tabel dan grafik di bawah. Filter Produk/MI menerima kecocokan sebagian.`,
     rev2_detail_hint: `Management fee yang bertambah harian dari AUM (goal_snapshots), dibagi menjadi porsi AperD/MI, dijumlahkan per produk per periode.`,
+
+    ul_sid_ph: `SID (persis, opsional)`,
+    ul_filters_hint: `Perhitungan management fee harian yang sama seperti Revenue (PWC), tapi dikelompokkan per nasabah, bukan per produk. Kolom uang mengikuti rentang tanggal yang dipilih; kolom lifetime (terdaftar, pembelian pertama, lifetime holding) berasal dari seluruh riwayat transaksi, yang jauh lebih panjang daripada feed portfolio_with_code.`,
+    ul_trend: `Pendapatan & jumlah nasabah dari waktu ke waktu`,
+    ul_users_title: `Pendapatan & lifetime per nasabah`,
+    ul_users_hint: `Diurutkan dari porsi milik platform (porsi AperD) terbesar. Klik satu baris untuk melihat rincian per bulan dan per produk nasabah tersebut. "Holding pertama/terakhir" adalah tanggal dari feed snapshot dan hanya mundur sejauh feed itu ada — gunakan "Pembelian pertama" dan "Lifetime holding" untuk lifetime sebenarnya.`,
+
+    cr_promo_ph: `Kode promo (wildcard)`,
+    cr_filters_hint: `Estimasi pendapatan management fee dari unit yang dikunci setiap promo. Pembelian yang settle memakai kode promo membuat baris bonus_portfolios; unit tersebut menghasilkan fee selama tetap diinvestasikan. Status on_going dihitung sampai hari ini, redeemed berhenti di tanggal redeem, dan succeeded dihitung sampai ledger transaksi menunjukkan unit itu terjual dari goal dan produk yang sama.`,
+    cr_trend: `Tren pendapatan campaign`,
+    cr_campaigns_title: `Per campaign (seluruh rentang)`,
+    cr_campaigns_hint: `Satu baris per kode promo. "Est. biaya" adalah bonus yang dibayarkan campaign (bonus amount × kuota terpakai), sehingga "Net vs biaya" menunjukkan apakah fee dari unit yang dikunci menutup biaya promo tersebut.`,
+    cr_detail_title: `Per campaign, per periode`,
+    cr_detail_hint: `"AperD (alt)" adalah pendapatan yang sama dengan asumsi sebaliknya tentang unit mana yang terjual lebih dulu — kolom utama mengasumsikan unit campaign terjual duluan, kolom alt mengasumsikan terjual terakhir. Selisih keduanya adalah tingkat ketidakpastian estimasi ini.`,
+    cr_xlsx_per_promo: `Excel: satu sheet per campaign`,
 
     rem_gs_hint: `Fee remisier adalah porsi dari porsi AperD (bukan management fee mentah) — mis. Sayakaya 40% / remisier 60% dari porsi AperD.`,
     rem_gs_detail_hint: `Management fee yang bertambah harian dari AUM goal_snapshots, dibagi menjadi porsi AperD/MI, lalu AperD dibagi menjadi porsi remisier/Sayakaya — dijumlahkan per produk per periode.`,

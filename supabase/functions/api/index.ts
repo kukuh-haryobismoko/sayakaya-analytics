@@ -37,6 +37,12 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   revenue_summary: 'revenue',
   revenue_v2_detail: 'revenue2',
   revenue_v2_summary: 'revenue2',
+  user_lifetime_users: 'user-lifetime',
+  user_lifetime_detail: 'user-lifetime',
+  user_lifetime_summary: 'user-lifetime',
+  campaign_revenue_detail: 'campaign-revenue',
+  campaign_revenue_campaigns: 'campaign-revenue',
+  campaign_revenue_summary: 'campaign-revenue',
   remisier_revenue_detail: 'remisier',
   remisier_revenue_summary: 'remisier',
   remisier_revenue_pwc_detail: 'remisier-pwc',
@@ -659,6 +665,38 @@ on('GET', '/api/revenue-v2/summary', requireTab('revenue2', async (_req, _params
   return json(await runQuery(q.sql, q.params));
 }));
 
+// ---- User lifetime: Revenue (PWC) math grouped per investor, plus the
+// lifetime dates (registration / first buy / holding span) around it --------
+on('GET', '/api/user-lifetime', requireTab('user-lifetime', async (_req, _params, url) => {
+  const limit = Math.min(Number(qp(url, 'limit')) || 200, 2000);
+  const q = Q.userLifetimeUsers(qp(url, 'from'), qp(url, 'to'), qp(url, 'fund'), qp(url, 'mi'), qp(url, 'sid'), limit);
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/user-lifetime/summary', requireTab('user-lifetime', async (_req, _params, url) => {
+  const q = Q.userLifetimeSummary(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/user-lifetime/detail', requireTab('user-lifetime', async (_req, _params, url) => {
+  const sid = qp(url, 'sid');
+  if (!sid) return json({ error: 'sid is required.' }, 400);
+  const q = Q.userLifetimeDetail(sid, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- Campaign revenue: management fee earned on promo-locked units --------
+on('GET', '/api/campaign-revenue', requireTab('campaign-revenue', async (_req, _params, url) => {
+  const q = Q.campaignRevenueDetail(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'promo'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/campaign-revenue/campaigns', requireTab('campaign-revenue', async (_req, _params, url) => {
+  const q = Q.campaignRevenueByCampaign(qp(url, 'from'), qp(url, 'to'), qp(url, 'promo'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/campaign-revenue/summary', requireTab('campaign-revenue', async (_req, _params, url) => {
+  const q = Q.campaignRevenueSummary(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'promo'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
 // ---- Remisier sharing: management fee revenue for one remisier's users,
 // from goal_snapshots, split as a portion of the AperD share -----------------
 on('GET', '/api/remisier/users', requireAnyTab(['remisier', 'remisier-pwc'], async (_req, _params, url) => {
@@ -1067,6 +1105,30 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'revenue_v2_summary') {
     const q = Q.revenueV2MonthlySummary(body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'user_lifetime_users') {
+    const q = Q.userLifetimeUsers(body.from as string, body.to as string, body.fund as string, body.mi as string, body.sid as string, limit || 100000);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'user_lifetime_summary') {
+    const q = Q.userLifetimeSummary(body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'user_lifetime_detail') {
+    const sid = body.sid as string;
+    if (!sid) return json({ error: 'sid is required.' }, 400);
+    const q = Q.userLifetimeDetail(sid, body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'campaign_revenue_detail') {
+    const q = Q.campaignRevenueDetail(body.from as string, body.to as string, body.granularity as string, body.promo as string);
+    const detail = await runQuery(q.sql, q.params);
+    if (format === 'xlsx' && body.splitBy === 'promo') {
+      return xlsxMultiResponse(splitRowsBySheet(detail, 'promo_code'), filename, username);
+    }
+    rows = detail;
+  } else if (source === 'campaign_revenue_campaigns') {
+    const q = Q.campaignRevenueByCampaign(body.from as string, body.to as string, body.promo as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'campaign_revenue_summary') {
+    const q = Q.campaignRevenueSummary(body.from as string, body.to as string, body.granularity as string, body.promo as string);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'remisier_revenue_detail' || source === 'remisier_revenue_summary') {
     const code = body.code as string;

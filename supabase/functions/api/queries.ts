@@ -2007,3 +2007,486 @@ export const revenueV2MonthlySummary = (from?: string, to?: string, granularity 
     params,
   };
 };
+
+// ---- User lifetime: the same daily management-fee accrual as Revenue (PWC)
+// above, but grouped per investor instead of per fund, with lifetime dates
+// attached.
+//
+// Why lifetime does NOT come from portfolio_with_code: that table only holds
+// ~216 days of history (it starts 2026-01-14), so MIN(created_at) over it is
+// "first day in the snapshot feed", not "first day this investor held
+// anything". The lifetime columns therefore come from main.transactions (full
+// history back to 2021) and users.created_at, while the money columns come
+// from PWC exactly as Revenue (PWC) computes them. first_hold/last_hold are
+// deliberately labelled as in-range, snapshot-feed dates for that reason.
+//
+// PWC is one row per sid_code + fund + day (verified: 260,628 rows and 260,628
+// distinct sid+fund pairs on 2026-08-15), so pwc.amount is used directly — no
+// GROUP BY is needed to get an investor's per-fund daily AUM, unlike
+// revenueCTEs which must SUM across investors to reach a fund total.
+function userLifetimeCTEs(from?: string, to?: string, fund = '', mi = '', sid = '') {
+  const r = range(from, to);
+  return {
+    cte: `WITH latest_mgmt_fee AS (
+        SELECT management_fee_id, management_fee, aperd_share, mi_share
+        FROM (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY management_fee_id ORDER BY updated_at DESC) AS rn
+          FROM ${MGMT_FEE_LOGS}
+        ) t
+        WHERE rn = 1
+      ),
+      daily AS (
+        SELECT
+          DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) AS created_date,
+          pwc.sid_code,
+          pwc.id AS fund_id,
+          f.name AS fund_name,
+          f.sinvest_code,
+          COALESCE(im.common_name, im.name) AS mi_name,
+          pwc.amount AS aum,
+          lmf.management_fee,
+          lmf.aperd_share,
+          lmf.mi_share
+        FROM ${PORT_WITH_CODE} pwc
+        LEFT JOIN ${FUNDS} f ON pwc.id = f.id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+        LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
+        WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) BETWEEN @from AND @to
+          AND pwc.sid_code IS NOT NULL
+          AND (@sid = '' OR pwc.sid_code = @sid)
+          AND ${FUND_MI_FILTER_SQL}
+      ),
+      daily_fee AS (
+        SELECT *,
+          (management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(created_date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(created_date, YEAR), DAY) AS management_fee_per_day,
+          aperd_share * ((management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(created_date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(created_date, YEAR), DAY)) AS aperd_share_per_day,
+          mi_share * ((management_fee * aum) / DATE_DIFF(
+            DATE_ADD(DATE_TRUNC(created_date, YEAR), INTERVAL 1 YEAR),
+            DATE_TRUNC(created_date, YEAR), DAY)) AS mi_share_per_day
+        FROM daily
+      )`,
+    params: { ...r, fund, mi, sid },
+  };
+}
+
+// Lifetime dates from the full transaction ledger — deliberately unfiltered by
+// @from/@to, since a lifetime that only counted the selected window would not
+// be a lifetime. Kept as its own CTE so both the per-user table and the
+// per-user drill-down can reuse it.
+const TX_LIFE_CTE = `tx_life AS (
+    SELECT user_id,
+      MIN(DATE(created_at)) AS first_tx,
+      MAX(DATE(created_at)) AS last_tx,
+      MIN(IF(type IN ('buy','SWITCH_IN','reinvestment','transfer_in'), DATE(created_at), NULL)) AS first_buy,
+      MAX(IF(type IN ('sell','SWITCH_OUT','transfer_out','liquidation'), DATE(created_at), NULL)) AS last_sell,
+      COUNT(*) AS tx_count,
+      SUM(IF(type = 'buy', amount, 0)) AS total_invested
+    FROM ${TX}
+    WHERE status IN ('completed','completed_payment','verified')
+    GROUP BY user_id
+  )`;
+
+// Per-investor table. Ordered by the platform's own take (AperD share) so the
+// LIMIT keeps the investors that actually matter to revenue.
+//
+// holding_lifetime_days runs from the investor's first buy to today when they
+// still show up in the snapshot feed (last_hold within 3 days of today, which
+// absorbs the feed's normal 1-2 day lag), otherwise to their last sell — i.e.
+// "how long have they been invested", not "how long has the feed seen them".
+export const userLifetimeUsers = (from?: string, to?: string, fund = '', mi = '', sid = '', limit: number | string = 200): Query => {
+  const { cte, params } = userLifetimeCTEs(from, to, fund, mi, sid);
+  return {
+    sql: `${cte},
+      ${TX_LIFE_CTE},
+      per_user AS (
+        SELECT sid_code,
+          MIN(created_date) AS first_hold,
+          MAX(created_date) AS last_hold,
+          COUNT(DISTINCT created_date) AS active_days,
+          COUNT(DISTINCT fund_id) AS funds,
+          SUM(management_fee_per_day) AS total_management_fee,
+          SUM(aperd_share_per_day) AS total_aperd_share,
+          SUM(mi_share_per_day) AS total_mi_share
+        FROM daily_fee
+        GROUP BY sid_code
+      ),
+      user_day_aum AS (
+        SELECT sid_code, created_date, SUM(aum) AS day_total
+        FROM daily_fee
+        GROUP BY sid_code, created_date
+      ),
+      aum_stats AS (
+        SELECT sid_code,
+          AVG(day_total) AS avg_aum,
+          ARRAY_AGG(day_total ORDER BY created_date DESC LIMIT 1)[OFFSET(0)] AS last_aum
+        FROM user_day_aum
+        GROUP BY sid_code
+      )
+      SELECT
+        pu.sid_code, up.name, u.email,
+        DATE(u.created_at) AS registered_at,
+        t.first_tx, t.first_buy, t.last_tx, t.tx_count, t.total_invested,
+        pu.first_hold, pu.last_hold, pu.active_days, pu.funds,
+        DATE_DIFF(CURRENT_DATE(), DATE(u.created_at), DAY) AS account_age_days,
+        DATE_DIFF(t.first_buy, DATE(u.created_at), DAY) AS days_to_first_buy,
+        DATE_DIFF(t.last_tx, t.first_tx, DAY) + 1 AS tx_span_days,
+        DATE_DIFF(
+          IF(pu.last_hold >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY),
+             CURRENT_DATE(), COALESCE(t.last_sell, pu.last_hold)),
+          t.first_buy, DAY) + 1 AS holding_lifetime_days,
+        a.avg_aum, a.last_aum,
+        pu.total_management_fee, pu.total_aperd_share, pu.total_mi_share
+      FROM per_user pu
+      JOIN aum_stats a ON a.sid_code = pu.sid_code
+      JOIN ${USERS} u ON u.sid_code = pu.sid_code
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      LEFT JOIN tx_life t ON t.user_id = u.id
+      ORDER BY pu.total_aperd_share DESC
+      LIMIT @limit`,
+    params: { ...params, limit: parseInt(String(limit), 10) || 200 },
+  };
+};
+
+// Drill-down for one investor: per period, per fund. @sid is required by the
+// route — without it this would aggregate the whole platform per fund.
+export const userLifetimeDetail = (sid: string, from?: string, to?: string, granularity = 'month', fund = '', mi = ''): Query => {
+  const { cte, params } = userLifetimeCTEs(from, to, fund, mi, sid);
+  const part = granularityPart(granularity);
+  return {
+    sql: `${cte}
+      SELECT
+        DATE_TRUNC(created_date, ${part}) AS period,
+        fund_id,
+        ANY_VALUE(fund_name) AS fund_name,
+        ANY_VALUE(sinvest_code) AS sinvest_code,
+        ANY_VALUE(mi_name) AS mi_name,
+        ANY_VALUE(management_fee) AS management_fee,
+        COUNT(DISTINCT created_date) AS days_running,
+        AVG(aum) AS avg_aum,
+        ARRAY_AGG(aum ORDER BY created_date DESC LIMIT 1)[OFFSET(0)] AS aum_eop,
+        SUM(management_fee_per_day) AS total_management_fee,
+        SUM(aperd_share_per_day) AS total_aperd_share,
+        SUM(mi_share_per_day) AS total_mi_share
+      FROM daily_fee
+      GROUP BY period, fund_id
+      ORDER BY period, fund_name`,
+    params,
+  };
+};
+
+// Platform-wide per-period rollup for the trend chart. avg_aum is the average
+// of each day's platform-wide total, matching revenueMonthlySummary.
+export const userLifetimeSummary = (from?: string, to?: string, granularity = 'month', fund = '', mi = ''): Query => {
+  const { cte, params } = userLifetimeCTEs(from, to, fund, mi, '');
+  const part = granularityPart(granularity);
+  return {
+    sql: `${cte},
+      daily_platform AS (
+        SELECT created_date, SUM(aum) AS platform_aum, COUNT(DISTINCT sid_code) AS investors
+        FROM daily_fee
+        GROUP BY created_date
+      ),
+      period_daily AS (
+        SELECT DATE_TRUNC(created_date, ${part}) AS period,
+          AVG(platform_aum) AS avg_aum, MAX(investors) AS peak_investors
+        FROM daily_platform
+        GROUP BY period
+      ),
+      per_period AS (
+        SELECT DATE_TRUNC(created_date, ${part}) AS period,
+          COUNT(DISTINCT sid_code) AS investors,
+          COUNT(DISTINCT created_date) AS days_running,
+          SUM(management_fee_per_day) AS total_management_fee,
+          SUM(aperd_share_per_day) AS total_aperd_share,
+          SUM(mi_share_per_day) AS total_mi_share
+        FROM daily_fee
+        GROUP BY period
+      )
+      SELECT pp.period, pp.investors, pp.days_running, pd.avg_aum, pd.peak_investors,
+        SAFE_DIVIDE(pp.total_aperd_share, pp.investors) AS aperd_per_investor,
+        pp.total_management_fee, pp.total_aperd_share, pp.total_mi_share
+      FROM per_period pp
+      JOIN period_daily pd ON pd.period = pp.period
+      ORDER BY pp.period`,
+    params,
+  };
+};
+
+// ---- Campaign revenue: management fee earned on units locked by a promo -----
+//
+// main.bonus_portfolios is one row per promo participation: the units a buy
+// transaction locked under a campaign's holding period (verified — for promo
+// THRCUAN, bonus_portfolios.unit equals the qualifying buy's unit exactly, and
+// campaigns.bonus_amount is paid out separately as its own later buy). Status
+// drives the window over which those units earn a fee:
+//
+//   on_going  — still locked: created_at .. today
+//   redeemed  — pulled out early:  created_at .. redeemed_at
+//   succeeded — holding period cleared and the units merged back into
+//               main.portfolios, which stores only a live unit balance with no
+//               history. So "are they still held?" is answered from the
+//               transaction ledger instead: any sell/switch-out on the same
+//               goal_id + fund_id after the lock date eats into the locked
+//               units. Verified against goal 07f81095 / fund GgT-hq…: 3935.6324
+//               units locked 2026-03-12, sold in full 2026-07-07, and the
+//               computed remaining unit drops to 0 on exactly that date.
+//
+// Two attributions of a sell are produced side by side, because which one is
+// right is a business call rather than a data one:
+//   unit_a — sells consume campaign units FIRST (conservative; this is the rule
+//            as originally specified: "jika unit berkurang sejumlah unit dari
+//            bonus_portfolios maka stop"). Drives the headline columns.
+//   unit_b — sells consume the investor's own units first, campaign units last
+//            (optimistic). Surfaced as *_alt so the two can be compared.
+function campaignRevenueCTEs(from?: string, to?: string, promo = '') {
+  const r = range(from, to);
+  return {
+    cte: `WITH latest_mgmt_fee AS (
+        SELECT management_fee_id, management_fee, aperd_share, mi_share
+        FROM (
+          SELECT *, ROW_NUMBER() OVER (PARTITION BY management_fee_id ORDER BY updated_at DESC) AS rn
+          FROM ${MGMT_FEE_LOGS}
+        ) t
+        WHERE rn = 1
+      ),
+      bonus AS (
+        SELECT bp.id AS bonus_id, bp.promo_code, bp.goal_id, bp.fund_id, bp.user_id, bp.status,
+          CAST(bp.unit AS NUMERIC) AS bonus_unit,
+          DATE(bp.created_at) AS start_d,
+          CASE WHEN bp.status = 'redeemed' THEN DATE(bp.redeemed_at) ELSE CURRENT_DATE() END AS end_d
+        FROM ${BONUS_PORT} bp
+        WHERE bp.promo_code IS NOT NULL AND bp.unit > 0
+          AND (@promo = '' OR UPPER(bp.promo_code) LIKE CONCAT('%', UPPER(@promo), '%'))
+      ),
+      win AS (
+        SELECT b.*,
+          GREATEST(b.start_d, @from) AS win_from,
+          LEAST(COALESCE(b.end_d, CURRENT_DATE()), @to, CURRENT_DATE()) AS win_to
+        FROM bonus b
+      ),
+      -- Net unit movement per goal + fund per day, from the ledger only:
+      -- a promo lock is not a transaction, so this never double-counts it.
+      flow AS (
+        SELECT goal_id, fund_id, DATE(created_at) AS d,
+          SUM(IF(type IN ('sell','SWITCH_OUT','transfer_out','liquidation','unit_adjustment'), CAST(unit AS NUMERIC), 0)) AS sold,
+          SUM(IF(type IN ('buy','SWITCH_IN','reinvestment','transfer_in'), CAST(unit AS NUMERIC), 0)) AS bought
+        FROM ${TX}
+        WHERE status IN ('completed','completed_payment','verified') AND goal_id IS NOT NULL
+        GROUP BY goal_id, fund_id, d
+      ),
+      cum AS (
+        SELECT goal_id, fund_id, d,
+          SUM(sold) OVER (PARTITION BY goal_id, fund_id ORDER BY d) AS cum_sold,
+          SUM(bought) OVER (PARTITION BY goal_id, fund_id ORDER BY d) AS cum_bought
+        FROM flow
+      ),
+      -- Ledger position at the lock date and at the start of the requested
+      -- window. The window baseline is what seeds the forward-fill below when
+      -- @from lands after the lock date and the first day carries no ledger row.
+      base AS (
+        SELECT w.bonus_id,
+          COALESCE(SUM(IF(f.d <= w.start_d,  f.sold,   0)), 0) AS sold_at_start,
+          COALESCE(SUM(IF(f.d <= w.win_from, f.sold,   0)), 0) AS sold_at_winfrom,
+          COALESCE(SUM(IF(f.d <= w.start_d,  f.bought, 0)), 0) AS bought_at_start,
+          COALESCE(SUM(IF(f.d <= w.win_from, f.bought, 0)), 0) AS bought_at_winfrom
+        FROM win w
+        LEFT JOIN flow f ON f.goal_id = w.goal_id AND f.fund_id = w.fund_id
+        WHERE w.win_from <= w.win_to
+        GROUP BY w.bonus_id
+      ),
+      days AS (
+        SELECT w.bonus_id, w.promo_code, w.goal_id, w.fund_id, w.user_id, w.status, w.bonus_unit,
+          w.start_d, d,
+          b.sold_at_start, b.sold_at_winfrom, b.bought_at_start, b.bought_at_winfrom
+        FROM win w
+        JOIN base b ON b.bonus_id = w.bonus_id,
+        UNNEST(GENERATE_DATE_ARRAY(w.win_from, w.win_to)) AS d
+      ),
+      filled AS (
+        SELECT dd.*,
+          COALESCE(LAST_VALUE(c.cum_sold   IGNORE NULLS) OVER (PARTITION BY dd.bonus_id ORDER BY dd.d), dd.sold_at_winfrom)   AS cs,
+          COALESCE(LAST_VALUE(c.cum_bought IGNORE NULLS) OVER (PARTITION BY dd.bonus_id ORDER BY dd.d), dd.bought_at_winfrom) AS cb
+        FROM days dd
+        LEFT JOIN cum c ON c.goal_id = dd.goal_id AND c.fund_id = dd.fund_id AND c.d = dd.d
+      ),
+      held AS (
+        SELECT bonus_id, promo_code, fund_id, user_id, status, d, bonus_unit, start_d,
+          IF(status = 'succeeded',
+             GREATEST(bonus_unit - (cs - sold_at_start), 0),
+             bonus_unit) AS unit_a,
+          IF(status = 'succeeded',
+             LEAST(bonus_unit, GREATEST(bonus_unit + (cb - bought_at_start) - (cs - sold_at_start), 0)),
+             bonus_unit) AS unit_b
+        FROM filled
+      ),
+      nav_pts AS (
+        SELECT product_id AS fund_id, DATE(created_at) AS d, MAX(value) AS nav
+        FROM ${SNAPSHOTS} WHERE type = 'NAV'
+        GROUP BY fund_id, d
+      ),
+      -- NAV only exists on trading days, but the fee accrues every calendar
+      -- day, so the last known NAV is carried forward. Generated from 2021 so
+      -- the fill always has a seed regardless of @from; ~77 promo funds x ~2k
+      -- days, which is negligible next to the ledger scan.
+      nav_daily AS (
+        SELECT fund_id, d, LAST_VALUE(nav IGNORE NULLS) OVER (PARTITION BY fund_id ORDER BY d) AS nav
+        FROM (
+          SELECT bf.fund_id, gd AS d, n.nav
+          FROM (SELECT DISTINCT fund_id FROM bonus) bf
+          CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(DATE '2021-01-01', LEAST(@to, CURRENT_DATE()))) AS gd
+          LEFT JOIN nav_pts n ON n.fund_id = bf.fund_id AND n.d = gd
+        )
+      ),
+      priced AS (
+        SELECT h.bonus_id, h.promo_code, h.fund_id, h.user_id, h.status, h.d, h.bonus_unit, h.start_d,
+          h.unit_a, h.unit_b,
+          f.name AS fund_name,
+          COALESCE(im.common_name, im.name) AS mi_name,
+          h.unit_a * COALESCE(nd.nav, f.latest_nav_value) AS aum_a,
+          h.unit_b * COALESCE(nd.nav, f.latest_nav_value) AS aum_b,
+          lmf.management_fee, lmf.aperd_share, lmf.mi_share,
+          DATE_DIFF(DATE_ADD(DATE_TRUNC(h.d, YEAR), INTERVAL 1 YEAR), DATE_TRUNC(h.d, YEAR), DAY) AS year_days
+        FROM held h
+        LEFT JOIN ${FUNDS} f ON f.id = h.fund_id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+        LEFT JOIN nav_daily nd ON nd.fund_id = h.fund_id AND nd.d = h.d
+        LEFT JOIN latest_mgmt_fee lmf ON lmf.management_fee_id = h.fund_id
+      ),
+      fees AS (
+        SELECT *,
+          management_fee * aum_a / year_days AS management_fee_per_day,
+          aperd_share * management_fee * aum_a / year_days AS aperd_share_per_day,
+          mi_share * management_fee * aum_a / year_days AS mi_share_per_day,
+          aperd_share * management_fee * aum_b / year_days AS aperd_share_per_day_alt
+        FROM priced
+      )`,
+    params: { ...r, promo },
+  };
+}
+
+// Per campaign, per period — the detail table.
+export const campaignRevenueDetail = (from?: string, to?: string, granularity = 'month', promo = ''): Query => {
+  const { cte, params } = campaignRevenueCTEs(from, to, promo);
+  const part = granularityPart(granularity);
+  return {
+    // avg_aum/avg_units are the average of each *day's* campaign-wide total,
+    // not an average over bonus-days — otherwise a campaign with many small
+    // participations would report the size of a single participation.
+    sql: `${cte},
+      daily_promo AS (
+        SELECT promo_code, d, SUM(aum_a) AS day_aum, SUM(unit_a) AS day_units
+        FROM fees
+        GROUP BY promo_code, d
+      ),
+      period_promo_daily AS (
+        SELECT promo_code, DATE_TRUNC(d, ${part}) AS period,
+          AVG(day_aum) AS avg_aum, AVG(day_units) AS avg_units
+        FROM daily_promo
+        GROUP BY promo_code, period
+      ),
+      period_promo AS (
+        SELECT DATE_TRUNC(d, ${part}) AS period, promo_code,
+          COUNT(DISTINCT bonus_id) AS participations,
+          COUNT(DISTINCT user_id) AS investors,
+          COUNT(DISTINCT fund_id) AS funds,
+          COUNT(DISTINCT d) AS days_running,
+          COUNT(DISTINCT IF(status = 'on_going', bonus_id, NULL)) AS still_locked,
+          SUM(management_fee_per_day) AS total_management_fee,
+          SUM(aperd_share_per_day) AS total_aperd_share,
+          SUM(mi_share_per_day) AS total_mi_share,
+          SUM(aperd_share_per_day_alt) AS total_aperd_share_alt
+        FROM fees
+        GROUP BY period, promo_code
+      )
+      SELECT pp.period, pp.promo_code, c.name AS campaign_name,
+        pp.participations, pp.investors, pp.funds, pp.days_running, pp.still_locked,
+        pd.avg_units, pd.avg_aum,
+        pp.total_management_fee, pp.total_aperd_share, pp.total_mi_share,
+        pp.total_aperd_share_alt
+      FROM period_promo pp
+      JOIN period_promo_daily pd ON pd.promo_code = pp.promo_code AND pd.period = pp.period
+      LEFT JOIN ${CAMPAIGNS} c ON c.promo_code = pp.promo_code AND c.deleted_at IS NULL
+      ORDER BY pp.period, pp.total_aperd_share DESC`,
+    params,
+  };
+};
+
+// One row per campaign across the whole range — the "which promo actually paid
+// for itself" table. est_cost mirrors the Growth tab's campaign cost estimate
+// (bonus_amount x used_quota) so revenue and cost sit side by side.
+export const campaignRevenueByCampaign = (from?: string, to?: string, promo = ''): Query => {
+  const { cte, params } = campaignRevenueCTEs(from, to, promo);
+  return {
+    sql: `${cte},
+      per_campaign AS (
+        SELECT promo_code,
+          COUNT(DISTINCT bonus_id) AS participations,
+          COUNT(DISTINCT user_id) AS investors,
+          COUNT(DISTINCT fund_id) AS funds,
+          MIN(start_d) AS first_lock,
+          MAX(d) AS last_day,
+          COUNT(DISTINCT d) AS days_running,
+          COUNT(DISTINCT IF(status = 'on_going', bonus_id, NULL)) AS still_locked,
+          SUM(management_fee_per_day) AS total_management_fee,
+          SUM(aperd_share_per_day) AS total_aperd_share,
+          SUM(mi_share_per_day) AS total_mi_share,
+          SUM(aperd_share_per_day_alt) AS total_aperd_share_alt
+        FROM fees
+        GROUP BY promo_code
+      )
+      SELECT pc.promo_code,
+        c.name AS campaign_name, c.campaign_type,
+        c.start_date, c.end_date, c.holding_date,
+        pc.participations, pc.investors, pc.funds,
+        pc.first_lock, pc.last_day, pc.days_running, pc.still_locked,
+        c.bonus_amount, c.used_quota,
+        c.bonus_amount * c.used_quota AS est_cost,
+        pc.total_management_fee, pc.total_aperd_share, pc.total_mi_share,
+        pc.total_aperd_share_alt,
+        pc.total_aperd_share - COALESCE(c.bonus_amount * c.used_quota, 0) AS net_vs_cost
+      FROM per_campaign pc
+      LEFT JOIN ${CAMPAIGNS} c ON c.promo_code = pc.promo_code AND c.deleted_at IS NULL
+      ORDER BY pc.total_aperd_share DESC`,
+    params,
+  };
+};
+
+// All campaigns rolled up per period — drives the trend chart.
+export const campaignRevenueSummary = (from?: string, to?: string, granularity = 'month', promo = ''): Query => {
+  const { cte, params } = campaignRevenueCTEs(from, to, promo);
+  const part = granularityPart(granularity);
+  return {
+    sql: `${cte},
+      daily_platform AS (
+        SELECT d, SUM(aum_a) AS platform_aum, COUNT(DISTINCT bonus_id) AS participations
+        FROM fees GROUP BY d
+      ),
+      period_daily AS (
+        SELECT DATE_TRUNC(d, ${part}) AS period, AVG(platform_aum) AS avg_aum
+        FROM daily_platform GROUP BY period
+      ),
+      per_period AS (
+        SELECT DATE_TRUNC(d, ${part}) AS period,
+          COUNT(DISTINCT promo_code) AS campaigns,
+          COUNT(DISTINCT bonus_id) AS participations,
+          COUNT(DISTINCT user_id) AS investors,
+          COUNT(DISTINCT d) AS days_running,
+          SUM(management_fee_per_day) AS total_management_fee,
+          SUM(aperd_share_per_day) AS total_aperd_share,
+          SUM(mi_share_per_day) AS total_mi_share,
+          SUM(aperd_share_per_day_alt) AS total_aperd_share_alt
+        FROM fees GROUP BY period
+      )
+      SELECT pp.period, pp.campaigns, pp.participations, pp.investors, pp.days_running,
+        pd.avg_aum, pp.total_management_fee, pp.total_aperd_share, pp.total_mi_share,
+        pp.total_aperd_share_alt
+      FROM per_period pp
+      JOIN period_daily pd ON pd.period = pp.period
+      ORDER BY pp.period`,
+    params,
+  };
+};

@@ -80,6 +80,16 @@ function revRange() {
 function rev2Range() {
   return { from: $('#rev2From').value, to: $('#rev2To').value, fund: $('#rev2Fund').value.trim(), mi: $('#rev2Mi').value.trim() };
 }
+function ulRange() {
+  return {
+    from: $('#ulFrom').value, to: $('#ulTo').value,
+    fund: $('#ulFund').value.trim(), mi: $('#ulMi').value.trim(),
+    sid: $('#ulSid').value.trim(), limit: Number($('#ulLimit').value) || 200,
+  };
+}
+function crRange() {
+  return { from: $('#crFrom').value, to: $('#crTo').value, promo: $('#crPromo').value.trim() };
+}
 
 // ---------- chart palette (theme-aware: read from CSS custom properties) ----------
 function readThemeColors() {
@@ -1597,6 +1607,220 @@ async function loadRevenue2() {
 }
 
 // ====================================================================
+//  USER LIFETIME (Revenue (PWC) math per investor + lifetime dates)
+// ====================================================================
+let ulGran = 'month';
+let ulLoaded = false;
+let ulSelected = null; // { sid, name } — used by the drill-down + its exports
+
+function renderUlTrend(rows) {
+  const C = readThemeColors();
+  makeChart('ulTrendChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((d) => val(d.period)),
+      datasets: [
+        { label: 'AperD share', data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, order: 2 },
+        { label: 'Investors', data: rows.map((d) => Number(val(d.investors))), type: 'line', yAxisID: 'y1',
+          borderColor: C.indigo, backgroundColor: C.indigo, tension: .3, pointRadius: 2, order: 1 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (v) => num(v) } },
+        x: { grid: { display: false } },
+      },
+      plugins: { legend: { position: 'bottom' } },
+    },
+  });
+}
+
+const UL_USER_COLS = [
+  { key: 'sid_code', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+  { key: 'registered_at', label: 'Registered', type: 'date' },
+  { key: 'first_buy', label: 'First buy', type: 'date' },
+  { key: 'last_tx', label: 'Last transaction', type: 'date' },
+  { key: 'account_age_days', label: 'Account age (d)', type: 'num' },
+  { key: 'days_to_first_buy', label: 'Days to first buy', type: 'num' },
+  { key: 'tx_span_days', label: 'Transacting span (d)', type: 'num' },
+  { key: 'holding_lifetime_days', label: 'Holding lifetime (d)', type: 'num' },
+  { key: 'tx_count', label: 'Transactions', type: 'num' },
+  { key: 'total_invested', label: 'Lifetime invested', type: 'idr' },
+  { key: 'first_hold', label: 'First hold (feed)', type: 'date' },
+  { key: 'last_hold', label: 'Last hold (feed)', type: 'date' },
+  { key: 'active_days', label: 'Days in range', type: 'num' },
+  { key: 'funds', label: 'Funds', type: 'num' },
+  { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'last_aum', label: 'Latest AUM', type: 'idr' },
+  { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+  { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
+  { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+];
+
+// Same markup genTable produces, plus a clickable row carrying the SID — the
+// drill-down needs one extra query per investor, so it is not prefetched.
+function renderUlUsers(rows) {
+  genTable('#ulUsersTable', rows, UL_USER_COLS, 'No investor holdings in this range.');
+  const tbody = $('#ulUsersTable tbody');
+  if (!tbody) return;
+  Array.from(tbody.rows).forEach((tr, i) => {
+    const r = rows[i];
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', () => loadUlDetail(val(r.sid_code), val(r.name) || val(r.sid_code)));
+  });
+}
+
+async function loadUlDetail(sid, name) {
+  const r = ulRange();
+  ulSelected = { sid, name };
+  $('#ulDetailPanel').classList.remove('hidden');
+  $('#ulDetailName').textContent = name;
+  $('#ulDetailSub').textContent = `SID ${sid} · ${r.from} → ${r.to}`;
+  $('#ulDetailTable').innerHTML = '<div class="loading">Loading breakdown…</div>';
+  try {
+    const rows = await api(`/api/user-lifetime/detail?sid=${encodeURIComponent(sid)}&from=${r.from}&to=${r.to}&granularity=${ulGran}&fund=${encodeURIComponent(r.fund)}&mi=${encodeURIComponent(r.mi)}`);
+    genTable('#ulDetailTable', rows, [
+      { key: 'period', label: 'Period', type: 'date' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'mi_name', label: 'Investment Manager' },
+      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
+      { key: 'days_running', label: 'Days', type: 'num' },
+      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eop', label: 'AUM end of period', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+    ], 'No holdings for this investor in this range.');
+  } catch (e) { $('#ulDetailTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+async function loadUserLifetime() {
+  const r = ulRange();
+  ulSelected = null;
+  $('#ulDetailPanel').classList.add('hidden');
+  $('#ulUsersTable').innerHTML = '<div class="loading">Computing per-investor revenue…</div>';
+  $('#ulSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  const qs = `from=${r.from}&to=${r.to}&fund=${encodeURIComponent(r.fund)}&mi=${encodeURIComponent(r.mi)}`;
+  try {
+    const [users, summary] = await Promise.all([
+      api(`/api/user-lifetime?${qs}&sid=${encodeURIComponent(r.sid)}&limit=${r.limit}`),
+      api(`/api/user-lifetime/summary?${qs}&granularity=${ulGran}`),
+    ]);
+    renderUlTrend(summary);
+    renderUlUsers(users);
+    genTable('#ulSummaryTable', summary, [
+      { key: 'period', label: 'Period', type: 'date' },
+      { key: 'investors', label: 'Investors', type: 'num' },
+      { key: 'days_running', label: 'Days', type: 'num' },
+      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
+      { key: 'aperd_per_investor', label: 'AperD per investor', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+    ], 'No revenue in this range.');
+  } catch (e) {
+    $('#ulUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#ulSummaryTable').innerHTML = '';
+  }
+}
+
+// ====================================================================
+//  CAMPAIGN REVENUE (management fee earned on promo-locked units)
+// ====================================================================
+let crGran = 'month';
+let crLoaded = false;
+
+function renderCrTrend(rows) {
+  const C = readThemeColors();
+  makeChart('crTrendChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((d) => val(d.period)),
+      datasets: [
+        { label: 'AperD share', data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, order: 2 },
+        { label: 'AperD share (alt)', data: rows.map((d) => Number(val(d.total_aperd_share_alt))), backgroundColor: C.amber, borderRadius: 4, order: 2 },
+        { label: 'Locked AUM', data: rows.map((d) => Number(val(d.avg_aum))), type: 'line', yAxisID: 'y1',
+          borderColor: C.indigo, backgroundColor: C.indigo, tension: .3, pointRadius: 2, order: 1 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+        y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (v) => idr(v) } },
+        x: { grid: { display: false } },
+      },
+      plugins: { legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${idrFull(c.raw)}` } } },
+    },
+  });
+}
+
+async function loadCampaignRevenue() {
+  const r = crRange();
+  ['#crCampaignsTable', '#crDetailTable', '#crSummaryTable'].forEach((s) =>
+    $(s).innerHTML = '<div class="loading">Computing campaign revenue…</div>');
+  const qs = `from=${r.from}&to=${r.to}&promo=${encodeURIComponent(r.promo)}`;
+  try {
+    const [campaigns, detail, summary] = await Promise.all([
+      api(`/api/campaign-revenue/campaigns?${qs}`),
+      api(`/api/campaign-revenue?${qs}&granularity=${crGran}`),
+      api(`/api/campaign-revenue/summary?${qs}&granularity=${crGran}`),
+    ]);
+    renderCrTrend(summary);
+    genTable('#crCampaignsTable', campaigns, [
+      { key: 'promo_code', label: 'Promo' }, { key: 'campaign_name', label: 'Campaign' },
+      { key: 'campaign_type', label: 'Type' },
+      { key: 'start_date', label: 'Starts', type: 'date' }, { key: 'end_date', label: 'Ends', type: 'date' },
+      { key: 'holding_date', label: 'Holding until', type: 'date' },
+      { key: 'participations', label: 'Participations', type: 'num' },
+      { key: 'investors', label: 'Investors', type: 'num' },
+      { key: 'still_locked', label: 'Still locked', type: 'num' },
+      { key: 'funds', label: 'Funds', type: 'num' },
+      { key: 'first_lock', label: 'First lock', type: 'date' },
+      { key: 'days_running', label: 'Days', type: 'num' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
+      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr' },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'est_cost', label: 'Est. cost', type: 'idr' },
+      { key: 'net_vs_cost', label: 'Net vs cost', type: 'idr' },
+    ], 'No campaign holdings in this range.');
+    genTable('#crDetailTable', detail, [
+      { key: 'period', label: 'Period', type: 'date' },
+      { key: 'promo_code', label: 'Promo' }, { key: 'campaign_name', label: 'Campaign' },
+      { key: 'participations', label: 'Participations', type: 'num' },
+      { key: 'investors', label: 'Investors', type: 'num' },
+      { key: 'still_locked', label: 'Still locked', type: 'num' },
+      { key: 'funds', label: 'Funds', type: 'num' },
+      { key: 'days_running', label: 'Days', type: 'num' },
+      { key: 'avg_units', label: 'Avg units', type: 'num' },
+      { key: 'avg_aum', label: 'Avg locked AUM', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
+      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr' },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+    ], 'No campaign holdings in this range.');
+    genTable('#crSummaryTable', summary, [
+      { key: 'period', label: 'Period', type: 'date' },
+      { key: 'campaigns', label: 'Campaigns', type: 'num' },
+      { key: 'participations', label: 'Participations', type: 'num' },
+      { key: 'investors', label: 'Investors', type: 'num' },
+      { key: 'days_running', label: 'Days', type: 'num' },
+      { key: 'avg_aum', label: 'Avg locked AUM', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
+      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr' },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+    ], 'No campaign holdings in this range.');
+  } catch (e) {
+    $('#crCampaignsTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#crDetailTable').innerHTML = '';
+    $('#crSummaryTable').innerHTML = '';
+  }
+}
+
+// ====================================================================
 //  REMISIER SHARING (goal_snapshots — one remisier's users, AperD share
 //  split between remisier and Sayakaya)
 // ====================================================================
@@ -2693,6 +2917,11 @@ function switchTab(name) {
   if (name === 'sinvest-tx' && !sitxLoaded) loadSitx();
   if (name === 'revenue') loadRevenue();
   if (name === 'revenue2') loadRevenue2();
+  // Both are loaded once per session rather than on every visit: User lifetime
+  // scans ~3.7 GB of portfolio_with_code per run (the table is unpartitioned,
+  // so the date filter prunes nothing). Apply re-runs them on demand.
+  if (name === 'user-lifetime' && !ulLoaded) { ulLoaded = true; loadUserLifetime(); }
+  if (name === 'campaign-revenue' && !crLoaded) { crLoaded = true; loadCampaignRevenue(); }
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
   if (name === 'hnwi') loadHnwi();
@@ -3075,6 +3304,34 @@ function wire() {
   $('#rev2SummaryCsv').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'csv', filename: 'revenue_v2_summary', ...r, granularity: rev2Gran }, 'revenue_v2_summary.csv'); });
   $('#rev2SummaryXlsx').addEventListener('click', () => { const r = rev2Range(); download({ source: 'revenue_v2_summary', format: 'xlsx', filename: 'revenue_v2_summary', ...r, granularity: rev2Gran }, 'revenue_v2_summary.xlsx'); });
 
+  // user lifetime
+  $('#ulApply').addEventListener('click', loadUserLifetime);
+  $('#ulGran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#ulGran button').forEach((x) => x.classList.toggle('on', x === b));
+    ulGran = b.dataset.g; loadUserLifetime();
+  });
+  $('#ulUsersCsv').addEventListener('click', () => { const r = ulRange(); download({ source: 'user_lifetime_users', format: 'csv', filename: 'user_lifetime', ...r }, 'user_lifetime.csv'); });
+  $('#ulUsersXlsx').addEventListener('click', () => { const r = ulRange(); download({ source: 'user_lifetime_users', format: 'xlsx', filename: 'user_lifetime', ...r }, 'user_lifetime.xlsx'); });
+  $('#ulSummaryCsv').addEventListener('click', () => { const r = ulRange(); download({ source: 'user_lifetime_summary', format: 'csv', filename: 'user_lifetime_summary', ...r, granularity: ulGran }, 'user_lifetime_summary.csv'); });
+  $('#ulSummaryXlsx').addEventListener('click', () => { const r = ulRange(); download({ source: 'user_lifetime_summary', format: 'xlsx', filename: 'user_lifetime_summary', ...r, granularity: ulGran }, 'user_lifetime_summary.xlsx'); });
+  $('#ulDetailCsv').addEventListener('click', () => ulSelected && download({ source: 'user_lifetime_detail', format: 'csv', filename: `user_lifetime_${ulSelected.sid}`, ...ulRange(), sid: ulSelected.sid, granularity: ulGran }, `user_lifetime_${ulSelected.sid}.csv`));
+  $('#ulDetailXlsx').addEventListener('click', () => ulSelected && download({ source: 'user_lifetime_detail', format: 'xlsx', filename: `user_lifetime_${ulSelected.sid}`, ...ulRange(), sid: ulSelected.sid, granularity: ulGran }, `user_lifetime_${ulSelected.sid}.xlsx`));
+
+  // campaign revenue
+  $('#crApply').addEventListener('click', loadCampaignRevenue);
+  $('#crGran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#crGran button').forEach((x) => x.classList.toggle('on', x === b));
+    crGran = b.dataset.g; loadCampaignRevenue();
+  });
+  $('#crCampaignsCsv').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_campaigns', format: 'csv', filename: 'campaign_revenue_by_campaign', ...r }, 'campaign_revenue_by_campaign.csv'); });
+  $('#crCampaignsXlsx').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_campaigns', format: 'xlsx', filename: 'campaign_revenue_by_campaign', ...r }, 'campaign_revenue_by_campaign.xlsx'); });
+  $('#crDetailCsv').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_detail', format: 'csv', filename: 'campaign_revenue_detail', ...r, granularity: crGran }, 'campaign_revenue_detail.csv'); });
+  $('#crDetailXlsx').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_detail', format: 'xlsx', filename: 'campaign_revenue_detail', ...r, granularity: crGran, splitBy: $('#crSplitBy').value }, 'campaign_revenue_detail.xlsx'); });
+  $('#crSummaryCsv').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_summary', format: 'csv', filename: 'campaign_revenue_summary', ...r, granularity: crGran }, 'campaign_revenue_summary.csv'); });
+  $('#crSummaryXlsx').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_summary', format: 'xlsx', filename: 'campaign_revenue_summary', ...r, granularity: crGran }, 'campaign_revenue_summary.xlsx'); });
+
   // remisier sharing
   $('#remRun').addEventListener('click', loadRemisier);
   $('#remGran').addEventListener('click', (e) => {
@@ -3257,6 +3514,8 @@ async function init() {
   $('#from').value = r.from; $('#to').value = r.to;
   $('#revFrom').value = r.from; $('#revTo').value = r.to;
   $('#rev2From').value = r.from; $('#rev2To').value = r.to;
+  $('#ulFrom').value = r.from; $('#ulTo').value = r.to;
+  $('#crFrom').value = r.from; $('#crTo').value = r.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   $('#sitxFrom').value = r.from; $('#sitxTo').value = r.to;
