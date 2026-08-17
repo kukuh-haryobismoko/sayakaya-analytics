@@ -1614,8 +1614,8 @@ let ulLoaded = false;
 let ulSelected = null; // { sid, name } — used by the drill-down + its exports
 
 function renderUlTrend(rows) {
-  const C = readThemeColors();
-  makeChart('ulTrendChart', {
+  if (!rows.length) return;
+  paint('ulTrendChart', {
     type: 'bar',
     data: {
       labels: rows.map((d) => val(d.period)),
@@ -1731,8 +1731,8 @@ let crGran = 'month';
 let crLoaded = false;
 
 function renderCrTrend(rows) {
-  const C = readThemeColors();
-  makeChart('crTrendChart', {
+  if (!rows.length) return;
+  paint('crTrendChart', {
     type: 'bar',
     data: {
       labels: rows.map((d) => val(d.period)),
