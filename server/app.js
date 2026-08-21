@@ -522,9 +522,9 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
   app.get('/api/hnwi/by-fund', requireTab('hnwi'), handler(async (req, res) => {
-    const { date, minFundAum, maxFundAum, limit } = req.query;
+    const { date, minAum, maxAum, minFundAum, maxFundAum, limit } = req.query;
     if (!date) return res.status(400).json({ error: 'date is required.' });
-    const q = Q.hnwiByFund(date, minFundAum, maxFundAum, limit);
+    const q = Q.hnwiByFund(date, minAum, maxAum, minFundAum, maxFundAum, limit);
     res.json(await runQuery(q.sql, q.params));
   }));
 
@@ -1082,7 +1082,7 @@ function createApp({ serveStatic = true } = {}) {
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'hnwi_by_fund') {
       if (!req.body.date) return res.status(400).json({ error: 'date is required.' });
-      const q = Q.hnwiByFund(req.body.date, req.body.minFundAum, req.body.maxFundAum, limit || 20000);
+      const q = Q.hnwiByFund(req.body.date, req.body.minAum, req.body.maxAum, req.body.minFundAum, req.body.maxFundAum, limit || 20000);
       rows = await runQuery(q.sql, q.params);
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });

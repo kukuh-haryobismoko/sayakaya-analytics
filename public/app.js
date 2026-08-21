@@ -702,14 +702,24 @@ function renderPeByGoal(rows) {
 //  correction: created_at is a day ahead of the AUM date it represents).
 // ====================================================================
 let hnwiDateDefaulted = false;
-// Total-per-investor and per-fund tables filter on different things (an
-// investor's total AUM vs. one fund holding's own AUM), so each keeps its
-// own Min/Max AUM fields and can be applied independently of the other.
+let hnwiByFundOwnFilter = false; // tracks which of the two exclusive by-fund modes is active
 function hnwiTotalParams() {
   return { date: $('#hnwiDate').value, minAum: $('#hnwiMinAum').value || 0, maxAum: $('#hnwiMaxAum').value || '' };
 }
-function hnwiByFundParams() {
-  return { date: $('#hnwiDate').value, minFundAum: $('#hnwiMinFundAum').value || 0, maxFundAum: $('#hnwiMaxFundAum').value || '' };
+// Per-fund table has two exclusive modes: by default (or when the top
+// Filters panel is applied) it inherits the top Min/Max AUM filter and
+// ignores its own fields; once its own Apply is clicked, it switches to
+// using only its own Min/Max fund AUM fields and ignores the top filter.
+function hnwiByFundParams(useOwnFilter) {
+  const date = $('#hnwiDate').value;
+  if (useOwnFilter) {
+    return {
+      date, minAum: 0, maxAum: '',
+      minFundAum: $('#hnwiMinFundAum').value || 0,
+      maxFundAum: $('#hnwiMaxFundAum').value || '',
+    };
+  }
+  return { ...hnwiTotalParams(), minFundAum: 0, maxFundAum: '' };
 }
 const HNWI_CONTACT_COLS = [
   { key: 'name', label: 'Name' }, { key: 'sid_code', label: 'SID code' }, { key: 'ifua', label: 'IFUA code' },
@@ -744,12 +754,13 @@ async function loadHnwiTotal() {
     $('#hnwiTotalTable').innerHTML = `<div class="empty">${e.message}</div>`;
   }
 }
-async function loadHnwiByFund() {
+async function loadHnwiByFund(useOwnFilter = hnwiByFundOwnFilter) {
+  hnwiByFundOwnFilter = useOwnFilter;
   if (!(await hnwiEnsureDate())) { $('#hnwiByFundTable').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
-  const p = hnwiByFundParams();
+  const p = hnwiByFundParams(useOwnFilter);
   $('#hnwiByFundTable').innerHTML = '<div class="loading">Loading…</div>';
   try {
-    const byFund = await api(`/api/hnwi/by-fund?date=${p.date}&minFundAum=${p.minFundAum}&maxFundAum=${p.maxFundAum}`);
+    const byFund = await api(`/api/hnwi/by-fund?date=${p.date}&minAum=${p.minAum}&maxAum=${p.maxAum}&minFundAum=${p.minFundAum}&maxFundAum=${p.maxFundAum}`);
     genTable('#hnwiByFundTable', byFund, [
       ...HNWI_CONTACT_COLS, ...HNWI_RISK_COLS,
       { key: 'fund_name', label: 'Fund' }, { key: 'fund_aum', label: 'Fund AUM', type: 'idr' },
@@ -760,7 +771,7 @@ async function loadHnwiByFund() {
   }
 }
 function loadHnwi() {
-  return Promise.all([loadHnwiTotal(), loadHnwiByFund()]);
+  return Promise.all([loadHnwiTotal(), loadHnwiByFund(false)]);
 }
 
 // ====================================================================
@@ -3222,11 +3233,11 @@ function wire() {
 
   // HNWI
   $('#hnwiApply').addEventListener('click', loadHnwi);
-  $('#hnwiByFundApply').addEventListener('click', loadHnwiByFund);
+  $('#hnwiByFundApply').addEventListener('click', () => loadHnwiByFund(true));
   $('#hnwiTotalCsv').addEventListener('click', () => { const p = hnwiTotalParams(); download({ source: 'hnwi_total', format: 'csv', filename: 'hnwi_total', ...p }, 'hnwi_total.csv'); });
   $('#hnwiTotalXlsx').addEventListener('click', () => { const p = hnwiTotalParams(); download({ source: 'hnwi_total', format: 'xlsx', filename: 'hnwi_total', ...p }, 'hnwi_total.xlsx'); });
-  $('#hnwiByFundCsv').addEventListener('click', () => { const p = hnwiByFundParams(); download({ source: 'hnwi_by_fund', format: 'csv', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.csv'); });
-  $('#hnwiByFundXlsx').addEventListener('click', () => { const p = hnwiByFundParams(); download({ source: 'hnwi_by_fund', format: 'xlsx', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.xlsx'); });
+  $('#hnwiByFundCsv').addEventListener('click', () => { const p = hnwiByFundParams(hnwiByFundOwnFilter); download({ source: 'hnwi_by_fund', format: 'csv', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.csv'); });
+  $('#hnwiByFundXlsx').addEventListener('click', () => { const p = hnwiByFundParams(hnwiByFundOwnFilter); download({ source: 'hnwi_by_fund', format: 'xlsx', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.xlsx'); });
 
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
   $('#revApply').addEventListener('click', loadRevenue);

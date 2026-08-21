@@ -977,10 +977,20 @@ export const hnwiTotal = (date: string, minAum?: number | string, maxAum?: numbe
   };
 };
 
-// Filtered by each fund holding's OWN AUM — independent of the total filter above.
-export const hnwiByFund = (date: string, minFundAum?: number | string, maxFundAum?: number | string, limit: number | string = 5000): Query => {
+// Defaults to the same investor list as the total-AUM filter above (the
+// per_user total_aum range) — inherited so the section "follows" whatever
+// the top filter is set to. minFundAum/maxFundAum are an optional extra
+// layer on top: leave them blank to just inherit, or set them to also
+// narrow down to fund holdings within that own AUM range.
+export const hnwiByFund = (
+  date: string,
+  minAum?: number | string, maxAum?: number | string,
+  minFundAum?: number | string, maxFundAum?: number | string,
+  limit: number | string = 5000,
+): Query => {
   const { cte, params } = hnwiBase(date);
-  const { min, max } = aumRange(minFundAum, maxFundAum);
+  const total = aumRange(minAum, maxAum);
+  const fund = aumRange(minFundAum, maxFundAum);
   return {
     sql: `${cte}
       SELECT u.sid_code, up.name, u.ifua_code AS ifua, up.phone_number AS phone, u.email, up.birthdate,
@@ -990,10 +1000,16 @@ export const hnwiByFund = (date: string, minFundAum?: number | string, maxFundAu
       JOIN per_user pu ON pu.sid_code = d.sid_code
       JOIN ${USERS} u ON u.sid_code = d.sid_code
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-      WHERE d.amount BETWEEN @minFundAum AND @maxFundAum
+      WHERE pu.total_aum BETWEEN @minAum AND @maxAum
+        AND d.amount BETWEEN @minFundAum AND @maxFundAum
       ORDER BY pu.total_aum DESC, u.sid_code, d.fund_name
       LIMIT @limit`,
-    params: { ...params, minFundAum: min, maxFundAum: max, limit: parseInt(String(limit), 10) || 5000 },
+    params: {
+      ...params,
+      minAum: total.min, maxAum: total.max,
+      minFundAum: fund.min, maxFundAum: fund.max,
+      limit: parseInt(String(limit), 10) || 5000,
+    },
   };
 };
 

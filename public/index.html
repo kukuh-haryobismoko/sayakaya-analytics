@@ -444,7 +444,7 @@
             <button id="hnwiByFundApply" class="btn-primary" data-i18n="apply">Apply</button>
           </div>
         </div>
-        <span class="hint" data-i18n="hnwi_by_fund_filters_hint">Filters each row by that fund's own AUM (not the investor's total). Independent from the Min/Max AUM filter above. Leave blank to see every fund holding.</span>
+        <span class="hint" data-i18n="hnwi_by_fund_filters_hint">Defaults to the same investors as the Min/Max AUM filter above. Applying this filter switches to its own Min/Max fund AUM range instead, ignoring the filter above — click Apply on the filter above to go back to inheriting it.</span>
         <div id="hnwiByFundTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
@@ -1354,7 +1354,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3>💎 HNWI</h3>
-          <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below has its own independent Min/Max AUM filter, based on each fund holding's own amount rather than the investor's total.</p>
+          <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below defaults to that same investor list; applying its own Min/Max fund AUM filter switches it to generate its own list by fund holding amount instead, independent of the filter above.</p>
         </div>
       </div>
 
