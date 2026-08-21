@@ -931,7 +931,17 @@ export const hnwiLatestDate = (): Query => ({
   params: {},
 });
 
-function hnwiCTE(date: string, minAum?: number | string) {
+function aumRange(minAum?: number | string, maxAum?: number | string) {
+  return {
+    min: Number(minAum) || 0,
+    max: maxAum === '' || maxAum == null ? Number.MAX_SAFE_INTEGER : Number(maxAum),
+  };
+}
+
+// Shared base: one row per investor per fund holding, plus each investor's
+// total AUM across funds — unfiltered by any AUM threshold, so the total and
+// per-fund filters below can be applied independently of each other.
+function hnwiBase(date: string) {
   return {
     cte: `WITH daily AS (
         SELECT sid_code, id AS fund_id, fund AS fund_name, amount,
@@ -943,40 +953,47 @@ function hnwiCTE(date: string, minAum?: number | string) {
         SELECT sid_code, SUM(amount) AS total_aum, ANY_VALUE(aum_date) AS aum_date
         FROM daily
         GROUP BY sid_code
-        HAVING SUM(amount) >= @minAum
       )`,
-    params: { date, minAum: Number(minAum) || 0 },
+    params: { date },
   };
 }
 
-export const hnwiTotal = (date: string, minAum?: number | string, limit: number | string = 500): Query => {
-  const { cte, params } = hnwiCTE(date, minAum);
+// Filtered by the investor's TOTAL AUM across all funds.
+export const hnwiTotal = (date: string, minAum?: number | string, maxAum?: number | string, limit: number | string = 500): Query => {
+  const { cte, params } = hnwiBase(date);
+  const { min, max } = aumRange(minAum, maxAum);
   return {
     sql: `${cte}
       SELECT u.sid_code, up.name, u.ifua_code AS ifua, up.phone_number AS phone, u.email, up.birthdate,
+        up.risk_level, up.investment_priorities, up.investment_risk_tolerance,
         pu.total_aum, pu.aum_date
       FROM per_user pu
       JOIN ${USERS} u ON u.sid_code = pu.sid_code
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      WHERE pu.total_aum BETWEEN @minAum AND @maxAum
       ORDER BY pu.total_aum DESC
       LIMIT @limit`,
-    params: { ...params, limit: parseInt(String(limit), 10) || 500 },
+    params: { ...params, minAum: min, maxAum: max, limit: parseInt(String(limit), 10) || 500 },
   };
 };
 
-export const hnwiByFund = (date: string, minAum?: number | string, limit: number | string = 5000): Query => {
-  const { cte, params } = hnwiCTE(date, minAum);
+// Filtered by each fund holding's OWN AUM — independent of the total filter above.
+export const hnwiByFund = (date: string, minFundAum?: number | string, maxFundAum?: number | string, limit: number | string = 5000): Query => {
+  const { cte, params } = hnwiBase(date);
+  const { min, max } = aumRange(minFundAum, maxFundAum);
   return {
     sql: `${cte}
       SELECT u.sid_code, up.name, u.ifua_code AS ifua, up.phone_number AS phone, u.email, up.birthdate,
+        up.risk_level, up.investment_priorities, up.investment_risk_tolerance,
         d.fund_name, d.amount AS fund_aum, d.aum_date, pu.total_aum
       FROM daily d
       JOIN per_user pu ON pu.sid_code = d.sid_code
       JOIN ${USERS} u ON u.sid_code = d.sid_code
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      WHERE d.amount BETWEEN @minFundAum AND @maxFundAum
       ORDER BY pu.total_aum DESC, u.sid_code, d.fund_name
       LIMIT @limit`,
-    params: { ...params, limit: parseInt(String(limit), 10) || 5000 },
+    params: { ...params, minFundAum: min, maxFundAum: max, limit: parseInt(String(limit), 10) || 5000 },
   };
 };
 

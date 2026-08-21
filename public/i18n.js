@@ -61,7 +61,7 @@ const I18N = {
     docs_growth_desc: `Marketing and growth numbers: how well promo campaigns performed, who's referring the most new investors, and which funds people switch between most.`,
 
     docs_panel_investor: `Investor`,
-    docs_hnwi_desc: `"High-Net-Worth Individuals" — the list of investors holding above a chosen amount (you set the threshold) as of a chosen date, with a total-across-everyone summary and an export.`,
+    docs_hnwi_desc: `"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below has its own independent Min/Max AUM filter, based on each fund holding's own amount rather than the investor's total.`,
 
     docs_panel_operations: `Operations & Finance`,
     docs_reconciliation_desc: `A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.`,
@@ -142,7 +142,11 @@ const I18N = {
     pe_holdings_by_goal_hint: `Preview only — exports stay merged across goals.`,
 
     hnwi_min_aum: `Min AUM (Rp)`,
-    hnwi_filters_hint: `From mi_fee_logs.portfolio_with_code, one day before its own created_at (its created_at is a day ahead of the AUM date it represents). Leave Min AUM blank to see everyone, sorted highest AUM first.`,
+    hnwi_max_aum: `Max AUM (Rp)`,
+    hnwi_filters_hint: `From mi_fee_logs.portfolio_with_code, one day before its own created_at (its created_at is a day ahead of the AUM date it represents). Leave Min/Max AUM blank to see everyone, sorted highest AUM first.`,
+    hnwi_min_fund_aum: `Min fund AUM (Rp)`,
+    hnwi_max_fund_aum: `Max fund AUM (Rp)`,
+    hnwi_by_fund_filters_hint: `Filters each row by that fund's own AUM (not the investor's total). Independent from the Min/Max AUM filter above. Leave blank to see every fund holding.`,
     hnwi_total_per_investor: `AUM per investor (total)`,
     hnwi_per_fund: `AUM per investor per fund`,
 
@@ -355,7 +359,7 @@ const I18N = {
     docs_growth_desc: `Angka pemasaran dan pertumbuhan: seberapa efektif kampanye promo, siapa yang paling banyak mereferensikan investor baru, dan produk apa yang paling sering dipindahkan (switching) investor.`,
 
     docs_panel_investor: `Investor`,
-    docs_hnwi_desc: `"High-Net-Worth Individuals" — daftar investor dengan kepemilikan di atas nilai tertentu (Anda tentukan ambang batasnya) per tanggal yang dipilih, lengkap dengan ringkasan total dan fitur ekspor.`,
+    docs_hnwi_desc: `"High-Net-Worth Individuals" — daftar investor dengan kepemilikan dalam rentang AUM tertentu (Anda tentukan ambang batas min/max) per tanggal yang dipilih, termasuk profil risiko tiap investor (tingkat risiko, prioritas investasi, toleransi risiko), lengkap dengan ringkasan total dan fitur ekspor. Rincian per produk di bawah memiliki filter Min/Max AUM tersendiri yang independen, berdasarkan nilai AUM tiap produk, bukan total investor.`,
 
     docs_panel_operations: `Operasional & Keuangan`,
     docs_reconciliation_desc: `Pengecekan harian untuk memastikan angka di berbagai sistem sudah cocok — gunakan ini untuk menangkap selisih sebelum menjadi masalah nyata.`,
@@ -436,7 +440,11 @@ const I18N = {
     pe_holdings_by_goal_hint: `Hanya pratinjau — ekspor tetap digabung dari semua goal.`,
 
     hnwi_min_aum: `Min AUM (Rp)`,
-    hnwi_filters_hint: `Dari mi_fee_logs.portfolio_with_code, satu hari sebelum created_at-nya sendiri (created_at-nya lebih maju satu hari dari tanggal AUM yang diwakilinya). Kosongkan Min AUM untuk melihat semua orang, diurutkan dari AUM tertinggi.`,
+    hnwi_max_aum: `Max AUM (Rp)`,
+    hnwi_filters_hint: `Dari mi_fee_logs.portfolio_with_code, satu hari sebelum created_at-nya sendiri (created_at-nya lebih maju satu hari dari tanggal AUM yang diwakilinya). Kosongkan Min/Max AUM untuk melihat semua orang, diurutkan dari AUM tertinggi.`,
+    hnwi_min_fund_aum: `Min AUM produk (Rp)`,
+    hnwi_max_fund_aum: `Max AUM produk (Rp)`,
+    hnwi_by_fund_filters_hint: `Menyaring tiap baris berdasarkan AUM produk itu sendiri (bukan total investor). Independen dari filter Min/Max AUM di atas. Kosongkan untuk melihat semua kepemilikan produk.`,
     hnwi_total_per_investor: `AUM per investor (total)`,
     hnwi_per_fund: `AUM per investor per produk`,
 

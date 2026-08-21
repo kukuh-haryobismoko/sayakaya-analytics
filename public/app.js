@@ -702,14 +702,25 @@ function renderPeByGoal(rows) {
 //  correction: created_at is a day ahead of the AUM date it represents).
 // ====================================================================
 let hnwiDateDefaulted = false;
-function hnwiParams() {
-  return { date: $('#hnwiDate').value, minAum: $('#hnwiMinAum').value || 0 };
+// Total-per-investor and per-fund tables filter on different things (an
+// investor's total AUM vs. one fund holding's own AUM), so each keeps its
+// own Min/Max AUM fields and can be applied independently of the other.
+function hnwiTotalParams() {
+  return { date: $('#hnwiDate').value, minAum: $('#hnwiMinAum').value || 0, maxAum: $('#hnwiMaxAum').value || '' };
+}
+function hnwiByFundParams() {
+  return { date: $('#hnwiDate').value, minFundAum: $('#hnwiMinFundAum').value || 0, maxFundAum: $('#hnwiMaxFundAum').value || '' };
 }
 const HNWI_CONTACT_COLS = [
   { key: 'name', label: 'Name' }, { key: 'sid_code', label: 'SID code' }, { key: 'ifua', label: 'IFUA code' },
   { key: 'phone', label: 'Phone' }, { key: 'email', label: 'Email' }, { key: 'birthdate', label: 'Birthdate', type: 'date' },
 ];
-async function loadHnwi() {
+const HNWI_RISK_COLS = [
+  { key: 'risk_level', label: 'Risk level' },
+  { key: 'investment_priorities', label: 'Investment priorities' },
+  { key: 'investment_risk_tolerance', label: 'Investment risk tolerance' },
+];
+async function hnwiEnsureDate() {
   if (!hnwiDateDefaulted) {
     hnwiDateDefaulted = true;
     try {
@@ -717,33 +728,39 @@ async function loadHnwi() {
       if (latestDate && !$('#hnwiDate').value) $('#hnwiDate').value = val(latestDate);
     } catch { /* leave blank — user can still pick a date manually */ }
   }
-  if (!$('#hnwiDate').value) {
-    $('#hnwiTotalTable').innerHTML = '<div class="empty">Pick a date.</div>';
-    $('#hnwiByFundTable').innerHTML = '';
-    return;
-  }
-  const p = hnwiParams();
+  return !!$('#hnwiDate').value;
+}
+async function loadHnwiTotal() {
+  if (!(await hnwiEnsureDate())) { $('#hnwiTotalTable').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  const p = hnwiTotalParams();
   $('#hnwiTotalTable').innerHTML = '<div class="loading">Loading…</div>';
-  $('#hnwiByFundTable').innerHTML = '<div class="loading">Loading…</div>';
-  const qs = `date=${p.date}&minAum=${p.minAum}`;
   try {
-    const [totals, byFund] = await Promise.all([
-      api(`/api/hnwi/total?${qs}`),
-      api(`/api/hnwi/by-fund?${qs}`),
-    ]);
+    const totals = await api(`/api/hnwi/total?date=${p.date}&minAum=${p.minAum}&maxAum=${p.maxAum}`);
     genTable('#hnwiTotalTable', totals, [
-      ...HNWI_CONTACT_COLS,
+      ...HNWI_CONTACT_COLS, ...HNWI_RISK_COLS,
       { key: 'total_aum', label: 'Total AUM', type: 'idr' }, { key: 'aum_date', label: 'AUM date', type: 'date' },
-    ], 'No investors at or above this AUM threshold.');
-    genTable('#hnwiByFundTable', byFund, [
-      ...HNWI_CONTACT_COLS,
-      { key: 'fund_name', label: 'Fund' }, { key: 'fund_aum', label: 'Fund AUM', type: 'idr' },
-      { key: 'aum_date', label: 'AUM date', type: 'date' }, { key: 'total_aum', label: 'Total AUM', type: 'idr' },
     ], 'No investors at or above this AUM threshold.');
   } catch (e) {
     $('#hnwiTotalTable').innerHTML = `<div class="empty">${e.message}</div>`;
-    $('#hnwiByFundTable').innerHTML = '';
   }
+}
+async function loadHnwiByFund() {
+  if (!(await hnwiEnsureDate())) { $('#hnwiByFundTable').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  const p = hnwiByFundParams();
+  $('#hnwiByFundTable').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const byFund = await api(`/api/hnwi/by-fund?date=${p.date}&minFundAum=${p.minFundAum}&maxFundAum=${p.maxFundAum}`);
+    genTable('#hnwiByFundTable', byFund, [
+      ...HNWI_CONTACT_COLS, ...HNWI_RISK_COLS,
+      { key: 'fund_name', label: 'Fund' }, { key: 'fund_aum', label: 'Fund AUM', type: 'idr' },
+      { key: 'aum_date', label: 'AUM date', type: 'date' }, { key: 'total_aum', label: 'Total AUM', type: 'idr' },
+    ], 'No fund holdings at or above this AUM threshold.');
+  } catch (e) {
+    $('#hnwiByFundTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+function loadHnwi() {
+  return Promise.all([loadHnwiTotal(), loadHnwiByFund()]);
 }
 
 // ====================================================================
@@ -3205,10 +3222,11 @@ function wire() {
 
   // HNWI
   $('#hnwiApply').addEventListener('click', loadHnwi);
-  $('#hnwiTotalCsv').addEventListener('click', () => { const p = hnwiParams(); download({ source: 'hnwi_total', format: 'csv', filename: 'hnwi_total', ...p }, 'hnwi_total.csv'); });
-  $('#hnwiTotalXlsx').addEventListener('click', () => { const p = hnwiParams(); download({ source: 'hnwi_total', format: 'xlsx', filename: 'hnwi_total', ...p }, 'hnwi_total.xlsx'); });
-  $('#hnwiByFundCsv').addEventListener('click', () => { const p = hnwiParams(); download({ source: 'hnwi_by_fund', format: 'csv', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.csv'); });
-  $('#hnwiByFundXlsx').addEventListener('click', () => { const p = hnwiParams(); download({ source: 'hnwi_by_fund', format: 'xlsx', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.xlsx'); });
+  $('#hnwiByFundApply').addEventListener('click', loadHnwiByFund);
+  $('#hnwiTotalCsv').addEventListener('click', () => { const p = hnwiTotalParams(); download({ source: 'hnwi_total', format: 'csv', filename: 'hnwi_total', ...p }, 'hnwi_total.csv'); });
+  $('#hnwiTotalXlsx').addEventListener('click', () => { const p = hnwiTotalParams(); download({ source: 'hnwi_total', format: 'xlsx', filename: 'hnwi_total', ...p }, 'hnwi_total.xlsx'); });
+  $('#hnwiByFundCsv').addEventListener('click', () => { const p = hnwiByFundParams(); download({ source: 'hnwi_by_fund', format: 'csv', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.csv'); });
+  $('#hnwiByFundXlsx').addEventListener('click', () => { const p = hnwiByFundParams(); download({ source: 'hnwi_by_fund', format: 'xlsx', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.xlsx'); });
 
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
   $('#revApply').addEventListener('click', loadRevenue);

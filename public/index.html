@@ -411,10 +411,11 @@
           <div class="range">
             <label><span data-i18n="common_as_of">As of</span> <input type="date" id="hnwiDate" /></label>
             <label><span data-i18n="hnwi_min_aum">Min AUM (Rp)</span> <input type="number" id="hnwiMinAum" placeholder="e.g. 5000000000" step="1000000" style="width:180px" /></label>
+            <label><span data-i18n="hnwi_max_aum">Max AUM (Rp)</span> <input type="number" id="hnwiMaxAum" placeholder="e.g. 10000000000" step="1000000" style="width:180px" /></label>
             <button id="hnwiApply" class="btn-primary" data-i18n="apply">Apply</button>
           </div>
         </div>
-        <span class="hint" data-i18n="hnwi_filters_hint">From mi_fee_logs.portfolio_with_code, one day before its own created_at (its created_at is a day ahead of the AUM date it represents). Leave Min AUM blank to see everyone, sorted highest AUM first.</span>
+        <span class="hint" data-i18n="hnwi_filters_hint">From mi_fee_logs.portfolio_with_code, one day before its own created_at (its created_at is a day ahead of the AUM date it represents). Leave Min/Max AUM blank to see everyone, sorted highest AUM first.</span>
       </div>
 
       <div class="panel">
@@ -436,6 +437,14 @@
             <button class="btn-ghost" id="hnwiByFundXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
+        <div class="panel-head wrap" style="margin-top:6px">
+          <div class="range">
+            <label><span data-i18n="hnwi_min_fund_aum">Min fund AUM (Rp)</span> <input type="number" id="hnwiMinFundAum" placeholder="e.g. 1000000000" step="1000000" style="width:180px" /></label>
+            <label><span data-i18n="hnwi_max_fund_aum">Max fund AUM (Rp)</span> <input type="number" id="hnwiMaxFundAum" placeholder="e.g. 5000000000" step="1000000" style="width:180px" /></label>
+            <button id="hnwiByFundApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="hnwi_by_fund_filters_hint">Filters each row by that fund's own AUM (not the investor's total). Independent from the Min/Max AUM filter above. Leave blank to see every fund holding.</span>
         <div id="hnwiByFundTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
@@ -1345,7 +1354,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3>💎 HNWI</h3>
-          <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding above a chosen amount (you set the threshold) as of a chosen date, with a total-across-everyone summary and an export.</p>
+          <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below has its own independent Min/Max AUM filter, based on each fund holding's own amount rather than the investor's total.</p>
         </div>
       </div>
 
