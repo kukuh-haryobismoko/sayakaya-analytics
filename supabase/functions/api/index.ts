@@ -8,7 +8,7 @@ import { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } from './export.ts';
 import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
-import { portfolioReport } from './pdf.ts';
+import { portfolioReport, val } from './pdf.ts';
 import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 
@@ -52,6 +52,7 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   sinvest_transactions: 'sinvest-tx',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
+  referral_program_detail: 'referral-program',
 };
 
 // Pivot flat (type, name, period, pct_change) rows into one fund-per-row
@@ -95,6 +96,46 @@ function portfolioSheetRows(holdings: Record<string, unknown>[]) {
     'Fund Value': h.fund_value, 'Market Value': h.value,
     'Unrealized Gain/Loss': h.gain_loss, '%': h.gain_pct, Opened: h.opened_at,
   }));
+}
+
+// ---- Referral program eligibility -----------------------------------------
+// Ported from server/app.js — turns Q.referralProgramDetail()'s raw holding
+// numbers into the T&C's verdict. Precedence: any hard-fail (KYC, redeemed,
+// no snapshot ever found) wins over "still pending" over "eligible" — a row
+// never both.
+const REFERRAL_HOLD_DAYS = 30;
+const REFERRAL_SNAPSHOT_LAG_DAYS = 2; // portfolio_fix updates ~1 day behind; give it slack before assuming "never snapshotted" means fully redeemed.
+function computeReferralEligibility(rows: Record<string, unknown>[]) {
+  return rows.map((r) => {
+    const reasons: string[] = [];
+    let hardFail = false;
+    let pending = false;
+    if (val(r.invitee_verification) !== 'verified') { reasons.push('Invitee not KYC-verified'); hardFail = true; }
+    if (val(r.inviter_verification) !== 'verified') { reasons.push('Inviter not KYC-verified'); hardFail = true; }
+
+    const daysHeld = Number(val(r.days_held));
+    const baseline = r.baseline_unit == null ? null : Number(val(r.baseline_unit));
+    const minUnit = r.min_unit_in_window == null ? null : Number(val(r.min_unit_in_window));
+
+    if (baseline == null) {
+      if (daysHeld > REFERRAL_SNAPSHOT_LAG_DAYS) {
+        reasons.push('No holding snapshot ever found — likely fully redeemed before the first daily snapshot (needs manual review)');
+        hardFail = true;
+      } else {
+        reasons.push('Holding snapshot not available yet (portfolio_fix updates about a day behind)');
+        pending = true;
+      }
+    } else if (minUnit! < baseline) {
+      reasons.push('Redeemed/switched out during the 30-day hold');
+      hardFail = true;
+    } else if (daysHeld < REFERRAL_HOLD_DAYS) {
+      reasons.push(`Holding period not yet complete (${daysHeld}/${REFERRAL_HOLD_DAYS} days)`);
+      pending = true;
+    }
+
+    const status = hardFail ? 'Not eligible' : pending ? 'Pending' : 'Eligible';
+    return { ...r, status, reason: reasons.join('; ') || null };
+  });
 }
 
 // ---- Response helpers -----------------------------------------------------
@@ -700,6 +741,12 @@ on('GET', '/api/campaign-revenue/summary', requireTab('campaign-revenue', async 
   return json(await runQuery(q.sql, q.params));
 }));
 
+// ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
+on('GET', '/api/referral-program/detail', requireTab('referral-program', async (_req, _params, url) => {
+  const q = Q.referralProgramDetail(qp(url, 'from'), qp(url, 'to'));
+  return json(computeReferralEligibility(await runQuery(q.sql, q.params)));
+}));
+
 // ---- Remisier sharing: management fee revenue for one remisier's users,
 // from goal_snapshots, split as a portion of the AperD share -----------------
 on('GET', '/api/remisier/users', requireAnyTab(['remisier', 'remisier-pwc'], async (_req, _params, url) => {
@@ -1194,6 +1241,9 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     if (!body.date) return json({ error: 'date is required.' }, 400);
     const q = Q.hnwiByFund(body.date as string, body.minAum as string, body.maxAum as string, body.minFundAum as string, body.maxFundAum as string, (limit as number) || 20000);
     rows = await runQuery(q.sql, q.params);
+  } else if (source === 'referral_program_detail') {
+    const q = Q.referralProgramDetail(body.from as string, body.to as string);
+    rows = computeReferralEligibility(await runQuery(q.sql, q.params));
   } else {
     return json({ error: 'Unknown export source.' }, 400);
   }

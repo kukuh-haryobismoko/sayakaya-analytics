@@ -57,6 +57,7 @@ const EXPORT_SOURCE_TAB = {
   sinvest_transactions: 'sinvest-tx',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
+  referral_program_detail: 'referral-program',
 };
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
@@ -91,6 +92,45 @@ function splitRowsBySheet(rows, keyField) {
     (groups[key] = groups[key] || []).push(r);
   }
   return Object.keys(groups).sort().map((name) => ({ name, rows: groups[name] }));
+}
+
+// ---- Referral program eligibility -----------------------------------------
+// Turns Q.referralProgramDetail()'s raw holding numbers into the T&C's
+// verdict. Precedence: any hard-fail (KYC, redeemed, no snapshot ever found)
+// wins over "still pending" over "eligible" — a row never both.
+const REFERRAL_HOLD_DAYS = 30;
+const REFERRAL_SNAPSHOT_LAG_DAYS = 2; // portfolio_fix updates ~1 day behind; give it slack before assuming "never snapshotted" means fully redeemed.
+function computeReferralEligibility(rows) {
+  return rows.map((r) => {
+    const reasons = [];
+    let hardFail = false;
+    let pending = false;
+    if (PDF.val(r.invitee_verification) !== 'verified') { reasons.push('Invitee not KYC-verified'); hardFail = true; }
+    if (PDF.val(r.inviter_verification) !== 'verified') { reasons.push('Inviter not KYC-verified'); hardFail = true; }
+
+    const daysHeld = Number(PDF.val(r.days_held));
+    const baseline = r.baseline_unit == null ? null : Number(PDF.val(r.baseline_unit));
+    const minUnit = r.min_unit_in_window == null ? null : Number(PDF.val(r.min_unit_in_window));
+
+    if (baseline == null) {
+      if (daysHeld > REFERRAL_SNAPSHOT_LAG_DAYS) {
+        reasons.push('No holding snapshot ever found — likely fully redeemed before the first daily snapshot (needs manual review)');
+        hardFail = true;
+      } else {
+        reasons.push('Holding snapshot not available yet (portfolio_fix updates about a day behind)');
+        pending = true;
+      }
+    } else if (minUnit < baseline) {
+      reasons.push('Redeemed/switched out during the 30-day hold');
+      hardFail = true;
+    } else if (daysHeld < REFERRAL_HOLD_DAYS) {
+      reasons.push(`Holding period not yet complete (${daysHeld}/${REFERRAL_HOLD_DAYS} days)`);
+      pending = true;
+    }
+
+    const status = hardFail ? 'Not eligible' : pending ? 'Pending' : 'Eligible';
+    return { ...r, status, reason: reasons.join('; ') || null };
+  });
 }
 
 // Friendly column names for the "Portfolio" sheet in the combined export.
@@ -639,6 +679,13 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
+  // ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
+  app.get('/api/referral-program/detail', requireTab('referral-program'), handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.referralProgramDetail(from, to);
+    res.json(computeReferralEligibility(await runQuery(q.sql, q.params)));
+  }));
+
   // ---- Remisier sharing: management fee revenue for one remisier's users,
   // from goal_snapshots, split as a portion of the AperD share -----------------
   // Shared by Remisier sharing and its PWC sibling — allow either.
@@ -1115,6 +1162,9 @@ function createApp({ serveStatic = true } = {}) {
       if (!req.body.date) return res.status(400).json({ error: 'date is required.' });
       const q = Q.hnwiByFund(req.body.date, req.body.minAum, req.body.maxAum, req.body.minFundAum, req.body.maxFundAum, limit || 20000);
       rows = await runQuery(q.sql, q.params);
+    } else if (source === 'referral_program_detail') {
+      const q = Q.referralProgramDetail(req.body.from, req.body.to);
+      rows = computeReferralEligibility(await runQuery(q.sql, q.params));
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
     }

@@ -82,6 +82,10 @@ const campaignsCR = [{ promo_code: 'KISIBESTINV', campaign_name: 'X', campaign_t
 const detailCR = [{ period: D('2026-01-01'), promo_code: 'X', campaign_name: 'Y', participations: 5, investors: 4, funds: 1,
   days_running: 31, still_locked: 0, avg_units: '100', avg_aum: '1e9', total_management_fee: '1e6',
   total_aperd_share: '5e5', total_mi_share: '5e5', total_aperd_share_alt: '6e5' }];
+const referralProgram = [{ inviter_sid: 'IDD1', inviter_name: 'A', inviter_ifua: 'IFUA1', inviter_email: 'a@b.c', inviter_phone: '628',
+  invitee_sid: 'IDD2', invitee_name: 'B', invitee_ifua: 'IFUA2', invitee_email: 'b@b.c', invitee_phone: '628',
+  fund_name: 'Sucorinvest Money Market Fund', amount: 1000000, tx_date: D('2026-09-05'), days_held: 35,
+  baseline_unit: '1000', min_unit_in_window: '1000', status: 'Eligible', reason: null }];
 
 sandbox.api = async (path) => {
   if (path.startsWith('/api/user-lifetime/summary')) return summaryUL;
@@ -90,17 +94,18 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/campaign-revenue/campaigns')) return campaignsCR;
   if (path.startsWith('/api/campaign-revenue/summary'))   return summaryCR;
   if (path.startsWith('/api/campaign-revenue'))           return detailCR;
+  if (path.startsWith('/api/referral-program/detail'))    return referralProgram;
   throw new Error('unexpected path ' + path);
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';

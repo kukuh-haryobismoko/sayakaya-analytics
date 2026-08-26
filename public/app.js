@@ -1849,6 +1849,56 @@ async function loadCampaignRevenue() {
 }
 
 // ====================================================================
+//  REFERRAL PROGRAM (Sep-Dec 2026 T&C eligibility report)
+// ====================================================================
+let refProgLoaded = false;
+
+function refProgRange() {
+  return { from: $('#refProgFrom').value || '2026-09-01', to: $('#refProgTo').value || '2026-12-31' };
+}
+
+async function loadReferralProgram() {
+  $('#refProgTable').innerHTML = '<div class="loading">Loading…</div>';
+  const r = refProgRange();
+  try {
+    const rows = await api(`/api/referral-program/detail?from=${r.from}&to=${r.to}`);
+    renderReferralProgram(rows);
+  } catch (e) {
+    $('#refProgKpis').innerHTML = '';
+    $('#refProgTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+function renderReferralProgram(rows) {
+  const eligible = rows.filter((r) => r.status === 'Eligible').length;
+  const pending = rows.filter((r) => r.status === 'Pending').length;
+  const notEligible = rows.filter((r) => r.status === 'Not eligible').length;
+  const inviters = new Set(rows.map((r) => val(r.inviter_sid)).filter(Boolean)).size;
+  const bonusTotal = eligible * 50000; // Rp25,000 to inviter + Rp25,000 to invitee, per eligible referral.
+  $('#refProgKpis').innerHTML = [
+    kpi(t('refprog_kpi_inviters'), num(inviters), '', '', '🧑‍🤝‍🧑'),
+    kpi(t('refprog_kpi_invitees'), num(rows.length), '', '', '➕'),
+    kpi(t('refprog_kpi_eligible'), num(eligible), '', 'accent', '✅'),
+    kpi(t('refprog_kpi_pending'), num(pending), '', 'amber', '⏳'),
+    kpi(t('refprog_kpi_not_eligible'), num(notEligible), '', 'warn', '🚫'),
+    kpi(t('refprog_kpi_bonus_total'), idr(bonusTotal), t('refprog_kpi_bonus_total_sub'), 'accent', '💰'),
+  ].join('');
+
+  genTable('#refProgTable', rows, [
+    { key: 'inviter_sid', label: 'Inviter SID' }, { key: 'inviter_name', label: 'Inviter name' },
+    { key: 'inviter_ifua', label: 'Inviter IFUA' }, { key: 'inviter_email', label: 'Inviter email' },
+    { key: 'inviter_phone', label: 'Inviter phone' },
+    { key: 'invitee_sid', label: 'Invitee SID' }, { key: 'invitee_name', label: 'Invitee name' },
+    { key: 'invitee_ifua', label: 'Invitee IFUA' }, { key: 'invitee_email', label: 'Invitee email' },
+    { key: 'invitee_phone', label: 'Invitee phone' },
+    { key: 'fund_name', label: 'Fund' }, { key: 'amount', label: 'Amount', type: 'idr' },
+    { key: 'tx_date', label: 'Transaction date', type: 'date' }, { key: 'days_held', label: 'Days held', type: 'num' },
+    { key: 'baseline_unit', label: 'Baseline units', type: 'num' }, { key: 'min_unit_in_window', label: 'Min units seen', type: 'num' },
+    { key: 'status', label: 'Status' }, { key: 'reason', label: 'Reason' },
+  ], 'No qualifying referrals in this period.');
+}
+
+// ====================================================================
 //  REMISIER SHARING (goal_snapshots — one remisier's users, AperD share
 //  split between remisier and Sayakaya)
 // ====================================================================
@@ -2980,6 +3030,7 @@ function switchTab(name) {
   // so the date filter prunes nothing). Apply re-runs them on demand.
   if (name === 'user-lifetime' && !ulLoaded) { ulLoaded = true; loadUserLifetime(); }
   if (name === 'campaign-revenue' && !crLoaded) { crLoaded = true; loadCampaignRevenue(); }
+  if (name === 'referral-program' && !refProgLoaded) { refProgLoaded = true; loadReferralProgram(); }
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
   if (name === 'hnwi') loadHnwi();
@@ -3400,6 +3451,11 @@ function wire() {
   $('#crDetailXlsx').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_detail', format: 'xlsx', filename: 'campaign_revenue_detail', ...r, granularity: crGran, splitBy: $('#crSplitBy').value }, 'campaign_revenue_detail.xlsx'); });
   $('#crSummaryCsv').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_summary', format: 'csv', filename: 'campaign_revenue_summary', ...r, granularity: crGran }, 'campaign_revenue_summary.csv'); });
   $('#crSummaryXlsx').addEventListener('click', () => { const r = crRange(); download({ source: 'campaign_revenue_summary', format: 'xlsx', filename: 'campaign_revenue_summary', ...r, granularity: crGran }, 'campaign_revenue_summary.xlsx'); });
+
+  // referral program
+  $('#refProgApply').addEventListener('click', loadReferralProgram);
+  $('#refProgCsv').addEventListener('click', () => { const r = refProgRange(); download({ source: 'referral_program_detail', format: 'csv', filename: 'referral_program_detail', ...r }, 'referral_program_detail.csv'); });
+  $('#refProgXlsx').addEventListener('click', () => { const r = refProgRange(); download({ source: 'referral_program_detail', format: 'xlsx', filename: 'referral_program_detail', ...r }, 'referral_program_detail.xlsx'); });
 
   // remisier sharing
   $('#remRun').addEventListener('click', loadRemisier);

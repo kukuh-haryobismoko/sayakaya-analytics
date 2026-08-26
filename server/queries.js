@@ -1202,6 +1202,91 @@ const topReferrers = (limit = 20) => ({
   params: { limit: parseInt(limit, 10) },
 });
 
+// ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
+// Rules: the invitee's very first-ever completed transaction (across every
+// fund, not just Sucor's) must itself be a Sucor Asset Management fund buy
+// of >= Rp1,000,000, placed using someone else's referral code, inside the
+// purchase window. The bonus additionally requires that fund's units to not
+// decrease for 30 days after that purchase — checked against
+// mi_fee_logs.portfolio_fix's daily snapshots (only completed transactions
+// ever reach that table), not main.transactions, per how this fund's
+// snapshots are read everywhere else in this file (created_at is one day
+// ahead of the balance date it represents).
+const referralProgramDetail = (periodFrom, periodTo) => ({
+  sql: `WITH first_tx AS (
+      SELECT user_id,
+        ARRAY_AGG(STRUCT(id AS tx_id, fund_id, amount, created_at) ORDER BY created_at ASC LIMIT 1)[OFFSET(0)] AS first_buy
+      FROM ${TX}
+      WHERE type = 'buy' AND status IN ('completed', 'completed_payment', 'verified')
+      GROUP BY user_id
+    ),
+    qualifying AS (
+      -- Only investors whose first-ever investment satisfies the campaign's
+      -- product/amount/period rule.
+      SELECT
+        ft.user_id AS invitee_user_id,
+        ft.first_buy.tx_id AS tx_id,
+        ft.first_buy.fund_id AS fund_id,
+        f.name AS fund_name,
+        ft.first_buy.amount AS amount,
+        DATE(ft.first_buy.created_at) AS tx_date
+      FROM first_tx ft
+      JOIN ${FUNDS} f ON f.id = ft.first_buy.fund_id
+      JOIN ${IM} im ON im.id = f.investment_manager_id
+      WHERE LOWER(im.name) LIKE '%sucor%'
+        AND ft.first_buy.amount >= 1000000
+        AND DATE(ft.first_buy.created_at) BETWEEN @periodFrom AND @periodTo
+    ),
+    pairs AS (
+      SELECT
+        q.tx_id, q.fund_id, q.fund_name, q.amount, q.tx_date,
+        inviter.sid_code AS inviter_sid, inviter.ifua_code AS inviter_ifua,
+        inviter.email AS inviter_email, inviter.verification_status AS inviter_verification,
+        inviter_up.name AS inviter_name, inviter_up.phone_number AS inviter_phone,
+        invitee.sid_code AS invitee_sid, invitee.ifua_code AS invitee_ifua,
+        invitee.email AS invitee_email, invitee.verification_status AS invitee_verification,
+        invitee_up.name AS invitee_name, invitee_up.phone_number AS invitee_phone
+      FROM qualifying q
+      JOIN ${USERS} invitee ON invitee.id = q.invitee_user_id
+      LEFT JOIN ${USER_PROFILES} invitee_up ON invitee_up.user_id = invitee.id
+      JOIN ${USERS} inviter ON inviter.referral_code = invitee.referrer_code
+      LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
+      WHERE invitee.referrer_code IS NOT NULL
+    ),
+    fix_snaps AS (
+      SELECT sid_code, id AS fund_id, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS snap_date, total_unit
+      FROM ${PORT_FIX}
+    ),
+    holding AS (
+      -- baseline_unit = the unit balance on the first snapshot on/after the
+      -- purchase (i.e. right after it settled); min_unit_in_window dropping
+      -- below that at any point in the next 30 days means something reduced
+      -- the position (sell/switch-out/transfer-out) during the hold.
+      SELECT
+        p.tx_id,
+        MIN(fs.total_unit) AS min_unit_in_window,
+        ARRAY_AGG(fs.total_unit ORDER BY fs.snap_date ASC LIMIT 1)[OFFSET(0)] AS baseline_unit
+      FROM pairs p
+      JOIN fix_snaps fs
+        ON fs.sid_code = p.invitee_sid AND fs.fund_id = p.fund_id
+        AND fs.snap_date BETWEEN p.tx_date AND DATE_ADD(p.tx_date, INTERVAL 30 DAY)
+      GROUP BY p.tx_id
+    )
+    SELECT
+      p.inviter_sid, p.inviter_ifua, p.inviter_email, p.inviter_phone, p.inviter_name, p.inviter_verification,
+      p.invitee_sid, p.invitee_ifua, p.invitee_email, p.invitee_phone, p.invitee_name, p.invitee_verification,
+      p.fund_name, p.amount, p.tx_date,
+      DATE_DIFF(CURRENT_DATE(), p.tx_date, DAY) AS days_held,
+      h.baseline_unit, h.min_unit_in_window
+    FROM pairs p
+    LEFT JOIN holding h ON h.tx_id = p.tx_id
+    ORDER BY p.tx_date DESC`,
+  params: {
+    periodFrom: periodFrom || '2026-09-01',
+    periodTo: periodTo || '2026-12-31',
+  },
+});
+
 // ---- Reconciliation: app ledger (main.transactions) vs custodian feed (sinvest) -
 // Transaction_Date/amount columns in sinvest.trx_history are STRING ('YYYYMMDD',
 // formatted numbers) — the raw KSEI/SInvest export, never cleaned.
@@ -2496,7 +2581,8 @@ module.exports = {
   hnwiLatestDate, hnwiTotal, hnwiByFund,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
   campaignPerformance, switchingTopPairs, aumByManager, largestFundsAum, largestFundsLatestDate,
-  aumByRisk, aumByIncome, usersByProvince, topCitiesByInvestors, topCitiesByAum, topReferrers, reconciliationDaily,
+  aumByRisk, aumByIncome, usersByProvince, topCitiesByInvestors, topCitiesByAum, topReferrers,
+  referralProgramDetail, reconciliationDaily,
   sinvestTransactions, sinvestHoldings, sinvestHoldingsAsOf,
   revenueDetail, revenueMonthlySummary,
   revenueV2Detail, revenueV2MonthlySummary,
