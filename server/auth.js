@@ -63,7 +63,7 @@ async function findUserById(id) {
 }
 
 function listUsers() {
-  return rest('/dashboard_users?select=id,username,is_superuser,allowed_tabs,created_at&order=username.asc');
+  return rest('/dashboard_users?select=id,username,email,is_superuser,allowed_tabs,created_at&order=username.asc');
 }
 
 async function countSuperusers() {
@@ -71,13 +71,14 @@ async function countSuperusers() {
   return rows.length;
 }
 
-async function createUser({ username, password, isSuperuser = false, allowedTabs = [] }) {
+async function createUser({ username, password, email = null, isSuperuser = false, allowedTabs = [] }) {
   const rows = await rest('/dashboard_users', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
       username,
       password_hash: hashPassword(password),
+      email: email || null,
       is_superuser: isSuperuser,
       allowed_tabs: allowedTabs,
     }),
@@ -85,10 +86,11 @@ async function createUser({ username, password, isSuperuser = false, allowedTabs
   return rows[0];
 }
 
-// patch: { password?, isSuperuser?, allowedTabs? } — only defined keys are updated.
+// patch: { password?, email?, isSuperuser?, allowedTabs? } — only defined keys are updated.
 async function updateUser(id, patch = {}) {
   const body = {};
   if (patch.password) body.password_hash = hashPassword(patch.password);
+  if (patch.email !== undefined) body.email = patch.email || null;
   if (patch.isSuperuser !== undefined) body.is_superuser = patch.isSuperuser;
   if (patch.allowedTabs !== undefined) body.allowed_tabs = patch.allowedTabs;
   const rows = await rest(`/dashboard_users?id=eq.${id}`, {
@@ -173,7 +175,10 @@ function listAuditLog({ limit = 200, search = '', from = '', to = '', user = '' 
 
 // ---- Shaping + permission check ---------------------------------------------
 function publicUser(u) {
-  return { id: u.id, username: u.username, isSuperuser: u.is_superuser, allowedTabs: u.allowed_tabs || [], createdAt: u.created_at };
+  return {
+    id: u.id, username: u.username, email: u.email || null,
+    isSuperuser: u.is_superuser, allowedTabs: u.allowed_tabs || [], createdAt: u.created_at,
+  };
 }
 
 function userCan(user, tab) {

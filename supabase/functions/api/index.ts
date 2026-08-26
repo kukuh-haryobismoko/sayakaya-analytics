@@ -9,6 +9,7 @@ import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
 import { portfolioReport } from './pdf.ts';
+import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
@@ -270,6 +271,7 @@ on('POST', '/api/admin/users', requireSuperuser(async (req, _params, _url, user)
   if (existing) return json({ error: 'That username is already taken.' }, 409);
   const created = await A.createUser({
     username, password,
+    email: body.email as string | undefined,
     isSuperuser: !!body.isSuperuser,
     allowedTabs: (body.allowedTabs as string[]) || [],
   });
@@ -288,6 +290,7 @@ on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params, _url, u
   }
   const updated = await A.updateUser(params.id, {
     password: body.password as string | undefined,
+    email: body.email as string | undefined,
     isSuperuser: body.isSuperuser as boolean | undefined,
     allowedTabs: body.allowedTabs as string[] | undefined,
   });
@@ -929,6 +932,12 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
         },
       });
     }
+    if (format === 'gsheet') {
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
+      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username }));
+    }
     const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);
     rows = sheets[0].rows; // CSV has no sheets — holdings only
@@ -964,6 +973,12 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
         },
       });
     }
+    if (format === 'gsheet') {
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
+      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username }));
+    }
     const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(fixSheets, filename, username);
     rows = fixSheets[0].rows; // CSV has no sheets — holdings only
@@ -997,6 +1012,12 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
         },
       });
     }
+    if (format === 'gsheet') {
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
+      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username }));
+    }
     const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(txSheets, filename, username);
     rows = txSheets[0].rows; // CSV has no sheets — holdings only
@@ -1029,6 +1050,12 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
           'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
         },
       });
+    }
+    if (format === 'gsheet') {
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
+      return json(await sheetPortfolioReport({ contact, holdings: holdingsSi }, { columns, username }));
     }
     const siSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdingsSi) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(siSheets, filename, username);
@@ -1066,6 +1093,12 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
           'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
         },
       });
+    }
+    if (format === 'gsheet') {
+      const columns = body.columns as string[] | undefined;
+      const c = Q.userContact(userId);
+      const [contact] = await runQuery(c.sql, c.params, { redact: false });
+      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username }));
     }
     const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);

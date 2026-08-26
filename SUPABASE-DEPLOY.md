@@ -123,8 +123,18 @@ supabase secrets set --env-file supabase/.env.secrets
 ### 3. Deploy
 
 ```bash
+supabase db push          # applies supabase/migrations/*.sql, incl. dashboard_users.email
 supabase functions deploy api
 ```
+
+The Portfolio tab's **Google Sheet** export (supabase/functions/api/sheets.ts)
+reuses `GCP_SA_KEY` from step 2, plus one more secret in
+`supabase/.env.secrets`: `GSHEET_TRACKER_ID`, the ID of a Google Sheet you
+create yourself and share as **Editor** with the service account's email —
+every export adds a new pair of tabs to that one sheet rather than creating a
+new file each time (a bare service account can't create its own Drive files
+under a Workspace org like sayakaya.id). Also enable the **Google Sheets
+API** for that key's GCP project — Drive's API is not needed.
 
 Your function is now live at:
 

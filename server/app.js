@@ -14,6 +14,7 @@ const { ask, askEnabled, TABLES, suggestChart } = require('./ask');
 const EX = require('./explore');
 const ML = require('./ml');
 const PDF = require('./pdf');
+const SHEETS = require('./sheets');
 const Auth = require('./auth');
 
 // Every export `source` maps to exactly one tab, so a single permission check
@@ -192,11 +193,11 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   app.post('/api/admin/users', requireSuperuser, handler(async (req, res) => {
-    const { username, password, isSuperuser, allowedTabs } = req.body || {};
+    const { username, password, email, isSuperuser, allowedTabs } = req.body || {};
     if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
     const existing = await Auth.findUserByUsername(username);
     if (existing) return res.status(409).json({ error: 'That username is already taken.' });
-    const created = await Auth.createUser({ username, password, isSuperuser: !!isSuperuser, allowedTabs: allowedTabs || [] });
+    const created = await Auth.createUser({ username, password, email, isSuperuser: !!isSuperuser, allowedTabs: allowedTabs || [] });
     await Auth.logEvent(req.user.id, req.user.username, 'admin_user_create',
       `created dashboard user "${username}"${isSuperuser ? ' (superuser)' : ''}`);
     res.json(Auth.publicUser(created));
@@ -886,6 +887,12 @@ function createApp({ serveStatic = true } = {}) {
         const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
         return sendPdf(res, buf, filename, username);
       }
+      if (format === 'gsheet') {
+        const { columns } = req.body;
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        return res.json(await SHEETS.portfolioReport({ contact, holdings }, { columns, username }));
+      }
       const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, sheets, filename, username);
       rows = sheets[0].rows; // CSV has no sheets — holdings only
@@ -913,6 +920,12 @@ function createApp({ serveStatic = true } = {}) {
         const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
         return sendPdf(res, buf, filename, username);
       }
+      if (format === 'gsheet') {
+        const { columns } = req.body;
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        return res.json(await SHEETS.portfolioReport({ contact, holdings }, { columns, username }));
+      }
       const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, fixSheets, filename, username);
       rows = fixSheets[0].rows; // CSV has no sheets — holdings only
@@ -938,6 +951,12 @@ function createApp({ serveStatic = true } = {}) {
         const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
         return sendPdf(res, buf, filename, username);
       }
+      if (format === 'gsheet') {
+        const { columns } = req.body;
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        return res.json(await SHEETS.portfolioReport({ contact, holdings }, { columns, username }));
+      }
       const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, txSheets, filename, username);
       rows = txSheets[0].rows; // CSV has no sheets — holdings only
@@ -962,6 +981,12 @@ function createApp({ serveStatic = true } = {}) {
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
         const buf = await PDF.portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username });
         return sendPdf(res, buf, filename, username);
+      }
+      if (format === 'gsheet') {
+        const { columns } = req.body;
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        return res.json(await SHEETS.portfolioReport({ contact, holdings: holdingsSi }, { columns, username }));
       }
       const siSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdingsSi) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, siSheets, filename, username);
@@ -993,6 +1018,12 @@ function createApp({ serveStatic = true } = {}) {
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
         const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
         return sendPdf(res, buf, filename, username);
+      }
+      if (format === 'gsheet') {
+        const { columns } = req.body;
+        const c = Q.userContact(userId);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        return res.json(await SHEETS.portfolioReport({ contact, holdings }, { columns, username }));
       }
       const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, sheets, filename, username);

@@ -2336,6 +2336,32 @@ async function download(body, filename) {
   toast('Export ready');
 }
 
+// Google Sheet export has no file to hand the browser — the server creates
+// the sheet and shares it with the requesting user's own email, then hands
+// back its URL to open directly, same button-press UX as download() above.
+//
+// The tab is opened synchronously, before the `await fetch`, and only
+// redirected once the URL comes back — window.open() after an await is no
+// longer inside the click's user-activation window, so browsers block the
+// navigation and leave it stuck on about:blank instead of an outright
+// "popup blocked" warning.
+async function pushToSheet(body) {
+  const tab = window.open('', '_blank');
+  const res = await fetch(API_BASE + '/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ ...body, format: 'gsheet' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (tab) tab.close();
+    toast(data.error || 'Google Sheets export failed');
+    return;
+  }
+  if (tab) tab.location.href = data.url; else window.open(data.url, '_blank');
+  toast('Google Sheet ready');
+}
+
 // ====================================================================
 //  ASK (natural language)
 // ====================================================================
@@ -2672,6 +2698,7 @@ function resetAdminForm() {
   $('#adminUsername').disabled = false;
   $('#adminPassword').value = '';
   $('#adminPassword').placeholder = t('gate_password_ph');
+  $('#adminEmail').value = '';
   $('#adminIsSuperuser').checked = false;
   $('#adminFormErr').textContent = '';
   renderAdminTabsPicker([]);
@@ -2685,6 +2712,7 @@ function startEditUser(user) {
   $('#adminUsername').disabled = true; // username is immutable once created
   $('#adminPassword').value = '';
   $('#adminPassword').placeholder = t('admin_password_keep_current_ph');
+  $('#adminEmail').value = user.email || '';
   $('#adminIsSuperuser').checked = user.isSuperuser;
   $('#adminFormErr').textContent = '';
   renderAdminTabsPicker(user.allowedTabs || []);
@@ -2703,6 +2731,7 @@ function renderAdminUsers(users) {
   const body = users.map((u) => `
     <tr>
       <td>${u.username}</td>
+      <td>${u.email || '—'}</td>
       <td>${accessCell(u)}</td>
       <td class="mono">${String(u.createdAt || '').slice(0, 10)}</td>
       <td>
@@ -2716,7 +2745,7 @@ function renderAdminUsers(users) {
       </td>
     </tr>`).join('');
   $('#adminUsersTable').innerHTML = `<table>
-    <thead><tr><th>Username</th><th>Access</th><th>Created</th><th></th></tr></thead>
+    <thead><tr><th>Username</th><th>Email</th><th>Access</th><th>Created</th><th></th></tr></thead>
     <tbody>${body}</tbody>
   </table>`;
   adminUsersCache = users;
@@ -2752,6 +2781,7 @@ async function loadAdminUsers() {
 async function saveAdminUser() {
   const username = $('#adminUsername').value.trim();
   const password = $('#adminPassword').value;
+  const email = $('#adminEmail').value.trim();
   const isSuperuser = $('#adminIsSuperuser').checked;
   const allowedTabs = $$('#adminTabsPicker input:checked').map((el) => el.value);
   $('#adminFormErr').textContent = '';
@@ -2761,12 +2791,12 @@ async function saveAdminUser() {
   }
   try {
     if (editingUserId) {
-      const patch = { isSuperuser, allowedTabs };
+      const patch = { email, isSuperuser, allowedTabs };
       if (password) patch.password = password;
       await api(`/api/admin/users/${editingUserId}`, { method: 'PATCH', body: JSON.stringify(patch) });
       toast('User updated');
     } else {
-      await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, password, isSuperuser, allowedTabs }) });
+      await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, password, email, isSuperuser, allowedTabs }) });
       toast('User created');
     }
     $('#adminUserModal').close();
@@ -3105,6 +3135,8 @@ function wire() {
   $('#pfPdfOnly').addEventListener('click', () => pfSelected && download(
     { source: 'portfolio_full', format: 'pdf', filename: pfFilename(), ...pfExportBody(), includePerformance: false, columns: selectedPdfColumns() },
     `${pfFilename()}.pdf`));
+  $('#pfGsheet').addEventListener('click', () => pfSelected && pushToSheet(
+    { source: 'portfolio_full', ...pfExportBody(), columns: selectedPdfColumns() }));
   $('#pfDateApply').addEventListener('click', loadPortfolioUser);
 
   // portfolio (fix) — same wiring as portfolio (pwc) above, different source table
@@ -3137,6 +3169,8 @@ function wire() {
   $('#pfxPdfOnly').addEventListener('click', () => pfxSelected && download(
     { source: 'portfolio_fix_full', format: 'pdf', filename: pfxFilename(), ...pfxExportBody(), includePerformance: false, columns: selectedPdfColumns() },
     `${pfxFilename()}.pdf`));
+  $('#pfxGsheet').addEventListener('click', () => pfxSelected && pushToSheet(
+    { source: 'portfolio_fix_full', ...pfxExportBody(), columns: selectedPdfColumns() }));
   $('#pfxDateApply').addEventListener('click', loadPfxUser);
 
   // portfolio (tx) — export carries the as-of date (if any) plus the fund checklist
@@ -3169,6 +3203,8 @@ function wire() {
   $('#ptxPdfOnly').addEventListener('click', () => ptxSelected && download(
     { source: 'portfolio_tx_full', format: 'pdf', filename: ptxFilename(), ...ptxExportBody(), includePerformance: false, columns: selectedPdfColumns() },
     `${ptxFilename()}.pdf`));
+  $('#ptxGsheet').addEventListener('click', () => ptxSelected && pushToSheet(
+    { source: 'portfolio_tx_full', ...ptxExportBody(), columns: selectedPdfColumns() }));
   $('#ptxDateApply').addEventListener('click', loadPtxUser);
 
   // portfolio (sinvest) — same wiring as portfolio (tx), sourced from the custodian feed
@@ -3201,6 +3237,8 @@ function wire() {
   $('#psiPdfOnly').addEventListener('click', () => psiSelected && download(
     { source: 'portfolio_sinvest_full', format: 'pdf', filename: psiFilename(), ...psiExportBody(), includePerformance: false, columns: selectedPdfColumns() },
     `${psiFilename()}.pdf`));
+  $('#psiGsheet').addEventListener('click', () => psiSelected && pushToSheet(
+    { source: 'portfolio_sinvest_full', ...psiExportBody(), columns: selectedPdfColumns() }));
   $('#psiDateApply').addEventListener('click', loadPsiUser);
 
   // portfolio explorer (goal_snapshots)
@@ -3230,6 +3268,8 @@ function wire() {
   $('#pePdfOnly').addEventListener('click', () => peSelected && download(
     { source: 'portfolio_explorer_full', format: 'pdf', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, includePerformance: false, columns: selectedPdfColumns() },
     `portfolio_explorer_${peSelected.sid}_${peSelected.date}.pdf`));
+  $('#peGsheet').addEventListener('click', () => peSelected && pushToSheet(
+    { source: 'portfolio_explorer_full', userId: peSelected.userId, date: peSelected.date, columns: selectedPdfColumns() }));
 
   // HNWI
   $('#hnwiApply').addEventListener('click', loadHnwi);

@@ -176,6 +176,7 @@
               </div>
               <button class="btn-ghost" id="pfPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="pfPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
+              <button class="btn-ghost" id="pfGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
           <span class="hint" id="pfUserSub"></span><br>
@@ -228,6 +229,7 @@
               </div>
               <button class="btn-ghost" id="pfxPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="pfxPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
+              <button class="btn-ghost" id="pfxGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
           <span class="hint" id="pfxUserSub"></span><br>
@@ -280,6 +282,7 @@
               </div>
               <button class="btn-ghost" id="ptxPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="ptxPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
+              <button class="btn-ghost" id="ptxGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
           <span class="hint" id="ptxUserSub"></span><br>
@@ -332,6 +335,7 @@
               </div>
               <button class="btn-ghost" id="psiPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="psiPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
+              <button class="btn-ghost" id="psiGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
           <span class="hint" id="psiUserSub"></span><br>
@@ -384,6 +388,7 @@
               </div>
               <button class="btn-ghost" id="pePdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="pePdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
+              <button class="btn-ghost" id="peGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
           <span class="hint" id="peUserSub"></span><br>
@@ -1356,6 +1361,10 @@ ORDER BY n DESC"></textarea>
           <h3>💎 HNWI</h3>
           <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below defaults to that same investor list; applying its own Min/Max fund AUM filter switches it to generate its own list by fund holding amount instead, independent of the filter above.</p>
         </div>
+        <div class="doc-item">
+          <h3>📤 Google Sheet export</h3>
+          <p>Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) has a <b>Google Sheet</b> button next to its PDF buttons — one click adds a new tab, named with the investor and a timestamp, to one shared tracker spreadsheet, with the same investor info and holdings table as the "PDF (portfolio only)" export (no fund-performance breakdown), then opens straight to the new tab. Ask a superuser for the tracker sheet's link if you don't have it yet.</p>
+        </div>
       </div>
 
       <!-- Remisier sharing / Remisier transactions doc-items are intentionally
@@ -1443,6 +1452,7 @@ ORDER BY n DESC"></textarea>
         <div class="filters" style="margin-top:12px">
           <input type="text" id="adminUsername" data-i18n-placeholder="gate_username_ph" placeholder="Username" style="min-width:160px" />
           <input type="password" id="adminPassword" data-i18n-placeholder="gate_password_ph" placeholder="Password" style="min-width:220px" autocomplete="new-password" />
+          <input type="email" id="adminEmail" data-i18n-placeholder="admin_email_ph" placeholder="Email (optional)" style="min-width:240px" />
           <label class="ask-table-chk"><input type="checkbox" id="adminIsSuperuser" /> <span data-i18n="admin_superuser_full_access">Superuser (full access)</span></label>
         </div>
         <div id="adminTabsPicker" class="ask-tables" style="margin-top:12px"></div>

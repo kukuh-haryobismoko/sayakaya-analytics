@@ -9,7 +9,7 @@ import LOGO_BASE64 from './logo.ts';
 const LOGO_BUFFER = Buffer.from(LOGO_BASE64, 'base64');
 const LOGO_RATIO = 490 / 720; // source PNG is 720x490 (sayakaya-kotak.png)
 
-function val(v: unknown): unknown {
+export function val(v: unknown): unknown {
   if (v === null || v === undefined) return null;
   if (typeof v === 'object') {
     if ('value' in (v as Record<string, unknown>)) return (v as { value: unknown }).value;
@@ -25,13 +25,13 @@ const numFmt = (n: unknown, digits = 4): string => {
   return v == null ? '—' : Number(v).toFixed(digits);
 };
 // Indonesian number format, as on the official statement: 51.038,7052 / 100.239.429
-const idNum = (n: unknown, digits = 0): string => {
+export const idNum = (n: unknown, digits = 0): string => {
   const v = val(n);
   if (v == null) return '—';
   return new Intl.NumberFormat('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(v));
 };
 // Accountant-style negatives for gain/loss cells: (214.800.256)
-const idParen = (n: unknown): string => {
+export const idParen = (n: unknown): string => {
   const v = val(n);
   if (v == null) return '—';
   const num = Number(v);
@@ -39,12 +39,12 @@ const idParen = (n: unknown): string => {
 };
 // funds.type enum → the statement's friendly label ("MIXED" is sold as balanced).
 const FUND_TYPE_LABELS: Record<string, string> = { MIXED: 'Balanced Fund' };
-const fundTypeLabel = (t: unknown): string => {
+export const fundTypeLabel = (t: unknown): string => {
   const v = val(t);
   if (!v) return '—';
   return FUND_TYPE_LABELS[String(v)] || String(v).split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ') + ' Fund';
 };
-const pctFmt = (n: unknown): string => {
+export const pctFmt = (n: unknown): string => {
   const v = val(n);
   if (v == null) return '—';
   const num = Number(v);
@@ -86,7 +86,7 @@ function pageHeader(doc: any, title: string, sub?: string) {
   doc.moveDown(0.6);
 }
 
-interface Column { key: string; label: string; width: number; align?: string; format?: (v: unknown) => string }
+export interface Column { key: string; label: string; width: number; align?: string; format?: (v: unknown) => string }
 
 // Minimal table renderer: header row + data rows, with column widths and
 // per-row page breaks.
@@ -144,7 +144,7 @@ function table(doc: any, columns: Column[], rows: Record<string, unknown>[], { r
 // Statement columns, mirroring the official "CUSTOMER PORTFOLIO" layout:
 // fund value = avg buy NAV x units; market value = close NAV x units;
 // unrealized gain/loss = market - fund value; % = gain/loss over fund value.
-const HOLDINGS_COLS = (width: number): Column[] => [
+export const HOLDINGS_COLS = (width: number): Column[] => [
   { key: 'fund', label: 'Fund Name', width: width * 0.15 },
   { key: 'fund_type', label: 'Fund Type', width: width * 0.09, format: fundTypeLabel },
   { key: 'unit', label: 'Unit Balance', width: width * 0.11, align: 'right', format: (v) => idNum(v, 4) },
@@ -158,7 +158,7 @@ const HOLDINGS_COLS = (width: number): Column[] => [
 
 // Drops columns not in `keys` (if given), keeping 'fund' always, and renormalizes
 // widths so the remaining columns still fill the full table width.
-function filterCols(cols: Column[], totalWidth: number, keys?: string[]): Column[] {
+export function filterCols(cols: Column[], totalWidth: number, keys?: string[]): Column[] {
   if (!keys) return cols;
   const keep = cols.filter((c) => c.key === 'fund' || keys.includes(c.key));
   const sumW = keep.reduce((s, c) => s + c.width, 0);
@@ -166,7 +166,7 @@ function filterCols(cols: Column[], totalWidth: number, keys?: string[]): Column
 }
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
-const PERF_COLS = (width: number): Column[] => [
+export const PERF_COLS = (width: number): Column[] => [
   { key: 'Fund', label: 'Fund', width: width * 0.24 },
   { key: 'NAV', label: 'NAV', width: width * 0.1, align: 'right', format: (v) => numFmt(v, 2) },
   ...PERF_PERIODS.map((p) => ({ key: p, label: p, width: (width * 0.66) / PERF_PERIODS.length, align: 'right', format: pctFmt })),
@@ -175,14 +175,14 @@ const PERF_COLS = (width: number): Column[] => [
 interface Contact { name?: unknown; sid?: unknown; ifua?: unknown; email?: unknown; phone?: unknown; address?: unknown }
 interface PerfSheet { name: string; rows: Record<string, unknown>[] }
 
-const DISCLAIMER = 'Dokumen ini dipersiapkan oleh PT SAYAKAYA LAHIR BATIN dan hanya bisa digunakan untuk kepentingan investor tersebut di atas dan tidak untuk pihak lainnya. Laporan ini bukan merupakan konfirmasi dari PT SAYAKAYA LAHIR BATIN dan tidak untuk menggantikan laporan yang wajib diterbitkan oleh Bank Kustodian, jika ada perbedaan antara laporan ini dengan laporan Bank Kustodian, maka laporan Bank Kustodian adalah yang benar. Laporan ini diproses oleh komputer dan tidak memerlukan tandatangan.';
-const OJK_LINE = 'PT SAYAKAYA LAHIR BATIN terdaftar dan diawasi oleh OJK, dengan nomor registrasi KEP-17/PM.21/2021';
+export const DISCLAIMER = 'Dokumen ini dipersiapkan oleh PT SAYAKAYA LAHIR BATIN dan hanya bisa digunakan untuk kepentingan investor tersebut di atas dan tidak untuk pihak lainnya. Laporan ini bukan merupakan konfirmasi dari PT SAYAKAYA LAHIR BATIN dan tidak untuk menggantikan laporan yang wajib diterbitkan oleh Bank Kustodian, jika ada perbedaan antara laporan ini dengan laporan Bank Kustodian, maka laporan Bank Kustodian adalah yang benar. Laporan ini diproses oleh komputer dan tidak memerlukan tandatangan.';
+export const OJK_LINE = 'PT SAYAKAYA LAHIR BATIN terdaftar dan diawasi oleh OJK, dengan nomor registrasi KEP-17/PM.21/2021';
 
 const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
 // Statement date is the latest NAV date across the holdings (NAV publishes
 // H-1, so "today's" statement is dated yesterday). Formatted like "4 Agustus 2025".
-function statementDate(holdings: Record<string, unknown>[]): string {
+export function statementDate(holdings: Record<string, unknown>[]): string {
   const latest = holdings.map((h) => String(val(h.nav_date) || '')).filter(Boolean).sort().pop();
   if (!latest) return '—';
   const [y, m, d] = latest.slice(0, 10).split('-').map(Number);

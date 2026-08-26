@@ -86,6 +86,7 @@ const I18N = {
     common_columns: `Columns`,
     common_pdf_portfolio_only: `PDF (portfolio only)`,
     common_pdf_with_performance: `PDF (with performance)`,
+    common_gsheet: `Google Sheet`,
     common_filters: `Filters`,
     common_detail: `Detail`,
     common_day: `Day`,
@@ -274,6 +275,7 @@ const I18N = {
     admin_edit_user_prefix: `Edit`,
     admin_save_changes: `Save changes`,
     admin_password_keep_current_ph: `Leave blank to keep current password`,
+    admin_email_ph: `Email (optional)`,
 
     // ---- Phase 3: KPI cards + chart legends (added 2026-08-03) ----
     kpi_platform_aum: `Platform AUM`,
@@ -384,6 +386,7 @@ const I18N = {
     common_columns: `Kolom`,
     common_pdf_portfolio_only: `PDF (portofolio saja)`,
     common_pdf_with_performance: `PDF (dengan performa)`,
+    common_gsheet: `Google Sheet`,
     common_filters: `Filter`,
     common_detail: `Detail`,
     common_day: `Hari`,
@@ -572,6 +575,7 @@ const I18N = {
     admin_edit_user_prefix: `Ubah`,
     admin_save_changes: `Simpan perubahan`,
     admin_password_keep_current_ph: `Kosongkan untuk mempertahankan kata sandi saat ini`,
+    admin_email_ph: `Email (opsional)`,
 
     // ---- Phase 3: KPI cards + chart legends (added 2026-08-03) ----
     kpi_platform_aum: `AUM platform`,

@@ -16,6 +16,7 @@ export interface DashboardUser {
   id: string;
   username: string;
   password_hash: string;
+  email: string | null;
   is_superuser: boolean;
   allowed_tabs: string[];
   created_at: string;
@@ -24,6 +25,7 @@ export interface DashboardUser {
 export interface PublicUser {
   id: string;
   username: string;
+  email: string | null;
   isSuperuser: boolean;
   allowedTabs: string[];
   createdAt: string;
@@ -78,7 +80,7 @@ export async function findUserById(id: string): Promise<DashboardUser | null> {
 }
 
 export function listUsers(): Promise<DashboardUser[]> {
-  return rest('/dashboard_users?select=id,username,is_superuser,allowed_tabs,created_at&order=username.asc');
+  return rest('/dashboard_users?select=id,username,email,is_superuser,allowed_tabs,created_at&order=username.asc');
 }
 
 export async function countSuperusers(): Promise<number> {
@@ -86,13 +88,14 @@ export async function countSuperusers(): Promise<number> {
   return rows.length;
 }
 
-export async function createUser(opts: { username: string; password: string; isSuperuser?: boolean; allowedTabs?: string[] }): Promise<DashboardUser> {
+export async function createUser(opts: { username: string; password: string; email?: string | null; isSuperuser?: boolean; allowedTabs?: string[] }): Promise<DashboardUser> {
   const rows = await rest('/dashboard_users', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
       username: opts.username,
       password_hash: hashPassword(opts.password),
+      email: opts.email || null,
       is_superuser: !!opts.isSuperuser,
       allowed_tabs: opts.allowedTabs || [],
     }),
@@ -100,10 +103,11 @@ export async function createUser(opts: { username: string; password: string; isS
   return rows[0];
 }
 
-// patch: { password?, isSuperuser?, allowedTabs? } — only defined keys are updated.
-export async function updateUser(id: string, patch: { password?: string; isSuperuser?: boolean; allowedTabs?: string[] } = {}): Promise<DashboardUser> {
+// patch: { password?, email?, isSuperuser?, allowedTabs? } — only defined keys are updated.
+export async function updateUser(id: string, patch: { password?: string; email?: string | null; isSuperuser?: boolean; allowedTabs?: string[] } = {}): Promise<DashboardUser> {
   const body: Record<string, unknown> = {};
   if (patch.password) body.password_hash = hashPassword(patch.password);
+  if (patch.email !== undefined) body.email = patch.email || null;
   if (patch.isSuperuser !== undefined) body.is_superuser = patch.isSuperuser;
   if (patch.allowedTabs !== undefined) body.allowed_tabs = patch.allowedTabs;
   const rows = await rest(`/dashboard_users?id=eq.${id}`, {
@@ -198,7 +202,7 @@ export function listAuditLog(opts: { limit?: number | string; search?: string; f
 
 // ---- Shaping + permission check ---------------------------------------------
 export function publicUser(u: DashboardUser): PublicUser {
-  return { id: u.id, username: u.username, isSuperuser: u.is_superuser, allowedTabs: u.allowed_tabs || [], createdAt: u.created_at };
+  return { id: u.id, username: u.username, email: u.email || null, isSuperuser: u.is_superuser, allowedTabs: u.allowed_tabs || [], createdAt: u.created_at };
 }
 
 export function userCan(user: DashboardUser | null | undefined, tab: string): boolean {

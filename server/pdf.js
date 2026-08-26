@@ -277,4 +277,11 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
   return bufferDoc(doc);
 }
 
-module.exports = { portfolioReport };
+module.exports = {
+  portfolioReport,
+  // Exported for server/sheets.js, so the Google Sheets export mirrors this
+  // PDF's exact columns, number formatting, and disclaimer text instead of
+  // re-implementing them.
+  val, idNum, idParen, pctFmt, fundTypeLabel, statementDate,
+  HOLDINGS_COLS, filterCols, PERF_COLS, DISCLAIMER, OJK_LINE,
+};

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/render-smoke.js"
+    "test": "node test/render-smoke.js && node test/sheets-format-smoke.js"
   },
   "engines": {
     "node": ">=18"
@@ -18,6 +18,7 @@
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
+    "google-auth-library": "^9.15.1",
     "pdfkit": "^0.19.1",
     "serverless-http": "^3.2.0"
   }

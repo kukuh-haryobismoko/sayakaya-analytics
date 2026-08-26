@@ -69,6 +69,21 @@ In the Netlify UI: **Site configuration → Environment variables → Add a vari
 | `SUPABASE_SERVICE_ROLE_KEY` | From the Supabase dashboard → Settings → API. Supabase's own Edge Function gets this injected automatically; Netlify needs it set explicitly. |
 | `ANTHROPIC_API_KEY` | Optional. Enables the **Ask** tab (plain-English questions → SQL). Get one at console.anthropic.com/settings/keys. |
 
+`GCP_SA_KEY`'s service account also drives the Portfolio tab's **Google Sheet**
+export button (server/sheets.js) — reuses the same key, and needs one more
+variable:
+
+| Key | Value |
+|---|---|
+| `GSHEET_TRACKER_ID` | The ID (from its URL) of a Google Sheet you create yourself, shared as **Editor** with the service account's email (`client_email` in `service-account.json`) — every export adds a new pair of tabs to this one sheet, it doesn't create a new file each time. |
+
+Also enable the **Google Sheets API** for that key's GCP project
+(console.cloud.google.com → APIs & Services) — separate from BigQuery's API.
+Google Drive's API is *not* needed: a bare service account can't create its
+own Drive-backed files under a Google Workspace org (sayakaya.id rejects that
+outright), which is exactly why this writes into a sheet a real person
+already owns instead of creating one per export.
+
 The UI handles the multi-line JSON cleanly. With the CLI, do it in one shot from
 the file so newlines stay intact:
 
