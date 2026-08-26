@@ -2731,11 +2731,33 @@ function allTabs() {
     .map((t) => ({ id: t.dataset.tab, label: t.textContent.trim() }));
 }
 
+// Same tabs as allTabs(), but grouped and ordered like the sidebar (one
+// section per nav-group) instead of one flat list — used only by the access
+// picker below; allTabs() stays flat since renderAdminUsers's Access column
+// just needs an id -> label lookup.
+function allTabsGrouped() {
+  return $$('.nav-group[data-group]')
+    .filter((g) => g.dataset.group !== 'admin')
+    .map((g) => {
+      const icon = (t) => t.querySelector('.nav-icon')?.textContent || '';
+      return {
+        label: g.querySelector('.nav-label span')?.textContent.trim() || g.dataset.group,
+        tabs: Array.from(g.querySelectorAll('.nav-link[data-tab]'))
+          .filter((t) => !SUPERUSER_ONLY_TABS.includes(t.dataset.tab) && !ALWAYS_ALLOWED_TABS.includes(t.dataset.tab))
+          .map((t) => ({ id: t.dataset.tab, icon: icon(t), label: t.textContent.replace(icon(t), '').trim() })),
+      };
+    })
+    .filter((g) => g.tabs.length);
+}
+
 function renderAdminTabsPicker(selected = []) {
   const checked = new Set(selected);
-  $('#adminTabsPicker').innerHTML = allTabs().map((t) =>
-    `<label class="ask-table-chk"><input type="checkbox" value="${t.id}" ${checked.has(t.id) ? 'checked' : ''}> ${t.label}</label>`
-  ).join('');
+  $('#adminTabsPicker').innerHTML = allTabsGrouped().map((g) => `
+    <div class="admin-tabs-group">
+      <div class="admin-tabs-group-label">${g.label}</div>
+      ${g.tabs.map((t) => `<label class="admin-tab-row"><input type="checkbox" value="${t.id}" ${checked.has(t.id) ? 'checked' : ''}><span class="nav-icon">${t.icon}</span>${t.label}</label>`).join('')}
+    </div>
+  `).join('');
 }
 
 let editingUserId = null;
@@ -2932,14 +2954,31 @@ function wireChangePassword() {
     $('#changePwPanel').classList.toggle('hidden');
     $('#changePwCurrent').focus();
   });
+  // Eye-icon show/hide toggle — generic so it works for any .pw-toggle button
+  // paired with an input via data-for, not just this one form.
+  $$('.pw-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = $('#' + btn.dataset.for);
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.textContent = show ? '🙈' : '👁';
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
+  });
   $('#changePwSave').addEventListener('click', async () => {
     const currentPassword = $('#changePwCurrent').value;
     const newPassword = $('#changePwNew').value;
+    const confirmPassword = $('#changePwConfirm').value;
     $('#changePwErr').textContent = '';
-    if (!currentPassword || !newPassword) { $('#changePwErr').textContent = 'Both fields are required.'; return; }
+    if (!currentPassword || !newPassword || !confirmPassword) { $('#changePwErr').textContent = 'All fields are required.'; return; }
+    if (newPassword !== confirmPassword) { $('#changePwErr').textContent = "New passwords don't match."; return; }
     try {
       await api('/api/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) });
-      $('#changePwCurrent').value = ''; $('#changePwNew').value = '';
+      $('#changePwCurrent').value = ''; $('#changePwNew').value = ''; $('#changePwConfirm').value = '';
+      $$('.pw-toggle').forEach((btn) => {
+        $('#' + btn.dataset.for).type = 'password';
+        btn.textContent = '👁'; btn.setAttribute('aria-label', 'Show password');
+      });
       $('#changePwPanel').classList.add('hidden');
       toast('Password updated');
     } catch (e) { $('#changePwErr').textContent = e.message; }

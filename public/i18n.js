@@ -27,6 +27,7 @@ const I18N = {
     logout_btn: `Log out`,
     change_pw_current_ph: `Current password`,
     change_pw_new_ph: `New password`,
+    change_pw_confirm_ph: `Confirm new password`,
     change_pw_save: `Update password`,
 
     nav_group_dashboards: `Dashboards`,
@@ -341,6 +342,7 @@ const I18N = {
     logout_btn: `Keluar`,
     change_pw_current_ph: `Kata sandi saat ini`,
     change_pw_new_ph: `Kata sandi baru`,
+    change_pw_confirm_ph: `Konfirmasi kata sandi baru`,
     change_pw_save: `Perbarui kata sandi`,
 
     nav_group_dashboards: `Dasbor`,

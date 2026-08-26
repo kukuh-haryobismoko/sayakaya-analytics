@@ -361,8 +361,31 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--indigo);
   border-radius: var(--radius); box-shadow: var(--shadow); color: var(--ink);
   padding: 18px 20px; width: 640px; max-width: calc(100vw - 32px);
+  max-height: 85vh; overflow-y: auto;
 }
 .admin-modal::backdrop { background: rgba(10, 12, 30, .5); }
+
+/* Password fields with a show/hide eye toggle */
+.pw-field { position: relative; }
+.pw-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; padding: 0; border: none; background: none; cursor: pointer;
+  font-size: 14px; line-height: 1; opacity: .6; border-radius: 6px;
+}
+.pw-toggle:hover { opacity: 1; background: var(--hover-bg); }
+
+/* Tab-access picker: one section per sidebar group, tabs stacked vertically
+   in the same order as the sidebar — a wrapping chip cloud got unreadable
+   once there were ~30 tabs to pick from. */
+.admin-tabs-picker { margin-top: 12px; display: flex; flex-direction: column; gap: 14px; }
+.admin-tabs-group-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin-bottom: 6px;
+}
+.admin-tabs-group { display: flex; flex-direction: column; }
+.admin-tab-row {
+  display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; color: var(--ink);
+}
 
 /* ---------- SQL lab ---------- */
 #sqlInput {
