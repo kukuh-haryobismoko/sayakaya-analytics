@@ -8,9 +8,10 @@ import { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } from './export.ts';
 import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
-import { portfolioReport, val } from './pdf.ts';
+import { portfolioReport, transactionStatement, val } from './pdf.ts';
 import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
+import * as Mail from './mail.ts';
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
 
@@ -494,7 +495,7 @@ on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
 }));
 
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest'], async (_req, _params, url) => {
+on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -1252,6 +1253,58 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
   if (format === 'txt') return txtResponse(rows, filename, username);
   return csvResponse(rows, filename, username);
 });
+
+// ---- Send statement: email an investor their portfolio (holdings only, no
+// fund performance) and/or their monthly transaction e-statement, as one
+// or two PDF attachments. ---------------------------------------------------
+on('POST', '/api/statement/email', requireTab('send-statement', async (req, _params, _url, user) => {
+  const body = await bodyOf(req);
+  const userId = body.userId as string; const sid = body.sid as string;
+  const sendPortfolio = body.sendPortfolio as boolean | undefined;
+  const portfolioDate = body.portfolioDate as string | undefined;
+  const sendStatement = body.sendStatement as boolean | undefined;
+  const statementMonth = body.statementMonth as string | undefined;
+  if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
+  if (!sendPortfolio && !sendStatement) return json({ error: 'Pick at least one document to send.' }, 400);
+
+  const username = user!.username;
+  const c = Q.userContact(userId);
+  const [contact] = await runQuery(c.sql, c.params, { redact: false });
+  if (!contact?.email) return json({ error: 'This investor has no email on file.' }, 400);
+
+  const attachments: { filename: string; content: Uint8Array }[] = [];
+
+  if (sendPortfolio) {
+    const h = portfolioDate ? Q.userHoldingsAsOf(sid, portfolioDate) : Q.userHoldings(userId);
+    const holdings = await runQuery(h.sql, h.params);
+    // Portfolio-only, no fund-performance pages — this tool never sends performance.
+    const buf = await portfolioReport({ contact, holdings }, [], { username });
+    attachments.push({ filename: `Portfolio_${sid}${portfolioDate ? '_' + portfolioDate : ''}.pdf`, content: new Uint8Array(buf) });
+  }
+
+  if (sendStatement) {
+    const [year, month] = String(statementMonth || '').split('-').map(Number);
+    if (!year || !month) return json({ error: 'statementMonth is required (YYYY-MM).' }, 400);
+    const from = `${year}-${String(month).padStart(2, '0')}-01`;
+    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of that month
+    const t = Q.userTransactions(userId, from, to);
+    const transactions = await runQuery(t.sql, t.params);
+    const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const buf = await transactionStatement({ contact, transactions }, monthLabel, { username });
+    attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: new Uint8Array(buf) });
+  }
+
+  await Mail.sendStatementEmail({
+    to: contact.email as string,
+    subject: body.subject as string | undefined,
+    body: body.body as string | undefined,
+    name: contact.name as string | undefined,
+    attachments,
+  });
+  const sent = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
+  await A.logEvent(user!.id, username, 'email_pdf', `send-statement (${sent}) to ${contact.email}`);
+  return json({ ok: true, to: contact.email });
+}));
 
 // ---- Serve ------------------------------------------------------------------
 Deno.serve(async (req) => {

@@ -421,6 +421,18 @@ export const userContact = (userId: string): Query => ({
   params: { userId },
 });
 
+// One investor's transactions within a date range, for the monthly e-statement
+// PDF (pdf.ts transactionStatement) — fund name resolved here since
+// main.transactions only carries fund_id.
+export const userTransactions = (userId: string, from: string, to: string): Query => ({
+  sql: `SELECT t.created_at, t.type, t.status, f.name AS fund, t.unit, t.amount, t.final_amount
+    FROM ${TX} t
+    LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+    WHERE t.user_id = @userId AND DATE(t.created_at) BETWEEN @from AND @to
+    ORDER BY t.created_at`,
+  params: { userId, from, to },
+});
+
 // Current holdings for one user, one row per fund — regular + bonus units are
 // combined (the investor doesn't care which bucket a unit came from). Live
 // value at the fund's latest NAV, same "active holdings" definition as the

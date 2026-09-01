@@ -86,6 +86,43 @@ function pageHeader(doc: any, title: string, sub?: string) {
   doc.moveDown(0.6);
 }
 
+// Shared "Page 1" header for every statement PDF: square logo + issuer
+// address block, then an investor info block (left) with a title/date block
+// (right) — the only bits that vary per statement type. Leaves doc.y past
+// the investor block, ready for a table.
+// deno-lint-ignore no-explicit-any
+function printLetterhead(doc: any, { left, width, contact, title, dateLabel, dateValue }: {
+  left: number; width: number; contact?: Contact; title: string; dateLabel: string; dateValue: string;
+}) {
+  const logoWidth = 54;
+  doc.image(LOGO_BUFFER, left, doc.y, { width: logoWidth });
+  const headX = left + logoWidth + 16;
+  const headY = doc.y;
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text('PT Sayakaya Lahir Batin', headX, headY);
+  doc.font('Helvetica').fontSize(9).fillColor(MUTED)
+    .text('Sahid Sudirman Center, 12th Floor', headX)
+    .text('Jl Jenderal Sudirman Kav. 86, Jakarta 10220', headX);
+  doc.y = Math.max(doc.y, headY + logoWidth * LOGO_RATIO) + 24;
+
+  const labelW = 60;
+  const valueW = width * 0.55 - labelW;
+  const rightW = 200;
+  const rightX = left + width - rightW;
+  const blockY = doc.y;
+  let y = blockY;
+  ([['NAME', contact?.name], ['SID', contact?.sid], ['IFUA', contact?.ifua], ['Address', contact?.address]] as [string, unknown][]).forEach(([label, v]) => {
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(INK).text(label, left, y, { width: labelW });
+    const text = String(val(v) || '—');
+    doc.font('Helvetica').fontSize(9).fillColor(INK).text(text, left + labelW, y, { width: valueW });
+    y += Math.max(13, doc.heightOfString(text, { width: valueW }) + 2);
+  });
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text(title, rightX, blockY, { width: rightW, align: 'center' });
+  doc.font('Helvetica').fontSize(9).fillColor(INK).text(dateLabel, rightX, blockY + 19, { width: rightW });
+  doc.text(dateValue, rightX, blockY + 19, { width: rightW, align: 'right' });
+  doc.x = left;
+  doc.y = y + 24;
+}
+
 export interface Column { key: string; label: string; width: number; align?: string; format?: (v: unknown) => string }
 
 // Minimal table renderer: header row + data rows, with column widths and
@@ -208,35 +245,7 @@ export function portfolioReport(
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
   // ---- Page 1: CUSTOMER PORTFOLIO statement ----
-  // Letterhead: square logo + issuer address block.
-  const logoWidth = 54;
-  doc.image(LOGO_BUFFER, left, doc.y, { width: logoWidth });
-  const headX = left + logoWidth + 16;
-  const headY = doc.y;
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text('PT Sayakaya Lahir Batin', headX, headY);
-  doc.font('Helvetica').fontSize(9).fillColor(MUTED)
-    .text('Sahid Sudirman Center, 12th Floor', headX)
-    .text('Jl Jenderal Sudirman Kav. 86, Jakarta 10220', headX);
-  doc.y = Math.max(doc.y, headY + logoWidth * LOGO_RATIO) + 24;
-
-  // Investor block (left) + CUSTOMER PORTFOLIO / DATE (right).
-  const labelW = 60;
-  const valueW = width * 0.55 - labelW;
-  const rightW = 200;
-  const rightX = left + width - rightW;
-  const blockY = doc.y;
-  let y = blockY;
-  ([['NAME', contact?.name], ['SID', contact?.sid], ['IFUA', contact?.ifua], ['Address', contact?.address]] as [string, unknown][]).forEach(([label, v]) => {
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(INK).text(label, left, y, { width: labelW });
-    const text = String(val(v) || '—');
-    doc.font('Helvetica').fontSize(9).fillColor(INK).text(text, left + labelW, y, { width: valueW });
-    y += Math.max(13, doc.heightOfString(text, { width: valueW }) + 2);
-  });
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text('CUSTOMER PORTFOLIO', rightX, blockY, { width: rightW, align: 'center' });
-  doc.font('Helvetica').fontSize(9).fillColor(INK).text('CLOSE NAV', rightX, blockY + 19, { width: rightW });
-  doc.text(statementDate(holdings), rightX, blockY + 19, { width: rightW, align: 'right' });
-  doc.x = left;
-  doc.y = y + 24;
+  printLetterhead(doc, { left, width, contact, title: 'CUSTOMER PORTFOLIO', dateLabel: 'CLOSE NAV', dateValue: statementDate(holdings) });
 
   const cols = filterCols(HOLDINGS_COLS(width), width, options.columns);
   if (holdings.length) {
@@ -294,6 +303,44 @@ export function portfolioReport(
       doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No NAV data for this fund type.');
     }
   });
+
+  return bufferDoc(doc);
+}
+
+export const TX_COLS = (width: number): Column[] => [
+  { key: 'created_at', label: 'Date', width: width * 0.14, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : '—'; } },
+  { key: 'fund', label: 'Fund', width: width * 0.30 },
+  { key: 'type', label: 'Type', width: width * 0.16 },
+  { key: 'status', label: 'Status', width: width * 0.14 },
+  { key: 'unit', label: 'Unit', width: width * 0.12, align: 'right', format: (v) => (val(v) == null ? '—' : idNum(v, 4)) },
+  { key: 'amount', label: 'Amount', width: width * 0.14, align: 'right', format: idNum },
+];
+
+// contact: { name, sid, ifua, address, ... }
+// transactions: rows from queries.ts userTransactions(), one calendar month
+export function transactionStatement(
+  { contact, transactions }: { contact?: Contact; transactions: Record<string, unknown>[] },
+  monthLabel: string,
+  options: { username?: string } = {},
+): Promise<Buffer> {
+  // deno-lint-ignore no-explicit-any
+  const doc: any = new PDFDocument({ size: 'A4', margin: 40 });
+  if (options.username) doc.info.Author = options.username;
+  const left = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  printLetterhead(doc, { left, width, contact, title: 'TRANSACTION E-STATEMENT', dateLabel: 'PERIOD', dateValue: monthLabel });
+
+  if (transactions.length) {
+    table(doc, TX_COLS(width), transactions, { fontSize: 7 });
+  } else {
+    doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No transactions this period.');
+    doc.moveDown(0.8);
+  }
+
+  doc.font('Helvetica').fontSize(7).fillColor(MUTED)
+    .text(DISCLAIMER, left, doc.y, { width })
+    .text(OJK_LINE, { width });
 
   return bufferDoc(doc);
 }
