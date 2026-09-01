@@ -2454,13 +2454,20 @@ function selectSendStatementUser(userId, sid, name, email) {
 function defaultStatementEmail({ name, sendPortfolio, portfolioDate, sendStatement, statementMonth }) {
   const parts = [];
   if (sendPortfolio) parts.push(`your portfolio statement${portfolioDate ? ` as of ${portfolioDate}` : ' (current holdings)'}`);
+  let periodLabel = null;
   if (sendStatement) {
-    const label = new Date(statementMonth + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    parts.push(`your transaction e-statement for ${label}`);
+    periodLabel = new Date(statementMonth + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    parts.push(`your transaction e-statement for ${periodLabel}`);
   }
-  const nowLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  // The subject's month follows the statement being sent, not today's date —
+  // falls back to the portfolio date's month, then today, when there's no
+  // transaction e-statement to anchor it to.
+  if (!periodLabel) {
+    const anchor = portfolioDate ? new Date(portfolioDate) : new Date();
+    periodLabel = anchor.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  }
   return {
-    subject: `Your Sayakaya Statement — ${nowLabel}`,
+    subject: `Your Sayakaya Statement — ${periodLabel}`,
     body: `Dear ${name || 'Investor'},\n\nPlease find attached ${parts.join(' and ')}, issued by PT Sayakaya Lahir Batin.\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin`,
   };
 }
