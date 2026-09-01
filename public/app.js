@@ -2413,6 +2413,70 @@ async function pushToSheet(body) {
 }
 
 // ====================================================================
+//  SEND STATEMENT (email an investor their portfolio — holdings only, no
+//  fund performance — and/or their monthly transaction e-statement).
+//  Separate tab from Portfolio (PWC) on purpose: this is a sending tool,
+//  not a lookup dashboard, so it gets its own search + selection state.
+// ====================================================================
+async function searchSendStatementUsers() {
+  const q = $('#ssSearchInput').value.trim();
+  if (!q) return;
+  $('#ssResults').innerHTML = '<div class="loading">Searching…</div>';
+  try {
+    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    renderSsResults(rows);
+  } catch (e) { $('#ssResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderSsResults(rows) {
+  if (!rows.length) { $('#ssResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  const body = rows.map((r) => `<tr class="pf-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
+      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+    </tr>`).join('');
+  $('#ssResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $$('#ssResults .pf-row').forEach((tr) => tr.addEventListener('click', () =>
+    selectSendStatementUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+}
+
+let ssSelected = null; // { userId, sid, name, email }
+
+function selectSendStatementUser(userId, sid, name, email) {
+  ssSelected = { userId, sid, name: name || sid, email };
+  $('#ssDetail').classList.remove('hidden');
+  $('#ssUserName').textContent = name || sid;
+  $('#ssUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
+  $('#ssPortfolioDate').value = '';
+  $('#ssStatementMonth').value = new Date().toISOString().slice(0, 7);
+}
+
+// Editable default for the compose modal — the server falls back to similar
+// text if subject/body come through blank (see server/mail.js).
+function defaultStatementEmail({ name, sendPortfolio, portfolioDate, sendStatement, statementMonth }) {
+  const parts = [];
+  if (sendPortfolio) parts.push(`your portfolio statement${portfolioDate ? ` as of ${portfolioDate}` : ' (current holdings)'}`);
+  if (sendStatement) {
+    const label = new Date(statementMonth + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    parts.push(`your transaction e-statement for ${label}`);
+  }
+  const nowLabel = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  return {
+    subject: `Your Sayakaya Statement — ${nowLabel}`,
+    body: `Dear ${name || 'Investor'},\n\nPlease find attached ${parts.join(' and ')}, issued by PT Sayakaya Lahir Batin.\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin`,
+  };
+}
+
+async function sendStatementEmail(body) {
+  const res = await fetch(API_BASE + '/api/statement/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(data.error || 'Email failed'); return; }
+  toast(`Emailed to ${data.to}`);
+}
+
+// ====================================================================
 //  ASK (natural language)
 // ====================================================================
 let askSqlCache = '';
@@ -3228,6 +3292,36 @@ function wire() {
   $('#pfGsheet').addEventListener('click', () => pfSelected && pushToSheet(
     { source: 'portfolio_full', ...pfExportBody(), columns: selectedPdfColumns() }));
   $('#pfDateApply').addEventListener('click', loadPortfolioUser);
+
+  // send statement
+  $('#ssSearchBtn').addEventListener('click', searchSendStatementUsers);
+  $('#ssSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchSendStatementUsers(); });
+  $('#ssComposeBtn').addEventListener('click', () => {
+    if (!ssSelected) return;
+    const sendPortfolio = $('#ssSendPortfolio').checked;
+    const sendStatement = $('#ssSendStatement').checked;
+    if (!sendPortfolio && !sendStatement) { toast('Pick at least one document to send.'); return; }
+    const portfolioDate = $('#ssPortfolioDate').value;
+    const statementMonth = $('#ssStatementMonth').value;
+    if (sendStatement && !statementMonth) { toast('Pick a month for the transaction e-statement.'); return; }
+    const { subject, body } = defaultStatementEmail({ name: ssSelected.name, sendPortfolio, portfolioDate, sendStatement, statementMonth });
+    $('#ssEmailTo').textContent = `Will be sent to ${ssSelected.name}'s email on file.`;
+    $('#ssEmailSubject').value = subject;
+    $('#ssEmailBody').value = body;
+    $('#ssEmailModal').showModal();
+  });
+  $('#ssEmailCancelBtn').addEventListener('click', () => $('#ssEmailModal').close());
+  $('#ssEmailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $('#ssEmailSendBtn').addEventListener('click', () => {
+    if (!ssSelected) return;
+    $('#ssEmailModal').close();
+    sendStatementEmail({
+      userId: ssSelected.userId, sid: ssSelected.sid,
+      sendPortfolio: $('#ssSendPortfolio').checked, portfolioDate: $('#ssPortfolioDate').value,
+      sendStatement: $('#ssSendStatement').checked, statementMonth: $('#ssStatementMonth').value,
+      subject: $('#ssEmailSubject').value, body: $('#ssEmailBody').value,
+    });
+  });
 
   // portfolio (fix) — same wiring as portfolio (pwc) above, different source table
   $('#pfxSearchBtn').addEventListener('click', searchPfxUsers);

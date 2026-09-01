@@ -96,6 +96,7 @@
           <button class="nav-link" data-tab="portfolio-tx"><span class="nav-icon">🧾</span>Portfolio (TX)</button>
           <button class="nav-link" data-tab="portfolio-sinvest"><span class="nav-icon">📇</span>Portfolio (SInvest)</button>
           <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
+          <button class="nav-link" data-tab="send-statement"><span class="nav-icon">📧</span>Send statement</button>
         </div>
         <div class="nav-group" data-group="operations">
           <div class="nav-label"><span data-i18n="nav_group_operations">Operations &amp; Finance</span><span class="nav-group-caret"></span></div>
@@ -210,6 +211,57 @@
           <div id="pfPerformance" class="table-wrap"></div>
         </div>
       </div>
+    </section>
+
+    <!-- ===================== SEND STATEMENT — email an investor their portfolio
+         (holdings only, no fund performance) and/or their monthly transaction
+         e-statement, for a chosen as-of date / month. Separate from Portfolio
+         (PWC) on purpose — this is a sending tool, not a lookup dashboard. ===== -->
+    <section id="send-statement" class="view">
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
+        <div class="ask-bar">
+          <input id="ssSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
+          <button id="ssSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
+        </div>
+        <div id="ssResults" class="table-wrap"></div>
+      </div>
+
+      <div id="ssDetail" class="hidden">
+        <div class="panel">
+          <div class="panel-head wrap"><h2 id="ssUserName">—</h2></div>
+          <span class="hint" id="ssUserSub"></span>
+
+          <div class="filters" style="margin-top:14px">
+            <label class="ask-table-chk"><input type="checkbox" id="ssSendPortfolio" checked />
+              <span data-i18n="ss_send_portfolio">Portfolio as of</span></label>
+            <input type="date" id="ssPortfolioDate" />
+          </div>
+          <div class="filters" style="margin-top:8px">
+            <label class="ask-table-chk"><input type="checkbox" id="ssSendStatement" checked />
+              <span data-i18n="ss_send_statement">Transaction e-statement for</span></label>
+            <input type="month" id="ssStatementMonth" />
+          </div>
+          <span class="hint" data-i18n="ss_hint">Portfolio is sent as holdings only (no fund performance breakdown). Leave the portfolio date blank for live holdings (today).</span>
+
+          <div class="exp" style="margin-top:14px">
+            <button class="btn-primary" id="ssComposeBtn" data-i18n="ss_compose">Compose email…</button>
+          </div>
+        </div>
+      </div>
+
+      <dialog id="ssEmailModal" class="admin-modal">
+        <div class="panel-head wrap"><h2 data-i18n="ss_modal_title">Email investor</h2></div>
+        <span class="hint" id="ssEmailTo"></span>
+        <div class="filters" style="margin-top:12px; flex-direction:column; align-items:stretch">
+          <input type="text" id="ssEmailSubject" style="width:100%" />
+          <textarea id="ssEmailBody" rows="10" style="width:100%; margin-top:10px; font:inherit"></textarea>
+        </div>
+        <div class="exp" style="margin-top:14px">
+          <button class="btn-primary" id="ssEmailSendBtn" data-i18n="common_send">Send</button>
+          <button class="btn-ghost" id="ssEmailCancelBtn" data-i18n="common_cancel">Cancel</button>
+        </div>
+      </dialog>
     </section>
 
     <!-- ===================== PORTFOLIO (FIX) — same as PWC above, sourced from mi_fee_logs.portfolio_fix ===================== -->
@@ -1399,6 +1451,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3>📇 Portfolio (SInvest)</h3>
           <p>Same as Portfolio (TX), but every number is built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table — a second, independent source for cross-checking one investor's holdings and average buy price.</p>
+        </div>
+        <div class="doc-item">
+          <h3>📧 Send statement</h3>
+          <p>Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent.</p>
         </div>
         <div class="doc-item">
           <h3>💎 HNWI</h3>

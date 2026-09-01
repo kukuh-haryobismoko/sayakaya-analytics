@@ -176,18 +176,11 @@ function statementDate(holdings) {
   return `${d} ${MONTHS_ID[m - 1]} ${y}`;
 }
 
-// contact: { name, sid, ifua, address, ... }
-// holdings: rows from queries.userHoldings()
-// performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }] — from pivotPerformanceByType()
-// options.columns: optional list of HOLDINGS_COLS keys to keep (plus 'fund', always kept)
-function portfolioReport({ contact, holdings }, performanceSheets, options = {}) {
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
-  if (options.username) doc.info.Author = options.username;
-  const left = doc.page.margins.left;
-  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-
-  // ---- Page 1: CUSTOMER PORTFOLIO statement ----
-  // Letterhead: square logo + issuer address block.
+// Shared "Page 1" header for every statement PDF: square logo + issuer
+// address block, then an investor info block (left) with a title/date block
+// (right) — the only bits that vary per statement type. Leaves doc.y past
+// the investor block, ready for a table.
+function printLetterhead(doc, { left, width, contact, title, dateLabel, dateValue }) {
   const logoWidth = 54;
   doc.image(LOGO_BUFFER, left, doc.y, { width: logoWidth });
   const headX = left + logoWidth + 16;
@@ -198,7 +191,6 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
     .text('Jl Jenderal Sudirman Kav. 86, Jakarta 10220', headX);
   doc.y = Math.max(doc.y, headY + logoWidth * LOGO_RATIO) + 24;
 
-  // Investor block (left) + CUSTOMER PORTFOLIO / DATE (right).
   const labelW = 60;
   const valueW = width * 0.55 - labelW;
   const rightW = 200;
@@ -211,11 +203,25 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
     doc.font('Helvetica').fontSize(9).fillColor(INK).text(text, left + labelW, y, { width: valueW });
     y += Math.max(13, doc.heightOfString(text, { width: valueW }) + 2);
   });
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text('CUSTOMER PORTFOLIO', rightX, blockY, { width: rightW, align: 'center' });
-  doc.font('Helvetica').fontSize(9).fillColor(INK).text('CLOSE NAV', rightX, blockY + 19, { width: rightW });
-  doc.text(statementDate(holdings), rightX, blockY + 19, { width: rightW, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(INK).text(title, rightX, blockY, { width: rightW, align: 'center' });
+  doc.font('Helvetica').fontSize(9).fillColor(INK).text(dateLabel, rightX, blockY + 19, { width: rightW });
+  doc.text(dateValue, rightX, blockY + 19, { width: rightW, align: 'right' });
   doc.x = left;
   doc.y = y + 24;
+}
+
+// contact: { name, sid, ifua, address, ... }
+// holdings: rows from queries.userHoldings()
+// performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }] — from pivotPerformanceByType()
+// options.columns: optional list of HOLDINGS_COLS keys to keep (plus 'fund', always kept)
+function portfolioReport({ contact, holdings }, performanceSheets, options = {}) {
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  if (options.username) doc.info.Author = options.username;
+  const left = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  // ---- Page 1: CUSTOMER PORTFOLIO statement ----
+  printLetterhead(doc, { left, width, contact, title: 'CUSTOMER PORTFOLIO', dateLabel: 'CLOSE NAV', dateValue: statementDate(holdings) });
 
   const cols = filterCols(HOLDINGS_COLS(width), width, options.columns);
   if (holdings.length) {
@@ -277,11 +283,45 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
   return bufferDoc(doc);
 }
 
+const TX_COLS = (width) => [
+  { key: 'created_at', label: 'Date', width: width * 0.14, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : '—'; } },
+  { key: 'fund', label: 'Fund', width: width * 0.30 },
+  { key: 'type', label: 'Type', width: width * 0.16 },
+  { key: 'status', label: 'Status', width: width * 0.14 },
+  { key: 'unit', label: 'Unit', width: width * 0.12, align: 'right', format: (v) => (val(v) == null ? '—' : idNum(v, 4)) },
+  { key: 'amount', label: 'Amount', width: width * 0.14, align: 'right', format: idNum },
+];
+
+// contact: { name, sid, ifua, address, ... }
+// transactions: rows from queries.userTransactions(), one calendar month
+function transactionStatement({ contact, transactions }, monthLabel, options = {}) {
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  if (options.username) doc.info.Author = options.username;
+  const left = doc.page.margins.left;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  printLetterhead(doc, { left, width, contact, title: 'TRANSACTION E-STATEMENT', dateLabel: 'PERIOD', dateValue: monthLabel });
+
+  if (transactions.length) {
+    table(doc, TX_COLS(width), transactions, { fontSize: 7 });
+  } else {
+    doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No transactions this period.');
+    doc.moveDown(0.8);
+  }
+
+  doc.font('Helvetica').fontSize(7).fillColor(MUTED)
+    .text(DISCLAIMER, left, doc.y, { width })
+    .text(OJK_LINE, { width });
+
+  return bufferDoc(doc);
+}
+
 module.exports = {
   portfolioReport,
+  transactionStatement,
   // Exported for server/sheets.js, so the Google Sheets export mirrors this
   // PDF's exact columns, number formatting, and disclaimer text instead of
   // re-implementing them.
   val, idNum, idParen, pctFmt, fundTypeLabel, statementDate,
-  HOLDINGS_COLS, filterCols, PERF_COLS, DISCLAIMER, OJK_LINE,
+  HOLDINGS_COLS, filterCols, PERF_COLS, TX_COLS, DISCLAIMER, OJK_LINE,
 };

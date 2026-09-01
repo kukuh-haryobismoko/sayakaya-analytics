@@ -15,6 +15,7 @@ const EX = require('./explore');
 const ML = require('./ml');
 const PDF = require('./pdf');
 const SHEETS = require('./sheets');
+const Mail = require('./mail');
 const Auth = require('./auth');
 
 // Every export `source` maps to exactly one tab, so a single permission check
@@ -422,9 +423,9 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), Portfolio (TX), and Portfolio (SInvest) — allow any.
+  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), Portfolio (TX), Portfolio (SInvest), and Send statement — allow any.
   const requireAnyPortfolio = (req, res, next) => {
-    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx') || Auth.userCan(req.user, 'portfolio-sinvest')) return next();
+    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx') || Auth.userCan(req.user, 'portfolio-sinvest') || Auth.userCan(req.user, 'send-statement')) return next();
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/users/search', requireAnyPortfolio, handler(async (req, res) => {
@@ -1171,6 +1172,49 @@ function createApp({ serveStatic = true } = {}) {
     if (format === 'xlsx') return sendXlsx(res, rows, filename, username, pctCols);
     if (format === 'txt') return sendTxt(res, rows, filename, username);
     return sendCsv(res, rows, filename, username);
+  }));
+
+  // ---- Send statement: email an investor their portfolio (holdings only, no
+  // fund performance) and/or their monthly transaction e-statement, as one
+  // email with 1-2 PDF attachments. Separate tool from Portfolio (PWC).
+  app.post('/api/statement/email', requireTab('send-statement'), handler(async (req, res) => {
+    const {
+      userId, sid, sendPortfolio, portfolioDate, sendStatement, statementMonth, subject, body,
+    } = req.body || {};
+    if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+    if (!sendPortfolio && !sendStatement) return res.status(400).json({ error: 'Pick at least one document to send.' });
+
+    const username = req.user.username;
+    const c = Q.userContact(userId);
+    const [contact] = await runQuery(c.sql, c.params, { redact: false });
+    if (!contact?.email) return res.status(400).json({ error: 'This investor has no email on file.' });
+
+    const attachments = [];
+
+    if (sendPortfolio) {
+      const h = portfolioDate ? Q.userHoldingsAsOf(sid, portfolioDate) : Q.userHoldings(userId);
+      const holdings = await runQuery(h.sql, h.params);
+      // Portfolio-only, no fund-performance pages — this tool never sends performance.
+      const buf = await PDF.portfolioReport({ contact, holdings }, [], { username });
+      attachments.push({ filename: `Portfolio_${sid}${portfolioDate ? '_' + portfolioDate : ''}.pdf`, content: buf });
+    }
+
+    if (sendStatement) {
+      const [year, month] = String(statementMonth || '').split('-').map(Number);
+      if (!year || !month) return res.status(400).json({ error: 'statementMonth is required (YYYY-MM).' });
+      const from = `${year}-${String(month).padStart(2, '0')}-01`;
+      const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of that month
+      const t = Q.userTransactions(userId, from, to);
+      const transactions = await runQuery(t.sql, t.params);
+      const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      const buf = await PDF.transactionStatement({ contact, transactions }, monthLabel, { username });
+      attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: buf });
+    }
+
+    await Mail.sendStatementEmail({ to: contact.email, subject, body, name: contact.name, attachments });
+    const sent = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
+    await Auth.logEvent(req.user.id, username, 'email_pdf', `send-statement (${sent}) to ${contact.email}`);
+    res.json({ ok: true, to: contact.email });
   }));
 
   // ---- Static frontend (standalone hosts only) ------------------------------
