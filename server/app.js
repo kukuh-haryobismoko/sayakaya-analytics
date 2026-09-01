@@ -1174,6 +1174,28 @@ function createApp({ serveStatic = true } = {}) {
     return sendCsv(res, rows, filename, username);
   }));
 
+  // ---- Send statement preview: same holdings/transactions the PDFs would
+  // contain, as JSON, so the admin can sanity-check before sending. Reuses
+  // the exact query builders /api/statement/email attaches as PDFs.
+  app.get('/api/statement/preview', requireTab('send-statement'), handler(async (req, res) => {
+    const { userId, sid, sendPortfolio, portfolioDate, sendStatement, statementMonth } = req.query;
+    if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+    const result = {};
+    if (sendPortfolio === 'true') {
+      const h = portfolioDate ? Q.userHoldingsAsOf(sid, portfolioDate) : Q.userHoldings(userId);
+      result.holdings = await runQuery(h.sql, h.params);
+    }
+    if (sendStatement === 'true') {
+      const [year, month] = String(statementMonth || '').split('-').map(Number);
+      if (!year || !month) return res.status(400).json({ error: 'statementMonth is required (YYYY-MM).' });
+      const from = `${year}-${String(month).padStart(2, '0')}-01`;
+      const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+      const t = Q.userTransactions(userId, from, to);
+      result.transactions = await runQuery(t.sql, t.params);
+    }
+    res.json(result);
+  }));
+
   // ---- Send statement: email an investor their portfolio (holdings only, no
   // fund performance) and/or their monthly transaction e-statement, as one
   // email with 1-2 PDF attachments. Separate tool from Portfolio (PWC).

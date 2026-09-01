@@ -1254,6 +1254,32 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
   return csvResponse(rows, filename, username);
 });
 
+// ---- Send statement preview: same holdings/transactions the PDFs would
+// contain, as JSON, so the admin can sanity-check before sending. Reuses
+// the exact query builders /api/statement/email attaches as PDFs.
+on('GET', '/api/statement/preview', requireTab('send-statement', async (_req, _params, url) => {
+  const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
+  if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
+  const sendPortfolio = qp(url, 'sendPortfolio') === 'true';
+  const portfolioDate = qp(url, 'portfolioDate');
+  const sendStatement = qp(url, 'sendStatement') === 'true';
+  const statementMonth = qp(url, 'statementMonth');
+  const result: { holdings?: Record<string, unknown>[]; transactions?: Record<string, unknown>[] } = {};
+  if (sendPortfolio) {
+    const h = portfolioDate ? Q.userHoldingsAsOf(sid, portfolioDate) : Q.userHoldings(userId);
+    result.holdings = await runQuery(h.sql, h.params);
+  }
+  if (sendStatement) {
+    const [year, month] = String(statementMonth || '').split('-').map(Number);
+    if (!year || !month) return json({ error: 'statementMonth is required (YYYY-MM).' }, 400);
+    const from = `${year}-${String(month).padStart(2, '0')}-01`;
+    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    const t = Q.userTransactions(userId, from, to);
+    result.transactions = await runQuery(t.sql, t.params);
+  }
+  return json(result);
+}));
+
 // ---- Send statement: email an investor their portfolio (holdings only, no
 // fund performance) and/or their monthly transaction e-statement, as one
 // or two PDF attachments. ---------------------------------------------------

@@ -2305,8 +2305,8 @@ async function estimateSql() {
 
 function setSqlMsg(msg, cls) { const m = $('#sqlMsg'); m.textContent = msg; m.className = 'sql-msg ' + (cls || ''); }
 
-function renderGenericTable(sel, rows) {
-  if (!rows.length) { $(sel).innerHTML = '<div class="empty">Query returned no rows.</div>'; return; }
+function renderGenericTable(sel, rows, emptyMsg = 'Query returned no rows.') {
+  if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
   const cols = Object.keys(rows[0]);
   const head = cols.map((c) => `<th>${c}</th>`).join('');
   const body = rows.slice(0, 1000).map((r) => '<tr>' + cols.map((c) => {
@@ -2447,6 +2447,38 @@ function selectSendStatementUser(userId, sid, name, email) {
   $('#ssUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
   $('#ssPortfolioDate').value = '';
   $('#ssStatementMonth').value = new Date().toISOString().slice(0, 7);
+  loadSsPreview();
+}
+
+// Same holdings/transactions the PDFs would contain (see /api/statement/preview),
+// shown as a sanity check before the admin actually sends anything. Re-fetched
+// whenever the checkboxes or date/month change.
+async function loadSsPreview() {
+  if (!ssSelected) return;
+  const sendPortfolio = $('#ssSendPortfolio').checked;
+  const portfolioDate = $('#ssPortfolioDate').value;
+  const sendStatement = $('#ssSendStatement').checked && !!$('#ssStatementMonth').value;
+  const statementMonth = $('#ssStatementMonth').value;
+
+  $('#ssPreviewPortfolio').classList.toggle('hidden', !sendPortfolio);
+  $('#ssPreviewStatement').classList.toggle('hidden', !sendStatement);
+  if (!sendPortfolio && !sendStatement) return;
+
+  if (sendPortfolio) $('#ssPreviewPortfolioTable').innerHTML = '<div class="loading">Loading…</div>';
+  if (sendStatement) $('#ssPreviewStatementTable').innerHTML = '<div class="loading">Loading…</div>';
+  const params = new URLSearchParams({
+    userId: ssSelected.userId, sid: ssSelected.sid,
+    sendPortfolio: String(sendPortfolio), portfolioDate,
+    sendStatement: String(sendStatement), statementMonth,
+  });
+  try {
+    const data = await api(`/api/statement/preview?${params}`);
+    if (sendPortfolio) renderGenericTable('#ssPreviewPortfolioTable', data.holdings || [], 'No active holdings.');
+    if (sendStatement) renderGenericTable('#ssPreviewStatementTable', data.transactions || [], 'No transactions this period.');
+  } catch (e) {
+    if (sendPortfolio) $('#ssPreviewPortfolioTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    if (sendStatement) $('#ssPreviewStatementTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
 }
 
 // Editable default for the compose modal — the server falls back to similar
@@ -3303,6 +3335,10 @@ function wire() {
   // send statement
   $('#ssSearchBtn').addEventListener('click', searchSendStatementUsers);
   $('#ssSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchSendStatementUsers(); });
+  $('#ssSendPortfolio').addEventListener('change', loadSsPreview);
+  $('#ssPortfolioDate').addEventListener('change', loadSsPreview);
+  $('#ssSendStatement').addEventListener('change', loadSsPreview);
+  $('#ssStatementMonth').addEventListener('change', loadSsPreview);
   $('#ssComposeBtn').addEventListener('click', () => {
     if (!ssSelected) return;
     const sendPortfolio = $('#ssSendPortfolio').checked;

@@ -143,6 +143,8 @@ const I18N = {
     ss_hint: `Portfolio is sent as holdings only (no fund performance breakdown). Leave the portfolio date blank for live holdings (today).`,
     ss_compose: `Compose email…`,
     ss_modal_title: `Email investor`,
+    ss_preview_portfolio: `Portfolio preview`,
+    ss_preview_statement: `Transaction e-statement preview`,
     portfix_aum_performance_hint: `% change in total portfolio value, from mi_fee_logs.portfolio_fix.`,
 
     pe_holdings_by_fund: `Holdings by fund`,
@@ -464,6 +466,8 @@ const I18N = {
     ss_hint: `Portofolio dikirim hanya berisi kepemilikan (tanpa rincian performa produk). Kosongkan tanggal portofolio untuk kepemilikan live (hari ini).`,
     ss_compose: `Tulis email…`,
     ss_modal_title: `Email investor`,
+    ss_preview_portfolio: `Pratinjau portofolio`,
+    ss_preview_statement: `Pratinjau e-statement transaksi`,
     portfix_aum_performance_hint: `Perubahan % nilai total portofolio, dari mi_fee_logs.portfolio_fix.`,
 
     pe_holdings_by_fund: `Kepemilikan per produk`,
