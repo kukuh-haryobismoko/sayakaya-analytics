@@ -28,7 +28,7 @@
 <body>
   <!-- Login gate -->
   <div id="gate" class="gate">
-    <div class="gate-card">
+    <div class="gate-card" id="gate-login">
       <img class="gate-mark" src="logo.png" alt="Sayakaya" />
       <h1>Sayakaya Analytics</h1>
       <p data-i18n="sign_in_subtitle">Sign in to continue.</p>
@@ -40,6 +40,33 @@
       </div>
       <button id="gate-btn" class="btn-primary gate-submit" data-i18n="sign_in">Sign in</button>
       <div id="gate-err" class="gate-err"></div>
+      <button type="button" id="gate-forgot-link" class="gate-link" data-i18n="forgot_password_link">Forgot password?</button>
+    </div>
+
+    <div class="gate-card hidden" id="gate-forgot">
+      <img class="gate-mark" src="logo.png" alt="Sayakaya" />
+      <h1 data-i18n="forgot_password_title">Reset your password</h1>
+      <p data-i18n="forgot_password_hint">Enter your username. If there's an email on file, we'll send a reset link.</p>
+      <div class="gate-field">
+        <input id="forgot-username" type="text" data-i18n-placeholder="gate_username_ph" placeholder="Username" autocomplete="username" />
+      </div>
+      <button id="forgot-submit-btn" class="btn-primary gate-submit" data-i18n="forgot_password_send">Send reset link</button>
+      <div id="forgot-msg" class="gate-err"></div>
+      <button type="button" id="forgot-cancel-btn" class="gate-link" data-i18n="common_cancel">Cancel</button>
+    </div>
+
+    <div class="gate-card hidden" id="gate-reset">
+      <img class="gate-mark" src="logo.png" alt="Sayakaya" />
+      <h1 data-i18n="reset_password_title">Set a new password</h1>
+      <p data-i18n="reset_password_hint">Choose a new password for your account.</p>
+      <div class="gate-field">
+        <input id="reset-password" type="password" data-i18n-placeholder="reset_password_ph" placeholder="New password" autocomplete="new-password" />
+      </div>
+      <div class="gate-field">
+        <input id="reset-password-confirm" type="password" data-i18n-placeholder="reset_password_confirm_ph" placeholder="Confirm new password" autocomplete="new-password" />
+      </div>
+      <button id="reset-submit-btn" class="btn-primary gate-submit" data-i18n="reset_password_submit">Set new password</button>
+      <div id="reset-err" class="gate-err"></div>
     </div>
   </div>
 
@@ -191,8 +218,11 @@
               <button class="btn-ghost" id="pfGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
-          <span class="hint" id="pfUserSub"></span><br>
-          <span class="hint" id="pfSnapshotInfo">Live holdings (current units × today's NAV). Pick a date to see a historical snapshot from mi_fee_logs.portfolio_with_code instead.</span>
+          <span class="hint" id="pfUserSub"></span>
+          <div class="callout" style="margin-top:8px">
+            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span id="pfSnapshotInfo">Live holdings (current units × today's NAV). Pick a date to see a historical snapshot from mi_fee_logs.portfolio_with_code instead.</span>
+          </div>
           <div id="pfKpis" class="kpi-grid" style="margin-top:14px"></div>
         </div>
 
@@ -232,32 +262,47 @@
           <div class="panel-head wrap"><h2 id="ssUserName">—</h2></div>
           <span class="hint" id="ssUserSub"></span>
 
-          <div class="filters" style="margin-top:14px">
-            <label class="ask-table-chk"><input type="checkbox" id="ssSendPortfolio" checked />
-              <span data-i18n="ss_send_portfolio">Portfolio as of</span></label>
-            <input type="date" id="ssPortfolioDate" />
+          <div class="field-card-row" style="margin-top:16px">
+            <div class="field-card">
+              <label class="field-card-top"><input type="checkbox" id="ssSendPortfolio" checked />
+                <span data-i18n="ss_send_portfolio">Portfolio as of</span></label>
+              <input type="date" id="ssPortfolioDate" class="field-card-input" />
+            </div>
+            <div class="field-card">
+              <label class="field-card-top"><input type="checkbox" id="ssSendStatement" checked />
+                <span data-i18n="ss_send_statement">Transaction e-statement for</span></label>
+              <input type="month" id="ssStatementMonth" class="field-card-input" />
+            </div>
           </div>
-          <div class="filters" style="margin-top:8px">
-            <label class="ask-table-chk"><input type="checkbox" id="ssSendStatement" checked />
-              <span data-i18n="ss_send_statement">Transaction e-statement for</span></label>
-            <input type="month" id="ssStatementMonth" />
-          </div>
-          <span class="hint" data-i18n="ss_hint">Portfolio is sent as holdings only (no fund performance breakdown). Leave the portfolio date blank for live holdings (today).</span>
 
-          <div class="exp" style="margin-top:14px">
-            <button class="btn-primary" id="ssComposeBtn" data-i18n="ss_compose">Compose email…</button>
+          <div class="callout" style="margin-top:14px">
+            <span class="callout-icon" aria-hidden="true">📄</span>
+            <span data-i18n="ss_hint">Portfolio is sent as holdings only (no fund performance breakdown). Leave the portfolio date blank for live holdings (today).</span>
+          </div>
+
+          <div class="exp" style="margin-top:16px">
+            <button class="btn-primary lg" id="ssComposeBtn"><span data-i18n="ss_compose">Compose email…</span> <span aria-hidden="true">→</span></button>
           </div>
         </div>
 
         <div class="panel hidden" id="ssPreviewPortfolio">
-          <div class="panel-head"><h2 data-i18n="ss_preview_portfolio">Portfolio preview</h2></div>
+          <div class="panel-head"><h2><span aria-hidden="true">📄</span> <span data-i18n="ss_preview_portfolio">Portfolio preview</span></h2></div>
           <div id="ssPreviewPortfolioTable" class="table-wrap"></div>
         </div>
 
         <div class="panel hidden" id="ssPreviewStatement">
-          <div class="panel-head"><h2 data-i18n="ss_preview_statement">Transaction e-statement preview</h2></div>
+          <div class="panel-head"><h2><span aria-hidden="true">📄</span> <span data-i18n="ss_preview_statement">Transaction e-statement preview</span></h2></div>
           <div id="ssPreviewStatementTable" class="table-wrap"></div>
         </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2><span aria-hidden="true">📜</span> <span data-i18n="ss_log_title">Send history</span></h2>
+          <button class="btn-ghost" id="ssLogRefresh" data-i18n="common_refresh">Refresh</button>
+        </div>
+        <span class="hint" data-i18n="ss_log_hint">Every e-statement sent from this tab — who sent it, and to which investor. Most recent first.</span>
+        <div id="ssLogTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
       <dialog id="ssEmailModal" class="admin-modal">
@@ -305,8 +350,11 @@
               <button class="btn-ghost" id="pfxGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
-          <span class="hint" id="pfxUserSub"></span><br>
-          <span class="hint" id="pfxSnapshotInfo">Live holdings (current units × today's NAV). Pick a date to see a historical snapshot from mi_fee_logs.portfolio_fix instead.</span>
+          <span class="hint" id="pfxUserSub"></span>
+          <div class="callout" style="margin-top:8px">
+            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span id="pfxSnapshotInfo">Live holdings (current units × today's NAV). Pick a date to see a historical snapshot from mi_fee_logs.portfolio_fix instead.</span>
+          </div>
           <div id="pfxKpis" class="kpi-grid" style="margin-top:14px"></div>
         </div>
 
@@ -358,8 +406,11 @@
               <button class="btn-ghost" id="ptxGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
-          <span class="hint" id="ptxUserSub"></span><br>
-          <span class="hint" id="ptxSnapshotInfo">Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).</span>
+          <span class="hint" id="ptxUserSub"></span>
+          <div class="callout" style="margin-top:8px">
+            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span id="ptxSnapshotInfo">Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).</span>
+          </div>
           <div id="ptxKpis" class="kpi-grid" style="margin-top:14px"></div>
         </div>
 
@@ -411,8 +462,11 @@
               <button class="btn-ghost" id="psiGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
-          <span class="hint" id="psiUserSub"></span><br>
-          <span class="hint" id="psiSnapshotInfo">Live holdings (current units × today's NAV), built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table. Average buy price only reflects completed BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN rows — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.</span>
+          <span class="hint" id="psiUserSub"></span>
+          <div class="callout" style="margin-top:8px">
+            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span id="psiSnapshotInfo">Live holdings (current units × today's NAV), built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table. Average buy price only reflects completed BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN rows — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.</span>
+          </div>
           <div id="psiKpis" class="kpi-grid" style="margin-top:14px"></div>
         </div>
 
@@ -464,8 +518,11 @@
               <button class="btn-ghost" id="peGsheet" data-i18n="common_gsheet">Google Sheet</button>
             </div>
           </div>
-          <span class="hint" id="peUserSub"></span><br>
-          <span class="hint" id="peSnapshotInfo"></span>
+          <span class="hint" id="peUserSub"></span>
+          <div class="callout" style="margin-top:8px">
+            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span id="peSnapshotInfo"></span>
+          </div>
           <div id="peKpis" class="kpi-grid" style="margin-top:14px"></div>
         </div>
 
@@ -1562,7 +1619,10 @@ ORDER BY n DESC"></textarea>
 
       <dialog id="adminUserModal" class="admin-modal">
         <div class="panel-head wrap"><h2 id="adminFormTitle">Add user</h2></div>
-        <span class="hint" data-i18n="admin_modal_hint">Choose which sections this person can access. Superusers always see everything.</span>
+        <div class="callout">
+          <span class="callout-icon" aria-hidden="true">🛡️</span>
+          <span data-i18n="admin_modal_hint">Choose which sections this person can access. Superusers always see everything.</span>
+        </div>
         <div class="filters" style="margin-top:12px">
           <input type="text" id="adminUsername" data-i18n-placeholder="gate_username_ph" placeholder="Username" style="min-width:160px" />
           <input type="password" id="adminPassword" data-i18n-placeholder="gate_password_ph" placeholder="Password" style="min-width:220px" autocomplete="new-password" />

@@ -2513,6 +2513,22 @@ async function sendStatementEmail(body) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { toast(data.error || 'Email failed'); return; }
   toast(`Emailed to ${data.to}`);
+  loadSsLog();
+}
+
+// Who sent what to whom, from this tool — not the superuser-only Activity
+// log, so anyone with the Send statement tab can see the send history.
+async function loadSsLog() {
+  $('#ssLogTable').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const rows = await api('/api/statement/log');
+    const mapped = rows.map((r) => ({ ...r, created_at: toJakartaTime(val(r.created_at)) }));
+    genTable('#ssLogTable', mapped, [
+      { key: 'created_at', label: 'When (WIB)' },
+      { key: 'username', label: 'Sent by' },
+      { key: 'detail', label: 'Sent' },
+    ], 'No statements sent yet.');
+  } catch (e) { $('#ssLogTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
 // ====================================================================
@@ -3178,6 +3194,7 @@ function switchTab(name) {
   if (name === 'hnwi') loadHnwi();
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
+  if (name === 'send-statement') loadSsLog();
 }
 
 // Called once after login/session-restore: hides nav links + the Admin group
@@ -3353,6 +3370,7 @@ function wire() {
     $('#ssEmailBody').value = body;
     $('#ssEmailModal').showModal();
   });
+  $('#ssLogRefresh').addEventListener('click', loadSsLog);
   $('#ssEmailCancelBtn').addEventListener('click', () => $('#ssEmailModal').close());
   $('#ssEmailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   $('#ssEmailSendBtn').addEventListener('click', () => {
@@ -3740,9 +3758,16 @@ function wire() {
 }
 
 // ---------- login gate ----------
-function showGate(err) {
-  $('#appShell').classList.add('hidden');
+// Three cards share the same #gate overlay — login, forgot-password, and
+// set-new-password — only one visible at a time.
+let resetGateToken = null; // set in init() from ?reset=<token>, consumed by wireGate()'s submitReset
+function showGateCard(which) {
   $('#gate').classList.remove('hidden');
+  $('#appShell').classList.add('hidden');
+  ['gate-login', 'gate-forgot', 'gate-reset'].forEach((id) => $('#' + id).classList.toggle('hidden', id !== which));
+}
+function showGate(err) {
+  showGateCard('gate-login');
   $('#gate-err').textContent = err || '';
   $('#gate-username').focus();
 }
@@ -3781,6 +3806,63 @@ function wireGate() {
     currentUser = null;
     showGate();
   });
+
+  // forgot password — always shows the same generic message, whether or not
+  // the username exists / has an email on file (the server never reveals that).
+  $('#gate-forgot-link').addEventListener('click', () => {
+    $('#forgot-username').value = $('#gate-username').value;
+    $('#forgot-msg').textContent = '';
+    showGateCard('gate-forgot');
+    $('#forgot-username').focus();
+  });
+  $('#forgot-cancel-btn').addEventListener('click', () => showGate());
+  const submitForgot = async () => {
+    const username = $('#forgot-username').value.trim();
+    if (!username) { $('#forgot-msg').textContent = 'Enter your username.'; return; }
+    $('#forgot-submit-btn').disabled = true;
+    try {
+      const res = await fetch(API_BASE + '/api/auth/forgot-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }),
+      });
+      const body = await res.json().catch(() => ({}));
+      $('#forgot-msg').textContent = body.message || 'If that account has an email on file, a reset link has been sent.';
+    } catch {
+      $('#forgot-msg').textContent = 'Could not reach the server.';
+    } finally {
+      $('#forgot-submit-btn').disabled = false;
+    }
+  };
+  $('#forgot-submit-btn').addEventListener('click', submitForgot);
+  $('#forgot-username').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitForgot(); });
+
+  // set new password — landed here via the emailed reset link (?reset=<token>),
+  // wired unconditionally so Enter/click work even if the token turns out to
+  // be missing/expired; resetGateToken (set in init()) gates the actual call.
+  const submitReset = async () => {
+    if (!resetGateToken) return;
+    const p1 = $('#reset-password').value;
+    const p2 = $('#reset-password-confirm').value;
+    if (!p1) { $('#reset-err').textContent = 'Enter a new password.'; return; }
+    if (p1 !== p2) { $('#reset-err').textContent = 'Passwords do not match.'; return; }
+    $('#reset-submit-btn').disabled = true;
+    try {
+      const res = await fetch(API_BASE + '/api/auth/reset-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetGateToken, newPassword: p1 }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { $('#reset-err').textContent = body.error || 'Could not reset password.'; return; }
+      history.replaceState(null, '', location.pathname);
+      showGate();
+      toast('Password updated — sign in with your new password.');
+    } catch {
+      $('#reset-err').textContent = 'Could not reach the server.';
+    } finally {
+      $('#reset-submit-btn').disabled = false;
+    }
+  };
+  $('#reset-submit-btn').addEventListener('click', submitReset);
+  $('#reset-password-confirm').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitReset(); });
 }
 
 // ---------- boot ----------
@@ -3825,6 +3907,12 @@ async function init() {
   translatePage();
   syncLangSeg(getLang());
   wire(); wireGate(); wireAdmin(); wireChangePassword();
+
+  // A reset-password link takes priority over any existing session — even a
+  // logged-in user who clicks one should land on "set a new password", not
+  // their dashboard. Skips the auto-login check below entirely.
+  resetGateToken = new URLSearchParams(location.search).get('reset');
+  if (resetGateToken) { showGateCard('gate-reset'); return; }
 
   // Health is the one route that doesn't need a session — check it either way.
   try {

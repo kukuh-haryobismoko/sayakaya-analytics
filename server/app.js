@@ -166,7 +166,8 @@ function createApp({ serveStatic = true } = {}) {
   // permission edit or account deletion by a superuser takes effect on the
   // user's very next request, not just at their next login.
   app.use('/api', async (req, res, next) => {
-    if (req.path === '/health' || req.path === '/auth/login') return next();
+    if (req.path === '/health' || req.path === '/auth/login'
+      || req.path === '/auth/forgot-password' || req.path === '/auth/reset-password') return next();
     try {
       const authHeader = req.get('authorization') || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -292,6 +293,37 @@ function createApp({ serveStatic = true } = {}) {
     }
     await Auth.updateUser(req.user.id, { password: newPassword });
     await Auth.logEvent(req.user.id, req.user.username, 'password_change');
+    res.json({ ok: true });
+  }));
+
+  // ---- Auth: forgot password (unauthenticated, like login) ------------------
+  // Always responds with the same generic message regardless of whether the
+  // username exists or has an email on file — otherwise the response itself
+  // would let someone probe for valid usernames.
+  app.post('/api/auth/forgot-password', handler(async (req, res) => {
+    const generic = { ok: true, message: 'If that account has an email on file, a reset link has been sent.' };
+    const { username } = req.body || {};
+    if (!username) return res.json(generic);
+    const user = await Auth.findUserByUsername(username);
+    if (user && user.email) {
+      const token = await Auth.createPasswordReset(user.id);
+      const origin = process.env.APP_URL || req.get('origin') || '';
+      const resetUrl = `${origin}/?reset=${token}`;
+      await Mail.sendPasswordResetEmail({ to: user.email, username: user.username, resetUrl });
+      await Auth.logEvent(user.id, user.username, 'password_reset_requested');
+    }
+    res.json(generic);
+  }));
+
+  app.post('/api/auth/reset-password', handler(async (req, res) => {
+    const { token, newPassword } = req.body || {};
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required.' });
+    const userId = await Auth.consumePasswordReset(token);
+    if (!userId) return res.status(400).json({ error: 'This reset link is invalid or has expired. Request a new one.' });
+    const user = await Auth.findUserById(userId);
+    await Auth.updateUser(userId, { password: newPassword });
+    await Auth.deleteSessionsByUser(userId);
+    await Auth.logEvent(userId, user ? user.username : '', 'password_reset');
     res.json({ ok: true });
   }));
 
@@ -1239,8 +1271,17 @@ function createApp({ serveStatic = true } = {}) {
 
     await Mail.sendStatementEmail({ to: contact.email, subject, body, name: contact.name, attachments });
     const sent = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
-    await Auth.logEvent(req.user.id, username, 'email_pdf', `send-statement (${sent}) to ${contact.email}`);
+    const recipient = `${PDF.val(contact.name) || sid} (SID ${sid}, ${contact.email})`;
+    await Auth.logEvent(req.user.id, username, 'email_pdf', `send-statement (${sent}) to ${recipient}`);
     res.json({ ok: true, to: contact.email });
+  }));
+
+  // Send history for the Send Statement tab itself — not the superuser-only
+  // Activity log, so any user with access to this tab can see who sent what,
+  // to whom, and when (their own sends and everyone else's on this tool).
+  app.get('/api/statement/log', requireTab('send-statement'), handler(async (_req, res) => {
+    const rows = await Auth.listAuditLog({ action: 'email_pdf', limit: 100 });
+    res.json(rows);
   }));
 
   // ---- Static frontend (standalone hosts only) ------------------------------

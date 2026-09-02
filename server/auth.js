@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours, fixed — no refresh-on-activity.
+const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 async function rest(path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
@@ -137,6 +138,40 @@ async function deleteSessionByToken(token) {
   await rest(`/dashboard_sessions?token_hash=eq.${sha256Hex(token)}`, { method: 'DELETE' });
 }
 
+// Forces re-login everywhere for this user — called after a password reset,
+// in case the old password (and any session opened with it) was compromised.
+function deleteSessionsByUser(userId) {
+  return rest(`/dashboard_sessions?user_id=eq.${userId}`, { method: 'DELETE' });
+}
+
+// ---- Password reset (forgot password) ------------------------------------
+// Deletes any earlier outstanding token for this user first, so only the
+// most recently emailed link ever works — an admin resetting on someone's
+// behalf twice in a row doesn't leave a dangling valid link from the first email.
+async function createPasswordReset(userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+  await rest(`/dashboard_password_resets?user_id=eq.${userId}`, { method: 'DELETE' });
+  await rest('/dashboard_password_resets', {
+    method: 'POST',
+    body: JSON.stringify({ token_hash: sha256Hex(token), user_id: userId, expires_at: expiresAt }),
+  });
+  return token;
+}
+
+// Single-use: the token is deleted the moment it's looked up, whether or not
+// it turns out to still be valid, so a leaked/retried token can't be replayed.
+async function consumePasswordReset(token) {
+  if (!token) return null;
+  const tokenHash = sha256Hex(token);
+  const rows = await rest(`/dashboard_password_resets?token_hash=eq.${tokenHash}&select=user_id,expires_at`);
+  const reset = rows[0];
+  if (!reset) return null;
+  await rest(`/dashboard_password_resets?token_hash=eq.${tokenHash}`, { method: 'DELETE' });
+  if (new Date(reset.expires_at) < new Date()) return null;
+  return reset.user_id;
+}
+
 // ---- Audit log ----------------------------------------------------------
 // username is stored as a plain snapshot (not just a join through user_id)
 // so the record survives the account later being deleted.
@@ -161,13 +196,14 @@ async function logEvent(userId, username, action, detail) {
 // `user` is a separate, exact filter (the "filter by user" dropdown) — kept
 // apart from `search` so picking a user from the dropdown and typing a
 // detail/action keyword can be combined (both apply, PostgREST ANDs them).
-function listAuditLog({ limit = 200, search = '', from = '', to = '', user = '' } = {}) {
+function listAuditLog({ limit = 200, search = '', from = '', to = '', user = '', action = '' } = {}) {
   const params = [`select=*`, `order=created_at.desc`, `limit=${Number(limit) || 200}`];
   if (search) {
     const term = `*${search}*`;
     params.push(`or=(username.ilike.${encodeURIComponent(term)},action.ilike.${encodeURIComponent(term)},detail.ilike.${encodeURIComponent(term)})`);
   }
   if (user) params.push(`username=eq.${encodeURIComponent(user)}`);
+  if (action) params.push(`action=eq.${encodeURIComponent(action)}`);
   if (from) params.push(`created_at=gte.${encodeURIComponent(from + 'T00:00:00+07:00')}`);
   if (to) params.push(`created_at=lte.${encodeURIComponent(to + 'T23:59:59.999+07:00')}`);
   return rest(`/dashboard_audit_log?${params.join('&')}`);
@@ -190,7 +226,8 @@ function userCan(user, tab) {
 module.exports = {
   hashPassword, verifyPassword,
   findUserByUsername, findUserById, listUsers, countSuperusers, createUser, updateUser, deleteUser,
-  createSession, findUserByToken, deleteSessionByToken,
+  createSession, findUserByToken, deleteSessionByToken, deleteSessionsByUser,
+  createPasswordReset, consumePasswordReset,
   logEvent, listAuditLog,
   publicUser, userCan,
 };

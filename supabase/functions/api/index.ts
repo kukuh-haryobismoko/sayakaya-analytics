@@ -386,6 +386,40 @@ on('POST', '/api/auth/change-password', async (req, _params, _url, user) => {
   return json({ ok: true });
 });
 
+// ---- Auth: forgot password (unauthenticated, like login) ------------------
+// Always responds with the same generic message regardless of whether the
+// username exists or has an email on file — otherwise the response itself
+// would let someone probe for valid usernames.
+on('POST', '/api/auth/forgot-password', async (req) => {
+  const generic = { ok: true, message: 'If that account has an email on file, a reset link has been sent.' };
+  const body = await bodyOf(req);
+  const username = body.username as string;
+  if (!username) return json(generic);
+  const user = await A.findUserByUsername(username);
+  if (user && user.email) {
+    const token = await A.createPasswordReset(user.id);
+    const origin = Deno.env.get('APP_URL') || req.headers.get('origin') || '';
+    const resetUrl = `${origin}/?reset=${token}`;
+    await Mail.sendPasswordResetEmail({ to: user.email, username: user.username, resetUrl });
+    await A.logEvent(user.id, user.username, 'password_reset_requested');
+  }
+  return json(generic);
+});
+
+on('POST', '/api/auth/reset-password', async (req) => {
+  const body = await bodyOf(req);
+  const token = body.token as string;
+  const newPassword = body.newPassword as string;
+  if (!token || !newPassword) return json({ error: 'Token and new password are required.' }, 400);
+  const userId = await A.consumePasswordReset(token);
+  if (!userId) return json({ error: 'This reset link is invalid or has expired. Request a new one.' }, 400);
+  const user = await A.findUserById(userId);
+  await A.updateUser(userId, { password: newPassword });
+  await A.deleteSessionsByUser(userId);
+  await A.logEvent(userId, user ? user.username : '', 'password_reset');
+  return json({ ok: true });
+});
+
 // ---- Overview (KPIs) ------------------------------------------------------
 on('GET', '/api/overview', requireTab('overview', async (_req, _params, url) => {
   const from = qp(url, 'from'); const to = qp(url, 'to');
@@ -1337,8 +1371,17 @@ on('POST', '/api/statement/email', requireTab('send-statement', async (req, _par
     attachments,
   });
   const sent = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
-  await A.logEvent(user!.id, username, 'email_pdf', `send-statement (${sent}) to ${contact.email}`);
+  const recipient = `${val(contact.name) || sid} (SID ${sid}, ${contact.email})`;
+  await A.logEvent(user!.id, username, 'email_pdf', `send-statement (${sent}) to ${recipient}`);
   return json({ ok: true, to: contact.email });
+}));
+
+// Send history for the Send Statement tab itself — not the superuser-only
+// Activity log, so any user with access to this tab can see who sent what,
+// to whom, and when (their own sends and everyone else's on this tool).
+on('GET', '/api/statement/log', requireTab('send-statement', async () => {
+  const rows = await A.listAuditLog({ action: 'email_pdf', limit: 100 });
+  return json(rows);
 }));
 
 // ---- Serve ------------------------------------------------------------------
@@ -1358,7 +1401,9 @@ Deno.serve(async (req) => {
   // cached in the token — so a permission edit or account deletion takes
   // effect on the user's very next request, not just at their next login.
   let user: A.DashboardUser | null = null;
-  if (pathname !== '/api/health' && pathname !== '/api/auth/login') {
+  const authExempt = pathname === '/api/health' || pathname === '/api/auth/login'
+    || pathname === '/api/auth/forgot-password' || pathname === '/api/auth/reset-password';
+  if (!authExempt) {
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     try {
