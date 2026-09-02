@@ -3,6 +3,8 @@
 const PDFDocument = require('pdfkit');
 const LOGO_BUFFER = Buffer.from(require('./logo'), 'base64');
 const LOGO_RATIO = 490 / 720; // source PNG is 720x490 (sayakaya-kotak.png)
+const LOGO_H_BUFFER = Buffer.from(require('./logo-horizontal'), 'base64');
+const LOGO_H_RATIO = 456 / 1856; // source PNG is 1856x456 (sayakaya-horizontal.png)
 
 // BigQuery returns some values as wrapper objects. Date/Timestamp/Datetime/Time
 // expose a `.value` string; NUMERIC/BIGNUMERIC come back as big.js instances
@@ -51,6 +53,14 @@ const INDIGO = '#1e2a4a';
 const MUTED = '#6b7280';
 const LINE = '#e7e4dc';
 const INK = '#1a1d2e';
+const BLUE = '#2f5fdc';
+const GREEN = '#14c687';
+const RED = '#ff3165';
+const ZEBRA = '#eef0f8';
+// App's actual brand blue (--indigo in public/style.css) — used for the perf
+// table's header band instead of the near-black INDIGO above, which read as
+// too dark next to the reference "Reksa Dana Update" sheet.
+const TABLE_HEADER = '#3a50ab';
 
 function bufferDoc(doc) {
   return new Promise((resolve, reject) => {
@@ -62,26 +72,15 @@ function bufferDoc(doc) {
   });
 }
 
-function pageHeader(doc, title, sub) {
-  const logoWidth = 54; // square-ish kotak logo — keep it modest
-
-  doc.image(LOGO_BUFFER, doc.page.margins.left, doc.y, { width: logoWidth });
-  doc.y += logoWidth * LOGO_RATIO + 14;
-
-  doc.fillColor(INDIGO).font('Helvetica-Bold').fontSize(15).text(title);
-  if (sub) doc.fillColor(MUTED).font('Helvetica').fontSize(9).text(sub);
-  doc.moveDown(0.4);
-  const lineY = doc.y;
-  doc.strokeColor(LINE).lineWidth(1)
-    .moveTo(doc.page.margins.left, lineY)
-    .lineTo(doc.page.width - doc.page.margins.right, lineY)
-    .stroke();
-  doc.moveDown(0.6);
-}
-
 // Minimal table renderer: header row + data rows, with column widths and
 // per-row page breaks. columns: [{ key, label, width, align, format }]
-function table(doc, columns, rows, { rowHeight = 16, fontSize = 8 } = {}) {
+// headerFill/headerText style the header band; zebraFill (if set) shades
+// every other data row; cellColor(key, rawValue) (if set) overrides a body
+// cell's text color, e.g. green/red for % change — mirrors the official
+// "Reksa Dana Update" NAV sheet look.
+function table(doc, columns, rows, {
+  rowHeight = 16, fontSize = 8, headerFill = '#f4f2ec', headerText = INDIGO, zebraFill = null, cellColor = null,
+} = {}) {
   const left = doc.page.margins.left;
   const bottom = doc.page.height - doc.page.margins.bottom;
   const totalWidth = columns.reduce((s, c) => s + c.width, 0);
@@ -90,21 +89,22 @@ function table(doc, columns, rows, { rowHeight = 16, fontSize = 8 } = {}) {
   // Caller must have the row's font set before measuring.
   const measure = (texts) => Math.max(rowHeight,
     8 + Math.max(...texts.map((t, i) => doc.heightOfString(t, { width: columns[i].width - 8 }))));
-  const drawCells = (texts, y) => {
+  const drawCells = (texts, y, colorFn) => {
     let x = left;
     columns.forEach((c, i) => {
+      if (colorFn) doc.fillColor(colorFn(c.key) || INK);
       doc.text(texts[i], x + 4, y + 4, { width: c.width - 8, align: c.align || 'left' });
       x += c.width;
     });
   };
 
   function drawHeader() {
-    doc.font('Helvetica-Bold').fontSize(fontSize).fillColor(INDIGO);
+    doc.font('Helvetica-Bold').fontSize(fontSize).fillColor(headerText);
     const labels = columns.map((c) => c.label);
     const h = measure(labels);
     const y = doc.y;
-    doc.rect(left, y, totalWidth, h).fill('#f4f2ec');
-    doc.fillColor(INDIGO);
+    doc.rect(left, y, totalWidth, h).fill(headerFill);
+    doc.fillColor(headerText);
     drawCells(labels, y);
     doc.y = y + h;
     doc.strokeColor(LINE).moveTo(left, doc.y).lineTo(left + totalWidth, doc.y).stroke();
@@ -112,7 +112,7 @@ function table(doc, columns, rows, { rowHeight = 16, fontSize = 8 } = {}) {
 
   drawHeader();
   doc.font('Helvetica').fontSize(fontSize).fillColor(INK);
-  rows.forEach((r) => {
+  rows.forEach((r, i) => {
     const texts = columns.map((c) => {
       const raw = r[c.key];
       return String(c.format ? c.format(raw) : (val(raw) ?? '—'));
@@ -124,7 +124,8 @@ function table(doc, columns, rows, { rowHeight = 16, fontSize = 8 } = {}) {
       doc.font('Helvetica').fontSize(fontSize).fillColor(INK);
     }
     const y = doc.y;
-    drawCells(texts, y);
+    if (zebraFill && i % 2 === 1) doc.rect(left, y, totalWidth, h).fill(zebraFill);
+    drawCells(texts, y, cellColor ? (key) => cellColor(key, r[key]) : null);
     doc.y = y + h;
   });
   doc.strokeColor(LINE).moveTo(left, doc.y).lineTo(left + totalWidth, doc.y).stroke();
@@ -161,6 +162,64 @@ const PERF_COLS = (width) => [
   { key: 'NAV', label: 'NAV', width: width * 0.1, align: 'right', format: (v) => numFmt(v, 2) },
   ...PERF_PERIODS.map((p) => ({ key: p, label: p, width: (width * 0.66) / PERF_PERIODS.length, align: 'right', format: pctFmt })),
 ];
+// Same as PERF_COLS but with a leading row-number column, for the standalone
+// "Reksa Dana Update" style report — mirrors the official NAV update sheet.
+const PERF_COLS_NUMBERED = (width) => {
+  const noWidth = width * 0.045;
+  return [{ key: '__no', label: 'No', width: noWidth, align: 'center' }, ...PERF_COLS(width - noWidth)];
+};
+// Colors a period-change cell green (up) or red (down); leaves other columns alone.
+const perfCellColor = (key, raw) => {
+  if (!PERF_PERIODS.includes(key)) return null;
+  const v = val(raw);
+  return v == null ? null : (Number(v) >= 0 ? GREEN : RED);
+};
+const formatDateID = (d = new Date()) => `${String(d.getDate()).padStart(2, '0')} ${MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`;
+
+// Header for the "Reksa Dana Update" style report: bold title top-left,
+// blue date line below it, horizontal wordmark logo top-right.
+function perfReportHeader(doc, title, dateStr) {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const logoWidth = 110;
+  const y0 = doc.y;
+  doc.image(LOGO_H_BUFFER, right - logoWidth, y0, { width: logoWidth });
+  doc.font('Helvetica-Bold').fontSize(16).fillColor(INDIGO).text(title.toUpperCase(), left, y0, { width: right - logoWidth - left - 10 });
+  doc.font('Helvetica-Bold').fontSize(10).fillColor(BLUE).text(dateStr, left, doc.y + 2);
+  doc.y = Math.max(doc.y, y0 + logoWidth * LOGO_H_RATIO) + 16;
+  doc.x = left;
+}
+
+// One "Reksa Dana Update" page for a single fund-type sheet: { name, rows }.
+// Caller owns page breaks (addPage) between sheets.
+function perfSheetPage(doc, sheet, width) {
+  perfReportHeader(doc, `Reksa Dana Update — ${fundTypeLabel(sheet.name)}`, formatDateID());
+  if (sheet.rows.length) {
+    const numbered = sheet.rows.map((r, i) => ({ ...r, __no: i + 1 }));
+    table(doc, PERF_COLS_NUMBERED(width), numbered, {
+      headerFill: TABLE_HEADER, headerText: '#ffffff', zebraFill: ZEBRA, cellColor: perfCellColor,
+    });
+  } else {
+    doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No NAV data for this fund type.');
+  }
+}
+
+// sheets: [{ name: fundType, rows: [{ Fund, NAV, '1D': pct, ... }] }] — from
+// pivotPerformanceByType(). Standalone export for the Fund Performance section,
+// styled like the official "Reksa Dana Update" NAV sheet (one page per type).
+function fundPerformanceReport(sheets, options = {}) {
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  if (options.username) doc.info.Author = options.username;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  if (!sheets.length) {
+    doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No NAV data.');
+  }
+  sheets.forEach((sheet, i) => {
+    if (i > 0) doc.addPage();
+    perfSheetPage(doc, sheet, width);
+  });
+  return bufferDoc(doc);
+}
 
 const DISCLAIMER = 'Dokumen ini dipersiapkan oleh PT SAYAKAYA LAHIR BATIN dan hanya bisa digunakan untuk kepentingan investor tersebut di atas dan tidak untuk pihak lainnya. Laporan ini bukan merupakan konfirmasi dari PT SAYAKAYA LAHIR BATIN dan tidak untuk menggantikan laporan yang wajib diterbitkan oleh Bank Kustodian, jika ada perbedaan antara laporan ini dengan laporan Bank Kustodian, maka laporan Bank Kustodian adalah yang benar. Laporan ini diproses oleh komputer dan tidak memerlukan tandatangan.';
 const OJK_LINE = 'PT SAYAKAYA LAHIR BATIN terdaftar dan diawasi oleh OJK, dengan nomor registrasi KEP-17/PM.21/2021';
@@ -269,15 +328,10 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
     .text(DISCLAIMER, left, doc.y, { width })
     .text(OJK_LINE, { width });
 
-  // ---- One page per fund type: NAV % change table ----
+  // ---- One page per fund type: NAV % change table, "Reksa Dana Update" style ----
   performanceSheets.forEach((sheet) => {
     doc.addPage();
-    pageHeader(doc, `Fund performance — ${sheet.name}`, '% change in NAV vs. each period, as-of the fund\'s latest available NAV.');
-    if (sheet.rows.length) {
-      table(doc, PERF_COLS(width), sheet.rows);
-    } else {
-      doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No NAV data for this fund type.');
-    }
+    perfSheetPage(doc, sheet, width);
   });
 
   return bufferDoc(doc);
@@ -319,6 +373,7 @@ function transactionStatement({ contact, transactions }, monthLabel, options = {
 module.exports = {
   portfolioReport,
   transactionStatement,
+  fundPerformanceReport,
   // Exported for server/sheets.js, so the Google Sheets export mirrors this
   // PDF's exact columns, number formatting, and disclaimer text instead of
   // re-implementing them.

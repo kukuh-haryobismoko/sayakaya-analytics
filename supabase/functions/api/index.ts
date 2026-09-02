@@ -8,7 +8,7 @@ import { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } from './export.ts';
 import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
-import { portfolioReport, transactionStatement, val } from './pdf.ts';
+import { portfolioReport, transactionStatement, fundPerformanceReport, val } from './pdf.ts';
 import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 import * as Mail from './mail.ts';
@@ -953,6 +953,15 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const q = Q.productPerformanceDetail();
     const detail = await runQuery(q.sql, q.params);
     if (format === 'xlsx') return xlsxMultiResponse(pivotPerformanceByType(detail), filename, username);
+    if (format === 'pdf') {
+      const buf = await fundPerformanceReport(pivotPerformanceByType(detail), { username });
+      return new Response(new Uint8Array(buf), {
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
+        },
+      });
+    }
     rows = detail;
   } else if (source === 'portfolio_full') {
     const userId = body.userId as string; const sid = body.sid as string;

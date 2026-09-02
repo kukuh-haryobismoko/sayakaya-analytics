@@ -3565,6 +3565,7 @@ function wire() {
   });
   $('#perfDetailCsv').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'csv', filename: 'product_performance_detail' }, 'product_performance_detail.csv'));
   $('#perfDetailXlsx').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'xlsx', filename: 'product_performance_detail' }, 'product_performance_detail.xlsx'));
+  $('#perfDetailPdf').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'pdf', filename: 'product_performance_detail' }, 'product_performance_detail.pdf'));
 
   // growth
   $('#campCsv').addEventListener('click', () => download({ source: 'campaigns_performance', format: 'csv', filename: 'campaign_performance' }, 'campaign_performance.csv'));

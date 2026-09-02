@@ -917,6 +917,10 @@ function createApp({ serveStatic = true } = {}) {
       const q = Q.productPerformanceDetail();
       const detail = await runQuery(q.sql, q.params);
       if (format === 'xlsx') return sendXlsxMulti(res, pivotPerformanceByType(detail), filename, username);
+      if (format === 'pdf') {
+        const buf = await PDF.fundPerformanceReport(pivotPerformanceByType(detail), { username });
+        return sendPdf(res, buf, filename, username);
+      }
       rows = detail;
     } else if (source === 'portfolio_full') {
       const { userId, sid, date } = req.body;
