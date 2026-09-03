@@ -1421,10 +1421,18 @@ async function loadPerformanceDetail() {
 }
 
 function buildPerfTypeFilter(rows) {
-  const sel = $('#perfTypeFilter');
-  if (sel.options.length > 1) return; // built once
+  const list = $('#perfTypeFilterList');
+  if (list.children.length) return; // built once
   const types = [...new Set(rows.map((r) => val(r.type)))].sort();
-  types.forEach((t) => sel.insertAdjacentHTML('beforeend', `<option value="${t}">${t}</option>`));
+  list.innerHTML = types.map((ty) =>
+    `<label class="ask-table-chk"><input type="checkbox" value="${ty}"> ${ty}</label>`).join('');
+}
+
+// None checked = no filter (show every type) — mirrors the old select's
+// blank "All fund types" default. Button label shows the pick count.
+function updatePerfTypeFilterBtn() {
+  const n = $$('#perfTypeFilterList input:checked').length;
+  $('#perfTypeFilterBtn').textContent = n ? `${n} type${n === 1 ? '' : 's'} picked` : t('common_all_fund_types');
 }
 
 // pivot flat (type, name, period, pct_change) rows into one row per fund
@@ -1440,9 +1448,9 @@ function pivotByFund(rows) {
 }
 
 function renderPerformanceDetail() {
-  const typeFilter = $('#perfTypeFilter').value;
+  const pickedTypes = $$('#perfTypeFilterList input:checked').map((el) => el.value);
   const search = $('#perfDetailSearch').value.trim().toLowerCase();
-  const rows = typeFilter ? perfDetailCache.filter((r) => val(r.type) === typeFilter) : perfDetailCache;
+  const rows = pickedTypes.length ? perfDetailCache.filter((r) => pickedTypes.includes(val(r.type))) : perfDetailCache;
   const funds = pivotByFund(rows)
     .filter((f) => !search || f.name.toLowerCase().includes(search))
     .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
@@ -3574,7 +3582,14 @@ function wire() {
   // product performance
   $('#perfCsv').addEventListener('click', () => download({ source: 'product_performance', format: 'csv', filename: 'product_performance' }, 'product_performance.csv'));
   $('#perfXlsx').addEventListener('click', () => download({ source: 'product_performance', format: 'xlsx', filename: 'product_performance' }, 'product_performance.xlsx'));
-  $('#perfTypeFilter').addEventListener('change', renderPerformanceDetail);
+  $('#perfTypeFilterList').addEventListener('change', () => { updatePerfTypeFilterBtn(); renderPerformanceDetail(); });
+  $('#perfTypeFilterBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#perfTypeFilterPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#perfTypeFilterDropdown')) $('#perfTypeFilterPanel').classList.remove('open');
+  });
   $('#perfDetailSearch').addEventListener('input', renderPerformanceDetail);
   $('#perfDetailAsOf').addEventListener('change', loadPerformanceDetail);
   $('#perfTrendType').addEventListener('change', () => { loadPerfTrendFunds(); loadPerfTrend(); });

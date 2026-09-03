@@ -742,7 +742,12 @@
           <div class="filters">
             <label><span data-i18n="perf_as_of">NAV as of</span> <input type="date" id="perfDetailAsOf" /></label>
             <input id="perfDetailSearch" type="text" data-i18n-placeholder="common_search_funds_ph" placeholder="Search funds…" style="min-width:160px" />
-            <select id="perfTypeFilter"><option value="" data-i18n="common_all_fund_types">All fund types</option></select>
+            <div class="dropdown-multi" id="perfTypeFilterDropdown">
+              <button type="button" class="dropdown-multi-btn" id="perfTypeFilterBtn" data-i18n="common_all_fund_types">All fund types</button>
+              <div class="dropdown-multi-panel" id="perfTypeFilterPanel">
+                <div id="perfTypeFilterList" class="dropdown-multi-list"></div>
+              </div>
+            </div>
             <span class="divider"></span>
             <button class="btn-ghost" id="perfDetailCsv" data-i18n="common_csv">CSV</button>
             <button class="btn-ghost" id="perfDetailXlsx" data-i18n="perf_xlsx_per_type">Excel (one sheet per type)</button>
