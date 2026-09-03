@@ -2548,6 +2548,104 @@ async function loadSsLog() {
 }
 
 // ====================================================================
+//  SEND FUND PERFORMANCE (broadcast the Reksa Dana Update PDF to a picked
+//  or pasted list of emails). Separate tool from Send statement, which is
+//  scoped to one investor's own portfolio/e-statement.
+// ====================================================================
+async function searchFpeUsers() {
+  const q = $('#fpeSearchInput').value.trim();
+  if (!q) return;
+  $('#fpeResults').innerHTML = '<div class="loading">Searching…</div>';
+  try {
+    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    renderFpeResults(rows);
+  } catch (e) { $('#fpeResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function renderFpeResults(rows) {
+  if (!rows.length) { $('#fpeResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  const body = rows.map((r) => {
+    const email = val(r.email) || '';
+    const action = email
+      ? `<button class="btn-ghost fpe-add-btn" data-email="${email}">+ Add</button>`
+      : '<span class="hint">No email</span>';
+    return `<tr><td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${email || '—'}</td><td>${action}</td></tr>`;
+  }).join('');
+  $('#fpeResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+  $$('#fpeResults .fpe-add-btn').forEach((btn) => btn.addEventListener('click', () => addFpeRecipient(btn.dataset.email)));
+}
+
+// Keyed by lowercased email so the same investor can't be added twice.
+let fpePicked = new Map();
+function addFpeRecipient(email) {
+  const key = email.toLowerCase();
+  if (fpePicked.has(key)) { toast('Already added.'); return; }
+  fpePicked.set(key, email);
+  renderFpePicked();
+}
+function renderFpePicked() {
+  $('#fpePickedCount').textContent = fpePicked.size;
+  $('#fpePickedList').innerHTML = fpePicked.size
+    ? [...fpePicked.entries()].map(([key, email]) => `<button type="button" class="chip" data-key="${key}">${email} ✕</button>`).join('')
+    : '<span class="hint">None picked yet.</span>';
+  $$('#fpePickedList .chip').forEach((c) => c.addEventListener('click', () => {
+    fpePicked.delete(c.dataset.key);
+    renderFpePicked();
+  }));
+}
+
+// Splits on newlines, commas, and semicolons so either a one-per-line paste
+// or a comma-separated list works; silently drops anything that isn't a
+// plausible email instead of blocking the whole paste on one typo.
+function parsePastedEmails(text) {
+  return [...new Set((text || '').split(/[\s,;]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)))];
+}
+
+let fpeRecipients = [];
+function openFpeCompose() {
+  const pasted = parsePastedEmails($('#fpePasteEmails').value);
+  fpeRecipients = [...new Set([...fpePicked.keys(), ...pasted])];
+  if (!fpeRecipients.length) { toast('Add at least one recipient.'); return; }
+  $('#fpeEmailTo').textContent = `Will be sent to ${fpeRecipients.length} recipient${fpeRecipients.length === 1 ? '' : 's'}.`;
+  const asOf = $('#fpeAsOf').value;
+  $('#fpeEmailSubject').value = `Sayakaya Fund Performance Update${asOf ? ` — ${asOf}` : ''}`;
+  $('#fpeEmailBody').value = 'Dear Investor,\n\nPlease find attached our latest fund performance update (Reksa Dana Update), issued by PT Sayakaya Lahir Batin.\n\nBest regards,\nPT Sayakaya Lahir Batin';
+  $('#fpeEmailModal').showModal();
+}
+
+async function sendFpeEmail() {
+  try {
+    const res = await fetch(API_BASE + '/api/fund-performance/email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        to: fpeRecipients, subject: $('#fpeEmailSubject').value, body: $('#fpeEmailBody').value, asOf: $('#fpeAsOf').value,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(data.error || 'Email failed'); return; }
+    const failedNote = data.failed?.length ? `, ${data.failed.length} failed` : '';
+    toast(`Sent to ${data.sent.length} recipient${data.sent.length === 1 ? '' : 's'}${failedNote}`);
+    loadFpeLog();
+  } catch { toast('Could not reach the server.'); }
+}
+
+async function loadFpeLog() {
+  $('#fpeLogTable').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const rows = await api('/api/fund-performance/log');
+    const mapped = rows.map((r) => ({ ...r, created_at: toJakartaTime(val(r.created_at)) }));
+    genTable('#fpeLogTable', mapped, [
+      { key: 'created_at', label: 'When (WIB)' },
+      { key: 'username', label: 'Sent by' },
+      { key: 'detail', label: 'Sent' },
+    ], 'No fund performance emails sent yet.');
+  } catch (e) { $('#fpeLogTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// ====================================================================
 //  ASK (natural language)
 // ====================================================================
 let askSqlCache = '';
@@ -3211,6 +3309,7 @@ function switchTab(name) {
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
   if (name === 'send-statement') loadSsLog();
+  if (name === 'send-fund-performance') loadFpeLog();
 }
 
 // Called once after login/session-restore: hides nav links + the Admin group
@@ -3399,6 +3498,16 @@ function wire() {
       subject: $('#ssEmailSubject').value, body: $('#ssEmailBody').value,
     });
   });
+
+  // send fund performance
+  $('#fpeSearchBtn').addEventListener('click', searchFpeUsers);
+  $('#fpeSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchFpeUsers(); });
+  $('#fpeLogRefresh').addEventListener('click', loadFpeLog);
+  $('#fpeComposeBtn').addEventListener('click', openFpeCompose);
+  $('#fpeEmailCancelBtn').addEventListener('click', () => $('#fpeEmailModal').close());
+  $('#fpeEmailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $('#fpeEmailSendBtn').addEventListener('click', () => { $('#fpeEmailModal').close(); sendFpeEmail(); });
+  renderFpePicked();
 
   // portfolio (fix) — same wiring as portfolio (pwc) above, different source table
   $('#pfxSearchBtn').addEventListener('click', searchPfxUsers);

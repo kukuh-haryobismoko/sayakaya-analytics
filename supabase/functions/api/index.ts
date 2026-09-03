@@ -536,7 +536,7 @@ on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
 }));
 
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement'], async (_req, _params, url) => {
+on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement', 'send-fund-performance'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -1388,6 +1388,48 @@ on('POST', '/api/statement/email', requireTab('send-statement', async (req, _par
 // to whom, and when (their own sends and everyone else's on this tool).
 on('GET', '/api/statement/log', requireTab('send-statement', async () => {
   const rows = await A.listAuditLog({ action: 'email_pdf', limit: 100 });
+  return json(rows);
+}));
+
+// ---- Send fund performance: broadcast the Reksa Dana Update PDF to a
+// picked/pasted list of email addresses — one email per recipient, so one
+// bad address doesn't block the rest of the list. Separate tool from Send
+// statement, which is scoped to a single investor's own documents.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+on('POST', '/api/fund-performance/email', requireTab('send-fund-performance', async (req, _params, _url, user) => {
+  const body = await bodyOf(req);
+  const toRaw = body.to as string[] | undefined;
+  const recipients = [...new Set((Array.isArray(toRaw) ? toRaw : []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+  if (!recipients.length) return json({ error: 'At least one recipient email is required.' }, 400);
+  const bad = recipients.find((e) => !EMAIL_RE.test(e));
+  if (bad) return json({ error: `Invalid email address: ${bad}` }, 400);
+
+  const username = user!.username;
+  const asOf = body.asOf as string | undefined;
+  const q = Q.productPerformanceDetail(asOf);
+  const detail = await runQuery(q.sql, q.params);
+  const sheets = pivotPerformanceByType(detail);
+  const buf = await fundPerformanceReport(sheets, { username });
+  const attachments = [{ filename: `Reksa_Dana_Update${asOf ? `_${asOf}` : ''}.pdf`, content: new Uint8Array(buf) }];
+
+  const subject = body.subject as string | undefined;
+  const emailBody = body.body as string | undefined;
+  const results = await Promise.allSettled(
+    recipients.map((email) => Mail.sendStatementEmail({ to: email, subject, body: emailBody, attachments })),
+  );
+  const sent: string[] = []; const failed: string[] = [];
+  results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));
+
+  await A.logEvent(user!.id, username, 'email_fund_performance',
+    `fund-performance to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
+
+  if (!sent.length) return json({ error: 'All sends failed. Check the SMTP configuration.' }, 502);
+  return json({ ok: true, sent, failed });
+}));
+
+// Send history for this tab, same convention as /api/statement/log.
+on('GET', '/api/fund-performance/log', requireTab('send-fund-performance', async () => {
+  const rows = await A.listAuditLog({ action: 'email_fund_performance', limit: 100 });
   return json(rows);
 }));
 

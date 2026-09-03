@@ -462,9 +462,9 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), Portfolio (TX), Portfolio (SInvest), and Send statement — allow any.
+  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), Portfolio (TX), Portfolio (SInvest), Send statement, and Send fund performance — allow any.
   const requireAnyPortfolio = (req, res, next) => {
-    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx') || Auth.userCan(req.user, 'portfolio-sinvest') || Auth.userCan(req.user, 'send-statement')) return next();
+    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx') || Auth.userCan(req.user, 'portfolio-sinvest') || Auth.userCan(req.user, 'send-statement') || Auth.userCan(req.user, 'send-fund-performance')) return next();
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/users/search', requireAnyPortfolio, handler(async (req, res) => {
@@ -1288,6 +1288,44 @@ function createApp({ serveStatic = true } = {}) {
   // to whom, and when (their own sends and everyone else's on this tool).
   app.get('/api/statement/log', requireTab('send-statement'), handler(async (_req, res) => {
     const rows = await Auth.listAuditLog({ action: 'email_pdf', limit: 100 });
+    res.json(rows);
+  }));
+
+  // ---- Send fund performance: broadcast the Reksa Dana Update PDF to a
+  // picked/pasted list of email addresses — one email per recipient, so one
+  // bad address doesn't block the rest of the list. Separate tool from Send
+  // statement, which is scoped to a single investor's own documents.
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  app.post('/api/fund-performance/email', requireTab('send-fund-performance'), handler(async (req, res) => {
+    const { to, subject, body, asOf } = req.body || {};
+    const recipients = [...new Set((Array.isArray(to) ? to : []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+    if (!recipients.length) return res.status(400).json({ error: 'At least one recipient email is required.' });
+    const bad = recipients.find((e) => !EMAIL_RE.test(e));
+    if (bad) return res.status(400).json({ error: `Invalid email address: ${bad}` });
+
+    const username = req.user.username;
+    const q = Q.productPerformanceDetail(asOf);
+    const detail = await runQuery(q.sql, q.params);
+    const sheets = pivotPerformanceByType(detail);
+    const buf = await PDF.fundPerformanceReport(sheets, { username });
+    const attachments = [{ filename: `Reksa_Dana_Update${asOf ? `_${asOf}` : ''}.pdf`, content: buf }];
+
+    const results = await Promise.allSettled(
+      recipients.map((email) => Mail.sendStatementEmail({ to: email, subject, body, attachments })),
+    );
+    const sent = [], failed = [];
+    results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));
+
+    await Auth.logEvent(req.user.id, username, 'email_fund_performance',
+      `fund-performance to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
+
+    if (!sent.length) return res.status(502).json({ error: 'All sends failed. Check the SMTP configuration.' });
+    res.json({ ok: true, sent, failed });
+  }));
+
+  // Send history for this tab, same convention as /api/statement/log.
+  app.get('/api/fund-performance/log', requireTab('send-fund-performance'), handler(async (_req, res) => {
+    const rows = await Auth.listAuditLog({ action: 'email_fund_performance', limit: 100 });
     res.json(rows);
   }));
 

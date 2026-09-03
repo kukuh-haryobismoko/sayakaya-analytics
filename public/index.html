@@ -124,6 +124,7 @@
           <button class="nav-link" data-tab="portfolio-sinvest"><span class="nav-icon">📇</span>Portfolio (SInvest)</button>
           <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
           <button class="nav-link" data-tab="send-statement"><span class="nav-icon">📧</span>Send statement</button>
+          <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon">📊</span>Send fund performance</button>
         </div>
         <div class="nav-group" data-group="operations">
           <div class="nav-label"><span data-i18n="nav_group_operations">Operations &amp; Finance</span><span class="nav-group-caret"></span></div>
@@ -315,6 +316,69 @@
         <div class="exp" style="margin-top:14px">
           <button class="btn-primary" id="ssEmailSendBtn" data-i18n="common_send">Send</button>
           <button class="btn-ghost" id="ssEmailCancelBtn" data-i18n="common_cancel">Cancel</button>
+        </div>
+      </dialog>
+    </section>
+
+    <!-- ===================== SEND FUND PERFORMANCE — broadcast the Reksa Dana
+         Update PDF to a picked or pasted list of emails. Separate tool from
+         Send statement, which is scoped to one investor at a time. ===================== -->
+    <section id="send-fund-performance" class="view">
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="fpe_recipients_title">Recipients</h2><span class="hint" data-i18n="fpe_recipients_hint">Search registered users to add their email, or paste a list below — either or both.</span></div>
+        <div class="ask-bar">
+          <input id="fpeSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
+          <button id="fpeSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
+        </div>
+        <div id="fpeResults" class="table-wrap"></div>
+
+        <div style="margin-top:16px">
+          <div class="field-card-top" style="margin-bottom:8px"><span data-i18n="fpe_picked_label">Picked recipients</span> (<span id="fpePickedCount">0</span>)</div>
+          <div id="fpePickedList" class="chip-row"></div>
+        </div>
+
+        <div class="field-card" style="margin-top:16px">
+          <label class="field-card-top" for="fpePasteEmails"><span data-i18n="fpe_paste_label">Or paste emails (one per line, or comma-separated)</span></label>
+          <textarea id="fpePasteEmails" rows="4" class="field-card-input" style="resize:vertical" placeholder="jane@example.com&#10;john@example.com"></textarea>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="fpe_report_title">Fund performance report</h2></div>
+        <div class="field-card-row">
+          <div class="field-card">
+            <label class="field-card-top"><span data-i18n="perf_as_of">NAV as of</span></label>
+            <input type="date" id="fpeAsOf" class="field-card-input" />
+          </div>
+        </div>
+        <div class="callout" style="margin-top:14px">
+          <span class="callout-icon" aria-hidden="true">📄</span>
+          <span data-i18n="fpe_hint">Attaches the Reksa Dana Update PDF (all fund types, NAV as of the date above) to one email per recipient.</span>
+        </div>
+        <div class="exp" style="margin-top:16px">
+          <button class="btn-primary lg" id="fpeComposeBtn"><span data-i18n="ss_compose">Compose email…</span> <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2><span aria-hidden="true">📜</span> <span data-i18n="fpe_log_title">Send history</span></h2>
+          <button class="btn-ghost" id="fpeLogRefresh" data-i18n="common_refresh">Refresh</button>
+        </div>
+        <span class="hint" data-i18n="fpe_log_hint">Every fund performance email sent from this tab — who sent it, and to whom. Most recent first.</span>
+        <div id="fpeLogTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <dialog id="fpeEmailModal" class="admin-modal">
+        <div class="panel-head wrap"><h2 data-i18n="fpe_modal_title">Email fund performance</h2></div>
+        <span class="hint" id="fpeEmailTo"></span>
+        <div class="filters" style="margin-top:12px; flex-direction:column; align-items:stretch">
+          <input type="text" id="fpeEmailSubject" style="width:100%" />
+          <textarea id="fpeEmailBody" rows="10" style="width:100%; margin-top:10px; font:inherit"></textarea>
+        </div>
+        <div class="exp" style="margin-top:14px">
+          <button class="btn-primary" id="fpeEmailSendBtn" data-i18n="common_send">Send</button>
+          <button class="btn-ghost" id="fpeEmailCancelBtn" data-i18n="common_cancel">Cancel</button>
         </div>
       </dialog>
     </section>
@@ -1530,6 +1594,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3>📧 Send statement</h3>
           <p>Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent.</p>
+        </div>
+        <div class="doc-item">
+          <h3>📊 Send fund performance</h3>
+          <p>Broadcasts the "Reksa Dana Update" PDF (all fund types, NAV as of a chosen date) to a list of email addresses — search registered users to add their email, and/or paste a list of emails directly (one per line, or comma-separated). Sends one email per recipient, so one bad address doesn't block the rest. Separate tool from Send statement, which is scoped to one investor's own documents; this one can go to any list of emails, investor or not. Has its own send-history log, same as Send statement.</p>
         </div>
         <div class="doc-item">
           <h3>💎 HNWI</h3>

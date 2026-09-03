@@ -518,6 +518,9 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   font-family: inherit; font-size: 12px; padding: 6px 11px; border-radius: 20px; cursor: pointer;
 }
 .chip:hover { border-color: var(--indigo); color: var(--indigo); }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-row .chip { background: var(--indigo-tint); color: var(--indigo); border-color: transparent; }
+.chip-row .chip:hover { background: var(--rose-tint); color: var(--rose); border-color: transparent; }
 .ask-sql { border: 1px solid var(--line); border-radius: 9px; margin-bottom: 14px; overflow: hidden; }
 .ask-sql-head {
   display: flex; align-items: center; justify-content: space-between;
