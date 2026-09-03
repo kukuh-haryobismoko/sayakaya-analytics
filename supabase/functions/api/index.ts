@@ -13,7 +13,7 @@ import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 import * as Mail from './mail.ts';
 
-const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
+const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -66,7 +66,9 @@ function pivotPerformanceByType(rows: Record<string, unknown>[]) {
     const type = (r.type as string) || '(none)';
     const t = (byType[type] = byType[type] || { byFund: {}, asOf: null });
     const name = r.name as string;
-    const fund = (t.byFund[name] = t.byFund[name] || { Fund: r.name, NAV: r.latest_nav });
+    const fund = (t.byFund[name] = t.byFund[name] || {
+      Fund: r.name, NAV: r.latest_nav, ipoDate: r.ipo_date ? val(r.ipo_date) : null,
+    });
     fund[r.period as string] = r.pct_change;
     const d = r.latest_nav_date ? (val(r.latest_nav_date) as string) : null;
     if (d && (!t.asOf || d > t.asOf)) t.asOf = d;
@@ -75,7 +77,7 @@ function pivotPerformanceByType(rows: Record<string, unknown>[]) {
     name: type,
     asOf: byType[type].asOf,
     rows: Object.values(byType[type].byFund).map((f) => {
-      const out: Record<string, unknown> = { Fund: f.Fund, NAV: f.NAV };
+      const out: Record<string, unknown> = { Fund: f.Fund, NAV: f.NAV, ipoDate: f.ipoDate };
       for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
       return out;
     }),

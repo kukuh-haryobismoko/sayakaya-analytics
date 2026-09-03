@@ -170,11 +170,17 @@ function filterCols(cols, totalWidth, keys) {
   return keep.map((c) => ({ ...c, width: (c.width / sumW) * totalWidth }));
 }
 
-const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
+const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
+// Period key -> the official "Reksa Dana Update" sheet's Indonesian header.
+const PERF_PERIOD_LABELS_ID = {
+  '1D': '1 Hari', '1W': '1 Minggu', '1M': '1 Bulan', '3M': '3 Bulan',
+  YTD: 'YTD', '1Y': '1 Tahun', '3Y': '3 Tahun', '5Y': '5 Tahun', '10Y': '10 Tahun',
+};
 const PERF_COLS = (width) => [
-  { key: 'Fund', label: 'Fund', width: width * 0.24 },
-  { key: 'NAV', label: 'NAV', width: width * 0.1, align: 'right', format: (v) => numFmt(v, 2) },
-  ...PERF_PERIODS.map((p) => ({ key: p, label: p, width: (width * 0.66) / PERF_PERIODS.length, align: 'right', format: pctFmt })),
+  { key: 'Fund', label: 'Nama Produk', width: width * 0.19 },
+  { key: 'ipoDate', label: 'Tanggal Emisi', width: width * 0.09, format: (v) => formatDateStrID(v) || '—' },
+  { key: 'NAV', label: 'NAB/UP', width: width * 0.09, align: 'right', format: (v) => numFmt(v, 2) },
+  ...PERF_PERIODS.map((p) => ({ key: p, label: PERF_PERIOD_LABELS_ID[p] || p, width: (width * 0.63) / PERF_PERIODS.length, align: 'right', format: pctFmt })),
 ];
 // Same as PERF_COLS but with a leading row-number column, for the standalone
 // "Reksa Dana Update" style report — mirrors the official NAV update sheet.
@@ -224,7 +230,7 @@ function perfSheetPage(doc, sheet, width) {
   if (sheet.rows.length) {
     const numbered = sheet.rows.map((r, i) => ({ ...r, __no: i + 1 }));
     table(doc, PERF_COLS_NUMBERED(width), numbered, {
-      headerFill: TABLE_HEADER, headerText: '#ffffff', zebraFill: ZEBRA, cellColor: perfCellColor,
+      headerFill: TABLE_HEADER, headerText: '#ffffff', zebraFill: ZEBRA, cellColor: perfCellColor, fontSize: 7,
     });
   } else {
     doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No NAV data for this fund type.');

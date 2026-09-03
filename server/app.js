@@ -61,7 +61,7 @@ const EXPORT_SOURCE_TAB = {
   referral_program_detail: 'referral-program',
 };
 
-const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
+const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
 
 // Pivot flat (type, name, period, pct_change) rows into one fund-per-row
 // table per fund type — used for the per-type Excel sheets and the PDF.
@@ -72,7 +72,9 @@ function pivotPerformanceByType(rows) {
   for (const r of rows) {
     const type = r.type || '(none)';
     const t = (byType[type] = byType[type] || { byFund: {}, asOf: null });
-    const fund = (t.byFund[r.name] = t.byFund[r.name] || { Fund: r.name, NAV: r.latest_nav });
+    const fund = (t.byFund[r.name] = t.byFund[r.name] || {
+      Fund: r.name, NAV: r.latest_nav, ipoDate: r.ipo_date ? PDF.val(r.ipo_date) : null,
+    });
     fund[r.period] = r.pct_change;
     const d = r.latest_nav_date ? PDF.val(r.latest_nav_date) : null;
     if (d && (!t.asOf || d > t.asOf)) t.asOf = d;
@@ -81,7 +83,7 @@ function pivotPerformanceByType(rows) {
     name: type,
     asOf: byType[type].asOf,
     rows: Object.values(byType[type].byFund).map((f) => {
-      const out = { Fund: f.Fund, NAV: f.NAV };
+      const out = { Fund: f.Fund, NAV: f.NAV, ipoDate: f.ipoDate };
       for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
       return out;
     }),

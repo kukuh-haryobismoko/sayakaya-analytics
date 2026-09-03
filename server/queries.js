@@ -246,7 +246,8 @@ function periodTargets(latestDateExpr) {
         STRUCT('YTD', 5, DATE_TRUNC(${latestDateExpr}, YEAR)),
         STRUCT('1Y', 6, DATE_SUB(${latestDateExpr}, INTERVAL 1 YEAR)),
         STRUCT('3Y', 7, DATE_SUB(${latestDateExpr}, INTERVAL 3 YEAR)),
-        STRUCT('5Y', 8, DATE_SUB(${latestDateExpr}, INTERVAL 5 YEAR))
+        STRUCT('5Y', 8, DATE_SUB(${latestDateExpr}, INTERVAL 5 YEAR)),
+        STRUCT('10Y', 9, DATE_SUB(${latestDateExpr}, INTERVAL 10 YEAR))
       ]`;
 }
 
@@ -300,12 +301,14 @@ const productPerformanceDetail = (asOfDate) => ({
       FROM periods p JOIN nav n ON n.product_id = p.product_id
       GROUP BY p.product_id, p.name, p.type, p.period, p.ord, p.latest_snap
     )
-    SELECT type, name, period, ord,
-      ROUND(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100, 2) AS pct_change,
-      latest_snap.v AS latest_nav, asof_snap.v AS base_nav, latest_snap.d AS latest_nav_date
-    FROM snaps
-    WHERE asof_snap IS NOT NULL
-    ORDER BY type, name, ord`,
+    SELECT s.type, s.name, s.period, s.ord,
+      ROUND(SAFE_DIVIDE(s.latest_snap.v - s.asof_snap.v, s.asof_snap.v) * 100, 2) AS pct_change,
+      s.latest_snap.v AS latest_nav, s.asof_snap.v AS base_nav, s.latest_snap.d AS latest_nav_date,
+      f.ipo_date
+    FROM snaps s
+    LEFT JOIN ${FUNDS} f ON f.id = s.product_id
+    WHERE s.asof_snap IS NOT NULL
+    ORDER BY s.type, s.name, s.ord`,
   params: asOfDate ? { asOfDate } : {},
 });
 
