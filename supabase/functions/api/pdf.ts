@@ -47,6 +47,20 @@ export const fundTypeLabel = (t: unknown): string => {
   if (!v) return '—';
   return FUND_TYPE_LABELS[String(v)] || String(v).split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ') + ' Fund';
 };
+// funds.type enum → Indonesian label, matching the official "Reksa Dana
+// Update" sheet (e.g. MONEY_MARKET -> "Pasar Uang").
+const FUND_TYPE_LABELS_ID: Record<string, string> = {
+  MONEY_MARKET: 'Pasar Uang',
+  FIXED_INCOME: 'Pendapatan Tetap',
+  MIXED: 'Campuran',
+  EQUITY: 'Saham',
+  PROTECTED: 'Terproteksi',
+};
+const fundTypeLabelID = (t: unknown): string => {
+  const v = val(t);
+  if (!v) return '—';
+  return FUND_TYPE_LABELS_ID[String(v)] || String(v).split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ');
+};
 export const pctFmt = (n: unknown): string => {
   const v = val(n);
   if (v == null) return '—';
@@ -223,7 +237,7 @@ const perfCellColor = (key: string, raw: unknown): string | null => {
 };
 
 interface Contact { name?: unknown; sid?: unknown; ifua?: unknown; email?: unknown; phone?: unknown; address?: unknown }
-interface PerfSheet { name: string; rows: Record<string, unknown>[] }
+interface PerfSheet { name: string; rows: Record<string, unknown>[]; asOf?: string | null }
 
 export const DISCLAIMER = 'Dokumen ini dipersiapkan oleh PT SAYAKAYA LAHIR BATIN dan hanya bisa digunakan untuk kepentingan investor tersebut di atas dan tidak untuk pihak lainnya. Laporan ini bukan merupakan konfirmasi dari PT SAYAKAYA LAHIR BATIN dan tidak untuk menggantikan laporan yang wajib diterbitkan oleh Bank Kustodian, jika ada perbedaan antara laporan ini dengan laporan Bank Kustodian, maka laporan Bank Kustodian adalah yang benar. Laporan ini diproses oleh komputer dan tidak memerlukan tandatangan.';
 export const OJK_LINE = 'PT SAYAKAYA LAHIR BATIN terdaftar dan diawasi oleh OJK, dengan nomor registrasi KEP-17/PM.21/2021';
@@ -240,6 +254,15 @@ export function statementDate(holdings: Record<string, unknown>[]): string {
 }
 
 const formatDateID = (d: Date = new Date()) => `${String(d.getDate()).padStart(2, '0')} ${MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`;
+// Formats a 'YYYY-MM-DD' string (e.g. from a BigQuery DATE column) the same
+// way — returns null (not "today") when there's nothing to format, so the
+// caller can tell "no NAV date available" apart from an actual date.
+const formatDateStrID = (dateStr: string | null | undefined): string | null => {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return `${String(d).padStart(2, '0')} ${MONTHS_ID[m - 1]} ${y}`;
+};
 
 // Header for the "Reksa Dana Update" style report: bold title top-left,
 // blue date line below it, horizontal wordmark logo top-right.
@@ -256,11 +279,15 @@ function perfReportHeader(doc: any, title: string, dateStr: string) {
   doc.x = left;
 }
 
-// One "Reksa Dana Update" page for a single fund-type sheet: { name, rows }.
-// Caller owns page breaks (addPage) between sheets.
+// One "Reksa Dana Update" page for a single fund-type sheet: { name, rows,
+// asOf }. asOf is the actual latest NAV date behind these rows (from the
+// data, not "today" — NAV can lag, so the printed date must match what the
+// numbers are really as-of). Falls back to today only if the query somehow
+// returned no date at all. Caller owns page breaks (addPage) between sheets.
 // deno-lint-ignore no-explicit-any
 function perfSheetPage(doc: any, sheet: PerfSheet, width: number) {
-  perfReportHeader(doc, `Reksa Dana Update — ${fundTypeLabel(sheet.name)}`, formatDateID());
+  const dateLabel = formatDateStrID(sheet.asOf) || formatDateID();
+  perfReportHeader(doc, `Reksa Dana Update - ${fundTypeLabelID(sheet.name)}`, dateLabel);
   if (sheet.rows.length) {
     const numbered = sheet.rows.map((r, i) => ({ ...r, __no: i + 1 }));
     table(doc, PERF_COLS_NUMBERED(width), numbered, {

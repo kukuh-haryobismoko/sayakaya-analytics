@@ -740,6 +740,7 @@
         <div class="panel-head wrap">
           <h2 data-i18n="perf_detail_title">Fund detail</h2>
           <div class="filters">
+            <label><span data-i18n="perf_as_of">NAV as of</span> <input type="date" id="perfDetailAsOf" /></label>
             <input id="perfDetailSearch" type="text" data-i18n-placeholder="common_search_funds_ph" placeholder="Search funds…" style="min-width:160px" />
             <select id="perfTypeFilter"><option value="" data-i18n="common_all_fund_types">All fund types</option></select>
             <span class="divider"></span>
@@ -748,7 +749,8 @@
             <button class="btn-ghost" id="perfDetailPdf" data-i18n="common_pdf">PDF</button>
           </div>
         </div>
-        <div id="perfDetailTable" class="table-wrap tall"></div>
+        <span class="hint" id="perfDetailAsOfInfo"></span>
+        <div id="perfDetailTable" class="table-wrap tall" style="margin-top:10px"></div>
       </div>
     </section>
 

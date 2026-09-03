@@ -1412,8 +1412,9 @@ let perfDetailCache = [];
 
 async function loadPerformanceDetail() {
   $('#perfDetailTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
+  const asOf = $('#perfDetailAsOf').value;
   try {
-    perfDetailCache = await api('/api/product-performance/detail');
+    perfDetailCache = await api(`/api/product-performance/detail${asOf ? `?asOf=${asOf}` : ''}`);
     buildPerfTypeFilter(perfDetailCache);
     renderPerformanceDetail();
   } catch (e) { $('#perfDetailTable').innerHTML = `<div class="empty">${e.message}</div>`; }
@@ -1432,7 +1433,7 @@ function pivotByFund(rows) {
   rows.forEach((r) => {
     const name = val(r.name), type = val(r.type);
     const key = type + '||' + name;
-    const f = (byFund[key] = byFund[key] || { name, type, nav: val(r.latest_nav) });
+    const f = (byFund[key] = byFund[key] || { name, type, nav: val(r.latest_nav), navDate: val(r.latest_nav_date) });
     f[val(r.period)] = val(r.pct_change);
   });
   return Object.values(byFund);
@@ -1445,6 +1446,12 @@ function renderPerformanceDetail() {
   const funds = pivotByFund(rows)
     .filter((f) => !search || f.name.toLowerCase().includes(search))
     .sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
+  // Surfaces the real NAV date behind these numbers — not "today", since NAV
+  // can lag — so it's obvious what date is about to go on an export/PDF.
+  const latestDate = funds.reduce((max, f) => (f.navDate && (!max || f.navDate > max) ? f.navDate : max), null);
+  $('#perfDetailAsOfInfo').textContent = latestDate
+    ? `Showing NAV as of ${latestDate}${$('#perfDetailAsOf').value ? ' (most recent on or before the date picked above)' : ' (latest available)'}.`
+    : '';
   if (!funds.length) { $('#perfDetailTable').innerHTML = '<div class="empty">No matching fund.</div>'; return; }
   const head = PERF_PERIODS.map((p) => `<th class="num">${p}</th>`).join('');
   const body = funds.map((f) => {
@@ -3569,6 +3576,7 @@ function wire() {
   $('#perfXlsx').addEventListener('click', () => download({ source: 'product_performance', format: 'xlsx', filename: 'product_performance' }, 'product_performance.xlsx'));
   $('#perfTypeFilter').addEventListener('change', renderPerformanceDetail);
   $('#perfDetailSearch').addEventListener('input', renderPerformanceDetail);
+  $('#perfDetailAsOf').addEventListener('change', loadPerformanceDetail);
   $('#perfTrendType').addEventListener('change', () => { loadPerfTrendFunds(); loadPerfTrend(); });
   $('#perfTrendPeriod').addEventListener('change', loadPerfTrend);
   $('#perfTrendLimit').addEventListener('change', loadPerfTrend);
@@ -3581,9 +3589,9 @@ function wire() {
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#perfTrendFundsDropdown')) $('#perfTrendFundsPanel').classList.remove('open');
   });
-  $('#perfDetailCsv').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'csv', filename: 'product_performance_detail' }, 'product_performance_detail.csv'));
-  $('#perfDetailXlsx').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'xlsx', filename: 'product_performance_detail' }, 'product_performance_detail.xlsx'));
-  $('#perfDetailPdf').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'pdf', filename: 'product_performance_detail' }, 'product_performance_detail.pdf'));
+  $('#perfDetailCsv').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'csv', filename: 'product_performance_detail', asOf: $('#perfDetailAsOf').value }, 'product_performance_detail.csv'));
+  $('#perfDetailXlsx').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'xlsx', filename: 'product_performance_detail', asOf: $('#perfDetailAsOf').value }, 'product_performance_detail.xlsx'));
+  $('#perfDetailPdf').addEventListener('click', () => download({ source: 'product_performance_detail', format: 'pdf', filename: 'product_performance_detail', asOf: $('#perfDetailAsOf').value }, 'product_performance_detail.pdf'));
 
   // growth
   $('#campCsv').addEventListener('click', () => download({ source: 'campaigns_performance', format: 'csv', filename: 'campaign_performance' }, 'campaign_performance.csv'));

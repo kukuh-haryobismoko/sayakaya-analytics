@@ -42,6 +42,20 @@ const fundTypeLabel = (t) => {
   if (!v) return '—';
   return FUND_TYPE_LABELS[v] || String(v).split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ') + ' Fund';
 };
+// funds.type enum → Indonesian label, matching the official "Reksa Dana
+// Update" sheet (e.g. MONEY_MARKET -> "Pasar Uang").
+const FUND_TYPE_LABELS_ID = {
+  MONEY_MARKET: 'Pasar Uang',
+  FIXED_INCOME: 'Pendapatan Tetap',
+  MIXED: 'Campuran',
+  EQUITY: 'Saham',
+  PROTECTED: 'Terproteksi',
+};
+const fundTypeLabelID = (t) => {
+  const v = val(t);
+  if (!v) return '—';
+  return FUND_TYPE_LABELS_ID[v] || String(v).split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ');
+};
 const pctFmt = (n) => {
   const v = val(n);
   if (v == null) return '—';
@@ -175,6 +189,15 @@ const perfCellColor = (key, raw) => {
   return v == null ? null : (Number(v) >= 0 ? GREEN : RED);
 };
 const formatDateID = (d = new Date()) => `${String(d.getDate()).padStart(2, '0')} ${MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`;
+// Formats a 'YYYY-MM-DD' string (e.g. from a BigQuery DATE column) the same
+// way — returns null (not "today") when there's nothing to format, so the
+// caller can tell "no NAV date available" apart from an actual date.
+const formatDateStrID = (dateStr) => {
+  if (!dateStr) return null;
+  const [y, m, d] = String(dateStr).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return `${String(d).padStart(2, '0')} ${MONTHS_ID[m - 1]} ${y}`;
+};
 
 // Header for the "Reksa Dana Update" style report: bold title top-left,
 // blue date line below it, horizontal wordmark logo top-right.
@@ -190,10 +213,14 @@ function perfReportHeader(doc, title, dateStr) {
   doc.x = left;
 }
 
-// One "Reksa Dana Update" page for a single fund-type sheet: { name, rows }.
-// Caller owns page breaks (addPage) between sheets.
+// One "Reksa Dana Update" page for a single fund-type sheet: { name, rows,
+// asOf }. asOf is the actual latest NAV date behind these rows (from the
+// data, not "today" — NAV can lag, so the printed date must match what the
+// numbers are really as-of). Falls back to today only if the query somehow
+// returned no date at all. Caller owns page breaks (addPage) between sheets.
 function perfSheetPage(doc, sheet, width) {
-  perfReportHeader(doc, `Reksa Dana Update — ${fundTypeLabel(sheet.name)}`, formatDateID());
+  const dateLabel = formatDateStrID(sheet.asOf) || formatDateID();
+  perfReportHeader(doc, `Reksa Dana Update - ${fundTypeLabelID(sheet.name)}`, dateLabel);
   if (sheet.rows.length) {
     const numbered = sheet.rows.map((r, i) => ({ ...r, __no: i + 1 }));
     table(doc, PERF_COLS_NUMBERED(width), numbered, {

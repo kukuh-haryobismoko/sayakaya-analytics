@@ -57,19 +57,24 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
 };
 
 // Pivot flat (type, name, period, pct_change) rows into one fund-per-row
-// table per fund type — used for the per-type Excel sheets.
+// table per fund type — used for the per-type Excel sheets and the PDF.
+// Also tracks the latest latest_nav_date seen per type as `asOf`, so the PDF
+// can print the real NAV date behind the numbers instead of "today".
 function pivotPerformanceByType(rows: Record<string, unknown>[]) {
-  const byType: Record<string, Record<string, Record<string, unknown>>> = {};
+  const byType: Record<string, { byFund: Record<string, Record<string, unknown>>; asOf: string | null }> = {};
   for (const r of rows) {
     const type = (r.type as string) || '(none)';
-    const byFund = (byType[type] = byType[type] || {});
+    const t = (byType[type] = byType[type] || { byFund: {}, asOf: null });
     const name = r.name as string;
-    const fund = (byFund[name] = byFund[name] || { Fund: r.name, NAV: r.latest_nav });
+    const fund = (t.byFund[name] = t.byFund[name] || { Fund: r.name, NAV: r.latest_nav });
     fund[r.period as string] = r.pct_change;
+    const d = r.latest_nav_date ? (val(r.latest_nav_date) as string) : null;
+    if (d && (!t.asOf || d > t.asOf)) t.asOf = d;
   }
   return Object.keys(byType).sort().map((type) => ({
     name: type,
-    rows: Object.values(byType[type]).map((f) => {
+    asOf: byType[type].asOf,
+    rows: Object.values(byType[type].byFund).map((f) => {
       const out: Record<string, unknown> = { Fund: f.Fund, NAV: f.NAV };
       for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
       return out;
@@ -680,8 +685,8 @@ on('GET', '/api/product-performance', requireTab('performance', async () => {
   const q = Q.productPerformance();
   return json(await runQuery(q.sql, q.params));
 }));
-on('GET', '/api/product-performance/detail', requireTab('performance', async () => {
-  const q = Q.productPerformanceDetail();
+on('GET', '/api/product-performance/detail', requireTab('performance', async (_req, _params, url) => {
+  const q = Q.productPerformanceDetail(qp(url, 'asOf'));
   return json(await runQuery(q.sql, q.params));
 }));
 on('GET', '/api/product-performance/trend', requireTab('performance', async (_req, _params, url) => {
@@ -984,7 +989,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     rows = await runQuery(q.sql, q.params);
     pctCols = ['pct_change'];
   } else if (source === 'product_performance_detail') {
-    const q = Q.productPerformanceDetail();
+    const q = Q.productPerformanceDetail(body.asOf as string | undefined);
     const detail = await runQuery(q.sql, q.params);
     if (format === 'xlsx') return xlsxMultiResponse(pivotPerformanceByType(detail), filename, username);
     if (format === 'pdf') {

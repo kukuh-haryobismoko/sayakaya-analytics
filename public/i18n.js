@@ -196,6 +196,7 @@ const I18N = {
     perf_by_type_hint: `% change in NAV per fund type, averaged across funds of that type. Source: sayakaya.main.snapshots/funds.`,
     perf_detail_title: `Fund detail`,
     perf_xlsx_per_type: `Excel (one sheet per type)`,
+    perf_as_of: `NAV as of`,
 
     growth_campaign_title: `Campaign performance`,
     growth_campaign_hint: `Redemption % = used_quota / quota. Est. cost = used_quota × bonus_amount. Source: main.campaigns.`,
@@ -531,6 +532,7 @@ const I18N = {
     perf_by_type_hint: `Perubahan % NAV per jenis produk, dirata-rata di seluruh produk jenis tersebut. Sumber: sayakaya.main.snapshots/funds.`,
     perf_detail_title: `Detail produk`,
     perf_xlsx_per_type: `Excel (satu sheet per jenis)`,
+    perf_as_of: `NAB per tanggal`,
 
     growth_campaign_title: `Performa kampanye`,
     growth_campaign_hint: `Redemption % = used_quota / quota. Estimasi biaya = used_quota × bonus_amount. Sumber: main.campaigns.`,

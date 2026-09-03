@@ -64,18 +64,23 @@ const EXPORT_SOURCE_TAB = {
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y'];
 
 // Pivot flat (type, name, period, pct_change) rows into one fund-per-row
-// table per fund type — used for the per-type Excel sheets.
+// table per fund type — used for the per-type Excel sheets and the PDF.
+// Also tracks the latest latest_nav_date seen per type as `asOf`, so the PDF
+// can print the real NAV date behind the numbers instead of "today".
 function pivotPerformanceByType(rows) {
   const byType = {};
   for (const r of rows) {
     const type = r.type || '(none)';
-    const byFund = (byType[type] = byType[type] || {});
-    const fund = (byFund[r.name] = byFund[r.name] || { Fund: r.name, NAV: r.latest_nav });
+    const t = (byType[type] = byType[type] || { byFund: {}, asOf: null });
+    const fund = (t.byFund[r.name] = t.byFund[r.name] || { Fund: r.name, NAV: r.latest_nav });
     fund[r.period] = r.pct_change;
+    const d = r.latest_nav_date ? PDF.val(r.latest_nav_date) : null;
+    if (d && (!t.asOf || d > t.asOf)) t.asOf = d;
   }
   return Object.keys(byType).sort().map((type) => ({
     name: type,
-    rows: Object.values(byType[type]).map((f) => {
+    asOf: byType[type].asOf,
+    rows: Object.values(byType[type].byFund).map((f) => {
       const out = { Fund: f.Fund, NAV: f.NAV };
       for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
       return out;
@@ -607,8 +612,8 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.productPerformance();
     res.json(await runQuery(q.sql, q.params));
   }));
-  app.get('/api/product-performance/detail', requireTab('performance'), handler(async (_req, res) => {
-    const q = Q.productPerformanceDetail();
+  app.get('/api/product-performance/detail', requireTab('performance'), handler(async (req, res) => {
+    const q = Q.productPerformanceDetail(req.query.asOf);
     res.json(await runQuery(q.sql, q.params));
   }));
   app.get('/api/product-performance/trend', requireTab('performance'), handler(async (req, res) => {
@@ -946,7 +951,7 @@ function createApp({ serveStatic = true } = {}) {
       rows = await runQuery(q.sql, q.params);
       pctCols = ['pct_change'];
     } else if (source === 'product_performance_detail') {
-      const q = Q.productPerformanceDetail();
+      const q = Q.productPerformanceDetail(req.body.asOf);
       const detail = await runQuery(q.sql, q.params);
       if (format === 'xlsx') return sendXlsxMulti(res, pivotPerformanceByType(detail), filename, username);
       if (format === 'pdf') {

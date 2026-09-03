@@ -244,7 +244,7 @@ const NAV_SOURCE = `
     FROM ${SNAPSHOTS} s
     LEFT JOIN ${FUNDS} f
       ON s.product_id = f.id
-    WHERE s.type = 'NAV'`;
+    WHERE s.type = 'NAV' AND f.listing_status = 'ACTIVE'`;
 
 // Shared period list for every "% change vs N periods ago" report: 1D/1W/1M/3M/YTD/1Y/3Y/5Y.
 // Targets are computed relative to each entity's own *latest available* date
@@ -292,12 +292,16 @@ export const productPerformance = (): Query => ({
 
 // Per-fund detail behind productPerformance(): one row per fund per period,
 // for the drill-down table and the per-type export sheets.
-export const productPerformanceDetail = (): Query => ({
+// asOfDate (optional, YYYY-MM-DD): caps "latest" at the most recent NAV on
+// or before this date instead of the true latest — lets a caller pin the
+// report to a specific NAV date (e.g. to confirm/override before exporting)
+// rather than always floating to whatever published today.
+export const productPerformanceDetail = (asOfDate?: string): Query => ({
   sql: `WITH nav AS (${NAV_SOURCE}),
     latest AS (
       SELECT product_id, ANY_VALUE(name) AS name, ANY_VALUE(type) AS type,
         ARRAY_AGG(STRUCT(value AS v, d AS d) ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_snap
-      FROM nav WHERE type IS NOT NULL GROUP BY product_id
+      FROM nav WHERE type IS NOT NULL ${asOfDate ? 'AND d <= @asOfDate' : ''} GROUP BY product_id
     ),
     periods AS (
       SELECT l.product_id, l.name, l.type, l.latest_snap, pr.period, pr.ord, pr.target
@@ -311,11 +315,11 @@ export const productPerformanceDetail = (): Query => ({
     )
     SELECT type, name, period, ord,
       ROUND(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100, 2) AS pct_change,
-      latest_snap.v AS latest_nav, asof_snap.v AS base_nav
+      latest_snap.v AS latest_nav, asof_snap.v AS base_nav, latest_snap.d AS latest_nav_date
     FROM snaps
     WHERE asof_snap IS NOT NULL
     ORDER BY type, name, ord`,
-  params: {},
+  params: asOfDate ? { asOfDate } : {},
 });
 
 // All active, AUM-bearing funds — powers the fund-picker checkboxes on the
