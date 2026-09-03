@@ -1441,7 +1441,7 @@ function pivotByFund(rows) {
   rows.forEach((r) => {
     const name = val(r.name), type = val(r.type);
     const key = type + '||' + name;
-    const f = (byFund[key] = byFund[key] || { name, type, nav: val(r.latest_nav), navDate: val(r.latest_nav_date) });
+    const f = (byFund[key] = byFund[key] || { name, type, nav: val(r.latest_nav), navDate: val(r.latest_nav_date), ipoDate: val(r.ipo_date) });
     f[val(r.period)] = val(r.pct_change);
   });
   return Object.values(byFund);
@@ -1468,9 +1468,10 @@ function renderPerformanceDetail() {
       if (pct == null) return '<td class="num">—</td>';
       return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
     }).join('');
-    return `<tr><td>${f.name}</td><td><span class="tag other">${f.type}</span></td><td class="num">${num(f.nav)}</td>${cells}</tr>`;
+    const ipoDate = f.ipoDate ? String(f.ipoDate).slice(0, 10) : '—';
+    return `<tr><td>${f.name}</td><td><span class="tag other">${f.type}</span></td><td>${ipoDate}</td><td class="num">${num(f.nav)}</td>${cells}</tr>`;
   }).join('');
-  $('#perfDetailTable').innerHTML = `<table><thead><tr><th>Fund</th><th>Type</th><th class="num">NAV</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  $('#perfDetailTable').innerHTML = `<table><thead><tr><th>Fund</th><th>Type</th><th>Tanggal Emisi</th><th class="num">NAV</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 // ====================================================================
