@@ -1370,12 +1370,14 @@ on('POST', '/api/statement/email', requireTab('send-statement', async (req, _par
     attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: new Uint8Array(buf) });
   }
 
+  const senderEmail = Deno.env.get('SMTP_FROM_STATEMENT') || 'estatement@sayakaya.id';
   await Mail.sendStatementEmail({
     to: contact.email as string,
     subject: body.subject as string | undefined,
     body: body.body as string | undefined,
     name: contact.name as string | undefined,
     attachments,
+    from: senderEmail,
   });
   const sent = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
   const recipient = `${val(contact.name) || sid} (SID ${sid}, ${contact.email})`;
@@ -1414,8 +1416,9 @@ on('POST', '/api/fund-performance/email', requireTab('send-fund-performance', as
 
   const subject = body.subject as string | undefined;
   const emailBody = body.body as string | undefined;
+  const senderEmail = Deno.env.get('SMTP_FROM_FUND_PERFORMANCE') || 'hi@sayakaya.id';
   const results = await Promise.allSettled(
-    recipients.map((email) => Mail.sendStatementEmail({ to: email, subject, body: emailBody, attachments })),
+    recipients.map((email) => Mail.sendStatementEmail({ to: email, subject, body: emailBody, attachments, from: senderEmail })),
   );
   const sent: string[] = []; const failed: string[] = [];
   results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));

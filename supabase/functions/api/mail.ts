@@ -53,12 +53,14 @@ function htmlEmail(body: string): string {
 interface Attachment { filename: string; content: Buffer | Uint8Array }
 
 // attachments: [{ filename, content: Buffer }, ...] — one or more PDFs.
-export async function sendStatementEmail({ to, subject, body, name, attachments }: {
-  to: string; subject?: string; body?: string; name?: string; attachments: Attachment[];
+// from: overrides the default sender (index.ts picks a different verified
+// SES identity for Send statement vs. Send fund performance).
+export async function sendStatementEmail({ to, subject, body, name, attachments, from }: {
+  to: string; subject?: string; body?: string; name?: string; attachments: Attachment[]; from?: string;
 }): Promise<void> {
   const text = body || defaultBody({ name });
   await transport.sendMail({
-    from: Deno.env.get('SMTP_FROM'),
+    from: from || Deno.env.get('SMTP_FROM'),
     to,
     subject: subject || defaultSubject(),
     text,

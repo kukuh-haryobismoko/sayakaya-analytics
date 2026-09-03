@@ -1276,7 +1276,8 @@ function createApp({ serveStatic = true } = {}) {
       attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: buf });
     }
 
-    await Mail.sendStatementEmail({ to: contact.email, subject, body, name: contact.name, attachments });
+    const senderEmail = process.env.SMTP_FROM_STATEMENT || 'estatement@sayakaya.id';
+    await Mail.sendStatementEmail({ to: contact.email, subject, body, name: contact.name, attachments, from: senderEmail });
     const sent = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
     const recipient = `${PDF.val(contact.name) || sid} (SID ${sid}, ${contact.email})`;
     await Auth.logEvent(req.user.id, username, 'email_pdf', `send-statement (${sent}) to ${recipient}`);
@@ -1310,8 +1311,9 @@ function createApp({ serveStatic = true } = {}) {
     const buf = await PDF.fundPerformanceReport(sheets, { username });
     const attachments = [{ filename: `Reksa_Dana_Update${asOf ? `_${asOf}` : ''}.pdf`, content: buf }];
 
+    const senderEmail = process.env.SMTP_FROM_FUND_PERFORMANCE || 'hi@sayakaya.id';
     const results = await Promise.allSettled(
-      recipients.map((email) => Mail.sendStatementEmail({ to: email, subject, body, attachments })),
+      recipients.map((email) => Mail.sendStatementEmail({ to: email, subject, body, attachments, from: senderEmail })),
     );
     const sent = [], failed = [];
     results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));

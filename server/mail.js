@@ -46,10 +46,12 @@ function htmlEmail(body) {
 }
 
 // attachments: [{ filename, content: Buffer }, ...] — one or more PDFs.
-async function sendStatementEmail({ to, subject, body, name, attachments }) {
+// from: overrides the default sender (server/app.js picks a different
+// verified SES identity for Send statement vs. Send fund performance).
+async function sendStatementEmail({ to, subject, body, name, attachments, from }) {
   const text = body || defaultBody({ name });
   await transport.sendMail({
-    from: process.env.SMTP_FROM,
+    from: from || process.env.SMTP_FROM,
     to,
     subject: subject || defaultSubject(),
     text,
