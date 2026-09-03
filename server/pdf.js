@@ -398,10 +398,14 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
     .text(DISCLAIMER, left, doc.y, { width })
     .text(OJK_LINE, { width });
 
-  // ---- One page per fund type: NAV % change table, "Reksa Dana Update" style ----
+  // ---- One page per fund type: NAV % change table, "Reksa Dana Update" style.
+  // Landscape, same as the standalone Fund Performance PDF — needs the extra
+  // width for all 13 columns. Each addPage() switches layout for just that
+  // page; page 1 above stays portrait since it's a different, narrower table.
   performanceSheets.forEach((sheet) => {
-    doc.addPage();
-    perfSheetPage(doc, sheet, width);
+    doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
+    const perfWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    perfSheetPage(doc, sheet, perfWidth);
   });
 
   return bufferDoc(doc);
