@@ -36,7 +36,7 @@ const FOOTER_HTML = `
   <p style="margin:0 0 10px">Mutual fund distribution services are offered through PT Sayakaya Lahir Batin, a Mutual Fund Selling Agent (Agen Penjual Efek Reksa Dana / APERD) registered with and supervised by the Financial Services Authority of Indonesia (Otoritas Jasa Keuangan / OJK), registration number KEP-17/PM.21/2021.</p>
   <p style="margin:0 0 10px">Investments in mutual funds carry risk, including possible loss of principal. Net Asset Value (NAV) may fluctuate, and past performance is not indicative of future results. No content in this email or its attachments constitutes investment advice, a recommendation, or a solicitation to buy or sell any security.</p>
   <p style="margin:0 0 10px">This statement is prepared by PT Sayakaya Lahir Batin for the named investor's use only and is not a substitute for the official report issued by the Custodian Bank; in the event of any discrepancy, the Custodian Bank's report shall prevail. This document is system-generated and does not require a signature.</p>
-  <p style="margin:0">Questions about this statement? Contact us at <a href="mailto:report@sayakaya.id" style="color:#1e2a4a">report@sayakaya.id</a>.</p>
+  <p style="margin:0">Questions about this statement? Contact us at <a href="mailto:hi@sayakaya.id" style="color:#1e2a4a">hi@sayakaya.id</a>.</p>
 `;
 
 function htmlEmail(body: string): string {
