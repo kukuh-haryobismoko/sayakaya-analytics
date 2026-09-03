@@ -219,18 +219,52 @@ function perfReportHeader(doc, title, dateStr) {
   doc.x = left;
 }
 
+// Mirrors table()'s own per-row height formula exactly (same rowHeight/
+// fontSize inputs must produce the same result there) so picking a font
+// size here reliably predicts whether table() will need a second page.
+function estimateTableHeight(doc, columns, rows, fontSize, rowHeight) {
+  const measure = (texts) => Math.max(rowHeight,
+    8 + Math.max(...texts.map((t, i) => doc.heightOfString(t, { width: columns[i].width - 8 }))));
+  doc.font('Helvetica-Bold').fontSize(fontSize);
+  let total = measure(columns.map((c) => c.label));
+  doc.font('Helvetica').fontSize(fontSize);
+  for (const r of rows) {
+    const texts = columns.map((c) => String(c.format ? c.format(r[c.key]) : (val(r[c.key]) ?? '—')));
+    total += measure(texts);
+  }
+  return total;
+}
+
+// Shrinks font size (and matching row height) from `max` down to `min` until
+// the whole table — header plus every row — fits within availableHeight, so
+// a fund type with many funds still renders as exactly one page instead of
+// spilling onto a second. Floors out at `min` for pathologically long lists
+// rather than shrinking to unreadable text.
+function fitFontSize(doc, columns, rows, availableHeight, max = 8, min = 5.5) {
+  for (let fontSize = max; fontSize > min; fontSize -= 0.5) {
+    if (estimateTableHeight(doc, columns, rows, fontSize, fontSize + 8) <= availableHeight) return fontSize;
+  }
+  return min;
+}
+
 // One "Reksa Dana Update" page for a single fund-type sheet: { name, rows,
 // asOf }. asOf is the actual latest NAV date behind these rows (from the
 // data, not "today" — NAV can lag, so the printed date must match what the
 // numbers are really as-of). Falls back to today only if the query somehow
-// returned no date at all. Caller owns page breaks (addPage) between sheets.
+// returned no date at all. Font size auto-shrinks so every fund type stays
+// on exactly one page regardless of how many funds it has. Caller owns page
+// breaks (addPage) between sheets.
 function perfSheetPage(doc, sheet, width) {
   const dateLabel = formatDateStrID(sheet.asOf) || formatDateID();
   perfReportHeader(doc, `Reksa Dana Update - ${fundTypeLabelID(sheet.name)}`, dateLabel);
   if (sheet.rows.length) {
     const numbered = sheet.rows.map((r, i) => ({ ...r, __no: i + 1 }));
-    table(doc, PERF_COLS_NUMBERED(width), numbered, {
-      headerFill: TABLE_HEADER, headerText: '#ffffff', zebraFill: ZEBRA, cellColor: perfCellColor, fontSize: 7,
+    const cols = PERF_COLS_NUMBERED(width);
+    const available = (doc.page.height - doc.page.margins.bottom) - doc.y;
+    const fontSize = fitFontSize(doc, cols, numbered, available);
+    table(doc, cols, numbered, {
+      headerFill: TABLE_HEADER, headerText: '#ffffff', zebraFill: ZEBRA, cellColor: perfCellColor,
+      fontSize, rowHeight: fontSize + 8,
     });
   } else {
     doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No NAV data for this fund type.');
@@ -238,10 +272,13 @@ function perfSheetPage(doc, sheet, width) {
 }
 
 // sheets: [{ name: fundType, rows: [{ Fund, NAV, '1D': pct, ... }] }] — from
-// pivotPerformanceByType(). Standalone export for the Fund Performance section,
-// styled like the official "Reksa Dana Update" NAV sheet (one page per type).
+// pivotPerformanceByType(). Standalone export for the Fund Performance section
+// and the "Send fund performance" email attachment — styled like the official
+// "Reksa Dana Update" NAV sheet, one landscape page per fund type (the extra
+// width fits all 13 columns without wrapping; landscape is scoped to this
+// report only — the embedded pages inside portfolioReport() stay portrait).
 function fundPerformanceReport(sheets, options = {}) {
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 });
   if (options.username) doc.info.Author = options.username;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   if (!sheets.length) {
