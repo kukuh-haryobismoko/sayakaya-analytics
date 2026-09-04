@@ -502,7 +502,7 @@ export const userHoldingsFromTx = (userId: string): Query => ({
       FROM ${TX}
       WHERE user_id = @userId
         AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in')
-        AND status IN ('completed', 'completed_payment', 'verified')
+        AND status NOT IN ('expired', 'cancelled')
     ),
     regular_avg AS (
       SELECT fund_id, SAFE_DIVIDE(SUM(unit * value_per_unit), SUM(unit)) AS avg_price
@@ -568,7 +568,7 @@ export const userHoldingsFromTxAsOf = (userId: string, date: string): Query => (
       FROM ${TX}
       WHERE user_id = @userId
         AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in')
-        AND status IN ('completed', 'completed_payment', 'verified')
+        AND status NOT IN ('expired', 'cancelled')
         AND DATE(created_at) <= @date
     ),
     outgoing_tx AS (
@@ -576,7 +576,7 @@ export const userHoldingsFromTxAsOf = (userId: string, date: string): Query => (
       FROM ${TX}
       WHERE user_id = @userId
         AND type IN ('sell', 'SWITCH_OUT', 'transfer_out', 'liquidation', 'unit_adjustment')
-        AND status IN ('completed', 'completed_payment', 'verified')
+        AND status NOT IN ('expired', 'cancelled')
         AND DATE(created_at) <= @date
     ),
     regular_avg AS (
@@ -1264,12 +1264,19 @@ export const topReferrers = (limit: number | string = 20): Query => ({
 // ever reach that table), not main.transactions, per how this fund's
 // snapshots are read everywhere else in this file (created_at is one day
 // ahead of the balance date it represents).
+// id ASC is a deliberate tiebreaker: two of a user's transactions can share
+// the exact same created_at (batch-imported data), and BigQuery's ARRAY_AGG
+// ORDER BY has no defined order for ties — without it, this and the two
+// referralInviterStats*() queries below (which independently compute the
+// same "first-ever transaction") could each resolve a tie differently
+// between requests, making the leaderboard silently disagree with this
+// detail table over the same set of qualifying invitees.
 export const referralProgramDetail = (periodFrom?: string, periodTo?: string): Query => ({
   sql: `WITH first_tx AS (
       SELECT user_id,
-        ARRAY_AGG(STRUCT(id AS tx_id, fund_id, amount, created_at) ORDER BY created_at ASC LIMIT 1)[OFFSET(0)] AS first_buy
+        ARRAY_AGG(STRUCT(id AS tx_id, fund_id, amount, created_at) ORDER BY created_at ASC, id ASC LIMIT 1)[OFFSET(0)] AS first_buy
       FROM ${TX}
-      WHERE type = 'buy' AND status IN ('completed', 'completed_payment', 'verified')
+      WHERE type = 'buy' AND status NOT IN ('expired', 'cancelled')
       GROUP BY user_id
     ),
     qualifying AS (
@@ -1371,9 +1378,9 @@ export const referralInviterStats = (periodFrom?: string, periodTo?: string): Qu
     ),
     first_tx AS (
       SELECT user_id,
-        ARRAY_AGG(created_at ORDER BY created_at ASC LIMIT 1)[OFFSET(0)] AS first_tx_at
+        ARRAY_AGG(created_at ORDER BY created_at ASC, id ASC LIMIT 1)[OFFSET(0)] AS first_tx_at
       FROM ${TX}
-      WHERE type = 'buy' AND status IN ('completed', 'completed_payment', 'verified')
+      WHERE type = 'buy' AND status NOT IN ('expired', 'cancelled')
       GROUP BY user_id
     ),
     invited AS (
@@ -1419,9 +1426,9 @@ export const referralInviterStatsAlt = (periodFrom?: string, periodTo?: string):
     ),
     first_tx AS (
       SELECT user_id,
-        ARRAY_AGG(created_at ORDER BY created_at ASC LIMIT 1)[OFFSET(0)] AS first_tx_at
+        ARRAY_AGG(created_at ORDER BY created_at ASC, id ASC LIMIT 1)[OFFSET(0)] AS first_tx_at
       FROM ${TX}
-      WHERE type = 'buy' AND status IN ('completed', 'completed_payment', 'verified')
+      WHERE type = 'buy' AND status NOT IN ('expired', 'cancelled')
       GROUP BY user_id
     ),
     invited AS (
@@ -2337,7 +2344,7 @@ const TX_LIFE_CTE = `tx_life AS (
       COUNT(*) AS tx_count,
       SUM(IF(type = 'buy', amount, 0)) AS total_invested
     FROM ${TX}
-    WHERE status IN ('completed','completed_payment','verified')
+    WHERE status NOT IN ('expired','cancelled')
     GROUP BY user_id
   )`;
 
@@ -2526,7 +2533,7 @@ function campaignRevenueCTEs(from?: string, to?: string, promo = '') {
           SUM(IF(type IN ('sell','SWITCH_OUT','transfer_out','liquidation','unit_adjustment'), CAST(unit AS NUMERIC), 0)) AS sold,
           SUM(IF(type IN ('buy','SWITCH_IN','reinvestment','transfer_in'), CAST(unit AS NUMERIC), 0)) AS bought
         FROM ${TX}
-        WHERE status IN ('completed','completed_payment','verified') AND goal_id IS NOT NULL
+        WHERE status NOT IN ('expired','cancelled') AND goal_id IS NOT NULL
         GROUP BY goal_id, fund_id, d
       ),
       cum AS (
