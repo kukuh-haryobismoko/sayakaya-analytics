@@ -1332,18 +1332,13 @@ const referralProgramDetail = (periodFrom, periodTo) => ({
 // (computeReferralEligibility) for the full funnel: invited -> transacted ->
 // transacted >=1jt (qualifying) -> pending/eligible, so each stage must be a
 // superset of the next.
-// An invitee counts as "invited" here only if EITHER (a) they registered
-// during the period — the normal "new friend joined via this campaign" case,
-// still counted even if they haven't transacted yet (pending) — OR (b) their
-// first-ever transaction (any fund/amount; Sucor/>=1jt is
-// referralProgramDetail's extra filter) falls in the period, which catches an
-// invitee who signed up earlier but made their qualifying purchase during the
-// promo window, per the T&C ("only counts the very first-ever transaction").
-// Without (a), old dormant referrals (signed up years ago, never
-// transacted) would count as "pending" forever and flood the leaderboard;
-// without (b), a delayed-but-in-period qualifying purchase would show up in
-// referralProgramDetail's detail table without its inviter ever appearing
-// here — either gap breaks the qualifying/transacted/invited superset chain.
+// An invitee counts as "invited" here if they registered no earlier than one
+// day before the period starts — a grace day for someone who signed up the
+// evening before the campaign officially opened and transacted right at the
+// start, without opening the door to someone who registered, say, a week
+// early and only coincidentally transacts inside the window. Still counted
+// even if they haven't transacted yet (pending) — the registration date
+// alone qualifies them, independent of whether/when they transact.
 const referralInviterStats = (periodFrom, periodTo) => ({
   sql: `WITH invited_all AS (
       SELECT invitee.id AS invitee_id, invitee.created_at AS invitee_registered_at,
@@ -1366,8 +1361,8 @@ const referralInviterStats = (periodFrom, periodTo) => ({
         DATE(ft.first_tx_at) AS first_tx_date
       FROM invited_all ia
       LEFT JOIN first_tx ft ON ft.user_id = ia.invitee_id
-      WHERE DATE(ia.invitee_registered_at) BETWEEN @periodFrom AND @periodTo
-        OR (ft.first_tx_at IS NOT NULL AND DATE(ft.first_tx_at) BETWEEN @periodFrom AND @periodTo)
+      WHERE DATE(ia.invitee_registered_at)
+        BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)
     )
     SELECT inviter_sid, ANY_VALUE(inviter_referral_code) AS inviter_referral_code, ANY_VALUE(inviter_name) AS inviter_name,
       COUNT(DISTINCT invitee_id) AS invited_count,
