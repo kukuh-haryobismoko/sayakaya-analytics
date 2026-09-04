@@ -17,8 +17,11 @@ const transport = nodemailer.createTransport({
 function defaultSubject() {
   return `Your Sayakaya Statement — ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`;
 }
+// Shared with public/app.js's defaultStatementEmail (the text an admin
+// actually edits/sends) — kept in sync by hand since one runs in the browser.
+const PDF_PASSWORD_NOTE = 'To open the attached PDF file(s), use your date of birth as registered with us in DDMMYYYY format (e.g. 17081990 for 17 August 1990).';
 function defaultBody({ name }) {
-  return `Dear ${name || 'Investor'},\n\nPlease find your requested statement(s) attached, issued by PT Sayakaya Lahir Batin.\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin`;
+  return `Dear ${name || 'Investor'},\n\nPlease find your requested statement(s) attached, issued by PT Sayakaya Lahir Batin.\n\n${PDF_PASSWORD_NOTE}\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin`;
 }
 
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

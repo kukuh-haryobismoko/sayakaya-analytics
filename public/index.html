@@ -298,6 +298,29 @@
       </div>
 
       <div class="panel">
+        <div class="panel-head"><h2><span aria-hidden="true">📦</span> <span data-i18n="ss_batch_title">Batch send</span></h2><span class="hint" data-i18n="ss_batch_hint">Send the same portfolio/e-statement documents to multiple investors at once — enter one email or SID per line, or comma-separated.</span></div>
+        <div class="field-card" style="margin-top:8px">
+          <label class="field-card-top" for="ssBatchInput"><span data-i18n="ss_batch_label">Emails or SIDs</span></label>
+          <textarea id="ssBatchInput" rows="4" class="field-card-input" style="resize:vertical" placeholder="SID001, SID002&#10;jane@example.com"></textarea>
+        </div>
+        <div class="field-card-row" style="margin-top:16px">
+          <div class="field-card">
+            <label class="field-card-top"><input type="checkbox" id="ssBatchSendPortfolio" checked />
+              <span data-i18n="ss_send_portfolio">Portfolio as of</span></label>
+            <input type="date" id="ssBatchPortfolioDate" class="field-card-input" />
+          </div>
+          <div class="field-card">
+            <label class="field-card-top"><input type="checkbox" id="ssBatchSendStatement" checked />
+              <span data-i18n="ss_send_statement">Transaction e-statement for</span></label>
+            <input type="month" id="ssBatchStatementMonth" class="field-card-input" />
+          </div>
+        </div>
+        <div class="exp" style="margin-top:16px">
+          <button class="btn-primary lg" id="ssBatchComposeBtn"><span data-i18n="ss_compose">Compose email…</span> <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+
+      <div class="panel">
         <div class="panel-head wrap">
           <h2><span aria-hidden="true">📜</span> <span data-i18n="ss_log_title">Send history</span></h2>
           <button class="btn-ghost" id="ssLogRefresh" data-i18n="common_refresh">Refresh</button>
@@ -316,6 +339,19 @@
         <div class="exp" style="margin-top:14px">
           <button class="btn-primary" id="ssEmailSendBtn" data-i18n="common_send">Send</button>
           <button class="btn-ghost" id="ssEmailCancelBtn" data-i18n="common_cancel">Cancel</button>
+        </div>
+      </dialog>
+
+      <dialog id="ssBatchEmailModal" class="admin-modal">
+        <div class="panel-head wrap"><h2 data-i18n="ss_batch_modal_title">Email batch statement</h2></div>
+        <span class="hint" id="ssBatchEmailTo"></span>
+        <div class="filters" style="margin-top:12px; flex-direction:column; align-items:stretch">
+          <input type="text" id="ssBatchEmailSubject" style="width:100%" />
+          <textarea id="ssBatchEmailBody" rows="10" style="width:100%; margin-top:10px; font:inherit"></textarea>
+        </div>
+        <div class="exp" style="margin-top:14px">
+          <button class="btn-primary" id="ssBatchEmailSendBtn" data-i18n="common_send">Send</button>
+          <button class="btn-ghost" id="ssBatchEmailCancelBtn" data-i18n="common_cancel">Cancel</button>
         </div>
       </dialog>
     </section>
@@ -1593,7 +1629,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3>📧 Send statement</h3>
-          <p>Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent.</p>
+          <p>Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's own date of birth on file (DDMMYYYY) as its open password — left unlocked if we have no birthdate for them — and the default letter tells them the password format. The Batch send box below sends the same documents (same portfolio date/e-statement month) to many investors at once — paste a list of emails and/or SIDs (one per line, or comma-separated), and it looks each one up and emails whichever ones it finds; anything not matched to an investor is reported back, not silently skipped.</p>
         </div>
         <div class="doc-item">
           <h3>📊 Send fund performance</h3>

@@ -96,6 +96,59 @@ function splitRowsBySheet(rows: Record<string, unknown>[], keyField: string) {
   return Object.keys(groups).sort().map((name) => ({ name, rows: groups[name] }));
 }
 
+// PDF open-password: the investor's own birthdate as DDMMYYYY. null when
+// there's no birthdate on file, so the caller skips encrypting the PDF.
+function birthdatePassword(birthdate: unknown): string | null {
+  const s = val(birthdate) as string | null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
+  return m ? `${m[3]}${m[2]}${m[1]}` : null;
+}
+
+interface StatementAttachmentArgs {
+  userId: string;
+  sid: string;
+  contact: Record<string, unknown>;
+  sendPortfolio?: boolean;
+  portfolioDate?: string;
+  sendStatement?: boolean;
+  statementMonth?: string;
+  username: string;
+}
+
+// Builds the 1-2 statement PDF attachments (and applies the shared
+// birthdate-derived open-password) for one investor — reused by
+// /api/statement/email (single) and /api/statement/email-batch (many) so
+// both stay in sync. Throws on a missing/malformed statementMonth so the
+// caller decides how to report it (fail the whole request vs. one recipient).
+async function buildStatementAttachments(
+  { userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username }: StatementAttachmentArgs,
+): Promise<{ filename: string; content: Uint8Array }[]> {
+  const password = birthdatePassword(contact.birthdate) ?? undefined;
+  const attachments: { filename: string; content: Uint8Array }[] = [];
+
+  if (sendPortfolio) {
+    const h = portfolioDate ? Q.userHoldingsAsOfFix(sid, portfolioDate) : Q.userHoldings(userId);
+    const holdings = await runQuery(h.sql, h.params);
+    // Portfolio-only, no fund-performance pages — this tool never sends performance.
+    const buf = await portfolioReport({ contact, holdings }, [], { username, password });
+    attachments.push({ filename: `Portfolio_${sid}${portfolioDate ? '_' + portfolioDate : ''}.pdf`, content: new Uint8Array(buf) });
+  }
+
+  if (sendStatement) {
+    const [year, month] = String(statementMonth || '').split('-').map(Number);
+    if (!year || !month) throw new Error('statementMonth is required (YYYY-MM).');
+    const from = `${year}-${String(month).padStart(2, '0')}-01`;
+    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of that month
+    const t = Q.userTransactions(userId, from, to);
+    const transactions = await runQuery(t.sql, t.params);
+    const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const buf = await transactionStatement({ contact, transactions }, monthLabel, { username, password });
+    attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: new Uint8Array(buf) });
+  }
+
+  return attachments;
+}
+
 // Friendly column names for the "Portfolio" sheet in the combined export.
 function portfolioSheetRows(holdings: Record<string, unknown>[]) {
   return holdings.map((h) => ({
@@ -1316,7 +1369,7 @@ on('GET', '/api/statement/preview', requireTab('send-statement', async (_req, _p
   const statementMonth = qp(url, 'statementMonth');
   const result: { holdings?: Record<string, unknown>[]; transactions?: Record<string, unknown>[] } = {};
   if (sendPortfolio) {
-    const h = portfolioDate ? Q.userHoldingsAsOf(sid, portfolioDate) : Q.userHoldings(userId);
+    const h = portfolioDate ? Q.userHoldingsAsOfFix(sid, portfolioDate) : Q.userHoldings(userId);
     result.holdings = await runQuery(h.sql, h.params);
   }
   if (sendStatement) {
@@ -1348,26 +1401,11 @@ on('POST', '/api/statement/email', requireTab('send-statement', async (req, _par
   const [contact] = await runQuery(c.sql, c.params, { redact: false });
   if (!contact?.email) return json({ error: 'This investor has no email on file.' }, 400);
 
-  const attachments: { filename: string; content: Uint8Array }[] = [];
-
-  if (sendPortfolio) {
-    const h = portfolioDate ? Q.userHoldingsAsOf(sid, portfolioDate) : Q.userHoldings(userId);
-    const holdings = await runQuery(h.sql, h.params);
-    // Portfolio-only, no fund-performance pages — this tool never sends performance.
-    const buf = await portfolioReport({ contact, holdings }, [], { username });
-    attachments.push({ filename: `Portfolio_${sid}${portfolioDate ? '_' + portfolioDate : ''}.pdf`, content: new Uint8Array(buf) });
-  }
-
-  if (sendStatement) {
-    const [year, month] = String(statementMonth || '').split('-').map(Number);
-    if (!year || !month) return json({ error: 'statementMonth is required (YYYY-MM).' }, 400);
-    const from = `${year}-${String(month).padStart(2, '0')}-01`;
-    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of that month
-    const t = Q.userTransactions(userId, from, to);
-    const transactions = await runQuery(t.sql, t.params);
-    const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    const buf = await transactionStatement({ contact, transactions }, monthLabel, { username });
-    attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: new Uint8Array(buf) });
+  let attachments: { filename: string; content: Uint8Array }[];
+  try {
+    attachments = await buildStatementAttachments({ userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username });
+  } catch (e) {
+    return json({ error: (e as Error).message }, 400);
   }
 
   const senderEmail = Deno.env.get('SMTP_FROM_STATEMENT') || 'estatement@sayakaya.id';
@@ -1383,6 +1421,65 @@ on('POST', '/api/statement/email', requireTab('send-statement', async (req, _par
   const recipient = `${val(contact.name) || sid} (SID ${sid}, ${contact.email})`;
   await A.logEvent(user!.id, username, 'email_pdf', `send-statement (${sent}) to ${recipient}`);
   return json({ ok: true, to: contact.email });
+}));
+
+// ---- Send statement (batch): resolves a pasted list of emails/SIDs to
+// investors, then sends each their own portfolio/e-statement — same
+// subject/body, own PDFs and own birthdate-derived password. One email per
+// recipient (Promise.allSettled, same convention as /api/fund-performance/email)
+// so one bad recipient doesn't block the rest of the list.
+on('POST', '/api/statement/email-batch', requireTab('send-statement', async (req, _params, _url, user) => {
+  const body = await bodyOf(req);
+  const identifiers = body.identifiers as string[] | undefined;
+  const sendPortfolio = body.sendPortfolio as boolean | undefined;
+  const portfolioDate = body.portfolioDate as string | undefined;
+  const sendStatement = body.sendStatement as boolean | undefined;
+  const statementMonth = body.statementMonth as string | undefined;
+  const subject = body.subject as string | undefined;
+  const emailBody = body.body as string | undefined;
+
+  const idList = [...new Set((Array.isArray(identifiers) ? identifiers : []).map((s) => String(s).trim()).filter(Boolean))];
+  if (!idList.length) return json({ error: 'At least one email or SID is required.' }, 400);
+  if (!sendPortfolio && !sendStatement) return json({ error: 'Pick at least one document to send.' }, 400);
+  if (sendStatement && !/^\d{4}-\d{2}$/.test(statementMonth || '')) return json({ error: 'statementMonth is required (YYYY-MM).' }, 400);
+
+  const username = user!.username;
+  const r = Q.usersByIdentifiers(idList);
+  const matches = await runQuery(r.sql, r.params, { redact: false });
+  const byKey = new Map<string, Record<string, unknown>>();
+  matches.forEach((m) => {
+    const sid = val(m.sid) as string | null; const email = val(m.email) as string | null;
+    if (sid) byKey.set(sid.toLowerCase(), m);
+    if (email) byKey.set(email.toLowerCase(), m);
+  });
+  const notFound = idList.filter((id) => !byKey.has(id.toLowerCase()));
+  // Same investor may have been pasted twice (SID and email both) — send once.
+  const users = [...new Map(idList.filter((id) => byKey.has(id.toLowerCase()))
+    .map((id) => byKey.get(id.toLowerCase())!)
+    .map((m) => [m.user_id as string, m] as const)).values()];
+
+  const senderEmail = Deno.env.get('SMTP_FROM_STATEMENT') || 'estatement@sayakaya.id';
+  const results = await Promise.allSettled(users.map(async (m) => {
+    const userId = m.user_id as string; const sid = val(m.sid) as string;
+    const c = Q.userContact(userId);
+    const [contact] = await runQuery(c.sql, c.params, { redact: false });
+    if (!contact?.email) throw new Error('no email on file');
+    const attachments = await buildStatementAttachments({ userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username });
+    await Mail.sendStatementEmail({ to: contact.email as string, subject, body: emailBody, name: contact.name as string | undefined, attachments, from: senderEmail });
+    return { sid, email: contact.email as string };
+  }));
+
+  const sent: { sid: string; email: string }[] = []; const failed: { sid: string; error: string }[] = [];
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') sent.push(result.value);
+    else failed.push({ sid: val(users[i].sid) as string, error: (result.reason as Error).message });
+  });
+
+  const sentDesc = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
+  await A.logEvent(user!.id, username, 'email_pdf',
+    `send-statement batch (${sentDesc}) to ${sent.length} recipient(s)${failed.length ? `, ${failed.length} failed` : ''}${notFound.length ? `, not found: ${notFound.join(', ')}` : ''}`);
+
+  return json({ ok: true, sent, failed, notFound });
 }));
 
 // Send history for the Send Statement tab itself — not the superuser-only

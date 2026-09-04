@@ -399,10 +399,21 @@ const userSearch = (q) => ({
   params: { q: `%${String(q || '').trim().toLowerCase()}%` },
 });
 
+// Exact-match resolver for batch sends: each entry in `identifiers` is either
+// a SID code or an email, matched case-insensitively. Deliberately not a LIKE
+// search like userSearch() above — a pasted list must resolve deterministically,
+// not fuzzy-match into the wrong investor.
+const usersByIdentifiers = (identifiers) => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.email
+    FROM ${USERS} u
+    WHERE LOWER(u.sid_code) IN UNNEST(@ids) OR LOWER(u.email) IN UNNEST(@ids)`,
+  params: { ids: (identifiers || []).map((s) => String(s).trim().toLowerCase()) },
+});
+
 // Contact card for the PDF export header — fetched server-side by userId so
 // the report shows authoritative data, not whatever the client last selected.
 const userContact = (userId) => ({
-  sql: `SELECT u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone,
+  sql: `SELECT u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone, up.birthdate,
       COALESCE(up.correspondence_address, up.id_address) AS address
     FROM ${USERS} u
     LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
@@ -2593,7 +2604,7 @@ module.exports = {
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail, fundNavTrend, fundList,
-  userSearch, userContact, userTransactions, userHoldings, userPortfolioSplit, userPerformance, userAumHistory,
+  userSearch, usersByIdentifiers, userContact, userTransactions, userHoldings, userPortfolioSplit, userPerformance, userAumHistory,
   userHoldingsLatestDate, userHoldingsAsOf,
   userPerformanceFix, userAumHistoryFix, userHoldingsLatestDateFix, userHoldingsAsOfFix,
   userHoldingsFromTx, userHoldingsFromTxAsOf,

@@ -2516,7 +2516,7 @@ function defaultStatementEmail({ name, sendPortfolio, portfolioDate, sendStateme
   }
   return {
     subject: `Your Sayakaya Statement — ${periodLabel}`,
-    body: `Dear ${name || 'Investor'},\n\nPlease find attached ${parts.join(' and ')}, issued by PT Sayakaya Lahir Batin.\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin`,
+    body: `Dear ${name || 'Investor'},\n\nPlease find attached ${parts.join(' and ')}, issued by PT Sayakaya Lahir Batin.\n\nTo open the attached PDF file(s), use your date of birth as registered with us in DDMMYYYY format (e.g. 17081990 for 17 August 1990).\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin`,
   };
 }
 
@@ -2545,6 +2545,55 @@ async function loadSsLog() {
       { key: 'detail', label: 'Sent' },
     ], 'No statements sent yet.');
   } catch (e) { $('#ssLogTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// ---- Send statement (batch): same portfolio/e-statement documents to a
+// pasted list of emails/SIDs, resolved server-side to investors (one email
+// per matching recipient — see /api/statement/email-batch). ----------------
+
+// Splits on newlines/commas/semicolons — each entry is either a SID or an
+// email, so (unlike parsePastedEmails) nothing is filtered by an email regex.
+function parseBatchIdentifiers(text) {
+  return [...new Set((text || '').split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean))];
+}
+
+let ssBatchIdentifiers = [];
+function openSsBatchCompose() {
+  const sendPortfolio = $('#ssBatchSendPortfolio').checked;
+  const sendStatement = $('#ssBatchSendStatement').checked;
+  if (!sendPortfolio && !sendStatement) { toast('Pick at least one document to send.'); return; }
+  const portfolioDate = $('#ssBatchPortfolioDate').value;
+  const statementMonth = $('#ssBatchStatementMonth').value;
+  if (sendStatement && !statementMonth) { toast('Pick a month for the transaction e-statement.'); return; }
+  ssBatchIdentifiers = parseBatchIdentifiers($('#ssBatchInput').value);
+  if (!ssBatchIdentifiers.length) { toast('Enter at least one email or SID.'); return; }
+  const { subject, body } = defaultStatementEmail({ sendPortfolio, portfolioDate, sendStatement, statementMonth });
+  $('#ssBatchEmailTo').textContent = `Will be matched against ${ssBatchIdentifiers.length} entered email/SID${ssBatchIdentifiers.length === 1 ? '' : 's'} and sent to each investor found.`;
+  $('#ssBatchEmailSubject').value = subject;
+  $('#ssBatchEmailBody').value = body;
+  $('#ssBatchEmailModal').showModal();
+}
+
+async function sendSsBatchEmail() {
+  try {
+    const res = await fetch(API_BASE + '/api/statement/email-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        identifiers: ssBatchIdentifiers,
+        sendPortfolio: $('#ssBatchSendPortfolio').checked, portfolioDate: $('#ssBatchPortfolioDate').value,
+        sendStatement: $('#ssBatchSendStatement').checked, statementMonth: $('#ssBatchStatementMonth').value,
+        subject: $('#ssBatchEmailSubject').value, body: $('#ssBatchEmailBody').value,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(data.error || 'Batch email failed'); return; }
+    const parts = [`${data.sent.length} sent`];
+    if (data.failed?.length) parts.push(`${data.failed.length} failed`);
+    if (data.notFound?.length) parts.push(`${data.notFound.length} not found`);
+    toast(parts.join(', '));
+    loadSsLog();
+  } catch (e) { toast(e.message); }
 }
 
 // ====================================================================
@@ -3498,6 +3547,13 @@ function wire() {
       subject: $('#ssEmailSubject').value, body: $('#ssEmailBody').value,
     });
   });
+
+  // send statement (batch)
+  $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
+  $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
+  $('#ssBatchEmailCancelBtn').addEventListener('click', () => $('#ssBatchEmailModal').close());
+  $('#ssBatchEmailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $('#ssBatchEmailSendBtn').addEventListener('click', () => { $('#ssBatchEmailModal').close(); sendSsBatchEmail(); });
 
   // send fund performance
   $('#fpeSearchBtn').addEventListener('click', searchFpeUsers);

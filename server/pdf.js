@@ -344,7 +344,7 @@ function printLetterhead(doc, { left, width, contact, title, dateLabel, dateValu
 // performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }] — from pivotPerformanceByType()
 // options.columns: optional list of HOLDINGS_COLS keys to keep (plus 'fund', always kept)
 function portfolioReport({ contact, holdings }, performanceSheets, options = {}) {
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
   if (options.username) doc.info.Author = options.username;
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
@@ -423,7 +423,7 @@ const TX_COLS = (width) => [
 // contact: { name, sid, ifua, address, ... }
 // transactions: rows from queries.userTransactions(), one calendar month
 function transactionStatement({ contact, transactions }, monthLabel, options = {}) {
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
   if (options.username) doc.info.Author = options.username;
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;

@@ -368,13 +368,13 @@ export function fundPerformanceReport(sheets: PerfSheet[], options: { username?:
 export function portfolioReport(
   { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] },
   performanceSheets: PerfSheet[],
-  options: { columns?: string[]; username?: string } = {},
+  options: { columns?: string[]; username?: string; password?: string } = {},
 ): Promise<Buffer> {
   // pdfkit's bundled .d.ts doesn't fully describe PDFDocument's fluent
   // instance API (font/text/moveDown etc. all really exist at runtime) —
   // `any` here matches the same pragmatism already used in the helpers below.
   // deno-lint-ignore no-explicit-any
-  const doc: any = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc: any = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
   if (options.username) doc.info.Author = options.username;
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
@@ -455,10 +455,10 @@ export const TX_COLS = (width: number): Column[] => [
 export function transactionStatement(
   { contact, transactions }: { contact?: Contact; transactions: Record<string, unknown>[] },
   monthLabel: string,
-  options: { username?: string } = {},
+  options: { username?: string; password?: string } = {},
 ): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
-  const doc: any = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc: any = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
   if (options.username) doc.info.Author = options.username;
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
