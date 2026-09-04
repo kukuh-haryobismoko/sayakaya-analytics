@@ -1875,23 +1875,62 @@ function refProgRange() {
 
 async function loadReferralProgram() {
   $('#refProgTable').innerHTML = '<div class="loading">Loading…</div>';
+  $('#refProgLeaderboardTable').innerHTML = '<div class="loading">Loading…</div>';
   const r = refProgRange();
   try {
-    const rows = await api(`/api/referral-program/detail?from=${r.from}&to=${r.to}`);
-    renderReferralProgram(rows);
+    const [rows, stats] = await Promise.all([
+      api(`/api/referral-program/detail?from=${r.from}&to=${r.to}`),
+      api(`/api/referral-program/inviter-stats?from=${r.from}&to=${r.to}`),
+    ]);
+    renderReferralProgram(rows, stats);
   } catch (e) {
     $('#refProgKpis').innerHTML = '';
     $('#refProgTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#refProgLeaderboardTable').innerHTML = '';
   }
 }
 
-function renderReferralProgram(rows) {
+// Groups the detail rows (one per qualifying invitee, from computeReferralEligibility)
+// by inviter, then merges in the broader invited/transacted counts from
+// inviter-stats — "invited"/"transacted" cover every referral regardless of
+// product/amount, while qualifying/pending/eligible only cover invitees whose
+// first-ever transaction met the campaign's own rule.
+function buildReferralLeaderboard(rows, stats) {
+  const bySid = new Map();
+  stats.forEach((s) => {
+    const sid = val(s.inviter_sid);
+    if (!sid) return;
+    bySid.set(sid, {
+      inviter_sid: sid, inviter_referral_code: val(s.inviter_referral_code), inviter_name: val(s.inviter_name),
+      invited: Number(val(s.invited_count)) || 0, transacted: Number(val(s.transacted_count)) || 0,
+      qualifying: 0, pending: 0, eligible: 0, not_eligible: 0,
+    });
+  });
+  rows.forEach((r) => {
+    const sid = val(r.inviter_sid);
+    if (!sid) return;
+    if (!bySid.has(sid)) {
+      bySid.set(sid, { inviter_sid: sid, inviter_referral_code: null, inviter_name: val(r.inviter_name), invited: 0, transacted: 0, qualifying: 0, pending: 0, eligible: 0, not_eligible: 0 });
+    }
+    const row = bySid.get(sid);
+    row.qualifying += 1;
+    if (r.status === 'Eligible') row.eligible += 1;
+    else if (r.status === 'Pending') row.pending += 1;
+    else row.not_eligible += 1;
+  });
+  return [...bySid.values()].sort((a, b) => b.qualifying - a.qualifying || b.invited - a.invited);
+}
+
+// Shared by both Referral program and Referral Program (alt.) — same KPI/
+// detail/leaderboard shape, different data source (see loadReferralProgram
+// vs loadReferralProgramAlt). `sel` picks which section's DOM ids to fill.
+function renderReferralProgram(rows, stats, sel = { kpis: '#refProgKpis', table: '#refProgTable', leaderboard: '#refProgLeaderboardTable' }) {
   const eligible = rows.filter((r) => r.status === 'Eligible').length;
   const pending = rows.filter((r) => r.status === 'Pending').length;
   const notEligible = rows.filter((r) => r.status === 'Not eligible').length;
   const inviters = new Set(rows.map((r) => val(r.inviter_sid)).filter(Boolean)).size;
   const bonusTotal = eligible * 50000; // Rp25,000 to inviter + Rp25,000 to invitee, per eligible referral.
-  $('#refProgKpis').innerHTML = [
+  $(sel.kpis).innerHTML = [
     kpi(t('refprog_kpi_inviters'), num(inviters), '', '', '🧑‍🤝‍🧑'),
     kpi(t('refprog_kpi_invitees'), num(rows.length), '', '', '➕'),
     kpi(t('refprog_kpi_eligible'), num(eligible), '', 'accent', '✅'),
@@ -1900,7 +1939,7 @@ function renderReferralProgram(rows) {
     kpi(t('refprog_kpi_bonus_total'), idr(bonusTotal), t('refprog_kpi_bonus_total_sub'), 'accent', '💰'),
   ].join('');
 
-  genTable('#refProgTable', rows, [
+  genTable(sel.table, rows, [
     { key: 'inviter_sid', label: 'Inviter SID' }, { key: 'inviter_name', label: 'Inviter name' },
     { key: 'inviter_ifua', label: 'Inviter IFUA' }, { key: 'inviter_email', label: 'Inviter email' },
     { key: 'inviter_phone', label: 'Inviter phone' },
@@ -1912,6 +1951,46 @@ function renderReferralProgram(rows) {
     { key: 'baseline_unit', label: 'Baseline units', type: 'num' }, { key: 'min_unit_in_window', label: 'Min units seen', type: 'num' },
     { key: 'status', label: 'Status' }, { key: 'reason', label: 'Reason' },
   ], 'No qualifying referrals in this period.');
+
+  genTable(sel.leaderboard, buildReferralLeaderboard(rows, stats), [
+    { key: 'inviter_sid', label: 'Inviter SID' }, { key: 'inviter_name', label: 'Inviter name' },
+    { key: 'inviter_referral_code', label: 'Referral code' },
+    { key: 'invited', label: 'Invited', type: 'num' },
+    { key: 'transacted', label: 'Transacted', type: 'num' },
+    { key: 'qualifying', label: 'Transacted ≥ Rp1jt', type: 'num' },
+    { key: 'pending', label: 'Pending', type: 'num' },
+    { key: 'eligible', label: 'Eligible', type: 'num' },
+    { key: 'not_eligible', label: 'Not eligible', type: 'num' },
+  ], 'No referral activity in this period.');
+}
+
+// ====================================================================
+//  REFERRAL PROGRAM (ALT.) — same eligibility/detail rows as the section
+//  above, but a looser leaderboard (see queries.js:referralInviterStatsAlt):
+//  "Invited" doesn't require the invitee to have registered in the period,
+//  only that their first-ever transaction (if any) isn't already outside it.
+// ====================================================================
+let refProgAltLoaded = false;
+
+function refProgAltRange() {
+  return { from: $('#refProgAltFrom').value || '2026-09-01', to: $('#refProgAltTo').value || '2026-12-31' };
+}
+
+async function loadReferralProgramAlt() {
+  $('#refProgAltTable').innerHTML = '<div class="loading">Loading…</div>';
+  $('#refProgAltLeaderboardTable').innerHTML = '<div class="loading">Loading…</div>';
+  const r = refProgAltRange();
+  try {
+    const [rows, stats] = await Promise.all([
+      api(`/api/referral-program-alt/detail?from=${r.from}&to=${r.to}`),
+      api(`/api/referral-program-alt/inviter-stats?from=${r.from}&to=${r.to}`),
+    ]);
+    renderReferralProgram(rows, stats, { kpis: '#refProgAltKpis', table: '#refProgAltTable', leaderboard: '#refProgAltLeaderboardTable' });
+  } catch (e) {
+    $('#refProgAltKpis').innerHTML = '';
+    $('#refProgAltTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#refProgAltLeaderboardTable').innerHTML = '';
+  }
 }
 
 // ====================================================================
@@ -3352,6 +3431,7 @@ function switchTab(name) {
   if (name === 'user-lifetime' && !ulLoaded) { ulLoaded = true; loadUserLifetime(); }
   if (name === 'campaign-revenue' && !crLoaded) { crLoaded = true; loadCampaignRevenue(); }
   if (name === 'referral-program' && !refProgLoaded) { refProgLoaded = true; loadReferralProgram(); }
+  if (name === 'referral-program-alt' && !refProgAltLoaded) { refProgAltLoaded = true; loadReferralProgramAlt(); }
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
   if (name === 'hnwi') loadHnwi();
@@ -3840,6 +3920,11 @@ function wire() {
   $('#refProgApply').addEventListener('click', loadReferralProgram);
   $('#refProgCsv').addEventListener('click', () => { const r = refProgRange(); download({ source: 'referral_program_detail', format: 'csv', filename: 'referral_program_detail', ...r }, 'referral_program_detail.csv'); });
   $('#refProgXlsx').addEventListener('click', () => { const r = refProgRange(); download({ source: 'referral_program_detail', format: 'xlsx', filename: 'referral_program_detail', ...r }, 'referral_program_detail.xlsx'); });
+
+  // referral program (alt.)
+  $('#refProgAltApply').addEventListener('click', loadReferralProgramAlt);
+  $('#refProgAltCsv').addEventListener('click', () => { const r = refProgAltRange(); download({ source: 'referral_program_alt_detail', format: 'csv', filename: 'referral_program_alt_detail', ...r }, 'referral_program_alt_detail.csv'); });
+  $('#refProgAltXlsx').addEventListener('click', () => { const r = refProgAltRange(); download({ source: 'referral_program_alt_detail', format: 'xlsx', filename: 'referral_program_alt_detail', ...r }, 'referral_program_alt_detail.xlsx'); });
 
   // remisier sharing
   $('#remRun').addEventListener('click', loadRemisier);

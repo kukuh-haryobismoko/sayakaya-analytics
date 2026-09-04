@@ -1339,6 +1339,109 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string): Q
   },
 });
 
+// Referral program leaderboard, per inviter: everyone still relevant to this
+// campaign and how many of those transacted — broader than
+// referralProgramDetail's "qualifying" set (scoped to the campaign's own
+// Sucor/>=1jt rule), but NOT everyone the inviter has ever referred. The
+// frontend merges this with referralProgramDetail's per-row status
+// (computeReferralEligibility) for the full funnel: invited -> transacted ->
+// transacted >=1jt (qualifying) -> pending/eligible, so each stage must be a
+// superset of the next.
+// An invitee counts as "invited" here only if EITHER (a) they registered
+// during the period — the normal "new friend joined via this campaign" case,
+// still counted even if they haven't transacted yet (pending) — OR (b) their
+// first-ever transaction (any fund/amount; Sucor/>=1jt is
+// referralProgramDetail's extra filter) falls in the period, which catches an
+// invitee who signed up earlier but made their qualifying purchase during the
+// promo window, per the T&C ("only counts the very first-ever transaction").
+// Without (a), old dormant referrals (signed up years ago, never
+// transacted) would count as "pending" forever and flood the leaderboard;
+// without (b), a delayed-but-in-period qualifying purchase would show up in
+// referralProgramDetail's detail table without its inviter ever appearing
+// here — either gap breaks the qualifying/transacted/invited superset chain.
+export const referralInviterStats = (periodFrom?: string, periodTo?: string): Query => ({
+  sql: `WITH invited_all AS (
+      SELECT invitee.id AS invitee_id, invitee.created_at AS invitee_registered_at,
+        inviter.sid_code AS inviter_sid, inviter.referral_code AS inviter_referral_code,
+        COALESCE(inviter_up.name, inviter.email) AS inviter_name
+      FROM ${USERS} invitee
+      JOIN ${USERS} inviter ON inviter.referral_code = invitee.referrer_code
+      LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
+      WHERE invitee.referrer_code IS NOT NULL
+    ),
+    first_tx AS (
+      SELECT user_id,
+        ARRAY_AGG(created_at ORDER BY created_at ASC LIMIT 1)[OFFSET(0)] AS first_tx_at
+      FROM ${TX}
+      WHERE type = 'buy' AND status IN ('completed', 'completed_payment', 'verified')
+      GROUP BY user_id
+    ),
+    invited AS (
+      SELECT ia.invitee_id, ia.inviter_sid, ia.inviter_referral_code, ia.inviter_name,
+        DATE(ft.first_tx_at) AS first_tx_date
+      FROM invited_all ia
+      LEFT JOIN first_tx ft ON ft.user_id = ia.invitee_id
+      WHERE DATE(ia.invitee_registered_at) BETWEEN @periodFrom AND @periodTo
+        OR (ft.first_tx_at IS NOT NULL AND DATE(ft.first_tx_at) BETWEEN @periodFrom AND @periodTo)
+    )
+    SELECT inviter_sid, ANY_VALUE(inviter_referral_code) AS inviter_referral_code, ANY_VALUE(inviter_name) AS inviter_name,
+      COUNT(DISTINCT invitee_id) AS invited_count,
+      COUNT(DISTINCT IF(first_tx_date BETWEEN @periodFrom AND @periodTo, invitee_id, NULL)) AS transacted_count
+    FROM invited
+    GROUP BY inviter_sid`,
+  params: {
+    periodFrom: periodFrom || '2026-09-01',
+    periodTo: periodTo || '2026-12-31',
+  },
+});
+
+// Leaderboard for "Referral Program (alt.)" — a deliberately looser sibling
+// of referralInviterStats above. That one requires the invitee to have
+// *registered* during the period (else old, dormant referrals who never
+// transact would sit on the leaderboard forever as "pending"). This variant
+// drops that requirement entirely: the referral relationship can be
+// arbitrarily old — the only thing that matters is the invitee's first-ever
+// transaction. No transaction yet -> still "invited" (pending, may still
+// transact before the period ends). A first-ever transaction that already
+// landed outside the period -> excluded (their one shot already happened,
+// elsewhere). This mirrors referralProgramDetail's own qualifying rule
+// (first-ever transaction date, not registration date), so the two sections
+// deliberately show different "Invited" populations side by side.
+export const referralInviterStatsAlt = (periodFrom?: string, periodTo?: string): Query => ({
+  sql: `WITH invited_all AS (
+      SELECT invitee.id AS invitee_id, inviter.sid_code AS inviter_sid,
+        inviter.referral_code AS inviter_referral_code,
+        COALESCE(inviter_up.name, inviter.email) AS inviter_name
+      FROM ${USERS} invitee
+      JOIN ${USERS} inviter ON inviter.referral_code = invitee.referrer_code
+      LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
+      WHERE invitee.referrer_code IS NOT NULL
+    ),
+    first_tx AS (
+      SELECT user_id,
+        ARRAY_AGG(created_at ORDER BY created_at ASC LIMIT 1)[OFFSET(0)] AS first_tx_at
+      FROM ${TX}
+      WHERE type = 'buy' AND status IN ('completed', 'completed_payment', 'verified')
+      GROUP BY user_id
+    ),
+    invited AS (
+      SELECT ia.invitee_id, ia.inviter_sid, ia.inviter_referral_code, ia.inviter_name,
+        DATE(ft.first_tx_at) AS first_tx_date
+      FROM invited_all ia
+      LEFT JOIN first_tx ft ON ft.user_id = ia.invitee_id
+      WHERE ft.first_tx_at IS NULL OR DATE(ft.first_tx_at) BETWEEN @periodFrom AND @periodTo
+    )
+    SELECT inviter_sid, ANY_VALUE(inviter_referral_code) AS inviter_referral_code, ANY_VALUE(inviter_name) AS inviter_name,
+      COUNT(DISTINCT invitee_id) AS invited_count,
+      COUNT(DISTINCT IF(first_tx_date BETWEEN @periodFrom AND @periodTo, invitee_id, NULL)) AS transacted_count
+    FROM invited
+    GROUP BY inviter_sid`,
+  params: {
+    periodFrom: periodFrom || '2026-09-01',
+    periodTo: periodTo || '2026-12-31',
+  },
+});
+
 // ---- Reconciliation: app ledger (main.transactions) vs custodian feed (sinvest) -
 // Transaction_Date/amount columns in sinvest.trx_history are STRING ('YYYYMMDD',
 // formatted numbers) — the raw KSEI/SInvest export, never cleaned.

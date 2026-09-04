@@ -135,6 +135,7 @@
           <button class="nav-link" data-tab="user-lifetime"><span class="nav-icon">⏳</span>User lifetime</button>
           <button class="nav-link" data-tab="campaign-revenue"><span class="nav-icon">🎯</span>Campaign revenue</button>
           <button class="nav-link" data-tab="referral-program"><span class="nav-icon">🎁</span>Referral program</button>
+          <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon">🎟️</span>Referral Program (alt.)</button>
           <button class="nav-link" data-tab="remisier"><span class="nav-icon">🤝</span>Remisier sharing (GS)</button>
           <button class="nav-link" data-tab="remisier-pwc"><span class="nav-icon">🤝</span>Remisier sharing (PWC)</button>
           <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon">🧾</span>Remisier transactions</button>
@@ -1242,6 +1243,12 @@
       </div>
 
       <div class="panel">
+        <div class="panel-head"><h2 data-i18n="refprog_leaderboard_title">Inviter leaderboard</h2></div>
+        <span class="hint" data-i18n="refprog_leaderboard_hint">One row per inviter. "Invited" and "Transacted" count everyone they referred, any fund or amount — broader than "≥ Rp1jt", "Pending" and "Eligible", which only cover invitees whose first-ever transaction met the campaign's own product/amount rule.</span>
+        <div id="refProgLeaderboardTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
         <div class="panel-head wrap">
           <h2 data-i18n="refprog_detail_title">Referral detail</h2>
           <div class="exp">
@@ -1251,6 +1258,49 @@
         </div>
         <span class="hint" data-i18n="refprog_detail_hint">One row per successful invitee. "Baseline units" is the unit balance right after the qualifying purchase; "Min units seen" dropping below that during the 30-day window is what flags a redemption.</span>
         <div id="refProgTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ===================== REFERRAL PROGRAM (ALT.) — same T&C eligibility rule
+         and detail rows as Referral program above (an invitee's registration
+         date never mattered there — only their first-ever transaction date),
+         but a looser leaderboard: "Invited" here doesn't require the invitee
+         to have registered during the period, only that their first-ever
+         transaction (if any) hasn't already happened outside it. ===================== -->
+    <section id="referral-program-alt" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="refprog_period">Referral program period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="refProgAltFrom" value="2026-09-01" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="refProgAltTo" value="2026-12-31" /></label>
+            <button id="refProgAltApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="refprog_hint">Only counts an invitee's very first-ever transaction: it must be a Sucor Asset Management fund purchase of at least Rp1,000,000, made using another user's referral code, within the period above. Both the inviter and invitee must be KYC-verified, and the invitee's units in that fund must not decrease for 30 days after the purchase (checked daily against the custodian snapshot) for the bonus to become Eligible.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="refprog_summary">Summary</h2></div>
+        <div id="refProgAltKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="refprog_leaderboard_title">Inviter leaderboard</h2></div>
+        <span class="hint" data-i18n="refprog_alt_leaderboard_hint">One row per inviter. Unlike the main Referral program tab, "Invited" here doesn't require the invitee to have signed up during the period — the referral itself can be arbitrarily old. What matters is their first-ever transaction: not made yet still counts as invited (pending), but one that already happened outside the period permanently excludes them.</span>
+        <div id="refProgAltLeaderboardTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="refprog_detail_title">Referral detail</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="refProgAltCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="refProgAltXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="refprog_detail_hint">One row per successful invitee. "Baseline units" is the unit balance right after the qualifying purchase; "Min units seen" dropping below that during the 30-day window is what flags a redemption.</span>
+        <div id="refProgAltTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
 
@@ -1671,7 +1721,11 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3>🎁 Referral program</h3>
-          <p data-i18n="docs_referral_program_desc">The Sep-Dec 2026 referral bonus program's eligibility report. A referral only counts if the invited friend's very first-ever transaction is a Sucor Asset Management fund purchase of at least Rp1,000,000 made with someone's referral code; the bonus (Rp25,000 to each side, in Sucorinvest Money Market Fund units) additionally requires that fund's units to stay unchanged for 30 days. Each row shows both people's contact details, the transaction, days held, and a status — Eligible, Pending (still within the 30-day hold), or Not eligible (with the specific reason, e.g. redeemed early or KYC not verified).</p>
+          <p data-i18n="docs_referral_program_desc">The Sep-Dec 2026 referral bonus program's eligibility report. A referral only counts if the invited friend's very first-ever transaction is a Sucor Asset Management fund purchase of at least Rp1,000,000 made with someone's referral code; the bonus (Rp25,000 to each side, in Sucorinvest Money Market Fund units) additionally requires that fund's units to stay unchanged for 30 days. Each row shows both people's contact details, the transaction, days held, and a status — Eligible, Pending (still within the 30-day hold), or Not eligible (with the specific reason, e.g. redeemed early or KYC not verified). An Inviter leaderboard sits above the row-level detail: one line per inviter with how many people they referred and how many transacted at all (any fund, any amount) — broader counts than the eligibility rule itself — next to how many of those referrals qualified, and of those, how many are Pending vs. Eligible. On this leaderboard, "Invited" only counts an invitee if they also registered during the period — an old referral relationship that never leads to a signup/purchase in this window doesn't clutter the list.</p>
+        </div>
+        <div class="doc-item">
+          <h3>🎟️ Referral Program (alt.)</h3>
+          <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition. Here, the referral relationship can be arbitrarily old (no registration-date requirement); what matters is purely the invitee's first-ever transaction. Haven't transacted yet? Still counted as invited (pending — they may still transact before the period ends). Already made their first-ever transaction outside this period? Permanently excluded, since per the T&C only that very first transaction can ever qualify. Use this tab when you want to know "of everyone ever referred, who's still in play for this campaign," rather than "who signed up because of this campaign."</p>
         </div>
         <div class="doc-item">
           <h3>🤝 Remisier sharing (GS) / (PWC)</h3>

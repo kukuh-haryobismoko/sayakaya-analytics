@@ -54,6 +54,7 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
   referral_program_detail: 'referral-program',
+  referral_program_alt_detail: 'referral-program-alt',
 };
 
 // Pivot flat (type, name, period, pct_change) rows into one fund-per-row
@@ -842,6 +843,32 @@ on('GET', '/api/referral-program/detail', requireTab('referral-program', async (
   return json(computeReferralEligibility(await runQuery(q.sql, q.params)));
 }));
 
+// Per-inviter leaderboard: the frontend merges this with the detail rows
+// above (grouped by inviter_sid) for the full invited->transacted->
+// qualifying->pending/eligible funnel — see queries.ts:referralInviterStats.
+on('GET', '/api/referral-program/inviter-stats', requireTab('referral-program', async (_req, _params, url) => {
+  const q = Q.referralInviterStats(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- Referral program (alt.): same T&C eligibility rule and detail rows
+// as the section above (an invitee's registration date never mattered to
+// referralProgramDetail — only their first-ever transaction date), but a
+// deliberately looser leaderboard: "Invited" here doesn't require the
+// invitee to have registered during the period, only that they haven't
+// already burned their first-ever transaction outside it — see
+// queries.ts:referralInviterStatsAlt. Own tab permission ('referral-program-alt')
+// so it's assignable independently of the main section.
+on('GET', '/api/referral-program-alt/detail', requireTab('referral-program-alt', async (_req, _params, url) => {
+  const q = Q.referralProgramDetail(qp(url, 'from'), qp(url, 'to'));
+  return json(computeReferralEligibility(await runQuery(q.sql, q.params)));
+}));
+
+on('GET', '/api/referral-program-alt/inviter-stats', requireTab('referral-program-alt', async (_req, _params, url) => {
+  const q = Q.referralInviterStatsAlt(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
 // ---- Remisier sharing: management fee revenue for one remisier's users,
 // from goal_snapshots, split as a portion of the AperD share -----------------
 on('GET', '/api/remisier/users', requireAnyTab(['remisier', 'remisier-pwc'], async (_req, _params, url) => {
@@ -1345,7 +1372,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     if (!body.date) return json({ error: 'date is required.' }, 400);
     const q = Q.hnwiByFund(body.date as string, body.minAum as string, body.maxAum as string, body.minFundAum as string, body.maxFundAum as string, (limit as number) || 20000);
     rows = await runQuery(q.sql, q.params);
-  } else if (source === 'referral_program_detail') {
+  } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
     const q = Q.referralProgramDetail(body.from as string, body.to as string);
     rows = computeReferralEligibility(await runQuery(q.sql, q.params));
   } else {

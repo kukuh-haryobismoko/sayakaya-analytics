@@ -86,6 +86,7 @@ const referralProgram = [{ inviter_sid: 'IDD1', inviter_name: 'A', inviter_ifua:
   invitee_sid: 'IDD2', invitee_name: 'B', invitee_ifua: 'IFUA2', invitee_email: 'b@b.c', invitee_phone: '628',
   fund_name: 'Sucorinvest Money Market Fund', amount: 1000000, tx_date: D('2026-09-05'), days_held: 35,
   baseline_unit: '1000', min_unit_in_window: '1000', status: 'Eligible', reason: null }];
+const referralInviterStats = [{ inviter_sid: 'IDD1', inviter_referral_code: 'REF1', inviter_name: 'A', invited_count: 8, transacted_count: 3 }];
 
 sandbox.api = async (path) => {
   if (path.startsWith('/api/user-lifetime/summary')) return summaryUL;
@@ -94,18 +95,21 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/campaign-revenue/campaigns')) return campaignsCR;
   if (path.startsWith('/api/campaign-revenue/summary'))   return summaryCR;
   if (path.startsWith('/api/campaign-revenue'))           return detailCR;
+  if (path.startsWith('/api/referral-program-alt/detail')) return referralProgram;
+  if (path.startsWith('/api/referral-program-alt/inviter-stats')) return referralInviterStats;
   if (path.startsWith('/api/referral-program/detail'))    return referralProgram;
+  if (path.startsWith('/api/referral-program/inviter-stats')) return referralInviterStats;
   throw new Error('unexpected path ' + path);
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';

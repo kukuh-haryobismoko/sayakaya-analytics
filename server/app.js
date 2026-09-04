@@ -59,6 +59,7 @@ const EXPORT_SOURCE_TAB = {
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
   referral_program_detail: 'referral-program',
+  referral_program_alt_detail: 'referral-program-alt',
 };
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
@@ -766,6 +767,35 @@ function createApp({ serveStatic = true } = {}) {
     res.json(computeReferralEligibility(await runQuery(q.sql, q.params)));
   }));
 
+  // Per-inviter leaderboard: the frontend merges this with the detail rows
+  // above (grouped by inviter_sid) for the full invited->transacted->
+  // qualifying->pending/eligible funnel — see queries.js:referralInviterStats.
+  app.get('/api/referral-program/inviter-stats', requireTab('referral-program'), handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.referralInviterStats(from, to);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
+  // ---- Referral program (alt.): same T&C eligibility rule and detail rows
+  // as the section above (an invitee's registration date never mattered to
+  // referralProgramDetail — only their first-ever transaction date), but a
+  // deliberately looser leaderboard: "Invited" here doesn't require the
+  // invitee to have registered during the period, only that they haven't
+  // already burned their first-ever transaction outside it — see
+  // queries.js:referralInviterStatsAlt. Own tab permission ('referral-program-alt')
+  // so it's assignable independently of the main section.
+  app.get('/api/referral-program-alt/detail', requireTab('referral-program-alt'), handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.referralProgramDetail(from, to);
+    res.json(computeReferralEligibility(await runQuery(q.sql, q.params)));
+  }));
+
+  app.get('/api/referral-program-alt/inviter-stats', requireTab('referral-program-alt'), handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.referralInviterStatsAlt(from, to);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
   // ---- Remisier sharing: management fee revenue for one remisier's users,
   // from goal_snapshots, split as a portion of the AperD share -----------------
   // Shared by Remisier sharing and its PWC sibling — allow either.
@@ -1246,7 +1276,7 @@ function createApp({ serveStatic = true } = {}) {
       if (!req.body.date) return res.status(400).json({ error: 'date is required.' });
       const q = Q.hnwiByFund(req.body.date, req.body.minAum, req.body.maxAum, req.body.minFundAum, req.body.maxFundAum, limit || 20000);
       rows = await runQuery(q.sql, q.params);
-    } else if (source === 'referral_program_detail') {
+    } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
       const q = Q.referralProgramDetail(req.body.from, req.body.to);
       rows = computeReferralEligibility(await runQuery(q.sql, q.params));
     } else {
