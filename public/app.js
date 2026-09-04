@@ -62,6 +62,7 @@ function toast(msg) {
 }
 
 function val(x) { return x && typeof x === 'object' && 'value' in x ? x.value : x; }
+function escapeHtml(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // ---------- date range ----------
 function isoDate(d) { return d.toISOString().slice(0, 10); }
@@ -2774,6 +2775,194 @@ async function loadFpeLog() {
 }
 
 // ====================================================================
+//  SCHEDULED / AUTOMATED SENDING — shared by Send statement ('statement')
+//  and Send fund performance ('fund_performance'); server/schedules.js does
+//  the actual scheduling/OTP/recipient-resolution work. A schedule is only
+//  ever created via the OTP request/confirm pair — there's no direct
+//  "create" call from here.
+// ====================================================================
+function schedCfg(kind) {
+  return kind === 'statement' ? { kind, prefix: 'ssSched' } : { kind, prefix: 'fpeSched' };
+}
+function schedEl(prefix, name) { return $('#' + prefix + name); }
+
+let schedOtpState = null; // { kind, otpId } — set once step 1 succeeds
+
+async function loadSchedules(kind) {
+  const { prefix } = schedCfg(kind);
+  schedEl(prefix, 'Table').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    renderSchedules(kind, await api(`/api/schedules?kind=${kind}`));
+  } catch (e) { schedEl(prefix, 'Table').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+const SCHED_RECIPIENT_LABEL = { single_email: null, csv_list: null, all_aum: 'All investors with AUM', all_registered: 'All registered users' };
+function schedRecipientSummary(row) {
+  if (row.recipient_type === 'single_email') return val(row.recipient_email);
+  if (row.recipient_type === 'csv_list') return `${(row.recipient_list || []).length} emails`;
+  return SCHED_RECIPIENT_LABEL[row.recipient_type] || row.recipient_type;
+}
+const SCHED_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function schedFrequencySummary(row) {
+  if (row.frequency === 'daily') return `Daily @ ${row.run_time}`;
+  if (row.frequency === 'weekly') return `Weekly (${SCHED_WEEKDAYS[row.day_of_week] || '?'}) @ ${row.run_time}`;
+  if (row.frequency === 'monthly_last_day') return `End of month @ ${row.run_time}`;
+  if (row.frequency === 'monthly_day') return `Day ${row.day_of_month} of month @ ${row.run_time}`;
+  return row.frequency;
+}
+
+// Not built with genTable() — schedules need per-row Pause/Resume/Delete
+// buttons, which genTable's plain-cell renderer doesn't support.
+function renderSchedules(kind, rows) {
+  const { prefix } = schedCfg(kind);
+  const tableEl = schedEl(prefix, 'Table');
+  if (!rows.length) { tableEl.innerHTML = '<div class="empty">No schedules yet.</div>'; return; }
+  const body = rows.map((r) => `<tr>
+      <td>${escapeHtml(schedRecipientSummary(r))}</td>
+      <td>${escapeHtml(schedFrequencySummary(r))}</td>
+      <td>${r.kind === 'statement' ? [r.send_portfolio && 'Portfolio', r.send_statement && 'E-statement'].filter(Boolean).join(' + ') : 'Fund performance'}</td>
+      <td>${r.status === 'active' ? 'Active' : 'Paused'}</td>
+      <td>${r.next_run_at ? toJakartaTime(r.next_run_at) : '—'}</td>
+      <td>${r.last_run_at ? toJakartaTime(r.last_run_at) : '—'}</td>
+      <td class="num">${num(r.run_count)}</td>
+      <td>${escapeHtml(r.created_by_username || '—')}</td>
+      <td>
+        <button type="button" class="btn-ghost sched-toggle-btn" data-id="${r.id}" data-status="${r.status}">${r.status === 'active' ? 'Pause' : 'Resume'}</button>
+        <button type="button" class="btn-ghost sched-delete-btn" data-id="${r.id}">Delete</button>
+      </td>
+    </tr>`).join('');
+  tableEl.innerHTML = `<table><thead><tr>
+      <th>Recipients</th><th>Schedule</th><th>Sends</th><th>Status</th><th>Next run (WIB)</th><th>Last run (WIB)</th><th class="num">Times sent</th><th>Created by</th><th></th>
+    </tr></thead><tbody>${body}</tbody></table>`;
+  $$(`#${prefix}Table .sched-toggle-btn`).forEach((btn) => btn.addEventListener('click', async () => {
+    try {
+      await api(`/api/schedules/${btn.dataset.id}`, { method: 'PATCH', body: JSON.stringify({ status: btn.dataset.status === 'active' ? 'paused' : 'active' }) });
+      loadSchedules(kind);
+    } catch (e) { toast(e.message); }
+  }));
+  $$(`#${prefix}Table .sched-delete-btn`).forEach((btn) => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this schedule? This cannot be undone.')) return;
+    try { await api(`/api/schedules/${btn.dataset.id}`, { method: 'DELETE' }); loadSchedules(kind); } catch (e) { toast(e.message); }
+  }));
+}
+
+function schedResetModal(kind) {
+  const { prefix } = schedCfg(kind);
+  schedEl(prefix, 'Step1').classList.remove('hidden');
+  schedEl(prefix, 'Step2').classList.add('hidden');
+  schedEl(prefix, 'RecipientType').value = 'single_email';
+  schedEl(prefix, 'SingleEmail').value = '';
+  schedEl(prefix, 'CsvFile').value = '';
+  schedEl(prefix, 'CsvPaste').value = '';
+  schedEl(prefix, 'CountPreview').classList.add('hidden');
+  schedEl(prefix, 'Frequency').value = 'daily';
+  schedEl(prefix, 'DayOfWeek').value = '1';
+  schedEl(prefix, 'DayOfMonth').value = '1';
+  schedEl(prefix, 'RunTime').value = '08:00';
+  schedEl(prefix, 'Subject').value = kind === 'statement' ? 'Your Sayakaya Statement' : 'Sayakaya Fund Performance Update';
+  schedEl(prefix, 'Body').value = kind === 'statement'
+    ? 'Dear Investor,\n\nPlease find your portfolio/e-statement attached, issued by PT Sayakaya Lahir Batin.\n\nTo open the attached PDF file(s), use your date of birth as registered with us in DDMMYYYY format (e.g. 17081990 for 17 August 1990).\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin'
+    : 'Dear Investor,\n\nPlease find attached our latest fund performance update (Reksa Dana Update), issued by PT Sayakaya Lahir Batin.\n\nBest regards,\nPT Sayakaya Lahir Batin';
+  schedEl(prefix, 'ConfirmEmail').value = '';
+  if (kind === 'statement') { schedEl(prefix, 'SendPortfolio').checked = true; schedEl(prefix, 'SendStatement').checked = true; }
+  schedUpdateFieldVisibility(kind);
+}
+
+function schedUpdateFieldVisibility(kind) {
+  const { prefix } = schedCfg(kind);
+  const type = schedEl(prefix, 'RecipientType').value;
+  schedEl(prefix, 'SingleEmailField').classList.toggle('hidden', type !== 'single_email');
+  schedEl(prefix, 'CsvField').classList.toggle('hidden', type !== 'csv_list');
+  const freq = schedEl(prefix, 'Frequency').value;
+  schedEl(prefix, 'WeekdayField').classList.toggle('hidden', freq !== 'weekly');
+  schedEl(prefix, 'DayOfMonthField').classList.toggle('hidden', freq !== 'monthly_day');
+  if (type === 'all_aum' || type === 'all_registered') schedPreviewCount(kind);
+  else schedEl(prefix, 'CountPreview').classList.add('hidden');
+}
+
+// Reads the CSV file (if one was chosen) or falls back to the pasted
+// textarea — same tolerant comma/newline/semicolon split as the Send
+// statement batch tool's parseBatchIdentifiers, but filtered to valid emails
+// only (a schedule always sends by email, never by SID).
+function schedReadFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read the file.'));
+    reader.readAsText(file);
+  });
+}
+async function schedCollectEmails(kind) {
+  const { prefix } = schedCfg(kind);
+  const file = schedEl(prefix, 'CsvFile').files[0];
+  const text = file ? await schedReadFileAsText(file) : schedEl(prefix, 'CsvPaste').value;
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return [...new Set(text.split(/[\n,;]+/).map((s) => s.trim().toLowerCase()).filter((s) => EMAIL_RE.test(s)))];
+}
+
+async function schedBuildSpec(kind) {
+  const { prefix } = schedCfg(kind);
+  const recipientType = schedEl(prefix, 'RecipientType').value;
+  const spec = { kind, recipientType };
+  if (recipientType === 'single_email') spec.recipientEmail = schedEl(prefix, 'SingleEmail').value.trim();
+  if (recipientType === 'csv_list') spec.recipientList = await schedCollectEmails(kind);
+  return spec;
+}
+
+async function schedPreviewCount(kind) {
+  const { prefix } = schedCfg(kind);
+  const el = schedEl(prefix, 'CountPreview');
+  const textEl = schedEl(prefix, 'CountPreviewText');
+  el.classList.remove('hidden');
+  textEl.textContent = 'Checking recipient count…';
+  try {
+    const spec = await schedBuildSpec(kind);
+    const { count } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify(spec) });
+    textEl.textContent = `This will reach approximately ${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'} per send.`;
+  } catch (e) { textEl.textContent = e.message; }
+}
+
+async function schedSendOtp(kind) {
+  const { prefix } = schedCfg(kind);
+  try {
+    const spec = await schedBuildSpec(kind);
+    const frequency = schedEl(prefix, 'Frequency').value;
+    const payload = {
+      ...spec,
+      frequency,
+      dayOfWeek: frequency === 'weekly' ? Number(schedEl(prefix, 'DayOfWeek').value) : undefined,
+      dayOfMonth: frequency === 'monthly_day' ? Number(schedEl(prefix, 'DayOfMonth').value) : undefined,
+      runTime: schedEl(prefix, 'RunTime').value || '08:00',
+      subject: schedEl(prefix, 'Subject').value,
+      body: schedEl(prefix, 'Body').value,
+      confirmationEmail: schedEl(prefix, 'ConfirmEmail').value.trim(),
+    };
+    if (kind === 'statement') {
+      payload.sendPortfolio = schedEl(prefix, 'SendPortfolio').checked;
+      payload.sendStatement = schedEl(prefix, 'SendStatement').checked;
+    }
+    const { otpId, recipientCount } = await api('/api/schedules/otp/request', { method: 'POST', body: JSON.stringify(payload) });
+    schedOtpState = { kind, otpId };
+    schedEl(prefix, 'Step1').classList.add('hidden');
+    schedEl(prefix, 'Step2').classList.remove('hidden');
+    schedEl(prefix, 'Step2Hint').textContent =
+      `We sent a 6-digit code to ${payload.confirmationEmail}. Enter it below to create this schedule (reaches ~${num(recipientCount)} recipient${recipientCount === 1 ? '' : 's'} per send).`;
+    schedEl(prefix, 'Code').value = '';
+  } catch (e) { toast(e.message); }
+}
+
+async function schedConfirmOtp(kind) {
+  const { prefix } = schedCfg(kind);
+  if (!schedOtpState || schedOtpState.kind !== kind) { toast('Start over — session lost.'); return; }
+  try {
+    await api('/api/schedules/otp/confirm', { method: 'POST', body: JSON.stringify({ otpId: schedOtpState.otpId, code: schedEl(prefix, 'Code').value.trim() }) });
+    schedEl(prefix, 'Modal').close();
+    toast('Schedule created.');
+    loadSchedules(kind);
+  } catch (e) { toast(e.message); }
+}
+
+// ====================================================================
 //  ASK (natural language)
 // ====================================================================
 let askSqlCache = '';
@@ -3437,8 +3626,8 @@ function switchTab(name) {
   if (name === 'hnwi') loadHnwi();
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
-  if (name === 'send-statement') loadSsLog();
-  if (name === 'send-fund-performance') loadFpeLog();
+  if (name === 'send-statement') { loadSsLog(); loadSchedules('statement'); }
+  if (name === 'send-fund-performance') { loadFpeLog(); loadSchedules('fund_performance'); }
 }
 
 // Called once after login/session-restore: hides nav links + the Admin group
@@ -3644,6 +3833,23 @@ function wire() {
   $('#fpeEmailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   $('#fpeEmailSendBtn').addEventListener('click', () => { $('#fpeEmailModal').close(); sendFpeEmail(); });
   renderFpePicked();
+
+  // scheduled/automated sending — same wiring shape for both tabs
+  function wireSchedModal(kind) {
+    const { prefix } = schedCfg(kind);
+    schedEl(prefix, 'NewBtn').addEventListener('click', () => { schedResetModal(kind); schedEl(prefix, 'Modal').showModal(); });
+    schedEl(prefix, 'RecipientType').addEventListener('change', () => schedUpdateFieldVisibility(kind));
+    schedEl(prefix, 'Frequency').addEventListener('change', () => schedUpdateFieldVisibility(kind));
+    schedEl(prefix, 'CsvFile').addEventListener('change', () => schedPreviewCount(kind));
+    schedEl(prefix, 'CsvPaste').addEventListener('change', () => schedPreviewCount(kind));
+    schedEl(prefix, 'SendCodeBtn').addEventListener('click', () => schedSendOtp(kind));
+    schedEl(prefix, 'CancelBtn1').addEventListener('click', () => schedEl(prefix, 'Modal').close());
+    schedEl(prefix, 'BackBtn').addEventListener('click', () => { schedEl(prefix, 'Step2').classList.add('hidden'); schedEl(prefix, 'Step1').classList.remove('hidden'); });
+    schedEl(prefix, 'ConfirmBtn').addEventListener('click', () => schedConfirmOtp(kind));
+    schedEl(prefix, 'Modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  }
+  wireSchedModal('statement');
+  wireSchedModal('fund_performance');
 
   // portfolio (fix) — same wiring as portfolio (pwc) above, different source table
   $('#pfxSearchBtn').addEventListener('click', searchPfxUsers);

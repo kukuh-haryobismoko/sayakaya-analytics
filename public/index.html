@@ -323,6 +323,15 @@
 
       <div class="panel">
         <div class="panel-head wrap">
+          <h2><span aria-hidden="true">⏰</span> <span data-i18n="sched_title">Automated sending</span></h2>
+          <button class="btn-primary" id="ssSchedNewBtn"><span data-i18n="sched_new">+ New schedule</span></button>
+        </div>
+        <span class="hint" data-i18n="sched_hint">Recurring sends — a schedule is only created after the person setting it up confirms a one-time code emailed to them.</span>
+        <div id="ssSchedTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
           <h2><span aria-hidden="true">📜</span> <span data-i18n="ss_log_title">Send history</span></h2>
           <button class="btn-ghost" id="ssLogRefresh" data-i18n="common_refresh">Refresh</button>
         </div>
@@ -353,6 +362,108 @@
         <div class="exp" style="margin-top:14px">
           <button class="btn-primary" id="ssBatchEmailSendBtn" data-i18n="common_send">Send</button>
           <button class="btn-ghost" id="ssBatchEmailCancelBtn" data-i18n="common_cancel">Cancel</button>
+        </div>
+      </dialog>
+
+      <dialog id="ssSchedModal" class="admin-modal">
+        <div class="panel-head wrap"><h2 data-i18n="sched_modal_title">New automated schedule</h2></div>
+
+        <div id="ssSchedStep1">
+          <div class="field-card" style="margin-top:8px">
+            <label class="field-card-top" data-i18n="sched_recipient_type">Recipients</label>
+            <select id="ssSchedRecipientType" class="field-card-input">
+              <option value="single_email" data-i18n="sched_recipient_single">Single email</option>
+              <option value="csv_list" data-i18n="sched_recipient_csv">Upload CSV / paste emails</option>
+              <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM</option>
+              <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users</option>
+            </select>
+          </div>
+
+          <div class="field-card" id="ssSchedSingleEmailField" style="margin-top:10px">
+            <label class="field-card-top" for="ssSchedSingleEmail" data-i18n="sched_single_email_label">Email address</label>
+            <input type="email" id="ssSchedSingleEmail" class="field-card-input" placeholder="jane@example.com" />
+          </div>
+
+          <div class="field-card hidden" id="ssSchedCsvField" style="margin-top:10px">
+            <label class="field-card-top" for="ssSchedCsvFile" data-i18n="sched_csv_label">Upload a CSV, or paste emails (one per line, or comma-separated)</label>
+            <input type="file" id="ssSchedCsvFile" accept=".csv,text/csv,text/plain" />
+            <textarea id="ssSchedCsvPaste" rows="4" class="field-card-input" style="margin-top:8px; resize:vertical" placeholder="jane@example.com&#10;john@example.com"></textarea>
+          </div>
+
+          <div class="callout hidden" id="ssSchedCountPreview" style="margin-top:12px">
+            <span class="callout-icon" aria-hidden="true">👥</span>
+            <span id="ssSchedCountPreviewText"></span>
+          </div>
+
+          <div class="field-card-row" id="ssSchedDocsRow" style="margin-top:16px">
+            <div class="field-card">
+              <label class="field-card-top"><input type="checkbox" id="ssSchedSendPortfolio" checked />
+                <span data-i18n="sched_send_portfolio">Portfolio (live, as of send date)</span></label>
+            </div>
+            <div class="field-card">
+              <label class="field-card-top"><input type="checkbox" id="ssSchedSendStatement" checked />
+                <span data-i18n="sched_send_statement">Transaction e-statement (previous month)</span></label>
+            </div>
+          </div>
+
+          <div class="field-card-row" style="margin-top:16px">
+            <div class="field-card">
+              <label class="field-card-top" data-i18n="sched_frequency">Frequency</label>
+              <select id="ssSchedFrequency" class="field-card-input">
+                <option value="daily" data-i18n="sched_freq_daily">Daily</option>
+                <option value="weekly" data-i18n="sched_freq_weekly">Weekly</option>
+                <option value="monthly_last_day" data-i18n="sched_freq_monthly_last">End of month</option>
+                <option value="monthly_day" data-i18n="sched_freq_monthly_day">A specific date each month</option>
+              </select>
+            </div>
+            <div class="field-card hidden" id="ssSchedWeekdayField">
+              <label class="field-card-top" data-i18n="sched_day_of_week">Day of week</label>
+              <select id="ssSchedDayOfWeek" class="field-card-input">
+                <option value="1" data-i18n="sched_mon">Monday</option>
+                <option value="2" data-i18n="sched_tue">Tuesday</option>
+                <option value="3" data-i18n="sched_wed">Wednesday</option>
+                <option value="4" data-i18n="sched_thu">Thursday</option>
+                <option value="5" data-i18n="sched_fri">Friday</option>
+                <option value="6" data-i18n="sched_sat">Saturday</option>
+                <option value="0" data-i18n="sched_sun">Sunday</option>
+              </select>
+            </div>
+            <div class="field-card hidden" id="ssSchedDayOfMonthField">
+              <label class="field-card-top" data-i18n="sched_day_of_month">Day of month</label>
+              <input type="number" id="ssSchedDayOfMonth" class="field-card-input" min="1" max="31" value="1" />
+            </div>
+            <div class="field-card">
+              <label class="field-card-top" data-i18n="sched_run_time">Time (WIB)</label>
+              <input type="time" id="ssSchedRunTime" class="field-card-input" value="08:00" />
+            </div>
+          </div>
+
+          <div class="filters" style="margin-top:16px; flex-direction:column; align-items:stretch">
+            <input type="text" id="ssSchedSubject" data-i18n-placeholder="sched_subject_ph" placeholder="Subject" style="width:100%" />
+            <textarea id="ssSchedBody" rows="6" style="width:100%; margin-top:10px; font:inherit" data-i18n-placeholder="sched_body_ph" placeholder="Body"></textarea>
+          </div>
+
+          <div class="field-card" style="margin-top:16px">
+            <label class="field-card-top" for="ssSchedConfirmEmail" data-i18n="sched_confirm_email_label">Your email (a confirmation code will be sent here)</label>
+            <input type="email" id="ssSchedConfirmEmail" class="field-card-input" placeholder="you@sayakaya.id" />
+          </div>
+
+          <div class="exp" style="margin-top:16px">
+            <button class="btn-primary" id="ssSchedSendCodeBtn" data-i18n="sched_send_code">Send confirmation code</button>
+            <button class="btn-ghost" id="ssSchedCancelBtn1" data-i18n="common_cancel">Cancel</button>
+          </div>
+        </div>
+
+        <div id="ssSchedStep2" class="hidden">
+          <span class="hint" id="ssSchedStep2Hint"></span>
+          <div class="field-card" style="margin-top:12px">
+            <label class="field-card-top" for="ssSchedCode" data-i18n="sched_code_label">Confirmation code</label>
+            <input type="text" id="ssSchedCode" class="field-card-input" maxlength="6" placeholder="123456" />
+          </div>
+          <div class="exp" style="margin-top:16px">
+            <button class="btn-primary" id="ssSchedConfirmBtn" data-i18n="sched_confirm">Confirm &amp; create schedule</button>
+            <button class="btn-ghost" id="ssSchedBackBtn" data-i18n="common_back">Back</button>
+          </div>
         </div>
       </dialog>
     </section>
@@ -399,6 +510,15 @@
 
       <div class="panel">
         <div class="panel-head wrap">
+          <h2><span aria-hidden="true">⏰</span> <span data-i18n="sched_title">Automated sending</span></h2>
+          <button class="btn-primary" id="fpeSchedNewBtn"><span data-i18n="sched_new">+ New schedule</span></button>
+        </div>
+        <span class="hint" data-i18n="sched_hint">Recurring sends — a schedule is only created after the person setting it up confirms a one-time code emailed to them.</span>
+        <div id="fpeSchedTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
           <h2><span aria-hidden="true">📜</span> <span data-i18n="fpe_log_title">Send history</span></h2>
           <button class="btn-ghost" id="fpeLogRefresh" data-i18n="common_refresh">Refresh</button>
         </div>
@@ -416,6 +536,97 @@
         <div class="exp" style="margin-top:14px">
           <button class="btn-primary" id="fpeEmailSendBtn" data-i18n="common_send">Send</button>
           <button class="btn-ghost" id="fpeEmailCancelBtn" data-i18n="common_cancel">Cancel</button>
+        </div>
+      </dialog>
+
+      <dialog id="fpeSchedModal" class="admin-modal">
+        <div class="panel-head wrap"><h2 data-i18n="sched_modal_title">New automated schedule</h2></div>
+
+        <div id="fpeSchedStep1">
+          <div class="field-card" style="margin-top:8px">
+            <label class="field-card-top" data-i18n="sched_recipient_type">Recipients</label>
+            <select id="fpeSchedRecipientType" class="field-card-input">
+              <option value="single_email" data-i18n="sched_recipient_single">Single email</option>
+              <option value="csv_list" data-i18n="sched_recipient_csv">Upload CSV / paste emails</option>
+              <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM</option>
+              <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users</option>
+            </select>
+          </div>
+
+          <div class="field-card" id="fpeSchedSingleEmailField" style="margin-top:10px">
+            <label class="field-card-top" for="fpeSchedSingleEmail" data-i18n="sched_single_email_label">Email address</label>
+            <input type="email" id="fpeSchedSingleEmail" class="field-card-input" placeholder="jane@example.com" />
+          </div>
+
+          <div class="field-card hidden" id="fpeSchedCsvField" style="margin-top:10px">
+            <label class="field-card-top" for="fpeSchedCsvFile" data-i18n="sched_csv_label">Upload a CSV, or paste emails (one per line, or comma-separated)</label>
+            <input type="file" id="fpeSchedCsvFile" accept=".csv,text/csv,text/plain" />
+            <textarea id="fpeSchedCsvPaste" rows="4" class="field-card-input" style="margin-top:8px; resize:vertical" placeholder="jane@example.com&#10;john@example.com"></textarea>
+          </div>
+
+          <div class="callout hidden" id="fpeSchedCountPreview" style="margin-top:12px">
+            <span class="callout-icon" aria-hidden="true">👥</span>
+            <span id="fpeSchedCountPreviewText"></span>
+          </div>
+
+          <div class="field-card-row" style="margin-top:16px">
+            <div class="field-card">
+              <label class="field-card-top" data-i18n="sched_frequency">Frequency</label>
+              <select id="fpeSchedFrequency" class="field-card-input">
+                <option value="daily" data-i18n="sched_freq_daily">Daily</option>
+                <option value="weekly" data-i18n="sched_freq_weekly">Weekly</option>
+                <option value="monthly_last_day" data-i18n="sched_freq_monthly_last">End of month</option>
+                <option value="monthly_day" data-i18n="sched_freq_monthly_day">A specific date each month</option>
+              </select>
+            </div>
+            <div class="field-card hidden" id="fpeSchedWeekdayField">
+              <label class="field-card-top" data-i18n="sched_day_of_week">Day of week</label>
+              <select id="fpeSchedDayOfWeek" class="field-card-input">
+                <option value="1" data-i18n="sched_mon">Monday</option>
+                <option value="2" data-i18n="sched_tue">Tuesday</option>
+                <option value="3" data-i18n="sched_wed">Wednesday</option>
+                <option value="4" data-i18n="sched_thu">Thursday</option>
+                <option value="5" data-i18n="sched_fri">Friday</option>
+                <option value="6" data-i18n="sched_sat">Saturday</option>
+                <option value="0" data-i18n="sched_sun">Sunday</option>
+              </select>
+            </div>
+            <div class="field-card hidden" id="fpeSchedDayOfMonthField">
+              <label class="field-card-top" data-i18n="sched_day_of_month">Day of month</label>
+              <input type="number" id="fpeSchedDayOfMonth" class="field-card-input" min="1" max="31" value="1" />
+            </div>
+            <div class="field-card">
+              <label class="field-card-top" data-i18n="sched_run_time">Time (WIB)</label>
+              <input type="time" id="fpeSchedRunTime" class="field-card-input" value="08:00" />
+            </div>
+          </div>
+
+          <div class="filters" style="margin-top:16px; flex-direction:column; align-items:stretch">
+            <input type="text" id="fpeSchedSubject" data-i18n-placeholder="sched_subject_ph" placeholder="Subject" style="width:100%" />
+            <textarea id="fpeSchedBody" rows="6" style="width:100%; margin-top:10px; font:inherit" data-i18n-placeholder="sched_body_ph" placeholder="Body"></textarea>
+          </div>
+
+          <div class="field-card" style="margin-top:16px">
+            <label class="field-card-top" for="fpeSchedConfirmEmail" data-i18n="sched_confirm_email_label">Your email (a confirmation code will be sent here)</label>
+            <input type="email" id="fpeSchedConfirmEmail" class="field-card-input" placeholder="you@sayakaya.id" />
+          </div>
+
+          <div class="exp" style="margin-top:16px">
+            <button class="btn-primary" id="fpeSchedSendCodeBtn" data-i18n="sched_send_code">Send confirmation code</button>
+            <button class="btn-ghost" id="fpeSchedCancelBtn1" data-i18n="common_cancel">Cancel</button>
+          </div>
+        </div>
+
+        <div id="fpeSchedStep2" class="hidden">
+          <span class="hint" id="fpeSchedStep2Hint"></span>
+          <div class="field-card" style="margin-top:12px">
+            <label class="field-card-top" for="fpeSchedCode" data-i18n="sched_code_label">Confirmation code</label>
+            <input type="text" id="fpeSchedCode" class="field-card-input" maxlength="6" placeholder="123456" />
+          </div>
+          <div class="exp" style="margin-top:16px">
+            <button class="btn-primary" id="fpeSchedConfirmBtn" data-i18n="sched_confirm">Confirm &amp; create schedule</button>
+            <button class="btn-ghost" id="fpeSchedBackBtn" data-i18n="common_back">Back</button>
+          </div>
         </div>
       </dialog>
     </section>

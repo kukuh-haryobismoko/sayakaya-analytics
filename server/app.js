@@ -17,6 +17,8 @@ const PDF = require('./pdf');
 const SHEETS = require('./sheets');
 const Mail = require('./mail');
 const Auth = require('./auth');
+const Sched = require('./schedules');
+const { pivotPerformanceByType, buildStatementAttachments } = require('./report-helpers');
 
 // Every export `source` maps to exactly one tab, so a single permission check
 // at the top of /api/export covers all of them (see requireTab below for the
@@ -61,36 +63,6 @@ const EXPORT_SOURCE_TAB = {
   referral_program_detail: 'referral-program',
   referral_program_alt_detail: 'referral-program-alt',
 };
-
-const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
-
-// Pivot flat (type, name, period, pct_change) rows into one fund-per-row
-// table per fund type — used for the per-type Excel sheets and the PDF.
-// Also tracks the latest latest_nav_date seen per type as `asOf`, so the PDF
-// can print the real NAV date behind the numbers instead of "today".
-function pivotPerformanceByType(rows) {
-  const byType = {};
-  for (const r of rows) {
-    const type = r.type || '(none)';
-    const t = (byType[type] = byType[type] || { byFund: {}, asOf: null });
-    const fund = (t.byFund[r.name] = t.byFund[r.name] || {
-      Fund: r.name, NAV: r.latest_nav, ipoDate: r.ipo_date ? PDF.val(r.ipo_date) : null,
-    });
-    fund[r.period] = r.pct_change;
-    const d = r.latest_nav_date ? PDF.val(r.latest_nav_date) : null;
-    if (d && (!t.asOf || d > t.asOf)) t.asOf = d;
-  }
-  return Object.keys(byType).sort().map((type) => ({
-    name: type,
-    asOf: byType[type].asOf,
-    rows: Object.values(byType[type].byFund).map((f) => {
-      const out = { Fund: f.Fund, NAV: f.NAV, ipoDate: f.ipoDate };
-      for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
-      return out;
-    }),
-    pctCols: PERF_PERIODS,
-  }));
-}
 
 // Splits flat detail rows into one worksheet per distinct value of keyField —
 // used for the revenue exports' "one sheet per fund/MI" option.
@@ -142,46 +114,6 @@ function computeReferralEligibility(rows) {
   });
 }
 
-// PDF open-password: the investor's own birthdate as DDMMYYYY. null when
-// there's no birthdate on file, so the caller skips encrypting the PDF.
-function birthdatePassword(birthdate) {
-  const s = PDF.val(birthdate);
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
-  return m ? `${m[3]}${m[2]}${m[1]}` : null;
-}
-
-// Builds the 1-2 statement PDF attachments (and applies the shared
-// birthdate-derived open-password) for one investor — reused by
-// /api/statement/email (single) and /api/statement/email-batch (many) so
-// both stay in sync. Throws on a missing/malformed statementMonth so the
-// caller decides how to report it (fail the whole request vs. one recipient).
-async function buildStatementAttachments({ userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username }) {
-  const password = birthdatePassword(contact.birthdate);
-  const attachments = [];
-
-  if (sendPortfolio) {
-    const h = portfolioDate ? Q.userHoldingsAsOfFix(sid, portfolioDate) : Q.userHoldings(userId);
-    const holdings = await runQuery(h.sql, h.params);
-    // Portfolio-only, no fund-performance pages — this tool never sends performance.
-    const buf = await PDF.portfolioReport({ contact, holdings }, [], { username, password });
-    attachments.push({ filename: `Portfolio_${sid}${portfolioDate ? '_' + portfolioDate : ''}.pdf`, content: buf });
-  }
-
-  if (sendStatement) {
-    const [year, month] = String(statementMonth || '').split('-').map(Number);
-    if (!year || !month) throw new Error('statementMonth is required (YYYY-MM).');
-    const from = `${year}-${String(month).padStart(2, '0')}-01`;
-    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of that month
-    const t = Q.userTransactions(userId, from, to);
-    const transactions = await runQuery(t.sql, t.params);
-    const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    const buf = await PDF.transactionStatement({ contact, transactions }, monthLabel, { username, password });
-    attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: buf });
-  }
-
-  return attachments;
-}
-
 // Friendly column names for the "Portfolio" sheet in the combined export.
 function portfolioSheetRows(holdings) {
   return holdings.map((h) => ({
@@ -215,7 +147,8 @@ function createApp({ serveStatic = true } = {}) {
   // user's very next request, not just at their next login.
   app.use('/api', async (req, res, next) => {
     if (req.path === '/health' || req.path === '/auth/login'
-      || req.path === '/auth/forgot-password' || req.path === '/auth/reset-password') return next();
+      || req.path === '/auth/forgot-password' || req.path === '/auth/reset-password'
+      || req.path === '/cron/run-due-schedules') return next();
     try {
       const authHeader = req.get('authorization') || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -1437,6 +1370,98 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/fund-performance/log', requireTab('send-fund-performance'), handler(async (_req, res) => {
     const rows = await Auth.listAuditLog({ action: 'email_fund_performance', limit: 100 });
     res.json(rows);
+  }));
+
+  // ---- Scheduled/automated sending -------------------------------------------
+  // Shared by Send statement ('statement') and Send fund performance
+  // ('fund_performance') — see server/schedules.js for the actual scheduling,
+  // OTP, and recipient-resolution logic. A schedule only ever gets created
+  // through the OTP request/confirm pair below; there's no direct "create"
+  // endpoint, by design — see the OTP note on requestOtp().
+  const SCHEDULE_KIND_TAB = { statement: 'send-statement', fund_performance: 'send-fund-performance' };
+  const requireScheduleKindTab = (req, res, next) => {
+    const tab = SCHEDULE_KIND_TAB[req.body?.kind || req.query?.kind];
+    if (!tab) return res.status(400).json({ error: 'kind must be "statement" or "fund_performance".' });
+    return requireTab(tab)(req, res, next);
+  };
+  // Pause/resume/delete don't carry `kind` in the request — either sending
+  // tab is accepted, matching how requireAnyRemisier treats its own pair of
+  // tabs as one shared tool.
+  const requireEitherScheduleTab = (req, res, next) => {
+    if (Auth.userCan(req.user, 'send-statement') || Auth.userCan(req.user, 'send-fund-performance')) return next();
+    res.status(403).json({ error: 'You do not have access to this section.' });
+  };
+
+  app.post('/api/schedules/preview', requireScheduleKindTab, handler(async (req, res) => {
+    const { kind, recipientType, recipientEmail, recipientList } = req.body || {};
+    if (!recipientType) return res.status(400).json({ error: 'recipientType is required.' });
+    const count = await Sched.previewRecipientCount({ kind, recipientType, recipientEmail, recipientList });
+    res.json({ count });
+  }));
+
+  // Step 1 of creating a schedule: validate + email a 6-digit code to the
+  // confirmation email. Nothing is scheduled yet — the full config is held in
+  // dashboard_schedule_otps until confirmed (or it expires in 10 minutes).
+  app.post('/api/schedules/otp/request', requireScheduleKindTab, handler(async (req, res) => {
+    const {
+      kind, recipientType, recipientEmail, recipientList, sendPortfolio, sendStatement,
+      subject, body, frequency, dayOfWeek, dayOfMonth, runTime, confirmationEmail,
+    } = req.body || {};
+    if (!recipientType) return res.status(400).json({ error: 'recipientType is required.' });
+    if (!frequency) return res.status(400).json({ error: 'frequency is required.' });
+    if (kind === 'statement' && !sendPortfolio && !sendStatement) {
+      return res.status(400).json({ error: 'Pick at least one document to send.' });
+    }
+    const count = await Sched.previewRecipientCount({ kind, recipientType, recipientEmail, recipientList });
+    if (!count) return res.status(400).json({ error: 'No recipients matched — nothing would be sent.' });
+
+    const otpId = await Sched.requestOtp({
+      kind, recipientType, recipientEmail, recipientList, sendPortfolio, sendStatement,
+      subject, body, frequency, dayOfWeek, dayOfMonth, runTime, confirmationEmail,
+      userId: req.user.id, username: req.user.username,
+    });
+    res.json({ ok: true, otpId, recipientCount: count });
+  }));
+
+  // Step 2: verifying the code is what actually creates the schedule.
+  app.post('/api/schedules/otp/confirm', requireEitherScheduleTab, handler(async (req, res) => {
+    const { otpId, code } = req.body || {};
+    if (!otpId || !code) return res.status(400).json({ error: 'otpId and code are required.' });
+    const job = await Sched.confirmOtp(otpId, code);
+    await Auth.logEvent(req.user.id, req.user.username, 'schedule_create',
+      `created ${job.kind} schedule (${job.frequency}) to ${job.recipient_type}, confirmed via ${job.confirmation_email}`);
+    res.json({ ok: true, job });
+  }));
+
+  app.get('/api/schedules', requireScheduleKindTab, handler(async (req, res) => {
+    res.json(await Sched.listJobs(req.query.kind));
+  }));
+
+  app.patch('/api/schedules/:id', requireEitherScheduleTab, handler(async (req, res) => {
+    const { status } = req.body || {};
+    if (status !== 'active' && status !== 'paused') return res.status(400).json({ error: 'status must be "active" or "paused".' });
+    const job = await Sched.setJobStatus(req.params.id, status);
+    await Auth.logEvent(req.user.id, req.user.username, 'schedule_update', `${status === 'paused' ? 'paused' : 'resumed'} ${job.kind} schedule ${job.id}`);
+    res.json({ ok: true, job });
+  }));
+
+  app.delete('/api/schedules/:id', requireEitherScheduleTab, handler(async (req, res) => {
+    await Sched.deleteJob(req.params.id);
+    await Auth.logEvent(req.user.id, req.user.username, 'schedule_delete', `deleted schedule ${req.params.id}`);
+    res.json({ ok: true });
+  }));
+
+  // ---- Scheduled-send execution: invoked by an external scheduler on a
+  // timer (Netlify Scheduled Function today, GCP Cloud Scheduler after a
+  // migration, or literally cron+curl) — never by a dashboard session, so it
+  // sits outside the /api Bearer-token gate above and checks its own shared
+  // secret instead. Safe to call more often than jobs actually come due:
+  // it's a no-op when nothing is due and nothing is queued.
+  app.post('/api/cron/run-due-schedules', handler(async (req, res) => {
+    const expected = process.env.CRON_SECRET;
+    if (!expected) return res.status(500).json({ error: 'CRON_SECRET is not configured on the server.' });
+    if (req.get('x-cron-key') !== expected) return res.status(401).json({ error: 'Unauthorized.' });
+    res.json(await Sched.runDueJobs());
   }));
 
   // ---- Static frontend (standalone hosts only) ------------------------------

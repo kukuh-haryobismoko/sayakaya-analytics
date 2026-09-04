@@ -934,6 +934,41 @@ const userHoldingsAsOfFix = (sid, date) => ({
   params: { sid, date },
 });
 
+// ---- Scheduled sending: recipient resolution for "All AUM investors" /
+// "All registered users" (see server/schedules.js) --------------------------
+
+// Every investor with a positive AUM as of the latest available portfolio_fix
+// snapshot, with an email on file — same source table as the rest of Send
+// statement's "portfolio as of" branch (userHoldingsAsOfFix), so a scheduled
+// "all AUM investors" send reflects the same holdings data the manual tool
+// would show for any one of them.
+const allInvestorsWithAum = () => ({
+  sql: `WITH latest AS (
+      SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS d FROM ${PORT_FIX}
+    ),
+    aum AS (
+      SELECT sid_code, SUM(buy_amount) AS total_aum
+      FROM ${PORT_FIX}, latest
+      WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = latest.d AND total_unit > 0
+      GROUP BY sid_code
+      HAVING SUM(buy_amount) > 0
+    )
+    SELECT u.id AS user_id, u.sid_code AS sid, u.email
+    FROM aum
+    JOIN ${USERS} u ON u.sid_code = aum.sid_code
+    WHERE u.email IS NOT NULL`,
+  params: {},
+});
+
+// Every registered user with an email on file — the broadest recipient pool,
+// regardless of whether they hold anything.
+const allRegisteredUsersWithEmail = () => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.email
+    FROM ${USERS} u
+    WHERE u.email IS NOT NULL`,
+  params: {},
+});
+
 // ---- HNWI (High Net Worth Individual): investors at/above an AUM threshold,
 // as of a specific date, from portfolio_with_code — same -1 day correction as
 // the rest of this section (created_at is a day ahead of the AUM date it
@@ -2712,6 +2747,7 @@ module.exports = {
   userSearch, usersByIdentifiers, userContact, userTransactions, userHoldings, userPortfolioSplit, userPerformance, userAumHistory,
   userHoldingsLatestDate, userHoldingsAsOf,
   userPerformanceFix, userAumHistoryFix, userHoldingsLatestDateFix, userHoldingsAsOfFix,
+  allInvestorsWithAum, allRegisteredUsersWithEmail,
   userHoldingsFromTx, userHoldingsFromTxAsOf,
   hnwiLatestDate, hnwiTotal, hnwiByFund,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,

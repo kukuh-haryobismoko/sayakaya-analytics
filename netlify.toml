@@ -18,6 +18,14 @@
   node_bundler = "esbuild"
   external_node_modules = ["@google-cloud/bigquery", "exceljs", "pdfkit"]
 
+# Scheduled sending (server/schedules.js) — this function just pings
+# POST /api/cron/run-due-schedules on a timer; see
+# netlify/functions/cron-run-schedules.js. Requires CRON_SECRET to be set as
+# an environment variable (Site settings > Environment variables) — the same
+# value the function sends and the API route checks.
+[functions."cron-run-schedules"]
+  schedule = "*/15 * * * *"
+
 # Send every API call to the Express function. status 200 = rewrite (URL stays /api/...).
 [[redirects]]
   from = "/api/*"
