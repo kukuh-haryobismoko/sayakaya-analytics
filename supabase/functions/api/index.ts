@@ -8,12 +8,12 @@ import { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } from './export.ts';
 import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
-import { portfolioReport, transactionStatement, fundPerformanceReport, val } from './pdf.ts';
+import { portfolioReport, fundPerformanceReport, val } from './pdf.ts';
 import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 import * as Mail from './mail.ts';
-
-const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
+import * as Sched from './schedules.ts';
+import { pivotPerformanceByType, buildStatementAttachments } from './report-helpers.ts';
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -57,35 +57,6 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   referral_program_alt_detail: 'referral-program-alt',
 };
 
-// Pivot flat (type, name, period, pct_change) rows into one fund-per-row
-// table per fund type — used for the per-type Excel sheets and the PDF.
-// Also tracks the latest latest_nav_date seen per type as `asOf`, so the PDF
-// can print the real NAV date behind the numbers instead of "today".
-function pivotPerformanceByType(rows: Record<string, unknown>[]) {
-  const byType: Record<string, { byFund: Record<string, Record<string, unknown>>; asOf: string | null }> = {};
-  for (const r of rows) {
-    const type = (r.type as string) || '(none)';
-    const t = (byType[type] = byType[type] || { byFund: {}, asOf: null });
-    const name = r.name as string;
-    const fund = (t.byFund[name] = t.byFund[name] || {
-      Fund: r.name, NAV: r.latest_nav, ipoDate: r.ipo_date ? val(r.ipo_date) : null,
-    });
-    fund[r.period as string] = r.pct_change;
-    const d = r.latest_nav_date ? (val(r.latest_nav_date) as string) : null;
-    if (d && (!t.asOf || d > t.asOf)) t.asOf = d;
-  }
-  return Object.keys(byType).sort().map((type) => ({
-    name: type,
-    asOf: byType[type].asOf,
-    rows: Object.values(byType[type].byFund).map((f) => {
-      const out: Record<string, unknown> = { Fund: f.Fund, NAV: f.NAV, ipoDate: f.ipoDate };
-      for (const p of PERF_PERIODS) out[p] = f[p] ?? null;
-      return out;
-    }),
-    pctCols: PERF_PERIODS,
-  }));
-}
-
 // Splits flat detail rows into one worksheet per distinct value of keyField —
 // used for the revenue exports' "one sheet per fund/MI" option.
 function splitRowsBySheet(rows: Record<string, unknown>[], keyField: string) {
@@ -95,59 +66,6 @@ function splitRowsBySheet(rows: Record<string, unknown>[], keyField: string) {
     (groups[key] = groups[key] || []).push(r);
   }
   return Object.keys(groups).sort().map((name) => ({ name, rows: groups[name] }));
-}
-
-// PDF open-password: the investor's own birthdate as DDMMYYYY. null when
-// there's no birthdate on file, so the caller skips encrypting the PDF.
-function birthdatePassword(birthdate: unknown): string | null {
-  const s = val(birthdate) as string | null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
-  return m ? `${m[3]}${m[2]}${m[1]}` : null;
-}
-
-interface StatementAttachmentArgs {
-  userId: string;
-  sid: string;
-  contact: Record<string, unknown>;
-  sendPortfolio?: boolean;
-  portfolioDate?: string;
-  sendStatement?: boolean;
-  statementMonth?: string;
-  username: string;
-}
-
-// Builds the 1-2 statement PDF attachments (and applies the shared
-// birthdate-derived open-password) for one investor — reused by
-// /api/statement/email (single) and /api/statement/email-batch (many) so
-// both stay in sync. Throws on a missing/malformed statementMonth so the
-// caller decides how to report it (fail the whole request vs. one recipient).
-async function buildStatementAttachments(
-  { userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username }: StatementAttachmentArgs,
-): Promise<{ filename: string; content: Uint8Array }[]> {
-  const password = birthdatePassword(contact.birthdate) ?? undefined;
-  const attachments: { filename: string; content: Uint8Array }[] = [];
-
-  if (sendPortfolio) {
-    const h = portfolioDate ? Q.userHoldingsAsOfFix(sid, portfolioDate) : Q.userHoldings(userId);
-    const holdings = await runQuery(h.sql, h.params);
-    // Portfolio-only, no fund-performance pages — this tool never sends performance.
-    const buf = await portfolioReport({ contact, holdings }, [], { username, password });
-    attachments.push({ filename: `Portfolio_${sid}${portfolioDate ? '_' + portfolioDate : ''}.pdf`, content: new Uint8Array(buf) });
-  }
-
-  if (sendStatement) {
-    const [year, month] = String(statementMonth || '').split('-').map(Number);
-    if (!year || !month) throw new Error('statementMonth is required (YYYY-MM).');
-    const from = `${year}-${String(month).padStart(2, '0')}-01`;
-    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of that month
-    const t = Q.userTransactions(userId, from, to);
-    const transactions = await runQuery(t.sql, t.params);
-    const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    const buf = await transactionStatement({ contact, transactions }, monthLabel, { username, password });
-    attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: new Uint8Array(buf) });
-  }
-
-  return attachments;
 }
 
 // Friendly column names for the "Portfolio" sheet in the combined export.
@@ -1560,6 +1478,104 @@ on('GET', '/api/fund-performance/log', requireTab('send-fund-performance', async
   return json(rows);
 }));
 
+// ---- Scheduled/automated sending -------------------------------------------
+// Ported from server/app.js — see server/schedules.js / schedules.ts for the
+// actual scheduling, OTP, and recipient-resolution logic. A schedule only
+// ever gets created through the OTP request/confirm pair below; there's no
+// direct "create" endpoint, by design.
+const SCHEDULE_KIND_TAB: Record<string, string> = { statement: 'send-statement', fund_performance: 'send-fund-performance' };
+// kind comes from the query string (GET) or the JSON body (POST) — read via
+// a cloned Request so the real handler can still read the body itself
+// afterwards (a Request's body stream can only be consumed once).
+function requireScheduleKindTab(handler: Handler): Handler {
+  return async (req, params, url, user) => {
+    const kind = req.method === 'GET' ? qp(url, 'kind') : (await bodyOf(req.clone())).kind as string | undefined;
+    const tab = kind ? SCHEDULE_KIND_TAB[kind] : undefined;
+    if (!tab) return json({ error: 'kind must be "statement" or "fund_performance".' }, 400);
+    if (!A.userCan(user, tab)) return json({ error: `You do not have access to this section (${tab}).` }, 403);
+    return handler(req, params, url, user);
+  };
+}
+
+on('POST', '/api/schedules/preview', requireScheduleKindTab(async (req) => {
+  const body = await bodyOf(req);
+  const { kind, recipientType, recipientEmail, recipientList } = body as { kind: string; recipientType: string; recipientEmail?: string; recipientList?: string[] };
+  if (!recipientType) return json({ error: 'recipientType is required.' }, 400);
+  const count = await Sched.previewRecipientCount({ kind, recipientType, recipientEmail, recipientList });
+  return json({ count });
+}));
+
+// Step 1 of creating a schedule: validate + email a 6-digit code to the
+// confirmation email. Nothing is scheduled yet — the full config is held in
+// dashboard_schedule_otps until confirmed (or it expires in 10 minutes).
+on('POST', '/api/schedules/otp/request', requireScheduleKindTab(async (req, _params, _url, user) => {
+  const b = await bodyOf(req);
+  const kind = b.kind as string;
+  const recipientType = b.recipientType as string | undefined;
+  const sendPortfolio = b.sendPortfolio as boolean | undefined;
+  const sendStatement = b.sendStatement as boolean | undefined;
+  const frequency = b.frequency as string | undefined;
+  if (!recipientType) return json({ error: 'recipientType is required.' }, 400);
+  if (!frequency) return json({ error: 'frequency is required.' }, 400);
+  if (kind === 'statement' && !sendPortfolio && !sendStatement) {
+    return json({ error: 'Pick at least one document to send.' }, 400);
+  }
+  const spec = { kind, recipientType, recipientEmail: b.recipientEmail as string | undefined, recipientList: b.recipientList as string[] | undefined };
+  const count = await Sched.previewRecipientCount(spec);
+  if (!count) return json({ error: 'No recipients matched — nothing would be sent.' }, 400);
+
+  const otpId = await Sched.requestOtp({
+    kind, recipientType, recipientEmail: b.recipientEmail, recipientList: b.recipientList,
+    sendPortfolio, sendStatement, subject: b.subject, body: b.body,
+    frequency, dayOfWeek: b.dayOfWeek, dayOfMonth: b.dayOfMonth, runTime: b.runTime,
+    confirmationEmail: b.confirmationEmail,
+    userId: user!.id, username: user!.username,
+  });
+  return json({ ok: true, otpId, recipientCount: count });
+}));
+
+// Step 2: verifying the code is what actually creates the schedule.
+on('POST', '/api/schedules/otp/confirm', requireAnyTab(['send-statement', 'send-fund-performance'], async (req, _params, _url, user) => {
+  const body = await bodyOf(req);
+  const otpId = body.otpId as string | undefined;
+  const code = body.code as string | undefined;
+  if (!otpId || !code) return json({ error: 'otpId and code are required.' }, 400);
+  const job = await Sched.confirmOtp(otpId, code);
+  await A.logEvent(user!.id, user!.username, 'schedule_create',
+    `created ${job.kind} schedule (${job.frequency}) to ${job.recipient_type}, confirmed via ${job.confirmation_email}`);
+  return json({ ok: true, job });
+}));
+
+on('GET', '/api/schedules', requireScheduleKindTab(async (_req, _params, url) => {
+  return json(await Sched.listJobs(qp(url, 'kind') as string));
+}));
+
+on('PATCH', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-performance'], async (req, params, _url, user) => {
+  const body = await bodyOf(req);
+  const status = body.status as string;
+  if (status !== 'active' && status !== 'paused') return json({ error: 'status must be "active" or "paused".' }, 400);
+  const job = await Sched.setJobStatus(params.id, status);
+  await A.logEvent(user!.id, user!.username, 'schedule_update', `${status === 'paused' ? 'paused' : 'resumed'} ${job.kind} schedule ${job.id}`);
+  return json({ ok: true, job });
+}));
+
+on('DELETE', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-performance'], async (_req, params, _url, user) => {
+  await Sched.deleteJob(params.id);
+  await A.logEvent(user!.id, user!.username, 'schedule_delete', `deleted schedule ${params.id}`);
+  return json({ ok: true });
+}));
+
+// ---- Scheduled-send execution: invoked by an external scheduler on a timer
+// (see server/schedules.js's header comment for the full rationale) — never
+// by a dashboard session, so it's exempted from the Bearer-token check below
+// and checks its own shared secret instead.
+on('POST', '/api/cron/run-due-schedules', async (req) => {
+  const expected = Deno.env.get('CRON_SECRET');
+  if (!expected) return json({ error: 'CRON_SECRET is not configured on the server.' }, 500);
+  if (req.headers.get('x-cron-key') !== expected) return json({ error: 'Unauthorized.' }, 401);
+  return json(await Sched.runDueJobs());
+});
+
 // ---- Serve ------------------------------------------------------------------
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -1578,7 +1594,8 @@ Deno.serve(async (req) => {
   // effect on the user's very next request, not just at their next login.
   let user: A.DashboardUser | null = null;
   const authExempt = pathname === '/api/health' || pathname === '/api/auth/login'
-    || pathname === '/api/auth/forgot-password' || pathname === '/api/auth/reset-password';
+    || pathname === '/api/auth/forgot-password' || pathname === '/api/auth/reset-password'
+    || pathname === '/api/cron/run-due-schedules';
   if (!authExempt) {
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
