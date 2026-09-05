@@ -9,7 +9,9 @@ name: Run due e-statement schedules
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # ponytail: offset off the :00/:15/:30/:45 marks — GitHub's own docs say schedule
+    # events queue longest exactly on those marks since every repo fires there too.
+    - cron: "3,18,33,48 * * * *"
   workflow_dispatch:
 
 jobs:
