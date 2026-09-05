@@ -1,0 +1,29 @@
+name: Run due e-statement schedules
+
+# Ticks the scheduled-sending backend (server/schedules.js / supabase/functions/api/schedules.ts)
+# for the GitHub Pages + Supabase deployment. This site has no Netlify function running, so
+# nothing else calls POST /api/cron/run-due-schedules on a timer — see
+# netlify/functions/cron-run-schedules.js, which only exists for a Netlify-hosted deployment.
+# Requires the CRON_SECRET repo secret to match the CRON_SECRET Supabase secret
+# (`supabase secrets set CRON_SECRET=...`).
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  run-due-schedules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping run-due-schedules
+        run: |
+          status=$(curl -s -o /tmp/body -w '%{http_code}' -X POST \
+            -H "x-cron-key: ${{ secrets.CRON_SECRET }}" \
+            https://josptpfisrsdjeggkqke.supabase.co/functions/v1/api/cron/run-due-schedules)
+          cat /tmp/body
+          echo
+          if [ "$status" -ge 300 ]; then
+            echo "run-due-schedules failed with status $status"
+            exit 1
+          fi
