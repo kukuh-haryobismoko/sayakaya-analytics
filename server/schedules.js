@@ -29,6 +29,7 @@ const { runQuery } = require('./bigquery');
 const Q = require('./queries');
 const PDF = require('./pdf');
 const Mail = require('./mail');
+const Auth = require('./auth');
 const { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } = require('./report-helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -297,6 +298,8 @@ async function drainQueueForJob(job, limit) {
           attachments: [{ filename: 'Reksa_Dana_Update.pdf', content: fundPerfBuffer }],
           from: senderEmail,
         });
+        await Auth.logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_fund_performance',
+          `scheduled fund-performance to ${row.recipient_email}`);
       } else {
         const c = Q.userContact(row.recipient_user_id);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
@@ -308,6 +311,10 @@ async function drainQueueForJob(job, limit) {
           username: job.created_by_username || 'schedule',
         });
         await Mail.sendStatementEmail({ to: contact.email, subject: job.subject, body: job.body, name: contact.name, attachments, from: senderEmail });
+        const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
+        const recipient = `${PDF.val(contact.name) || row.recipient_sid} (SID ${row.recipient_sid}, ${contact.email})`;
+        await Auth.logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_pdf',
+          `scheduled send-statement (${sentDesc}) to ${recipient}`);
       }
       await markQueueRow(row.id, 'sent');
       sent++;
@@ -347,7 +354,7 @@ async function runDueJobs() {
     enqueued += await enqueueJob(job);
   }
 
-  const activeJobs = await rest('/dashboard_scheduled_jobs?status=eq.active&select=id,kind,created_by_username');
+  const activeJobs = await rest('/dashboard_scheduled_jobs?status=eq.active&select=*');
   let sent = 0, failed = 0;
   for (const job of activeJobs) {
     const r = await drainQueueForJob(job, DRAIN_LIMIT[job.kind] || 25);

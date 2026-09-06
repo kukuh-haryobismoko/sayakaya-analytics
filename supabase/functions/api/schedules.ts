@@ -11,6 +11,7 @@ import { runQuery } from './bigquery.ts';
 import * as Q from './queries.ts';
 import { fundPerformanceReport, val } from './pdf.ts';
 import * as Mail from './mail.ts';
+import { logEvent } from './auth.ts';
 import { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } from './report-helpers.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
@@ -289,6 +290,8 @@ async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sen
           attachments: [{ filename: 'Reksa_Dana_Update.pdf', content: fundPerfBuffer }],
           from: senderEmail,
         });
+        await logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_fund_performance',
+          `scheduled fund-performance to ${row.recipient_email}`);
       } else {
         const c = Q.userContact(row.recipient_user_id);
         const [contact] = await runQuery(c.sql, c.params);
@@ -303,6 +306,10 @@ async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sen
           to: contact.email as string, subject: job.subject ?? undefined, body: job.body ?? undefined,
           name: contact.name as string | undefined, attachments, from: senderEmail,
         });
+        const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
+        const recipient = `${val(contact.name as string | undefined) || row.recipient_sid} (SID ${row.recipient_sid}, ${contact.email})`;
+        await logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_pdf',
+          `scheduled send-statement (${sentDesc}) to ${recipient}`);
       }
       await markQueueRow(row.id, 'sent');
       sent++;
@@ -333,7 +340,7 @@ export async function runDueJobs(): Promise<{ jobsClaimed: number; recipientsEnq
     enqueued += await enqueueJob(job);
   }
 
-  const activeJobs: ScheduledJob[] = await rest('/dashboard_scheduled_jobs?status=eq.active&select=id,kind,created_by_username');
+  const activeJobs: ScheduledJob[] = await rest('/dashboard_scheduled_jobs?status=eq.active&select=*');
   let sent = 0, failed = 0;
   for (const job of activeJobs) {
     const r = await drainQueueForJob(job, DRAIN_LIMIT[job.kind] || 25);
