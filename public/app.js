@@ -2838,8 +2838,10 @@ function renderSchedules(kind, rows) {
     </tr></thead><tbody>${body}</tbody></table>`;
   $$(`#${prefix}Table .sched-detail-btn`).forEach((btn) => btn.addEventListener('click', () => openSchedDetail(kind, btn.dataset.id)));
   $$(`#${prefix}Table .sched-toggle-btn`).forEach((btn) => btn.addEventListener('click', async () => {
+    const pausing = btn.dataset.status === 'active';
+    if (!confirm(pausing ? 'Pause this schedule? It will stop sending until resumed.' : 'Resume this schedule?')) return;
     try {
-      await api(`/api/schedules/${btn.dataset.id}`, { method: 'PATCH', body: JSON.stringify({ status: btn.dataset.status === 'active' ? 'paused' : 'active' }) });
+      await api(`/api/schedules/${btn.dataset.id}`, { method: 'PATCH', body: JSON.stringify({ status: pausing ? 'paused' : 'active' }) });
       loadSchedules(kind);
     } catch (e) { toast(e.message); }
   }));
@@ -3535,8 +3537,6 @@ function wireAdmin() {
   $('#adminSaveBtn').addEventListener('click', saveAdminUser);
   $('#adminCancelEditBtn').addEventListener('click', () => $('#adminUserModal').close());
   $('#adminUserModal').addEventListener('close', resetAdminForm);
-  // Click on the backdrop (the dialog element itself, outside its content box) dismisses it.
-  $('#adminUserModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.row-actions')) $$('#adminUsersTable .dropdown-multi-panel.open').forEach((p) => p.classList.remove('open'));
   });
@@ -3774,6 +3774,10 @@ function wireNavGroups() {
 
 const SIDEBAR_COLLAPSED_KEY = 'sk_sidebar_collapsed';
 function wire() {
+  // Modals only close via the explicit X or a Cancel/Close button — an
+  // accidental click on the backdrop while dismissing a dropdown elsewhere
+  // used to cancel whatever was open in the dialog.
+  document.addEventListener('click', (e) => { e.target.closest('.modal-close')?.closest('dialog')?.close(); });
   wrapNavLabels();
   wireNavGroups();
   $$('.nav-link').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
@@ -3853,7 +3857,6 @@ function wire() {
   });
   $('#ssLogRefresh').addEventListener('click', loadSsLog);
   $('#ssEmailCancelBtn').addEventListener('click', () => $('#ssEmailModal').close());
-  $('#ssEmailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   $('#ssEmailSendBtn').addEventListener('click', () => {
     if (!ssSelected) return;
     $('#ssEmailModal').close();
@@ -3869,7 +3872,6 @@ function wire() {
   $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
   $('#ssBatchEmailCancelBtn').addEventListener('click', () => $('#ssBatchEmailModal').close());
-  $('#ssBatchEmailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   $('#ssBatchEmailSendBtn').addEventListener('click', () => { $('#ssBatchEmailModal').close(); sendSsBatchEmail(); });
 
   // send fund performance
@@ -3878,7 +3880,6 @@ function wire() {
   $('#fpeLogRefresh').addEventListener('click', loadFpeLog);
   $('#fpeComposeBtn').addEventListener('click', openFpeCompose);
   $('#fpeEmailCancelBtn').addEventListener('click', () => $('#fpeEmailModal').close());
-  $('#fpeEmailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   $('#fpeEmailSendBtn').addEventListener('click', () => { $('#fpeEmailModal').close(); sendFpeEmail(); });
   renderFpePicked();
 
@@ -3895,9 +3896,7 @@ function wire() {
     schedEl(prefix, 'CancelBtn1').addEventListener('click', () => schedEl(prefix, 'Modal').close());
     schedEl(prefix, 'BackBtn').addEventListener('click', () => { schedEl(prefix, 'Step2').classList.add('hidden'); schedEl(prefix, 'Step1').classList.remove('hidden'); });
     schedEl(prefix, 'ConfirmBtn').addEventListener('click', () => schedConfirmOtp(kind));
-    schedEl(prefix, 'Modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
     schedEl(prefix, 'DetailCloseBtn').addEventListener('click', () => schedEl(prefix, 'DetailModal').close());
-    schedEl(prefix, 'DetailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   }
   wireSchedModal('statement');
   wireSchedModal('fund_performance');

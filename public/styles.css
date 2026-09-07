@@ -394,6 +394,11 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   max-height: 85vh; overflow-y: auto;
 }
 .admin-modal::backdrop { background: rgba(10, 12, 30, .5); }
+.modal-close {
+  width: 28px; height: 28px; padding: 0; border: none; background: none; cursor: pointer;
+  font-size: 15px; line-height: 1; color: var(--muted); border-radius: 6px; flex: none;
+}
+.modal-close:hover { background: var(--hover-bg); color: var(--ink); }
 
 /* Password fields with a show/hide eye toggle */
 .pw-field { position: relative; }
