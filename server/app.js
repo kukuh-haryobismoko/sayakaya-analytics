@@ -190,13 +190,13 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/auth/login', handler(async (req, res) => {
     const { username, password } = req.body || {};
     if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
-    const user = await Auth.findUserByUsername(username);
+    const user = await Auth.findUserByIdentifier(username);
     if (!user || !Auth.verifyPassword(password, user.password_hash)) {
       await Auth.logEvent(user ? user.id : null, username, 'login_failure');
-      return res.status(401).json({ error: 'Incorrect username or password.' });
+      return res.status(401).json({ error: 'Incorrect username/email or password.' });
     }
     const token = await Auth.createSession(user.id);
-    await Auth.logEvent(user.id, user.username, 'login_success');
+    await Auth.logEvent(user.id, user.username || user.email, 'login_success');
     res.json({ token, user: Auth.publicUser(user) });
   }));
 
@@ -215,14 +215,25 @@ function createApp({ serveStatic = true } = {}) {
     res.json(rows.map((r) => Auth.publicUser({ ...r, password_hash: '' })));
   }));
 
+  // Admin only supplies an email + access tabs — no password. The account is
+  // created inactive (no password_hash) and the user activates it themselves
+  // via an emailed link, reusing the same token mechanism as "forgot password"
+  // (Auth.createPasswordReset / Mail.sendInviteEmail), just with a longer TTL.
   app.post('/api/admin/users', requireSuperuser, handler(async (req, res) => {
-    const { username, password, email, isSuperuser, allowedTabs } = req.body || {};
-    if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
-    const existing = await Auth.findUserByUsername(username);
-    if (existing) return res.status(409).json({ error: 'That username is already taken.' });
-    const created = await Auth.createUser({ username, password, email, isSuperuser: !!isSuperuser, allowedTabs: allowedTabs || [] });
+    const { username, email, isSuperuser, allowedTabs } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+    if (username) {
+      const existingUsername = await Auth.findUserByUsername(username);
+      if (existingUsername) return res.status(409).json({ error: 'That username is already taken.' });
+    }
+    const existingEmail = await Auth.findUserByEmail(email);
+    if (existingEmail) return res.status(409).json({ error: 'That email is already in use.' });
+    const created = await Auth.createUser({ username: username || null, email, isSuperuser: !!isSuperuser, allowedTabs: allowedTabs || [] });
+    const token = await Auth.createPasswordReset(created.id, Auth.INVITE_TTL_MS);
+    const origin = process.env.APP_URL || req.get('origin') || '';
+    await Mail.sendInviteEmail({ to: email, activateUrl: `${origin}/?reset=${token}` });
     await Auth.logEvent(req.user.id, req.user.username, 'admin_user_create',
-      `created dashboard user "${username}"${isSuperuser ? ' (superuser)' : ''}`);
+      `invited dashboard user "${username || email}"${isSuperuser ? ' (superuser)' : ''}`);
     res.json(Auth.publicUser(created));
   }));
 
@@ -239,7 +250,7 @@ function createApp({ serveStatic = true } = {}) {
     if (req.body.isSuperuser !== undefined) changes.push(`superuser=${req.body.isSuperuser}`);
     if (req.body.allowedTabs !== undefined) changes.push(`tabs=[${(req.body.allowedTabs || []).join(',')}]`);
     await Auth.logEvent(req.user.id, req.user.username, 'admin_user_update',
-      `updated "${target.username}": ${changes.join(', ') || 'no changes'}`);
+      `updated "${target.username || target.email}": ${changes.join(', ') || 'no changes'}`);
     res.json(Auth.publicUser(updated));
   }));
 
@@ -250,7 +261,7 @@ function createApp({ serveStatic = true } = {}) {
       return res.status(400).json({ error: 'Cannot delete the last remaining superuser.' });
     }
     await Auth.deleteUser(req.params.id);
-    await Auth.logEvent(req.user.id, req.user.username, 'admin_user_delete', `deleted dashboard user "${target.username}"`);
+    await Auth.logEvent(req.user.id, req.user.username, 'admin_user_delete', `deleted dashboard user "${target.username || target.email}"`);
     res.json({ ok: true });
   }));
 
@@ -285,13 +296,13 @@ function createApp({ serveStatic = true } = {}) {
     const generic = { ok: true, message: 'If that account has an email on file, a reset link has been sent.' };
     const { username } = req.body || {};
     if (!username) return res.json(generic);
-    const user = await Auth.findUserByUsername(username);
+    const user = await Auth.findUserByIdentifier(username);
     if (user && user.email) {
       const token = await Auth.createPasswordReset(user.id);
       const origin = process.env.APP_URL || req.get('origin') || '';
       const resetUrl = `${origin}/?reset=${token}`;
-      await Mail.sendPasswordResetEmail({ to: user.email, username: user.username, resetUrl });
-      await Auth.logEvent(user.id, user.username, 'password_reset_requested');
+      await Mail.sendPasswordResetEmail({ to: user.email, username: user.username || user.email, resetUrl });
+      await Auth.logEvent(user.id, user.username || user.email, 'password_reset_requested');
     }
     res.json(generic);
   }));
@@ -304,7 +315,7 @@ function createApp({ serveStatic = true } = {}) {
     const user = await Auth.findUserById(userId);
     await Auth.updateUser(userId, { password: newPassword });
     await Auth.deleteSessionsByUser(userId);
-    await Auth.logEvent(userId, user ? user.username : '', 'password_reset');
+    await Auth.logEvent(userId, user ? (user.username || user.email) : '', 'password_reset');
     res.json({ ok: true });
   }));
 

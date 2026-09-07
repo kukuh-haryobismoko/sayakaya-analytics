@@ -19,12 +19,12 @@
 const I18N = {
   en: {
     sign_in_subtitle: `Sign in to continue.`,
-    gate_username_ph: `Username`,
+    gate_username_ph: `Username or email`,
     gate_password_ph: `Password`,
     sign_in: `Sign in`,
     forgot_password_link: `Forgot password?`,
     forgot_password_title: `Reset your password`,
-    forgot_password_hint: `Enter your username. If there's an email on file, we'll send a reset link.`,
+    forgot_password_hint: `Enter your username or email. If there's an email on file, we'll send a reset link.`,
     forgot_password_send: `Send reset link`,
     reset_password_title: `Set a new password`,
     reset_password_hint: `Choose a new password for your account.`,
@@ -352,6 +352,7 @@ const I18N = {
     admin_users: `Users`,
     admin_add_user: `+ Add user`,
     admin_modal_hint: `Choose which sections this person can access. Superusers always see everything.`,
+    admin_modal_hint_invite: `Enter their email and choose access. We'll email them a link to activate their account and set a password.`,
     admin_superuser_full_access: `Superuser (full access)`,
     admin_activity_log: `Activity log`,
     admin_all_users: `All users`,
@@ -362,7 +363,8 @@ const I18N = {
     admin_edit_user_prefix: `Edit`,
     admin_save_changes: `Save changes`,
     admin_password_keep_current_ph: `Leave blank to keep current password`,
-    admin_email_ph: `Email (optional)`,
+    admin_email_ph: `Email`,
+    admin_username_ph: `Username (optional)`,
 
     // ---- Phase 3: KPI cards + chart legends (added 2026-08-03) ----
     kpi_platform_aum: `Platform AUM`,
@@ -406,12 +408,12 @@ const I18N = {
   },
   id: {
     sign_in_subtitle: `Masuk untuk melanjutkan.`,
-    gate_username_ph: `Nama pengguna`,
+    gate_username_ph: `Nama pengguna atau email`,
     gate_password_ph: `Kata sandi`,
     sign_in: `Masuk`,
     forgot_password_link: `Lupa kata sandi?`,
     forgot_password_title: `Atur ulang kata sandi`,
-    forgot_password_hint: `Masukkan nama pengguna Anda. Jika ada email yang terdaftar, kami akan mengirim tautan atur ulang.`,
+    forgot_password_hint: `Masukkan nama pengguna atau email Anda. Jika ada email yang terdaftar, kami akan mengirim tautan atur ulang.`,
     forgot_password_send: `Kirim tautan atur ulang`,
     reset_password_title: `Buat kata sandi baru`,
     reset_password_hint: `Pilih kata sandi baru untuk akun Anda.`,
@@ -739,6 +741,7 @@ const I18N = {
     admin_users: `Pengguna`,
     admin_add_user: `+ Tambah pengguna`,
     admin_modal_hint: `Pilih bagian mana yang boleh diakses orang ini. Superuser selalu bisa melihat semuanya.`,
+    admin_modal_hint_invite: `Masukkan email mereka dan pilih akses. Kami akan mengirim tautan untuk mengaktifkan akun dan membuat kata sandi.`,
     admin_superuser_full_access: `Superuser (akses penuh)`,
     admin_activity_log: `Log aktivitas`,
     admin_all_users: `Semua pengguna`,
@@ -749,7 +752,8 @@ const I18N = {
     admin_edit_user_prefix: `Ubah`,
     admin_save_changes: `Simpan perubahan`,
     admin_password_keep_current_ph: `Kosongkan untuk mempertahankan kata sandi saat ini`,
-    admin_email_ph: `Email (opsional)`,
+    admin_email_ph: `Email`,
+    admin_username_ph: `Nama pengguna (opsional)`,
 
     // ---- Phase 3: KPI cards + chart legends (added 2026-08-03) ----
     kpi_platform_aum: `AUM platform`,

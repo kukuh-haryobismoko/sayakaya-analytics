@@ -14,6 +14,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours, fixed — no refresh-on-activity.
 const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days — an invite email sits unread longer than a reset request
 
 async function rest(path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
@@ -58,6 +59,19 @@ async function findUserByUsername(username) {
   return rows[0] || null;
 }
 
+async function findUserByEmail(email) {
+  const rows = await rest(`/dashboard_users?email=eq.${encodeURIComponent(email)}&select=*`);
+  return rows[0] || null;
+}
+
+// Login accepts either a username or an email in the same field — invited
+// users (created with an email but no username) can only log in this way.
+async function findUserByIdentifier(identifier) {
+  const value = encodeURIComponent(identifier);
+  const rows = await rest(`/dashboard_users?or=(username.eq.${value},email.eq.${value})&select=*`);
+  return rows[0] || null;
+}
+
 async function findUserById(id) {
   const rows = await rest(`/dashboard_users?id=eq.${id}&select=*`);
   return rows[0] || null;
@@ -72,13 +86,15 @@ async function countSuperusers() {
   return rows.length;
 }
 
-async function createUser({ username, password, email = null, isSuperuser = false, allowedTabs = [] }) {
+// password is optional: an admin-invited user is created with no password_hash
+// and activates via the emailed invite link (see POST /api/admin/users).
+async function createUser({ username = null, password = null, email = null, isSuperuser = false, allowedTabs = [] }) {
   const rows = await rest('/dashboard_users', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
-      username,
-      password_hash: hashPassword(password),
+      username: username || null,
+      password_hash: password ? hashPassword(password) : null,
       email: email || null,
       is_superuser: isSuperuser,
       allowed_tabs: allowedTabs,
@@ -148,9 +164,9 @@ function deleteSessionsByUser(userId) {
 // Deletes any earlier outstanding token for this user first, so only the
 // most recently emailed link ever works — an admin resetting on someone's
 // behalf twice in a row doesn't leave a dangling valid link from the first email.
-async function createPasswordReset(userId) {
+async function createPasswordReset(userId, ttlMs = RESET_TTL_MS) {
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
   await rest(`/dashboard_password_resets?user_id=eq.${userId}`, { method: 'DELETE' });
   await rest('/dashboard_password_resets', {
     method: 'POST',
@@ -225,9 +241,10 @@ function userCan(user, tab) {
 
 module.exports = {
   hashPassword, verifyPassword,
-  findUserByUsername, findUserById, listUsers, countSuperusers, createUser, updateUser, deleteUser,
+  findUserByUsername, findUserByEmail, findUserByIdentifier, findUserById,
+  listUsers, countSuperusers, createUser, updateUser, deleteUser,
   createSession, findUserByToken, deleteSessionByToken, deleteSessionsByUser,
-  createPasswordReset, consumePasswordReset,
+  createPasswordReset, consumePasswordReset, INVITE_TTL_MS,
   logEvent, listAuditLog,
   publicUser, userCan,
 };

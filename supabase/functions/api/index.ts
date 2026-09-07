@@ -258,13 +258,13 @@ on('POST', '/api/auth/login', async (req) => {
   const username = body.username as string;
   const password = body.password as string;
   if (!username || !password) return json({ error: 'Username and password are required.' }, 400);
-  const user = await A.findUserByUsername(username);
+  const user = await A.findUserByIdentifier(username);
   if (!user || !A.verifyPassword(password, user.password_hash)) {
     await A.logEvent(user ? user.id : null, username, 'login_failure');
-    return json({ error: 'Incorrect username or password.' }, 401);
+    return json({ error: 'Incorrect username/email or password.' }, 401);
   }
   const token = await A.createSession(user.id);
-  await A.logEvent(user.id, user.username, 'login_success');
+  await A.logEvent(user.id, user.username || user.email, 'login_success');
   return json({ token, user: A.publicUser(user) });
 });
 
@@ -283,21 +283,32 @@ on('GET', '/api/admin/users', requireSuperuser(async () => {
   return json(rows.map((r) => A.publicUser({ ...r, password_hash: '' })));
 }));
 
+// Admin only supplies an email + access tabs — no password. The account is
+// created inactive (no password_hash) and the user activates it themselves
+// via an emailed link, reusing the same token mechanism as "forgot password"
+// (A.createPasswordReset / Mail.sendInviteEmail), just with a longer TTL.
 on('POST', '/api/admin/users', requireSuperuser(async (req, _params, _url, user) => {
   const body = await bodyOf(req);
-  const username = body.username as string;
-  const password = body.password as string;
-  if (!username || !password) return json({ error: 'Username and password are required.' }, 400);
-  const existing = await A.findUserByUsername(username);
-  if (existing) return json({ error: 'That username is already taken.' }, 409);
+  const username = body.username as string | undefined;
+  const email = body.email as string;
+  if (!email) return json({ error: 'Email is required.' }, 400);
+  if (username) {
+    const existingUsername = await A.findUserByUsername(username);
+    if (existingUsername) return json({ error: 'That username is already taken.' }, 409);
+  }
+  const existingEmail = await A.findUserByEmail(email);
+  if (existingEmail) return json({ error: 'That email is already in use.' }, 409);
   const created = await A.createUser({
-    username, password,
-    email: body.email as string | undefined,
+    username: username || null,
+    email,
     isSuperuser: !!body.isSuperuser,
     allowedTabs: (body.allowedTabs as string[]) || [],
   });
+  const token = await A.createPasswordReset(created.id, A.INVITE_TTL_MS);
+  const origin = Deno.env.get('APP_URL') || req.headers.get('origin') || '';
+  await Mail.sendInviteEmail({ to: email, activateUrl: `${origin}/?reset=${token}` });
   await A.logEvent(user!.id, user!.username, 'admin_user_create',
-    `created dashboard user "${username}"${body.isSuperuser ? ' (superuser)' : ''}`);
+    `invited dashboard user "${username || email}"${body.isSuperuser ? ' (superuser)' : ''}`);
   return json(A.publicUser(created));
 }));
 
@@ -320,7 +331,7 @@ on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params, _url, u
   if (body.isSuperuser !== undefined) changes.push(`superuser=${body.isSuperuser}`);
   if (body.allowedTabs !== undefined) changes.push(`tabs=[${((body.allowedTabs as string[]) || []).join(',')}]`);
   await A.logEvent(user!.id, user!.username, 'admin_user_update',
-    `updated "${target.username}": ${changes.join(', ') || 'no changes'}`);
+    `updated "${target.username || target.email}": ${changes.join(', ') || 'no changes'}`);
   return json(A.publicUser(updated));
 }));
 
@@ -331,7 +342,7 @@ on('DELETE', '/api/admin/users/:id', requireSuperuser(async (_req, params, _url,
     return json({ error: 'Cannot delete the last remaining superuser.' }, 400);
   }
   await A.deleteUser(params.id);
-  await A.logEvent(user!.id, user!.username, 'admin_user_delete', `deleted dashboard user "${target.username}"`);
+  await A.logEvent(user!.id, user!.username, 'admin_user_delete', `deleted dashboard user "${target.username || target.email}"`);
   return json({ ok: true });
 }));
 
@@ -374,13 +385,13 @@ on('POST', '/api/auth/forgot-password', async (req) => {
   const body = await bodyOf(req);
   const username = body.username as string;
   if (!username) return json(generic);
-  const user = await A.findUserByUsername(username);
+  const user = await A.findUserByIdentifier(username);
   if (user && user.email) {
     const token = await A.createPasswordReset(user.id);
     const origin = Deno.env.get('APP_URL') || req.headers.get('origin') || '';
     const resetUrl = `${origin}/?reset=${token}`;
-    await Mail.sendPasswordResetEmail({ to: user.email, username: user.username, resetUrl });
-    await A.logEvent(user.id, user.username, 'password_reset_requested');
+    await Mail.sendPasswordResetEmail({ to: user.email, username: user.username || user.email, resetUrl });
+    await A.logEvent(user.id, user.username || user.email, 'password_reset_requested');
   }
   return json(generic);
 });
@@ -395,7 +406,7 @@ on('POST', '/api/auth/reset-password', async (req) => {
   const user = await A.findUserById(userId);
   await A.updateUser(userId, { password: newPassword });
   await A.deleteSessionsByUser(userId);
-  await A.logEvent(userId, user ? user.username : '', 'password_reset');
+  await A.logEvent(userId, user ? (user.username || user.email || '') : '', 'password_reset');
   return json({ ok: true });
 });
 

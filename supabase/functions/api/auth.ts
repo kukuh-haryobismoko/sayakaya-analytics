@@ -12,11 +12,12 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours, fixed — no refresh-on-activity.
 const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
+export const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days — an invite email sits unread longer than a reset request
 
 export interface DashboardUser {
   id: string;
-  username: string;
-  password_hash: string;
+  username: string | null;
+  password_hash: string | null;
   email: string | null;
   is_superuser: boolean;
   allowed_tabs: string[];
@@ -25,7 +26,7 @@ export interface DashboardUser {
 
 export interface PublicUser {
   id: string;
-  username: string;
+  username: string | null;
   email: string | null;
   isSuperuser: boolean;
   allowedTabs: string[];
@@ -75,6 +76,19 @@ export async function findUserByUsername(username: string): Promise<DashboardUse
   return rows[0] || null;
 }
 
+export async function findUserByEmail(email: string): Promise<DashboardUser | null> {
+  const rows = await rest(`/dashboard_users?email=eq.${encodeURIComponent(email)}&select=*`);
+  return rows[0] || null;
+}
+
+// Login accepts either a username or an email in the same field — invited
+// users (created with an email but no username) can only log in this way.
+export async function findUserByIdentifier(identifier: string): Promise<DashboardUser | null> {
+  const value = encodeURIComponent(identifier);
+  const rows = await rest(`/dashboard_users?or=(username.eq.${value},email.eq.${value})&select=*`);
+  return rows[0] || null;
+}
+
 export async function findUserById(id: string): Promise<DashboardUser | null> {
   const rows = await rest(`/dashboard_users?id=eq.${id}&select=*`);
   return rows[0] || null;
@@ -89,13 +103,15 @@ export async function countSuperusers(): Promise<number> {
   return rows.length;
 }
 
-export async function createUser(opts: { username: string; password: string; email?: string | null; isSuperuser?: boolean; allowedTabs?: string[] }): Promise<DashboardUser> {
+// password is optional: an admin-invited user is created with no password_hash
+// and activates via the emailed invite link (see POST /api/admin/users).
+export async function createUser(opts: { username?: string | null; password?: string | null; email?: string | null; isSuperuser?: boolean; allowedTabs?: string[] }): Promise<DashboardUser> {
   const rows = await rest('/dashboard_users', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
     body: JSON.stringify({
-      username: opts.username,
-      password_hash: hashPassword(opts.password),
+      username: opts.username || null,
+      password_hash: opts.password ? hashPassword(opts.password) : null,
       email: opts.email || null,
       is_superuser: !!opts.isSuperuser,
       allowed_tabs: opts.allowedTabs || [],
@@ -164,9 +180,9 @@ export function deleteSessionsByUser(userId: string): Promise<void> {
 // ---- Password reset (forgot password) ------------------------------------
 // Deletes any earlier outstanding token for this user first, so only the
 // most recently emailed link ever works.
-export async function createPasswordReset(userId: string): Promise<string> {
+export async function createPasswordReset(userId: string, ttlMs: number = RESET_TTL_MS): Promise<string> {
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
   await rest(`/dashboard_password_resets?user_id=eq.${userId}`, { method: 'DELETE' });
   await rest('/dashboard_password_resets', {
     method: 'POST',

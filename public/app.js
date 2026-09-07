@@ -3366,10 +3366,11 @@ function resetAdminForm() {
   editingUserId = null;
   $('#adminFormTitle').textContent = t('admin_add_user_title');
   $('#adminSaveBtn').textContent = t('admin_create_user');
+  $('#adminModalHint').textContent = t('admin_modal_hint_invite');
   $('#adminUsername').value = '';
   $('#adminUsername').disabled = false;
   $('#adminPassword').value = '';
-  $('#adminPassword').placeholder = t('gate_password_ph');
+  $('#adminPassword').classList.add('hidden'); // no password up front — set via the emailed activation link
   $('#adminEmail').value = '';
   $('#adminIsSuperuser').checked = false;
   $('#adminFormErr').textContent = '';
@@ -3378,12 +3379,14 @@ function resetAdminForm() {
 
 function startEditUser(user) {
   editingUserId = user.id;
-  $('#adminFormTitle').textContent = `${t('admin_edit_user_prefix')} ${user.username}`;
+  $('#adminFormTitle').textContent = `${t('admin_edit_user_prefix')} ${user.username || user.email}`;
   $('#adminSaveBtn').textContent = t('admin_save_changes');
-  $('#adminUsername').value = user.username;
-  $('#adminUsername').disabled = true; // username is immutable once created
+  $('#adminModalHint').textContent = t('admin_modal_hint');
+  $('#adminUsername').value = user.username || '';
+  $('#adminUsername').disabled = !!user.username; // username is immutable once set
   $('#adminPassword').value = '';
   $('#adminPassword').placeholder = t('admin_password_keep_current_ph');
+  $('#adminPassword').classList.remove('hidden');
   $('#adminEmail').value = user.email || '';
   $('#adminIsSuperuser').checked = user.isSuperuser;
   $('#adminFormErr').textContent = '';
@@ -3402,7 +3405,7 @@ function renderAdminUsers(users) {
   };
   const body = users.map((u) => `
     <tr>
-      <td>${u.username}</td>
+      <td>${u.username || '—'}</td>
       <td>${u.email || '—'}</td>
       <td>${accessCell(u)}</td>
       <td class="mono">${String(u.createdAt || '').slice(0, 10)}</td>
@@ -3411,7 +3414,7 @@ function renderAdminUsers(users) {
           <button type="button" class="dropdown-multi-btn row-menu-btn" data-row-menu="${u.id}" aria-label="Actions">⚙</button>
           <div class="dropdown-multi-panel menu-sm">
             <button type="button" class="row-menu-item" data-edit="${u.id}">Edit access</button>
-            <button type="button" class="row-menu-item danger" data-delete="${u.id}" data-username="${u.username}">Delete</button>
+            <button type="button" class="row-menu-item danger" data-delete="${u.id}" data-username="${u.username || u.email}">Delete</button>
           </div>
         </div>
       </td>
@@ -3457,8 +3460,8 @@ async function saveAdminUser() {
   const isSuperuser = $('#adminIsSuperuser').checked;
   const allowedTabs = $$('#adminTabsPicker input:checked').map((el) => el.value);
   $('#adminFormErr').textContent = '';
-  if (!editingUserId && (!username || !password)) {
-    $('#adminFormErr').textContent = 'Username and password are required.';
+  if (!editingUserId && !email) {
+    $('#adminFormErr').textContent = 'Email is required.';
     return;
   }
   try {
@@ -3468,8 +3471,8 @@ async function saveAdminUser() {
       await api(`/api/admin/users/${editingUserId}`, { method: 'PATCH', body: JSON.stringify(patch) });
       toast('User updated');
     } else {
-      await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, password, email, isSuperuser, allowedTabs }) });
-      toast('User created');
+      await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, email, isSuperuser, allowedTabs }) });
+      toast('Invitation sent — they can activate their account from the email.');
     }
     $('#adminUserModal').close();
     resetAdminForm();
@@ -4309,7 +4312,7 @@ function wireGate() {
   const submit = async () => {
     const username = $('#gate-username').value.trim();
     const password = $('#gate-input').value;
-    if (!username || !password) { $('#gate-err').textContent = 'Enter a username and password.'; return; }
+    if (!username || !password) { $('#gate-err').textContent = 'Enter a username/email and password.'; return; }
     try {
       const res = await fetch(API_BASE + '/api/auth/login', {
         method: 'POST',
