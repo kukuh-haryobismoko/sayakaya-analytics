@@ -2859,21 +2859,24 @@ async function openSchedDetail(kind, id) {
   schedEl(prefix, 'DetailBody').innerHTML = '<div class="loading">Loading…</div>';
   schedEl(prefix, 'DetailModal').showModal();
   try {
-    const { job, recipients } = await api(`/api/schedules/${id}/detail`);
+    const { job, recipients, preview } = await api(`/api/schedules/${id}/detail`);
     schedEl(prefix, 'DetailTitle').textContent = `${schedFrequencySummary(job)} — ${schedRecipientSummary(job)}`;
     if (!recipients.length) {
-      schedEl(prefix, 'DetailBody').innerHTML = '<div class="empty">No recipients queued yet — this schedule hasn\'t had its first run.</div>';
+      schedEl(prefix, 'DetailBody').innerHTML = '<div class="empty">No recipients match this schedule\'s filters.</div>';
       return;
     }
+    const note = preview
+      ? '<div class="callout" style="margin-bottom:12px"><span class="callout-icon" aria-hidden="true">👀</span><span>Preview — this schedule hasn\'t run yet. Recipients below are resolved live and may change by the time it actually sends.</span></div>'
+      : '';
     const rows = recipients.map((r) => `<tr>
         <td>${escapeHtml(r.name || '—')}</td>
         <td>${escapeHtml(r.sid || '—')}</td>
         <td>${escapeHtml(r.email || '—')}</td>
         <td>${SCHED_YN(r.has_portfolio)}</td>
         <td>${SCHED_YN(r.had_transaction_last_month)}</td>
-        <td>${escapeHtml(r.status)}${r.error ? ` — ${escapeHtml(r.error)}` : ''}</td>
+        <td>${r.status ? escapeHtml(r.status) : 'Not sent yet'}${r.error ? ` — ${escapeHtml(r.error)}` : ''}</td>
       </tr>`).join('');
-    schedEl(prefix, 'DetailBody').innerHTML = `<table><thead><tr>
+    schedEl(prefix, 'DetailBody').innerHTML = `${note}<table><thead><tr>
         <th>Name</th><th>SID</th><th>Email</th><th>Has portfolio</th><th>Tx last month</th><th>Status</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) { schedEl(prefix, 'DetailBody').innerHTML = `<div class="empty">${e.message}</div>`; }

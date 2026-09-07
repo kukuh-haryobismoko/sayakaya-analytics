@@ -1556,12 +1556,24 @@ on('GET', '/api/schedules', requireScheduleKindTab(async (_req, _params, url) =>
 // portfolio and whether they transacted last calendar month. Recipients
 // added via a plain email list for Send fund performance never resolve to
 // a user, so those two columns come back null for them (not false —
-// "unknown", not "no").
+// "unknown", not "no"). Before the first run (queue empty), falls back to
+// a live preview of who *would* be resolved — response carries
+// `preview: true` so the UI can label it accordingly.
 on('GET', '/api/schedules/:id/detail', requireAnyTab(['send-statement', 'send-fund-performance'], async (_req, params) => {
   const job = await Sched.getJob(params.id);
   if (!job) return json({ error: 'Schedule not found.' }, 404);
   // deno-lint-ignore no-explicit-any
-  const queue: any[] = await Sched.listQueue(params.id);
+  let queue: any[] = await Sched.listQueue(params.id);
+
+  let preview = false;
+  if (!queue.length) {
+    const resolved = await Sched.resolveRecipients({
+      kind: job.kind, recipientType: job.recipient_type,
+      recipientEmail: job.recipient_email ?? undefined, recipientList: job.recipient_list ?? undefined,
+    });
+    queue = resolved.map((r) => ({ recipient_email: r.email, recipient_user_id: r.userId, recipient_sid: r.sid, status: null, error: null, processed_at: null }));
+    preview = true;
+  }
 
   const userIds = [...new Set(queue.map((r) => r.recipient_user_id).filter(Boolean))] as string[];
   // deno-lint-ignore no-explicit-any
@@ -1588,7 +1600,7 @@ on('GET', '/api/schedules/:id/detail', requireAnyTab(['send-statement', 'send-fu
       had_transaction_last_month: recap ? recap.had_transaction_last_month : null,
     };
   });
-  return json({ job, recipients });
+  return json({ job, recipients, preview });
 }));
 
 on('PATCH', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-performance'], async (req, params, _url, user) => {

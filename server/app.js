@@ -1443,11 +1443,26 @@ function createApp({ serveStatic = true } = {}) {
   // portfolio and whether they transacted last calendar month. Recipients
   // added via a plain email list for Send fund performance never resolve to
   // a user, so those two columns come back null for them (not false —
-  // "unknown", not "no").
+  // "unknown", not "no"). Before the first run (queue empty), falls back to
+  // a live preview of who *would* be resolved — response carries
+  // `preview: true` so the UI can label it accordingly.
   app.get('/api/schedules/:id/detail', requireEitherScheduleTab, handler(async (req, res) => {
     const job = await Sched.getJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'Schedule not found.' });
-    const queue = await Sched.listQueue(req.params.id);
+    let queue = await Sched.listQueue(req.params.id);
+
+    // Before the first run, dashboard_schedule_queue has nothing yet — resolve
+    // the same recipient list enqueueJob() would, live, so "who would this
+    // reach" is answerable before the schedule ever fires.
+    let preview = false;
+    if (!queue.length) {
+      const recipients = await Sched.resolveRecipients({
+        kind: job.kind, recipientType: job.recipient_type,
+        recipientEmail: job.recipient_email, recipientList: job.recipient_list,
+      });
+      queue = recipients.map((r) => ({ recipient_email: r.email, recipient_user_id: r.userId, recipient_sid: r.sid, status: null, error: null, processed_at: null }));
+      preview = true;
+    }
 
     const userIds = [...new Set(queue.map((r) => r.recipient_user_id).filter(Boolean))];
     let recapByUser = {};
@@ -1473,7 +1488,7 @@ function createApp({ serveStatic = true } = {}) {
         had_transaction_last_month: recap ? recap.had_transaction_last_month : null,
       };
     });
-    res.json({ job, recipients });
+    res.json({ job, recipients, preview });
   }));
 
   app.patch('/api/schedules/:id', requireEitherScheduleTab, handler(async (req, res) => {
