@@ -89,6 +89,15 @@ const I18N = {
     docs_manage_users_desc: `Create dashboard login accounts for your team, and choose exactly which sections each person is allowed to see.`,
     docs_activity_log_desc: `See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio, or changed an account — and when.`,
 
+    docs_panel_presentation: `Presentation`,
+    docs_presentation_desc: `Internal meeting decks (e.g. the AI Taskforce update), one sub-section per month, viewable full-screen one page at a time. Not shown to everyone — only accounts an admin has explicitly granted this tab (e.g. a dedicated "presentation" login for sharing at a meeting) can see it, same as any other restricted section.`,
+
+    presentation_title: `Presentation`,
+    presentation_hint: `Internal meeting decks, viewable full-screen one page at a time.`,
+    presentation_month_september: `September`,
+    presentation_present_btn: `Present`,
+    presentation_exit_hint: `Esc to exit · ← → to move`,
+
     // ---- Phase 2: per-section dashboard UI (added 2026-08-03) ----
     common_search_hint: `Search by SID code, name, or email.`,
     common_sid_ph: `e.g. SID code`,
@@ -480,6 +489,15 @@ const I18N = {
     docs_panel_admin: `Admin (khusus superuser)`,
     docs_manage_users_desc: `Buat akun login dasbor untuk tim Anda, dan tentukan persis bagian mana saja yang boleh dilihat masing-masing orang.`,
     docs_activity_log_desc: `Lihat siapa yang login, mengekspor file, mengajukan pertanyaan Ask, menjalankan query SQL, melihat portofolio seorang investor, atau mengubah akun — dan kapan.`,
+
+    docs_panel_presentation: `Presentasi`,
+    docs_presentation_desc: `Materi presentasi rapat internal (mis. update AI Taskforce), satu sub-bagian per bulan, bisa ditampilkan layar penuh satu halaman per satu. Tidak ditampilkan untuk semua orang — hanya akun yang oleh admin sudah diberi akses ke tab ini (mis. login khusus "presentation" untuk dibagikan saat rapat) yang bisa melihatnya, sama seperti bagian terbatas lainnya.`,
+
+    presentation_title: `Presentasi`,
+    presentation_hint: `Materi rapat internal, bisa ditampilkan layar penuh satu halaman per satu.`,
+    presentation_month_september: `September`,
+    presentation_present_btn: `Presentasikan`,
+    presentation_exit_hint: `Esc untuk keluar · ← → untuk berpindah halaman`,
 
     // ---- Phase 2: per-section dashboard UI (added 2026-08-03) ----
     common_search_hint: `Cari berdasarkan kode SID, nama, atau email.`,

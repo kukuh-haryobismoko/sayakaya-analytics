@@ -3699,9 +3699,55 @@ function switchTab(name) {
   if (name === 'hnwi') loadHnwi();
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
+  if (name === 'presentation') loadPresentation($('#presentationMonthSeg .on')?.dataset.month || 'september');
   if (name === 'send-statement') { loadSsLog(); loadSchedules('statement'); }
   if (name === 'send-fund-performance') { loadFpeLog(); loadSchedules('fund_performance'); }
 }
+
+// Decks are PDFs fetched with the Bearer token (not linked directly — a plain
+// <iframe src> can't attach it, and the file lives outside public/ so it
+// isn't reachable without one) and rendered page-by-page onto a canvas with
+// pdf.js, rather than shown in the browser's built-in PDF viewer — that
+// viewer scrolls continuously and can't be driven to "exactly one page,
+// full-screen, no scrolling" from our own Prev/Next buttons.
+const presentationCache = {}; // month -> pdf.js PDFDocumentProxy
+let presPdfDoc = null;
+let presPageNum = 1;
+async function loadPresentation(month) {
+  presPageNum = 1;
+  try {
+    if (!presentationCache[month]) {
+      const res = await fetch(`${API_BASE}/api/presentations/${month}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Request failed (${res.status})`);
+      const data = await res.arrayBuffer();
+      presentationCache[month] = await window.pdfjsLib.getDocument({ data }).promise;
+    }
+    presPdfDoc = presentationCache[month];
+    await presRenderPage(1);
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+async function presRenderPage(n) {
+  if (!presPdfDoc) return;
+  presPageNum = Math.max(1, Math.min(n, presPdfDoc.numPages));
+  const page = await presPdfDoc.getPage(presPageNum);
+  const stage = $('#presentationStage');
+  const dpr = window.devicePixelRatio || 1;
+  const unscaled = page.getViewport({ scale: 1 });
+  const fitScale = Math.min(stage.clientWidth / unscaled.width, stage.clientHeight / unscaled.height);
+  const viewport = page.getViewport({ scale: fitScale * dpr });
+  const canvas = $('#presentationCanvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  canvas.style.width = `${viewport.width / dpr}px`;
+  canvas.style.height = `${viewport.height / dpr}px`;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  $('#presentationCounter').textContent = `${presPageNum} / ${presPdfDoc.numPages}`;
+}
+function presNext() { presRenderPage(presPageNum + 1); }
+function presPrev() { presRenderPage(presPageNum - 1); }
 
 // Called once after login/session-restore: hides nav links + the Admin group
 // the current user isn't allowed to see, and lands on the first tab they can
@@ -3808,6 +3854,28 @@ function wire() {
   wrapNavLabels();
   wireNavGroups();
   $$('.nav-link').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  $$('#presentationMonthSeg button').forEach((b) => b.addEventListener('click', () => {
+    $$('#presentationMonthSeg button').forEach((x) => x.classList.toggle('on', x === b));
+    loadPresentation(b.dataset.month);
+  }));
+  $('#presentBtn').addEventListener('click', () => {
+    const stage = $('#presentationStage');
+    (stage.requestFullscreen || stage.webkitRequestFullscreen)?.call(stage);
+  });
+  $('#presPrevBtn').addEventListener('click', presPrev);
+  $('#presNextBtn').addEventListener('click', presNext);
+  // Re-fit the current page to the stage's new size — on entering/exiting
+  // fullscreen, and on any plain window resize while the tab is open.
+  ['resize', 'fullscreenchange', 'webkitfullscreenchange'].forEach((evt) => {
+    window.addEventListener(evt, () => { if (presPdfDoc) presRenderPage(presPageNum); });
+  });
+  // Scoped to the Presentation tab being open so arrow keys/space don't hijack
+  // navigation elsewhere in the dashboard.
+  document.addEventListener('keydown', (e) => {
+    if (!$('#presentation').classList.contains('active')) return;
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); presNext(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); presPrev(); }
+  });
   $$('#themeSeg button').forEach((b) => b.addEventListener('click', () => setThemeChoice(b.dataset.themeChoice)));
   $$('#langSeg button').forEach((b) => b.addEventListener('click', () => setLang(b.dataset.lang)));
   // One hamburger, two jobs depending on viewport — a persistent icon-only

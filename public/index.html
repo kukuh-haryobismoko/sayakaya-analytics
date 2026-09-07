@@ -23,6 +23,17 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Choropleth controller/projection for the Overview investor-distribution map — same CDN-script pattern as Chart.js above, no bundler. -->
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-geo@4.3.6/build/index.umd.min.js"></script>
+  <!-- Presentation tab renders deck PDF pages onto a canvas (one page per screen,
+       no scrolling, exact page-jump control) — the browser's built-in PDF viewer
+       can't be driven that precisely. pdf.js only ships as an ES module now, so
+       it's loaded as one and exposed as window.pdfjsLib for app.js (a classic
+       script) to use; module scripts run after classic ones, and pdfjsLib is
+       only touched from a later user action, so there's no load-order race. -->
+  <script type="module">
+    import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.3.289/pdf.min.mjs';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.3.289/pdf.worker.min.mjs';
+    window.pdfjsLib = pdfjsLib;
+  </script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -158,6 +169,14 @@
         <div class="nav-group" data-group="help">
           <div class="nav-label"><span data-i18n="nav_group_help">Help</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="docs"><span class="nav-icon">📖</span>Documentations</button>
+        </div>
+        <!-- Not superuser-gated — a regular tab like any other, shown to
+             whichever accounts have it checked in Manage users' access
+             picker (e.g. a dedicated "presentation" login with only this
+             tab granted, for sharing at an internal meeting). -->
+        <div class="nav-group" data-group="presentation">
+          <div class="nav-label"><span>Presentation</span><span class="nav-group-caret"></span></div>
+          <button class="nav-link" data-tab="presentation"><span class="nav-icon">📽️</span>Presentation</button>
         </div>
         <div class="nav-group hidden" id="adminNavGroup" data-group="admin">
           <div class="nav-label"><span data-i18n="nav_group_admin">Admin</span><span class="nav-group-caret"></span></div>
@@ -2016,6 +2035,14 @@ ORDER BY n DESC"></textarea>
         </div>
       </div>
 
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="docs_panel_presentation">Presentation</h2></div>
+        <div class="doc-item">
+          <h3>📽️ Presentation</h3>
+          <p data-i18n="docs_presentation_desc">Internal meeting decks (e.g. the AI Taskforce update), one sub-section per month, viewable full-screen one page at a time. Not shown to everyone — only accounts an admin has explicitly granted this tab (e.g. a dedicated "presentation" login for sharing at a meeting) can see it, same as any other restricted section.</p>
+        </div>
+      </div>
+
       <div class="panel hidden" id="docsAdminSection">
         <div class="panel-head"><h2 data-i18n="docs_panel_admin">Admin (superuser only)</h2></div>
         <div class="doc-item">
@@ -2025,6 +2052,31 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3>📜 Activity log</h3>
           <p data-i18n="docs_activity_log_desc">See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio, or changed an account — and when.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== PRESENTATION (superuser only) — internal
+         meeting decks, one sub-section per month. Add a button + entry in
+         PRESENTATIONS (server/app.js) for each new month's deck. ===== -->
+    <section id="presentation" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="presentation_title">Presentation</h2>
+          <span class="hint" data-i18n="presentation_hint">Internal meeting decks, viewable full-screen one page at a time.</span>
+          <button type="button" class="btn-primary" id="presentBtn">▶ <span data-i18n="presentation_present_btn">Present</span></button>
+        </div>
+        <div class="seg" id="presentationMonthSeg">
+          <button type="button" class="on" data-month="september" data-i18n="presentation_month_september">September</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div id="presentationStage" class="presentation-stage">
+          <canvas id="presentationCanvas"></canvas>
+          <button type="button" class="pres-nav pres-prev" id="presPrevBtn" aria-label="Previous page">‹</button>
+          <button type="button" class="pres-nav pres-next" id="presNextBtn" aria-label="Next page">›</button>
+          <div class="presentation-counter" id="presentationCounter">1 / 1</div>
+          <div class="presentation-hint" data-i18n="presentation_exit_hint">Esc to exit · ← → to move</div>
         </div>
       </div>
     </section>

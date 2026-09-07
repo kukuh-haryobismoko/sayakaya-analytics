@@ -1,6 +1,7 @@
 'use strict';
 
 require('dotenv').config();
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
@@ -273,6 +274,22 @@ function createApp({ serveStatic = true } = {}) {
     const { limit, search, from, to, user } = req.query;
     const rows = await Auth.listAuditLog({ limit, search, from, to, user });
     res.json(rows);
+  }));
+
+  // ---- Presentation decks (internal meetings) --------------------------------
+  // Gated like any other tab (requireTab, not requireSuperuser) so an admin
+  // can hand out a narrowly-scoped login — e.g. a "presentation" account with
+  // only this tab checked in allowed_tabs — without granting superuser.
+  // Served from presentation-docs/ rather than public/ so the PDF isn't
+  // reachable by URL without such a session. Add one entry per new month's deck.
+  const PRESENTATIONS = {
+    september: { label: 'September 2026', file: 'AI Taskforce Sayakaya - September.pdf' },
+  };
+  app.get('/api/presentations/:month', requireTab('presentation'), handler(async (req, res) => {
+    const deck = PRESENTATIONS[req.params.month];
+    if (!deck) return res.status(404).json({ error: 'No deck for that month.' });
+    const pdf = await fs.promises.readFile(path.join(__dirname, '..', 'presentation-docs', deck.file));
+    res.type('application/pdf').send(pdf);
   }));
 
   // ---- Auth: change your own password ---------------------------------------

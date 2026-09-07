@@ -246,6 +246,37 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 .panel-head h2 { font-size: 15px; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; }
 
+/* ---------- Presentation page ---------- */
+/* One PDF page rendered onto the canvas at a time (app.js), letterboxed to
+   fit the stage — never scrolled. Fullscreening the stage itself (not just
+   the canvas) keeps the nav buttons/counter/hint visible over the deck,
+   since fullscreen only renders the fullscreened element's own subtree. */
+.presentation-stage {
+  position: relative; background: #1c1d1f; border-radius: 8px; overflow: hidden;
+  height: 80vh; display: flex; align-items: center; justify-content: center;
+}
+.presentation-stage:fullscreen,
+.presentation-stage:-webkit-full-screen { height: 100vh; border-radius: 0; }
+.presentation-stage canvas { max-width: 100%; max-height: 100%; }
+.pres-nav {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 1;
+  width: 40px; height: 40px; border-radius: 999px; border: 0; cursor: pointer;
+  background: rgba(0,0,0,.4); color: #fff; font-size: 20px; line-height: 1;
+}
+.pres-nav:hover { background: rgba(0,0,0,.6); }
+.pres-prev { left: 14px; }
+.pres-next { right: 14px; }
+.presentation-counter, .presentation-hint {
+  position: absolute; bottom: 14px; background: rgba(0,0,0,.65); color: #fff;
+  font-size: 12px; padding: 6px 12px; border-radius: 999px;
+}
+.presentation-counter { right: 14px; }
+.presentation-hint {
+  left: 50%; transform: translateX(-50%); opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.presentation-stage:fullscreen .presentation-hint,
+.presentation-stage:-webkit-full-screen .presentation-hint { opacity: 1; }
+
 /* ---------- Documentation page ---------- */
 .doc-item { padding: 12px 0; border-top: 1px solid var(--line); }
 .doc-item:first-child { border-top: 0; padding-top: 0; }
