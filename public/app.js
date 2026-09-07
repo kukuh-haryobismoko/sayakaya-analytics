@@ -2828,6 +2828,7 @@ function renderSchedules(kind, rows) {
       <td class="num">${num(r.run_count)}</td>
       <td>${escapeHtml(r.created_by_username || '—')}</td>
       <td>
+        <button type="button" class="btn-ghost sched-detail-btn" data-id="${r.id}">Detail</button>
         <button type="button" class="btn-ghost sched-toggle-btn" data-id="${r.id}" data-status="${r.status}">${r.status === 'active' ? 'Pause' : 'Resume'}</button>
         <button type="button" class="btn-ghost sched-delete-btn" data-id="${r.id}">Delete</button>
       </td>
@@ -2835,6 +2836,7 @@ function renderSchedules(kind, rows) {
   tableEl.innerHTML = `<table><thead><tr>
       <th>Recipients</th><th>Schedule</th><th>Sends</th><th>Status</th><th>Ends</th><th>Next run (WIB)</th><th>Last run (WIB)</th><th class="num">Times sent</th><th>Created by</th><th></th>
     </tr></thead><tbody>${body}</tbody></table>`;
+  $$(`#${prefix}Table .sched-detail-btn`).forEach((btn) => btn.addEventListener('click', () => openSchedDetail(kind, btn.dataset.id)));
   $$(`#${prefix}Table .sched-toggle-btn`).forEach((btn) => btn.addEventListener('click', async () => {
     try {
       await api(`/api/schedules/${btn.dataset.id}`, { method: 'PATCH', body: JSON.stringify({ status: btn.dataset.status === 'active' ? 'paused' : 'active' }) });
@@ -2845,6 +2847,36 @@ function renderSchedules(kind, rows) {
     if (!confirm('Delete this schedule? This cannot be undone.')) return;
     try { await api(`/api/schedules/${btn.dataset.id}`, { method: 'DELETE' }); loadSchedules(kind); } catch (e) { toast(e.message); }
   }));
+}
+
+// Per-recipient breakdown: name/SID (resolved server-side), send status, and
+// whether they currently hold a portfolio / transacted last month — "—" for
+// recipients that never resolved to a known investor (a plain email on a
+// Send fund performance list), not a false "No".
+const SCHED_YN = (v) => (v == null ? '—' : v ? 'Yes' : 'No');
+async function openSchedDetail(kind, id) {
+  const { prefix } = schedCfg(kind);
+  schedEl(prefix, 'DetailBody').innerHTML = '<div class="loading">Loading…</div>';
+  schedEl(prefix, 'DetailModal').showModal();
+  try {
+    const { job, recipients } = await api(`/api/schedules/${id}/detail`);
+    schedEl(prefix, 'DetailTitle').textContent = `${schedFrequencySummary(job)} — ${schedRecipientSummary(job)}`;
+    if (!recipients.length) {
+      schedEl(prefix, 'DetailBody').innerHTML = '<div class="empty">No recipients queued yet — this schedule hasn\'t had its first run.</div>';
+      return;
+    }
+    const rows = recipients.map((r) => `<tr>
+        <td>${escapeHtml(r.name || '—')}</td>
+        <td>${escapeHtml(r.sid || '—')}</td>
+        <td>${escapeHtml(r.email || '—')}</td>
+        <td>${SCHED_YN(r.has_portfolio)}</td>
+        <td>${SCHED_YN(r.had_transaction_last_month)}</td>
+        <td>${escapeHtml(r.status)}${r.error ? ` — ${escapeHtml(r.error)}` : ''}</td>
+      </tr>`).join('');
+    schedEl(prefix, 'DetailBody').innerHTML = `<table><thead><tr>
+        <th>Name</th><th>SID</th><th>Email</th><th>Has portfolio</th><th>Tx last month</th><th>Status</th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (e) { schedEl(prefix, 'DetailBody').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
 function schedResetModal(kind) {
@@ -3854,6 +3886,8 @@ function wire() {
     schedEl(prefix, 'BackBtn').addEventListener('click', () => { schedEl(prefix, 'Step2').classList.add('hidden'); schedEl(prefix, 'Step1').classList.remove('hidden'); });
     schedEl(prefix, 'ConfirmBtn').addEventListener('click', () => schedConfirmOtp(kind));
     schedEl(prefix, 'Modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+    schedEl(prefix, 'DetailCloseBtn').addEventListener('click', () => schedEl(prefix, 'DetailModal').close());
+    schedEl(prefix, 'DetailModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   }
   wireSchedModal('statement');
   wireSchedModal('fund_performance');

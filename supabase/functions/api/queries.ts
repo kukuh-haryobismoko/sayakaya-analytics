@@ -484,6 +484,22 @@ export const userHoldings = (userId: string): Query => ({
   params: { userId },
 });
 
+// Batched per-recipient recap for a schedule's queue detail view: for each
+// user, whether they currently hold any portfolio units (same "active
+// holdings" definition as userHoldings — regular + bonus, unit > 0/on_going)
+// and whether they transacted within [from, to] (the schedule's e-statement
+// month) — one query for the whole recipient list instead of one per row.
+export const scheduleRecipientRecap = (userIds: string[], from: string, to: string): Query => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name,
+      (EXISTS (SELECT 1 FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id = u.id)
+        OR EXISTS (SELECT 1 FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id = u.id)) AS has_portfolio,
+      EXISTS (SELECT 1 FROM ${TX} t WHERE t.user_id = u.id AND DATE(t.created_at) BETWEEN @from AND @to) AS had_transaction_last_month
+    FROM ${USERS} u
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+    WHERE u.id IN UNNEST(@userIds)`,
+  params: { userIds: userIds || [], from, to },
+});
+
 // Same shape as userHoldings() above, but avg_buy_price is derived from the
 // real transaction ledger instead of portfolios.initial_price (which can
 // silently drift from the actual buy price — see the IDD031084165546 case).

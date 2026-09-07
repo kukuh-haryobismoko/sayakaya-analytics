@@ -232,6 +232,17 @@ function listJobs(kind) {
   return rest(`/dashboard_scheduled_jobs?kind=eq.${kind}&select=*&order=created_at.desc`);
 }
 
+async function getJob(id) {
+  const rows = await rest(`/dashboard_scheduled_jobs?id=eq.${id}&select=*`);
+  return rows[0] || null;
+}
+
+// Every (job, recipient) row ever queued for this job, most recent first —
+// the per-recipient breakdown behind the schedule detail view.
+function listQueue(jobId) {
+  return rest(`/dashboard_schedule_queue?job_id=eq.${jobId}&select=*&order=created_at.desc`);
+}
+
 async function setJobStatus(id, status) {
   const rows = await rest(`/dashboard_scheduled_jobs?id=eq.${id}`, {
     method: 'PATCH',
@@ -379,6 +390,8 @@ module.exports = {
   requestOtp,
   confirmOtp,
   listJobs,
+  getJob,
+  listQueue,
   setJobStatus,
   deleteJob,
   runDueJobs,

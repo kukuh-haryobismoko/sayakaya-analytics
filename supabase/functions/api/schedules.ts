@@ -231,6 +231,18 @@ export function listJobs(kind: string): Promise<ScheduledJob[]> {
   return rest(`/dashboard_scheduled_jobs?kind=eq.${kind}&select=*&order=created_at.desc`);
 }
 
+export async function getJob(id: string): Promise<ScheduledJob | null> {
+  const rows = await rest(`/dashboard_scheduled_jobs?id=eq.${id}&select=*`);
+  return rows[0] || null;
+}
+
+// Every (job, recipient) row ever queued for this job, most recent first —
+// the per-recipient breakdown behind the schedule detail view.
+// deno-lint-ignore no-explicit-any
+export function listQueue(jobId: string): Promise<any[]> {
+  return rest(`/dashboard_schedule_queue?job_id=eq.${jobId}&select=*&order=created_at.desc`);
+}
+
 export async function setJobStatus(id: string, status: string): Promise<ScheduledJob> {
   const rows = await rest(`/dashboard_scheduled_jobs?id=eq.${id}`, {
     method: 'PATCH',

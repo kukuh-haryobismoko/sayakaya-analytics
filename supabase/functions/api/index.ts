@@ -13,7 +13,7 @@ import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 import * as Mail from './mail.ts';
 import * as Sched from './schedules.ts';
-import { pivotPerformanceByType, buildStatementAttachments } from './report-helpers.ts';
+import { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } from './report-helpers.ts';
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -1548,6 +1548,47 @@ on('POST', '/api/schedules/otp/confirm', requireAnyTab(['send-statement', 'send-
 
 on('GET', '/api/schedules', requireScheduleKindTab(async (_req, _params, url) => {
   return json(await Sched.listJobs(qp(url, 'kind') as string));
+}));
+
+// Per-recipient breakdown of one schedule: every (job, recipient) row ever
+// queued, its send status, and — for recipients resolved to a known
+// investor (recipient_user_id set) — whether they currently hold any
+// portfolio and whether they transacted last calendar month. Recipients
+// added via a plain email list for Send fund performance never resolve to
+// a user, so those two columns come back null for them (not false —
+// "unknown", not "no").
+on('GET', '/api/schedules/:id/detail', requireAnyTab(['send-statement', 'send-fund-performance'], async (_req, params) => {
+  const job = await Sched.getJob(params.id);
+  if (!job) return json({ error: 'Schedule not found.' }, 404);
+  // deno-lint-ignore no-explicit-any
+  const queue: any[] = await Sched.listQueue(params.id);
+
+  const userIds = [...new Set(queue.map((r) => r.recipient_user_id).filter(Boolean))] as string[];
+  // deno-lint-ignore no-explicit-any
+  let recapByUser: Record<string, any> = {};
+  if (userIds.length) {
+    const [year, month] = previousMonthYYYYMM().split('-').map(Number);
+    const from = `${year}-${String(month).padStart(2, '0')}-01`;
+    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    const q = Q.scheduleRecipientRecap(userIds, from, to);
+    const rows = await runQuery(q.sql, q.params);
+    recapByUser = Object.fromEntries(rows.map((r) => [r.user_id as string, r]));
+  }
+
+  const recipients = queue.map((r) => {
+    const recap = r.recipient_user_id ? recapByUser[r.recipient_user_id] : null;
+    return {
+      email: r.recipient_email,
+      sid: r.recipient_sid || (recap && val(recap.sid as string | undefined)) || null,
+      name: recap ? val(recap.name as string | undefined) : null,
+      status: r.status,
+      error: r.error,
+      processed_at: r.processed_at,
+      has_portfolio: recap ? recap.has_portfolio : null,
+      had_transaction_last_month: recap ? recap.had_transaction_last_month : null,
+    };
+  });
+  return json({ job, recipients });
 }));
 
 on('PATCH', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-performance'], async (req, params, _url, user) => {

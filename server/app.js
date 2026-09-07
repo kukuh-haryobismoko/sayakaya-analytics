@@ -18,7 +18,7 @@ const SHEETS = require('./sheets');
 const Mail = require('./mail');
 const Auth = require('./auth');
 const Sched = require('./schedules');
-const { pivotPerformanceByType, buildStatementAttachments } = require('./report-helpers');
+const { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } = require('./report-helpers');
 
 // Every export `source` maps to exactly one tab, so a single permission check
 // at the top of /api/export covers all of them (see requireTab below for the
@@ -1435,6 +1435,45 @@ function createApp({ serveStatic = true } = {}) {
 
   app.get('/api/schedules', requireScheduleKindTab, handler(async (req, res) => {
     res.json(await Sched.listJobs(req.query.kind));
+  }));
+
+  // Per-recipient breakdown of one schedule: every (job, recipient) row ever
+  // queued, its send status, and — for recipients resolved to a known
+  // investor (recipient_user_id set) — whether they currently hold any
+  // portfolio and whether they transacted last calendar month. Recipients
+  // added via a plain email list for Send fund performance never resolve to
+  // a user, so those two columns come back null for them (not false —
+  // "unknown", not "no").
+  app.get('/api/schedules/:id/detail', requireEitherScheduleTab, handler(async (req, res) => {
+    const job = await Sched.getJob(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Schedule not found.' });
+    const queue = await Sched.listQueue(req.params.id);
+
+    const userIds = [...new Set(queue.map((r) => r.recipient_user_id).filter(Boolean))];
+    let recapByUser = {};
+    if (userIds.length) {
+      const [year, month] = previousMonthYYYYMM().split('-').map(Number);
+      const from = `${year}-${String(month).padStart(2, '0')}-01`;
+      const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+      const q = Q.scheduleRecipientRecap(userIds, from, to);
+      const rows = await runQuery(q.sql, q.params);
+      recapByUser = Object.fromEntries(rows.map((r) => [r.user_id, r]));
+    }
+
+    const recipients = queue.map((r) => {
+      const recap = r.recipient_user_id ? recapByUser[r.recipient_user_id] : null;
+      return {
+        email: r.recipient_email,
+        sid: r.recipient_sid || (recap && PDF.val(recap.sid)) || null,
+        name: recap ? PDF.val(recap.name) : null,
+        status: r.status,
+        error: r.error,
+        processed_at: r.processed_at,
+        has_portfolio: recap ? recap.has_portfolio : null,
+        had_transaction_last_month: recap ? recap.had_transaction_last_month : null,
+      };
+    });
+    res.json({ job, recipients });
   }));
 
   app.patch('/api/schedules/:id', requireEitherScheduleTab, handler(async (req, res) => {
