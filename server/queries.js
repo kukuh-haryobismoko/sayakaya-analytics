@@ -424,12 +424,16 @@ const userContact = (userId) => ({
 
 // One investor's transactions within a date range, for the monthly e-statement
 // PDF (server/pdf.js transactionStatement) — fund name resolved here since
-// main.transactions only carries fund_id.
+// main.transactions only carries fund_id. Restricted to settled/successful
+// statuses — same set as the referral eligibility report's "did they buy"
+// check — so an expired/cancelled/pending_payment attempt never shows up on
+// an investor's official statement.
 const userTransactions = (userId, from, to) => ({
   sql: `SELECT t.created_at, t.type, t.status, f.name AS fund, t.unit, t.amount, t.final_amount
     FROM ${TX} t
     LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
     WHERE t.user_id = @userId AND DATE(t.created_at) BETWEEN @from AND @to
+      AND t.status IN ('completed', 'verified', 'completed_payment')
     ORDER BY t.created_at`,
   params: { userId, from, to },
 });
