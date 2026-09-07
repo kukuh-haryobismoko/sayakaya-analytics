@@ -1550,15 +1550,16 @@ on('GET', '/api/schedules', requireScheduleKindTab(async (_req, _params, url) =>
   return json(await Sched.listJobs(qp(url, 'kind') as string));
 }));
 
-// Per-recipient breakdown of one schedule: every (job, recipient) row ever
-// queued, its send status, and — for recipients resolved to a known
-// investor (recipient_user_id set) — whether they currently hold any
-// portfolio and whether they transacted last calendar month. Recipients
-// added via a plain email list for Send fund performance never resolve to
-// a user, so those two columns come back null for them (not false —
-// "unknown", not "no"). Before the first run (queue empty), falls back to
-// a live preview of who *would* be resolved — response carries
-// `preview: true` so the UI can label it accordingly.
+// Per-recipient breakdown of one schedule: one row per unique recipient
+// (most recent send, plus a sent/failed count across every run — see the
+// collapse below), and — for recipients resolved to a known investor
+// (recipient_user_id set) — whether they currently hold any portfolio and
+// whether they transacted last calendar month. Recipients added via a
+// plain email list for Send fund performance never resolve to a user, so
+// those two columns come back null for them (not false — "unknown", not
+// "no"). Before the first run (queue empty), falls back to a live preview
+// of who *would* be resolved — response carries `preview: true` so the UI
+// can label it accordingly.
 on('GET', '/api/schedules/:id/detail', requireAnyTab(['send-statement', 'send-fund-performance'], async (_req, params) => {
   const job = await Sched.getJob(params.id);
   if (!job) return json({ error: 'Schedule not found.' }, 404);
@@ -1574,6 +1575,24 @@ on('GET', '/api/schedules/:id/detail', requireAnyTab(['send-statement', 'send-fu
     queue = resolved.map((r) => ({ recipient_email: r.email, recipient_user_id: r.userId, recipient_sid: r.sid, status: null, error: null, processed_at: null }));
     preview = true;
   }
+
+  // Recurring schedules create a fresh queue row per recipient every run, so
+  // a job that's fired for a year could have hundreds of rows per person.
+  // Collapse to one row per recipient — most recent send — with a rollup of
+  // how many times it's gone out, instead of a growing, unreadable
+  // per-occurrence log.
+  // deno-lint-ignore no-explicit-any
+  const groups = new Map<string, any[]>();
+  for (const r of queue) {
+    const key = r.recipient_email || r.recipient_user_id || r.id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(r);
+  }
+  queue = [...groups.values()].map((rows) => ({
+    ...rows[0], // listQueue orders created_at desc, so rows[0] is the latest
+    sent_count: rows.filter((x) => x.status === 'sent').length,
+    failed_count: rows.filter((x) => x.status === 'failed').length,
+  }));
 
   const userIds = [...new Set(queue.map((r) => r.recipient_user_id).filter(Boolean))] as string[];
   // deno-lint-ignore no-explicit-any
@@ -1596,6 +1615,8 @@ on('GET', '/api/schedules/:id/detail', requireAnyTab(['send-statement', 'send-fu
       status: r.status,
       error: r.error,
       processed_at: r.processed_at,
+      sent_count: r.sent_count,
+      failed_count: r.failed_count,
       has_portfolio: recap ? recap.has_portfolio : null,
       had_transaction_last_month: recap ? recap.had_transaction_last_month : null,
     };

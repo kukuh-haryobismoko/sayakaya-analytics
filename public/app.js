@@ -2868,16 +2868,23 @@ async function openSchedDetail(kind, id) {
     const note = preview
       ? '<div class="callout" style="margin-bottom:12px"><span class="callout-icon" aria-hidden="true">👀</span><span>Preview — this schedule hasn\'t run yet. Recipients below are resolved live and may change by the time it actually sends.</span></div>'
       : '';
-    const rows = recipients.map((r) => `<tr>
+    const rows = recipients.map((r) => {
+      const sentLabel = num(r.sent_count || 0) + (r.failed_count ? ` sent · ${num(r.failed_count)} failed` : ' sent');
+      const lastLabel = r.status
+        ? `${escapeHtml(r.status)}${r.processed_at ? ` · ${toJakartaTime(r.processed_at)}` : ''}${r.error ? ` — ${escapeHtml(r.error)}` : ''}`
+        : 'Not sent yet';
+      return `<tr>
         <td>${escapeHtml(r.name || '—')}</td>
         <td>${escapeHtml(r.sid || '—')}</td>
         <td>${escapeHtml(r.email || '—')}</td>
         <td>${SCHED_YN(r.has_portfolio)}</td>
         <td>${SCHED_YN(r.had_transaction_last_month)}</td>
-        <td>${r.status ? escapeHtml(r.status) : 'Not sent yet'}${r.error ? ` — ${escapeHtml(r.error)}` : ''}</td>
-      </tr>`).join('');
+        <td>${sentLabel}</td>
+        <td>${lastLabel}</td>
+      </tr>`;
+    }).join('');
     schedEl(prefix, 'DetailBody').innerHTML = `${note}<table><thead><tr>
-        <th>Name</th><th>SID</th><th>Email</th><th>Has portfolio</th><th>Tx last month</th><th>Status</th>
+        <th>Name</th><th>SID</th><th>Email</th><th>Has portfolio</th><th>Tx last month</th><th>Sent</th><th>Last send (WIB)</th>
       </tr></thead><tbody>${rows}</tbody></table>`;
   } catch (e) { schedEl(prefix, 'DetailBody').innerHTML = `<div class="empty">${e.message}</div>`; }
 }

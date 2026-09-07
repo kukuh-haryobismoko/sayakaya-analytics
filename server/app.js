@@ -1437,15 +1437,16 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await Sched.listJobs(req.query.kind));
   }));
 
-  // Per-recipient breakdown of one schedule: every (job, recipient) row ever
-  // queued, its send status, and — for recipients resolved to a known
-  // investor (recipient_user_id set) — whether they currently hold any
-  // portfolio and whether they transacted last calendar month. Recipients
-  // added via a plain email list for Send fund performance never resolve to
-  // a user, so those two columns come back null for them (not false —
-  // "unknown", not "no"). Before the first run (queue empty), falls back to
-  // a live preview of who *would* be resolved — response carries
-  // `preview: true` so the UI can label it accordingly.
+  // Per-recipient breakdown of one schedule: one row per unique recipient
+  // (most recent send, plus a sent/failed count across every run — see the
+  // collapse below), and — for recipients resolved to a known investor
+  // (recipient_user_id set) — whether they currently hold any portfolio and
+  // whether they transacted last calendar month. Recipients added via a
+  // plain email list for Send fund performance never resolve to a user, so
+  // those two columns come back null for them (not false — "unknown", not
+  // "no"). Before the first run (queue empty), falls back to a live preview
+  // of who *would* be resolved — response carries `preview: true` so the UI
+  // can label it accordingly.
   app.get('/api/schedules/:id/detail', requireEitherScheduleTab, handler(async (req, res) => {
     const job = await Sched.getJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'Schedule not found.' });
@@ -1463,6 +1464,23 @@ function createApp({ serveStatic = true } = {}) {
       queue = recipients.map((r) => ({ recipient_email: r.email, recipient_user_id: r.userId, recipient_sid: r.sid, status: null, error: null, processed_at: null }));
       preview = true;
     }
+
+    // Recurring schedules create a fresh queue row per recipient every run,
+    // so a job that's fired for a year could have hundreds of rows per
+    // person. Collapse to one row per recipient — most recent send — with a
+    // rollup of how many times it's gone out, instead of a growing,
+    // unreadable per-occurrence log.
+    const groups = new Map();
+    for (const r of queue) {
+      const key = r.recipient_email || r.recipient_user_id || r.id;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(r);
+    }
+    queue = [...groups.values()].map((rows) => ({
+      ...rows[0], // listQueue orders created_at desc, so rows[0] is the latest
+      sent_count: rows.filter((x) => x.status === 'sent').length,
+      failed_count: rows.filter((x) => x.status === 'failed').length,
+    }));
 
     const userIds = [...new Set(queue.map((r) => r.recipient_user_id).filter(Boolean))];
     let recapByUser = {};
@@ -1484,6 +1502,8 @@ function createApp({ serveStatic = true } = {}) {
         status: r.status,
         error: r.error,
         processed_at: r.processed_at,
+        sent_count: r.sent_count,
+        failed_count: r.failed_count,
         has_portfolio: recap ? recap.has_portfolio : null,
         had_transaction_last_month: recap ? recap.had_transaction_last_month : null,
       };
