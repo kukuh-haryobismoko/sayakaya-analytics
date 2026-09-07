@@ -84,7 +84,7 @@ function portfolioSheetRows(holdings: Record<string, unknown>[]) {
 // no snapshot ever found) wins over "still pending" over "eligible" — a row
 // never both.
 const REFERRAL_HOLD_DAYS = 30;
-const REFERRAL_SNAPSHOT_LAG_DAYS = 2; // portfolio_fix updates ~1 day behind; give it slack before assuming "never snapshotted" means fully redeemed.
+const REFERRAL_SNAPSHOT_LAG_DAYS = 7; // observed lag from tx_date to first portfolio_fix snapshot ranges 1-7 days (weekends/custodian delay); give it slack before assuming "never snapshotted" means fully redeemed.
 function computeReferralEligibility(rows: Record<string, unknown>[]) {
   return rows.map((r) => {
     const reasons: string[] = [];
