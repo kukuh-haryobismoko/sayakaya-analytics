@@ -438,6 +438,17 @@
             </div>
           </div>
 
+          <div class="field-card-row" style="margin-top:16px">
+            <div class="field-card">
+              <label class="field-card-top"><input type="checkbox" id="ssSchedEndless" checked />
+                <span data-i18n="sched_endless">No end date (send indefinitely)</span></label>
+            </div>
+            <div class="field-card hidden" id="ssSchedEndDateField">
+              <label class="field-card-top" for="ssSchedEndDate" data-i18n="sched_end_date">End date (last send)</label>
+              <input type="date" id="ssSchedEndDate" class="field-card-input" />
+            </div>
+          </div>
+
           <div class="filters" style="margin-top:16px; flex-direction:column; align-items:stretch">
             <input type="text" id="ssSchedSubject" data-i18n-placeholder="sched_subject_ph" placeholder="Subject" style="width:100%" />
             <textarea id="ssSchedBody" rows="6" style="width:100%; margin-top:10px; font:inherit" data-i18n-placeholder="sched_body_ph" placeholder="Body"></textarea>
@@ -598,6 +609,17 @@
             <div class="field-card">
               <label class="field-card-top" data-i18n="sched_run_time">Time (WIB)</label>
               <input type="time" id="fpeSchedRunTime" class="field-card-input" value="08:00" />
+            </div>
+          </div>
+
+          <div class="field-card-row" style="margin-top:16px">
+            <div class="field-card">
+              <label class="field-card-top"><input type="checkbox" id="fpeSchedEndless" checked />
+                <span data-i18n="sched_endless">No end date (send indefinitely)</span></label>
+            </div>
+            <div class="field-card hidden" id="fpeSchedEndDateField">
+              <label class="field-card-top" for="fpeSchedEndDate" data-i18n="sched_end_date">End date (last send)</label>
+              <input type="date" id="fpeSchedEndDate" class="field-card-input" />
             </div>
           </div>
 

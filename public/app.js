@@ -2821,7 +2821,8 @@ function renderSchedules(kind, rows) {
       <td>${escapeHtml(schedRecipientSummary(r))}</td>
       <td>${escapeHtml(schedFrequencySummary(r))}</td>
       <td>${r.kind === 'statement' ? [r.send_portfolio && 'Portfolio', r.send_statement && 'E-statement'].filter(Boolean).join(' + ') : 'Fund performance'}</td>
-      <td>${r.status === 'active' ? 'Active' : 'Paused'}</td>
+      <td>${r.status === 'active' ? 'Active' : r.status === 'ended' ? 'Ended' : 'Paused'}</td>
+      <td>${r.end_date || '—'}</td>
       <td>${r.next_run_at ? toJakartaTime(r.next_run_at) : '—'}</td>
       <td>${r.last_run_at ? toJakartaTime(r.last_run_at) : '—'}</td>
       <td class="num">${num(r.run_count)}</td>
@@ -2832,7 +2833,7 @@ function renderSchedules(kind, rows) {
       </td>
     </tr>`).join('');
   tableEl.innerHTML = `<table><thead><tr>
-      <th>Recipients</th><th>Schedule</th><th>Sends</th><th>Status</th><th>Next run (WIB)</th><th>Last run (WIB)</th><th class="num">Times sent</th><th>Created by</th><th></th>
+      <th>Recipients</th><th>Schedule</th><th>Sends</th><th>Status</th><th>Ends</th><th>Next run (WIB)</th><th>Last run (WIB)</th><th class="num">Times sent</th><th>Created by</th><th></th>
     </tr></thead><tbody>${body}</tbody></table>`;
   $$(`#${prefix}Table .sched-toggle-btn`).forEach((btn) => btn.addEventListener('click', async () => {
     try {
@@ -2859,6 +2860,9 @@ function schedResetModal(kind) {
   schedEl(prefix, 'DayOfWeek').value = '1';
   schedEl(prefix, 'DayOfMonth').value = '1';
   schedEl(prefix, 'RunTime').value = '08:00';
+  schedEl(prefix, 'Endless').checked = true;
+  schedEl(prefix, 'EndDate').value = '';
+  schedEl(prefix, 'EndDate').min = new Date().toISOString().slice(0, 10);
   schedEl(prefix, 'Subject').value = kind === 'statement' ? 'Your Sayakaya Statement' : 'Sayakaya Fund Performance Update';
   schedEl(prefix, 'Body').value = kind === 'statement'
     ? 'Dear Investor,\n\nPlease find your portfolio/e-statement attached, issued by PT Sayakaya Lahir Batin.\n\nTo open the attached PDF file(s), use your date of birth as registered with us in DDMMYYYY format (e.g. 17081990 for 17 August 1990).\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin'
@@ -2876,6 +2880,7 @@ function schedUpdateFieldVisibility(kind) {
   const freq = schedEl(prefix, 'Frequency').value;
   schedEl(prefix, 'WeekdayField').classList.toggle('hidden', freq !== 'weekly');
   schedEl(prefix, 'DayOfMonthField').classList.toggle('hidden', freq !== 'monthly_day');
+  schedEl(prefix, 'EndDateField').classList.toggle('hidden', schedEl(prefix, 'Endless').checked);
   if (type === 'all_aum' || type === 'all_registered') schedPreviewCount(kind);
   else schedEl(prefix, 'CountPreview').classList.add('hidden');
 }
@@ -2933,6 +2938,7 @@ async function schedSendOtp(kind) {
       dayOfWeek: frequency === 'weekly' ? Number(schedEl(prefix, 'DayOfWeek').value) : undefined,
       dayOfMonth: frequency === 'monthly_day' ? Number(schedEl(prefix, 'DayOfMonth').value) : undefined,
       runTime: schedEl(prefix, 'RunTime').value || '08:00',
+      endDate: schedEl(prefix, 'Endless').checked ? null : (schedEl(prefix, 'EndDate').value || null),
       subject: schedEl(prefix, 'Subject').value,
       body: schedEl(prefix, 'Body').value,
       confirmationEmail: schedEl(prefix, 'ConfirmEmail').value.trim(),
@@ -3840,6 +3846,7 @@ function wire() {
     schedEl(prefix, 'NewBtn').addEventListener('click', () => { schedResetModal(kind); schedEl(prefix, 'Modal').showModal(); });
     schedEl(prefix, 'RecipientType').addEventListener('change', () => schedUpdateFieldVisibility(kind));
     schedEl(prefix, 'Frequency').addEventListener('change', () => schedUpdateFieldVisibility(kind));
+    schedEl(prefix, 'Endless').addEventListener('change', () => schedUpdateFieldVisibility(kind));
     schedEl(prefix, 'CsvFile').addEventListener('change', () => schedPreviewCount(kind));
     schedEl(prefix, 'CsvPaste').addEventListener('change', () => schedPreviewCount(kind));
     schedEl(prefix, 'SendCodeBtn').addEventListener('click', () => schedSendOtp(kind));

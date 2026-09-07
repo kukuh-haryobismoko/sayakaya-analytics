@@ -1528,7 +1528,7 @@ on('POST', '/api/schedules/otp/request', requireScheduleKindTab(async (req, _par
     kind, recipientType, recipientEmail: b.recipientEmail, recipientList: b.recipientList,
     sendPortfolio, sendStatement, subject: b.subject, body: b.body,
     frequency, dayOfWeek: b.dayOfWeek, dayOfMonth: b.dayOfMonth, runTime: b.runTime,
-    confirmationEmail: b.confirmationEmail,
+    endDate: b.endDate, confirmationEmail: b.confirmationEmail,
     userId: user!.id, username: user!.username,
   });
   return json({ ok: true, otpId, recipientCount: count });

@@ -37,6 +37,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes — same order as dashboard_password_resets
 const JAKARTA_OFFSET_MIN = 7 * 60; // WIB, UTC+7, no DST — same convention as the rest of the dashboard
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function jktDateStr(d) { return new Date(d.getTime() + JAKARTA_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
 
 // Per drain call: statement sends each cost a BigQuery query + PDF render;
 // fund_performance sends share one already-built PDF, so they're cheap and
@@ -214,6 +215,7 @@ async function confirmOtp(otpId, code) {
       day_of_week: p.dayOfWeek ?? null,
       day_of_month: p.dayOfMonth ?? null,
       run_time: p.runTime || '08:00',
+      end_date: p.endDate || null,
       status: 'active',
       next_run_at: computeNextRun(seed, new Date()).toISOString(),
       created_by_user_id: p.userId || null,
@@ -338,6 +340,12 @@ async function runDueJobs() {
 
   let enqueued = 0;
   for (const job of due) {
+    // end_date is inclusive — a due occurrence dated after it (WIB) means the
+    // schedule has run its course; stop it instead of enqueueing/re-arming.
+    if (job.end_date && jktDateStr(new Date(job.next_run_at)) > job.end_date) {
+      await rest(`/dashboard_scheduled_jobs?id=eq.${job.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'ended' }) });
+      continue;
+    }
     const nextRun = computeNextRun(job, new Date());
     // Conditional claim: only proceed if next_run_at still matches what we
     // just read — if another concurrent tick already claimed it, this PATCH

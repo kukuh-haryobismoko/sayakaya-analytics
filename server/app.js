@@ -1405,7 +1405,7 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/schedules/otp/request', requireScheduleKindTab, handler(async (req, res) => {
     const {
       kind, recipientType, recipientEmail, recipientList, sendPortfolio, sendStatement,
-      subject, body, frequency, dayOfWeek, dayOfMonth, runTime, confirmationEmail,
+      subject, body, frequency, dayOfWeek, dayOfMonth, runTime, endDate, confirmationEmail,
     } = req.body || {};
     if (!recipientType) return res.status(400).json({ error: 'recipientType is required.' });
     if (!frequency) return res.status(400).json({ error: 'frequency is required.' });
@@ -1417,7 +1417,7 @@ function createApp({ serveStatic = true } = {}) {
 
     const otpId = await Sched.requestOtp({
       kind, recipientType, recipientEmail, recipientList, sendPortfolio, sendStatement,
-      subject, body, frequency, dayOfWeek, dayOfMonth, runTime, confirmationEmail,
+      subject, body, frequency, dayOfWeek, dayOfMonth, runTime, endDate, confirmationEmail,
       userId: req.user.id, username: req.user.username,
     });
     res.json({ ok: true, otpId, recipientCount: count });

@@ -19,6 +19,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 const OTP_TTL_MS = 10 * 60 * 1000;
 const JAKARTA_OFFSET_MIN = 7 * 60;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function jktDateStr(d: Date): string { return new Date(d.getTime() + JAKARTA_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
 
 const DRAIN_LIMIT: Record<string, number> = {
   statement: Number(Deno.env.get('SCHEDULE_DRAIN_LIMIT_STATEMENT')) || 25,
@@ -40,7 +41,8 @@ export interface ScheduledJob {
   day_of_week: number | null;
   day_of_month: number | null;
   run_time: string;
-  status: 'active' | 'paused';
+  end_date: string | null;
+  status: 'active' | 'paused' | 'ended';
   next_run_at: string | null;
   last_run_at: string | null;
   run_count: number;
@@ -212,6 +214,7 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
       day_of_week: p.dayOfWeek ?? null,
       day_of_month: p.dayOfMonth ?? null,
       run_time: p.runTime || '08:00',
+      end_date: p.endDate || null,
       status: 'active',
       next_run_at: computeNextRun(seed, new Date()).toISOString(),
       created_by_user_id: p.userId || null,
@@ -327,6 +330,12 @@ export async function runDueJobs(): Promise<{ jobsClaimed: number; recipientsEnq
 
   let enqueued = 0;
   for (const job of due) {
+    // end_date is inclusive — a due occurrence dated after it (WIB) means the
+    // schedule has run its course; stop it instead of enqueueing/re-arming.
+    if (job.end_date && jktDateStr(new Date(job.next_run_at || '')) > job.end_date) {
+      await rest(`/dashboard_scheduled_jobs?id=eq.${job.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'ended' }) });
+      continue;
+    }
     const nextRun = computeNextRun(job, new Date());
     const claimed = await rest(
       `/dashboard_scheduled_jobs?id=eq.${job.id}&next_run_at=eq.${encodeURIComponent(job.next_run_at || '')}`,
