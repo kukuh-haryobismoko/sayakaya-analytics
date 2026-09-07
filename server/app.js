@@ -244,6 +244,10 @@ function createApp({ serveStatic = true } = {}) {
     if (target.is_superuser && req.body.isSuperuser === false && (await Auth.countSuperusers()) <= 1) {
       return res.status(400).json({ error: 'Cannot remove the last remaining superuser.' });
     }
+    if (req.body.username) {
+      const existingUsername = await Auth.findUserByUsername(req.body.username);
+      if (existingUsername && existingUsername.id !== target.id) return res.status(409).json({ error: 'That username is already taken.' });
+    }
     const updated = await Auth.updateUser(req.params.id, req.body || {});
     const changes = [];
     if (req.body.password) changes.push('password reset');
@@ -286,6 +290,21 @@ function createApp({ serveStatic = true } = {}) {
     await Auth.updateUser(req.user.id, { password: newPassword });
     await Auth.logEvent(req.user.id, req.user.username, 'password_change');
     res.json({ ok: true });
+  }));
+
+  // ---- Auth: claim your own username (once) ----------------------------------
+  // Only for accounts created via email-only invite (no username yet). Once
+  // set, further changes go through an admin — matching the picker's
+  // disabled-once-set rule in the admin edit form.
+  app.post('/api/auth/set-username', handler(async (req, res) => {
+    const { username } = req.body || {};
+    if (!username) return res.status(400).json({ error: 'Username is required.' });
+    if (req.user.username) return res.status(400).json({ error: 'Username is already set. Ask an admin to change it.' });
+    const existing = await Auth.findUserByUsername(username);
+    if (existing) return res.status(409).json({ error: 'That username is already taken.' });
+    const updated = await Auth.updateUser(req.user.id, { username });
+    await Auth.logEvent(req.user.id, username, 'username_set', `set own username to "${username}"`);
+    res.json({ user: Auth.publicUser(updated) });
   }));
 
   // ---- Auth: forgot password (unauthenticated, like login) ------------------

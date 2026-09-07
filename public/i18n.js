@@ -38,6 +38,9 @@ const I18N = {
     change_pw_new_ph: `New password`,
     change_pw_confirm_ph: `Confirm new password`,
     change_pw_save: `Update password`,
+    set_username_btn: `Set username`,
+    set_username_ph: `Choose a username`,
+    set_username_save: `Save username`,
 
     nav_group_dashboards: `Dashboards`,
     nav_group_investor: `Investor`,
@@ -421,6 +424,9 @@ const I18N = {
     reset_password_confirm_ph: `Konfirmasi kata sandi baru`,
     reset_password_submit: `Simpan kata sandi baru`,
 
+    set_username_btn: `Atur username`,
+    set_username_ph: `Pilih username`,
+    set_username_save: `Simpan username`,
     password_btn: `Kata sandi`,
     logout_btn: `Keluar`,
     change_pw_current_ph: `Kata sandi saat ini`,

@@ -3466,7 +3466,7 @@ async function saveAdminUser() {
   }
   try {
     if (editingUserId) {
-      const patch = { email, isSuperuser, allowedTabs };
+      const patch = { email, username, isSuperuser, allowedTabs };
       if (password) patch.password = password;
       await api(`/api/admin/users/${editingUserId}`, { method: 'PATCH', body: JSON.stringify(patch) });
       toast('User updated');
@@ -3547,6 +3547,28 @@ function wireAdmin() {
   $('#adminAuditApply').addEventListener('click', loadAdminAuditLog);
   $('#adminAuditUser').addEventListener('change', loadAdminAuditLog);
   $('#adminAuditSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAdminAuditLog(); });
+}
+
+// ---------- set own username, once (sidebar) ----------
+// Only for accounts created via email-only invite — hidden once a username
+// exists, matching the admin edit form's disabled-once-set field.
+function wireSetUsername() {
+  $('#setUsernameBtn').addEventListener('click', () => {
+    $('#setUsernamePanel').classList.toggle('hidden');
+    $('#setUsernameInput').focus();
+  });
+  $('#setUsernameSave').addEventListener('click', async () => {
+    const username = $('#setUsernameInput').value.trim();
+    $('#setUsernameErr').textContent = '';
+    if (!username) { $('#setUsernameErr').textContent = 'Username is required.'; return; }
+    try {
+      const body = await api('/api/auth/set-username', { method: 'POST', body: JSON.stringify({ username }) });
+      $('#setUsernamePanel').classList.add('hidden');
+      $('#setUsernameInput').value = '';
+      applyPermissions(body.user);
+      toast('Username set');
+    } catch (e) { $('#setUsernameErr').textContent = e.message; }
+  });
 }
 
 // ---------- change own password (sidebar) ----------
@@ -3688,8 +3710,10 @@ function switchTab(name) {
 const SUPERUSER_ONLY_TABS = ['admin', 'activity-log'];
 function applyPermissions(user) {
   currentUser = user;
-  $('#userBadgeName').textContent = user.username + (user.isSuperuser ? ' (superuser)' : '');
-  $('#userAvatar').textContent = user.username.slice(0, 2).toUpperCase();
+  const displayName = user.username || user.email || '';
+  $('#userBadgeName').textContent = displayName + (user.isSuperuser ? ' (superuser)' : '');
+  $('#userAvatar').textContent = (displayName.slice(0, 2) || '?').toUpperCase();
+  $('#setUsernameBtn').classList.toggle('hidden', !!user.username);
   $('#adminNavGroup').classList.toggle('hidden', !user.isSuperuser);
   $('#askActivityLogChip').classList.toggle('hidden', !user.isSuperuser);
   $('#docsAdminSection').classList.toggle('hidden', !user.isSuperuser);
@@ -4439,7 +4463,7 @@ async function init() {
   syncThemeSeg(getThemeChoice());
   translatePage();
   syncLangSeg(getLang());
-  wire(); wireGate(); wireAdmin(); wireChangePassword();
+  wire(); wireGate(); wireAdmin(); wireChangePassword(); wireSetUsername();
 
   // A reset-password link takes priority over any existing session — even a
   // logged-in user who clicks one should land on "set a new password", not

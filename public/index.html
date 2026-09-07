@@ -85,10 +85,18 @@
         <div class="user-panel-info">
           <div class="user-panel-name" id="userBadgeName"></div>
           <div class="user-panel-actions">
+            <button id="setUsernameBtn" type="button" class="hidden" data-i18n="set_username_btn">Set username</button>
             <button id="changePwBtn" type="button" data-i18n="password_btn">Password</button>
             <button id="logoutBtn" type="button" data-i18n="logout_btn">Log out</button>
           </div>
         </div>
+      </div>
+      <div id="setUsernamePanel" class="hidden" style="margin: 10px 18px; padding:10px; border:1px solid var(--sidebar-line); border-radius:9px; background:var(--sidebar-bg-alt)">
+        <div class="pw-field" style="margin-bottom:8px">
+          <input type="text" id="setUsernameInput" data-i18n-placeholder="set_username_ph" placeholder="Choose a username" autocomplete="username" style="width:100%; box-sizing:border-box; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--input-bg); color:var(--ink); font:inherit" />
+        </div>
+        <button class="btn-primary" id="setUsernameSave" style="width:100%; padding:7px; font-size:12px" data-i18n="set_username_save">Save username</button>
+        <div id="setUsernameErr" class="gate-err" style="margin-top:6px; font-size:11px"></div>
       </div>
       <div id="changePwPanel" class="hidden" style="margin: 10px 18px; padding:10px; border:1px solid var(--sidebar-line); border-radius:9px; background:var(--sidebar-bg-alt)">
         <div class="pw-field" style="margin-bottom:6px">

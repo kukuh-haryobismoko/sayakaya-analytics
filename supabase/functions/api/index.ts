@@ -320,9 +320,15 @@ on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params, _url, u
   if (target.is_superuser && body.isSuperuser === false && (await A.countSuperusers()) <= 1) {
     return json({ error: 'Cannot remove the last remaining superuser.' }, 400);
   }
+  const username = body.username as string | undefined;
+  if (username) {
+    const existingUsername = await A.findUserByUsername(username);
+    if (existingUsername && existingUsername.id !== target.id) return json({ error: 'That username is already taken.' }, 409);
+  }
   const updated = await A.updateUser(params.id, {
     password: body.password as string | undefined,
     email: body.email as string | undefined,
+    username,
     isSuperuser: body.isSuperuser as boolean | undefined,
     allowedTabs: body.allowedTabs as string[] | undefined,
   });
@@ -374,6 +380,22 @@ on('POST', '/api/auth/change-password', async (req, _params, _url, user) => {
   await A.updateUser(user!.id, { password: newPassword });
   await A.logEvent(user!.id, user!.username, 'password_change');
   return json({ ok: true });
+});
+
+// ---- Auth: claim your own username (once) ----------------------------------
+// Only for accounts created via email-only invite (no username yet). Once
+// set, further changes go through an admin — matching the picker's
+// disabled-once-set rule in the admin edit form.
+on('POST', '/api/auth/set-username', async (req, _params, _url, user) => {
+  const body = await bodyOf(req);
+  const username = body.username as string | undefined;
+  if (!username) return json({ error: 'Username is required.' }, 400);
+  if (user!.username) return json({ error: 'Username is already set. Ask an admin to change it.' }, 400);
+  const existing = await A.findUserByUsername(username);
+  if (existing) return json({ error: 'That username is already taken.' }, 409);
+  const updated = await A.updateUser(user!.id, { username });
+  await A.logEvent(user!.id, username, 'username_set', `set own username to "${username}"`);
+  return json({ user: A.publicUser(updated) });
 });
 
 // ---- Auth: forgot password (unauthenticated, like login) ------------------

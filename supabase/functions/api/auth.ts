@@ -120,11 +120,12 @@ export async function createUser(opts: { username?: string | null; password?: st
   return rows[0];
 }
 
-// patch: { password?, email?, isSuperuser?, allowedTabs? } — only defined keys are updated.
-export async function updateUser(id: string, patch: { password?: string; email?: string | null; isSuperuser?: boolean; allowedTabs?: string[] } = {}): Promise<DashboardUser> {
+// patch: { password?, email?, username?, isSuperuser?, allowedTabs? } — only defined keys are updated.
+export async function updateUser(id: string, patch: { password?: string; email?: string | null; username?: string | null; isSuperuser?: boolean; allowedTabs?: string[] } = {}): Promise<DashboardUser> {
   const body: Record<string, unknown> = {};
   if (patch.password) body.password_hash = hashPassword(patch.password);
   if (patch.email !== undefined) body.email = patch.email || null;
+  if (patch.username !== undefined) body.username = patch.username || null;
   if (patch.isSuperuser !== undefined) body.is_superuser = patch.isSuperuser;
   if (patch.allowedTabs !== undefined) body.allowed_tabs = patch.allowedTabs;
   const rows = await rest(`/dashboard_users?id=eq.${id}`, {
