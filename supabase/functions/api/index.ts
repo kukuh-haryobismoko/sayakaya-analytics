@@ -14,6 +14,8 @@ import * as A from './auth.ts';
 import * as Mail from './mail.ts';
 import * as Sched from './schedules.ts';
 import { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } from './report-helpers.ts';
+import { Buffer } from 'node:buffer';
+import PRESENTATION_SEPTEMBER_BASE64 from './presentation-september.ts';
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -361,6 +363,21 @@ on('GET', '/api/admin/audit-log', requireSuperuser(async (_req, _params, url) =>
     user: qp(url, 'user'),
   });
   return json(rows);
+}));
+
+// ---- Presentation decks (internal meetings) --------------------------------
+// Mirrors server/app.js's PRESENTATIONS map/route. The PDF is inlined as
+// base64 (presentation-september.ts) rather than read from disk — Supabase's
+// eszip bundling has no runtime filesystem to read presentation-docs/ from.
+const PRESENTATIONS: Record<string, string> = {
+  september: PRESENTATION_SEPTEMBER_BASE64,
+};
+on('GET', '/api/presentations/:month', requireTab('presentation', async (_req, params) => {
+  const b64 = PRESENTATIONS[params.month];
+  if (!b64) return json({ error: 'No deck for that month.' }, 404);
+  return new Response(new Uint8Array(Buffer.from(b64, 'base64')), {
+    headers: { 'content-type': 'application/pdf' },
+  });
 }));
 
 // ---- Auth: change your own password ---------------------------------------
