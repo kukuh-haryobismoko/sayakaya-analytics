@@ -1326,7 +1326,15 @@ export const topReferrers = (limit: number | string = 20): Query => ({
 // same "first-ever transaction") could each resolve a tie differently
 // between requests, making the leaderboard silently disagree with this
 // detail table over the same set of qualifying invitees.
-export const referralProgramDetail = (periodFrom?: string, periodTo?: string): Query => ({
+// requireInviteeRegisteredInPeriod: true for the main "Referral program" tab,
+// false for "Referral Program (alt.)" — see the two routes in index.ts.
+// Without it, this query's "qualifying" population (anyone whose first-ever
+// transaction, regardless of when they registered, hits the campaign's own
+// Sucor/>=1jt/period rule) can include invitees the main tab's own
+// referralInviterStats() leaderboard excluded entirely (it requires
+// registration within the period too) — silently breaking the invited >=
+// transacted >= qualifying funnel the leaderboard is merged into.
+export const referralProgramDetail = (periodFrom?: string, periodTo?: string, requireInviteeRegisteredInPeriod = false): Query => ({
   sql: `WITH first_tx AS (
       SELECT user_id,
         ARRAY_AGG(STRUCT(id AS tx_id, fund_id, amount, created_at) ORDER BY created_at ASC, id ASC LIMIT 1)[OFFSET(0)] AS first_buy
@@ -1366,6 +1374,7 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string): Q
       JOIN ${USERS} inviter ON inviter.referral_code = invitee.referrer_code
       LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
       WHERE invitee.referrer_code IS NOT NULL
+      ${requireInviteeRegisteredInPeriod ? 'AND DATE(invitee.created_at) BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)' : ''}
     ),
     fix_snaps AS (
       SELECT sid_code, id AS fund_id, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS snap_date, total_unit

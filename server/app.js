@@ -744,7 +744,7 @@ function createApp({ serveStatic = true } = {}) {
   // ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
   app.get('/api/referral-program/detail', requireTab('referral-program'), handler(async (req, res) => {
     const { from, to } = req.query;
-    const q = Q.referralProgramDetail(from, to);
+    const q = Q.referralProgramDetail(from, to, true);
     res.json(computeReferralEligibility(await runQuery(q.sql, q.params)));
   }));
 
@@ -767,7 +767,7 @@ function createApp({ serveStatic = true } = {}) {
   // so it's assignable independently of the main section.
   app.get('/api/referral-program-alt/detail', requireTab('referral-program-alt'), handler(async (req, res) => {
     const { from, to } = req.query;
-    const q = Q.referralProgramDetail(from, to);
+    const q = Q.referralProgramDetail(from, to, false);
     res.json(computeReferralEligibility(await runQuery(q.sql, q.params)));
   }));
 
@@ -1258,7 +1258,7 @@ function createApp({ serveStatic = true } = {}) {
       const q = Q.hnwiByFund(req.body.date, req.body.minAum, req.body.maxAum, req.body.minFundAum, req.body.maxFundAum, limit || 20000);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
-      const q = Q.referralProgramDetail(req.body.from, req.body.to);
+      const q = Q.referralProgramDetail(req.body.from, req.body.to, source === 'referral_program_detail');
       rows = computeReferralEligibility(await runQuery(q.sql, q.params));
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
