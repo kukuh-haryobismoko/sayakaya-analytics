@@ -94,6 +94,7 @@ const I18N = {
 
     presentation_title: `Presentation`,
     presentation_hint: `Internal meeting decks, viewable full-screen one page at a time.`,
+    presentation_month_july: `July`,
     presentation_month_september: `September`,
     presentation_present_btn: `Present`,
     presentation_exit_hint: `Esc to exit · ← → to move`,
@@ -495,6 +496,7 @@ const I18N = {
 
     presentation_title: `Presentasi`,
     presentation_hint: `Materi rapat internal, bisa ditampilkan layar penuh satu halaman per satu.`,
+    presentation_month_july: `Juli`,
     presentation_month_september: `September`,
     presentation_present_btn: `Presentasikan`,
     presentation_exit_hint: `Esc untuk keluar · ← → untuk berpindah halaman`,

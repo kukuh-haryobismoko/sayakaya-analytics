@@ -283,6 +283,7 @@ function createApp({ serveStatic = true } = {}) {
   // Served from presentation-docs/ rather than public/ so the PDF isn't
   // reachable by URL without such a session. Add one entry per new month's deck.
   const PRESENTATIONS = {
+    july: { label: 'July 2026', file: 'Sayakaya AI taskforce presentation.pdf' },
     september: { label: 'September 2026', file: 'AI Taskforce Sayakaya - September.pdf' },
   };
   app.get('/api/presentations/:month', requireTab('presentation'), handler(async (req, res) => {
