@@ -58,6 +58,8 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   hnwi_by_fund: 'hnwi',
   referral_program_detail: 'referral-program',
   referral_program_alt_detail: 'referral-program-alt',
+  referral_program_invited: 'referral-program',
+  referral_program_alt_invited: 'referral-program-alt',
 };
 
 // Splits flat detail rows into one worksheet per distinct value of keyField —
@@ -827,6 +829,13 @@ on('GET', '/api/referral-program/inviter-stats', requireTab('referral-program', 
   return json(await runQuery(q.sql, q.params));
 }));
 
+// Row-level roster behind the leaderboard's "Invited" count — see
+// queries.ts:referralInvitedUsers.
+on('GET', '/api/referral-program/invited', requireTab('referral-program', async (_req, _params, url) => {
+  const q = Q.referralInvitedUsers(qp(url, 'from'), qp(url, 'to'), false);
+  return json(await runQuery(q.sql, q.params));
+}));
+
 // ---- Referral program (alt.): same T&C eligibility rule and detail rows
 // as the section above (registration date is deliberately NOT required here,
 // unlike the main tab above — only the invitee's first-ever transaction date
@@ -842,6 +851,11 @@ on('GET', '/api/referral-program-alt/detail', requireTab('referral-program-alt',
 
 on('GET', '/api/referral-program-alt/inviter-stats', requireTab('referral-program-alt', async (_req, _params, url) => {
   const q = Q.referralInviterStatsAlt(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
+on('GET', '/api/referral-program-alt/invited', requireTab('referral-program-alt', async (_req, _params, url) => {
+  const q = Q.referralInvitedUsers(qp(url, 'from'), qp(url, 'to'), true);
   return json(await runQuery(q.sql, q.params));
 }));
 
@@ -1351,6 +1365,9 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
   } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
     const q = Q.referralProgramDetail(body.from as string, body.to as string, source === 'referral_program_detail');
     rows = computeReferralEligibility(await runQuery(q.sql, q.params));
+  } else if (source === 'referral_program_invited' || source === 'referral_program_alt_invited') {
+    const q = Q.referralInvitedUsers(body.from as string, body.to as string, source === 'referral_program_alt_invited');
+    rows = await runQuery(q.sql, q.params);
   } else {
     return json({ error: 'Unknown export source.' }, 400);
   }

@@ -63,6 +63,8 @@ const EXPORT_SOURCE_TAB = {
   hnwi_by_fund: 'hnwi',
   referral_program_detail: 'referral-program',
   referral_program_alt_detail: 'referral-program-alt',
+  referral_program_invited: 'referral-program',
+  referral_program_alt_invited: 'referral-program-alt',
 };
 
 // Splits flat detail rows into one worksheet per distinct value of keyField —
@@ -757,6 +759,14 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
+  // Row-level roster behind the leaderboard's "Invited" count — see
+  // queries.js:referralInvitedUsers.
+  app.get('/api/referral-program/invited', requireTab('referral-program'), handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.referralInvitedUsers(from, to, false);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
   // ---- Referral program (alt.): same T&C eligibility rule and detail rows
   // as the section above (an invitee's registration date never mattered to
   // referralProgramDetail — only their first-ever transaction date), but a
@@ -774,6 +784,12 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/referral-program-alt/inviter-stats', requireTab('referral-program-alt'), handler(async (req, res) => {
     const { from, to } = req.query;
     const q = Q.referralInviterStatsAlt(from, to);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
+  app.get('/api/referral-program-alt/invited', requireTab('referral-program-alt'), handler(async (req, res) => {
+    const { from, to } = req.query;
+    const q = Q.referralInvitedUsers(from, to, true);
     res.json(await runQuery(q.sql, q.params));
   }));
 
@@ -1260,6 +1276,9 @@ function createApp({ serveStatic = true } = {}) {
     } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
       const q = Q.referralProgramDetail(req.body.from, req.body.to, source === 'referral_program_detail');
       rows = computeReferralEligibility(await runQuery(q.sql, q.params));
+    } else if (source === 'referral_program_invited' || source === 'referral_program_alt_invited') {
+      const q = Q.referralInvitedUsers(req.body.from, req.body.to, source === 'referral_program_alt_invited');
+      rows = await runQuery(q.sql, q.params);
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
     }

@@ -1877,17 +1877,20 @@ function refProgRange() {
 async function loadReferralProgram() {
   $('#refProgTable').innerHTML = '<div class="loading">Loading…</div>';
   $('#refProgLeaderboardTable').innerHTML = '<div class="loading">Loading…</div>';
+  $('#refProgInvitedTable').innerHTML = '<div class="loading">Loading…</div>';
   const r = refProgRange();
   try {
-    const [rows, stats] = await Promise.all([
+    const [rows, stats, invited] = await Promise.all([
       api(`/api/referral-program/detail?from=${r.from}&to=${r.to}`),
       api(`/api/referral-program/inviter-stats?from=${r.from}&to=${r.to}`),
+      api(`/api/referral-program/invited?from=${r.from}&to=${r.to}`),
     ]);
-    renderReferralProgram(rows, stats);
+    renderReferralProgram(rows, stats, invited);
   } catch (e) {
     $('#refProgKpis').innerHTML = '';
     $('#refProgTable').innerHTML = `<div class="empty">${e.message}</div>`;
     $('#refProgLeaderboardTable').innerHTML = '';
+    $('#refProgInvitedTable').innerHTML = '';
   }
 }
 
@@ -1925,7 +1928,7 @@ function buildReferralLeaderboard(rows, stats) {
 // Shared by both Referral program and Referral Program (alt.) — same KPI/
 // detail/leaderboard shape, different data source (see loadReferralProgram
 // vs loadReferralProgramAlt). `sel` picks which section's DOM ids to fill.
-function renderReferralProgram(rows, stats, sel = { kpis: '#refProgKpis', table: '#refProgTable', leaderboard: '#refProgLeaderboardTable' }) {
+function renderReferralProgram(rows, stats, invited, sel = { kpis: '#refProgKpis', table: '#refProgTable', leaderboard: '#refProgLeaderboardTable', invited: '#refProgInvitedTable' }) {
   const eligible = rows.filter((r) => r.status === 'Eligible').length;
   const pending = rows.filter((r) => r.status === 'Pending').length;
   const notEligible = rows.filter((r) => r.status === 'Not eligible').length;
@@ -1963,6 +1966,14 @@ function renderReferralProgram(rows, stats, sel = { kpis: '#refProgKpis', table:
     { key: 'eligible', label: 'Eligible', type: 'num' },
     { key: 'not_eligible', label: 'Not eligible', type: 'num' },
   ], 'No referral activity in this period.');
+
+  genTable(sel.invited, invited, [
+    { key: 'invitee_name', label: 'Name' }, { key: 'invitee_created_at', label: 'Created at', type: 'date' },
+    { key: 'invitee_sid', label: 'SID' }, { key: 'invitee_email', label: 'Email' },
+    { key: 'invitee_phone', label: 'Phone number' },
+    { key: 'invitee_referral_code', label: 'Referral code' }, { key: 'inviter_referral_code', label: 'Referrer code' },
+    { key: 'kyc_status', label: 'KYC status' }, { key: 'transaction_status', label: 'Transaction status' },
+  ], 'No invited users in this period.');
 }
 
 // ====================================================================
@@ -1980,17 +1991,20 @@ function refProgAltRange() {
 async function loadReferralProgramAlt() {
   $('#refProgAltTable').innerHTML = '<div class="loading">Loading…</div>';
   $('#refProgAltLeaderboardTable').innerHTML = '<div class="loading">Loading…</div>';
+  $('#refProgAltInvitedTable').innerHTML = '<div class="loading">Loading…</div>';
   const r = refProgAltRange();
   try {
-    const [rows, stats] = await Promise.all([
+    const [rows, stats, invited] = await Promise.all([
       api(`/api/referral-program-alt/detail?from=${r.from}&to=${r.to}`),
       api(`/api/referral-program-alt/inviter-stats?from=${r.from}&to=${r.to}`),
+      api(`/api/referral-program-alt/invited?from=${r.from}&to=${r.to}`),
     ]);
-    renderReferralProgram(rows, stats, { kpis: '#refProgAltKpis', table: '#refProgAltTable', leaderboard: '#refProgAltLeaderboardTable' });
+    renderReferralProgram(rows, stats, invited, { kpis: '#refProgAltKpis', table: '#refProgAltTable', leaderboard: '#refProgAltLeaderboardTable', invited: '#refProgAltInvitedTable' });
   } catch (e) {
     $('#refProgAltKpis').innerHTML = '';
     $('#refProgAltTable').innerHTML = `<div class="empty">${e.message}</div>`;
     $('#refProgAltLeaderboardTable').innerHTML = '';
+    $('#refProgAltInvitedTable').innerHTML = '';
   }
 }
 
@@ -4271,11 +4285,15 @@ function wire() {
   $('#refProgApply').addEventListener('click', loadReferralProgram);
   $('#refProgCsv').addEventListener('click', () => { const r = refProgRange(); download({ source: 'referral_program_detail', format: 'csv', filename: 'referral_program_detail', ...r }, 'referral_program_detail.csv'); });
   $('#refProgXlsx').addEventListener('click', () => { const r = refProgRange(); download({ source: 'referral_program_detail', format: 'xlsx', filename: 'referral_program_detail', ...r }, 'referral_program_detail.xlsx'); });
+  $('#refProgInvitedCsv').addEventListener('click', () => { const r = refProgRange(); download({ source: 'referral_program_invited', format: 'csv', filename: 'referral_program_invited', ...r }, 'referral_program_invited.csv'); });
+  $('#refProgInvitedXlsx').addEventListener('click', () => { const r = refProgRange(); download({ source: 'referral_program_invited', format: 'xlsx', filename: 'referral_program_invited', ...r }, 'referral_program_invited.xlsx'); });
 
   // referral program (alt.)
   $('#refProgAltApply').addEventListener('click', loadReferralProgramAlt);
   $('#refProgAltCsv').addEventListener('click', () => { const r = refProgAltRange(); download({ source: 'referral_program_alt_detail', format: 'csv', filename: 'referral_program_alt_detail', ...r }, 'referral_program_alt_detail.csv'); });
   $('#refProgAltXlsx').addEventListener('click', () => { const r = refProgAltRange(); download({ source: 'referral_program_alt_detail', format: 'xlsx', filename: 'referral_program_alt_detail', ...r }, 'referral_program_alt_detail.xlsx'); });
+  $('#refProgAltInvitedCsv').addEventListener('click', () => { const r = refProgAltRange(); download({ source: 'referral_program_alt_invited', format: 'csv', filename: 'referral_program_alt_invited', ...r }, 'referral_program_alt_invited.csv'); });
+  $('#refProgAltInvitedXlsx').addEventListener('click', () => { const r = refProgAltRange(); download({ source: 'referral_program_alt_invited', format: 'xlsx', filename: 'referral_program_alt_invited', ...r }, 'referral_program_alt_invited.xlsx'); });
 
   // remisier sharing
   $('#remRun').addEventListener('click', loadRemisier);

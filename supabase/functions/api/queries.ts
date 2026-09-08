@@ -1310,6 +1310,32 @@ export const topReferrers = (limit: number | string = 20): Query => ({
 });
 
 // ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
+// main.user_referrals records the inviter/invitee link by user id at the time
+// of referral (immutable), unlike invitee.referrer_code / inviter.referral_code
+// string matching used elsewhere (e.g. the Growth tab's referral leaderboard):
+// referral_code isn't unique (33 codes are currently shared by 2 users each,
+// so a plain code JOIN double-counts/mis-attributes those invitees) and can
+// be reassigned after the fact, silently breaking old links. RESOLVED_INVITER_CTE
+// prefers user_referrals when a row exists, falling back to the code match
+// otherwise — that table doesn't (yet) cover every historical referrer_code
+// relationship, so falling back keeps the ones it's missing instead of
+// dropping them from these reports.
+const USER_REFERRALS = '`sayakaya.main.user_referrals`';
+const RESOLVED_INVITER_CTE = `resolved_inviter AS (
+    SELECT
+      invitee.id AS invitee_id,
+      COALESCE(ur.referrer_id, code_inviter.id) AS inviter_id
+    FROM ${USERS} invitee
+    LEFT JOIN ${USER_REFERRALS} ur ON ur.user_id = invitee.id
+    LEFT JOIN (
+      SELECT referral_code, MIN(id) AS id
+      FROM ${USERS}
+      WHERE referral_code IS NOT NULL
+      GROUP BY referral_code
+    ) code_inviter ON ur.referrer_id IS NULL AND code_inviter.referral_code = invitee.referrer_code
+    WHERE ur.referrer_id IS NOT NULL OR invitee.referrer_code IS NOT NULL
+  )`;
+
 // Rules: the invitee's very first-ever completed transaction (across every
 // fund, not just Sucor's) must itself be a Sucor Asset Management fund buy
 // of >= Rp1,000,000, placed using someone else's referral code, inside the
@@ -1359,6 +1385,7 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string, re
         AND ft.first_buy.amount >= 1000000
         AND DATE(ft.first_buy.created_at) BETWEEN @periodFrom AND @periodTo
     ),
+    ${RESOLVED_INVITER_CTE},
     pairs AS (
       SELECT
         q.tx_id, q.fund_id, q.fund_name, q.amount, q.tx_date,
@@ -1371,10 +1398,10 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string, re
       FROM qualifying q
       JOIN ${USERS} invitee ON invitee.id = q.invitee_user_id
       LEFT JOIN ${USER_PROFILES} invitee_up ON invitee_up.user_id = invitee.id
-      JOIN ${USERS} inviter ON inviter.referral_code = invitee.referrer_code
+      JOIN resolved_inviter ri ON ri.invitee_id = invitee.id
+      JOIN ${USERS} inviter ON inviter.id = ri.inviter_id
       LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
-      WHERE invitee.referrer_code IS NOT NULL
-      ${requireInviteeRegisteredInPeriod ? 'AND DATE(invitee.created_at) BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)' : ''}
+      ${requireInviteeRegisteredInPeriod ? 'WHERE DATE(invitee.created_at) BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)' : ''}
     ),
     fix_snaps AS (
       SELECT sid_code, id AS fund_id, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS snap_date, total_unit
@@ -1426,14 +1453,15 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string, re
 // even if they haven't transacted yet (pending) — the registration date
 // alone qualifies them, independent of whether/when they transact.
 export const referralInviterStats = (periodFrom?: string, periodTo?: string): Query => ({
-  sql: `WITH invited_all AS (
+  sql: `WITH ${RESOLVED_INVITER_CTE},
+    invited_all AS (
       SELECT invitee.id AS invitee_id, invitee.created_at AS invitee_registered_at,
         inviter.sid_code AS inviter_sid, inviter.referral_code AS inviter_referral_code,
         COALESCE(inviter_up.name, inviter.email) AS inviter_name
       FROM ${USERS} invitee
-      JOIN ${USERS} inviter ON inviter.referral_code = invitee.referrer_code
+      JOIN resolved_inviter ri ON ri.invitee_id = invitee.id
+      JOIN ${USERS} inviter ON inviter.id = ri.inviter_id
       LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
-      WHERE invitee.referrer_code IS NOT NULL
     ),
     first_tx AS (
       SELECT user_id,
@@ -1474,14 +1502,15 @@ export const referralInviterStats = (periodFrom?: string, periodTo?: string): Qu
 // (first-ever transaction date, not registration date), so the two sections
 // deliberately show different "Invited" populations side by side.
 export const referralInviterStatsAlt = (periodFrom?: string, periodTo?: string): Query => ({
-  sql: `WITH invited_all AS (
+  sql: `WITH ${RESOLVED_INVITER_CTE},
+    invited_all AS (
       SELECT invitee.id AS invitee_id, inviter.sid_code AS inviter_sid,
         inviter.referral_code AS inviter_referral_code,
         COALESCE(inviter_up.name, inviter.email) AS inviter_name
       FROM ${USERS} invitee
-      JOIN ${USERS} inviter ON inviter.referral_code = invitee.referrer_code
+      JOIN resolved_inviter ri ON ri.invitee_id = invitee.id
+      JOIN ${USERS} inviter ON inviter.id = ri.inviter_id
       LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
-      WHERE invitee.referrer_code IS NOT NULL
     ),
     first_tx AS (
       SELECT user_id,
@@ -1507,6 +1536,46 @@ export const referralInviterStatsAlt = (periodFrom?: string, periodTo?: string):
     periodTo: periodTo || '2026-12-31',
   },
 });
+
+// Full roster behind the leaderboards' "Invited" counts above: one row per
+// invitee with their own contact/KYC/referral-code details, not just the
+// per-inviter tallies. `alt` picks the same "invited" population as
+// referralInviterStats (false, registered-in-period) or referralInviterStatsAlt
+// (true, first-tx-in-period-or-none) so the row count always matches the
+// corresponding leaderboard's Invited total.
+export const referralInvitedUsers = (periodFrom?: string, periodTo?: string, alt = false): Query => {
+  const invitedFilter = alt
+    ? '(ft.first_tx.created_at IS NULL OR DATE(ft.first_tx.created_at) BETWEEN @periodFrom AND @periodTo)'
+    : 'DATE(invitee.created_at) BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)';
+  return {
+    sql: `WITH ${RESOLVED_INVITER_CTE},
+      first_tx AS (
+        SELECT user_id,
+          ARRAY_AGG(STRUCT(created_at, status) ORDER BY created_at ASC, id ASC LIMIT 1)[OFFSET(0)] AS first_tx
+        FROM ${TX}
+        WHERE type = 'buy' AND status NOT IN ('expired', 'cancelled')
+        GROUP BY user_id
+      )
+      SELECT
+        invitee_up.name AS invitee_name, invitee.created_at AS invitee_created_at,
+        invitee.sid_code AS invitee_sid, invitee.email AS invitee_email,
+        invitee_up.phone_number AS invitee_phone,
+        invitee.referral_code AS invitee_referral_code, inviter.referral_code AS inviter_referral_code,
+        invitee.verification_status AS kyc_status,
+        IFNULL(ft.first_tx.status, 'none') AS transaction_status
+      FROM ${USERS} invitee
+      JOIN resolved_inviter ri ON ri.invitee_id = invitee.id
+      JOIN ${USERS} inviter ON inviter.id = ri.inviter_id
+      LEFT JOIN ${USER_PROFILES} invitee_up ON invitee_up.user_id = invitee.id
+      LEFT JOIN first_tx ft ON ft.user_id = invitee.id
+      WHERE ${invitedFilter}
+      ORDER BY invitee.created_at DESC`,
+    params: {
+      periodFrom: periodFrom || '2026-09-01',
+      periodTo: periodTo || '2026-12-31',
+    },
+  };
+};
 
 // ---- Reconciliation: app ledger (main.transactions) vs custodian feed (sinvest) -
 // Transaction_Date/amount columns in sinvest.trx_history are STRING ('YYYYMMDD',

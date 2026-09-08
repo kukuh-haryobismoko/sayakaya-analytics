@@ -1526,6 +1526,18 @@
 
       <div class="panel">
         <div class="panel-head wrap">
+          <h2 data-i18n="refprog_invited_title">Invited users</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="refProgInvitedCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="refProgInvitedXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="refprog_invited_hint">One row per invitee behind the leaderboard's "Invited" count — their own account details, referral code, the referrer code they signed up with, KYC status, and first-transaction status.</span>
+        <div id="refProgInvitedTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
           <h2 data-i18n="refprog_detail_title">Referral detail</h2>
           <div class="exp">
             <button class="btn-ghost" id="refProgCsv" data-i18n="common_csv">CSV</button>
@@ -1565,6 +1577,18 @@
         <div class="panel-head"><h2 data-i18n="refprog_leaderboard_title">Inviter leaderboard</h2></div>
         <span class="hint" data-i18n="refprog_alt_leaderboard_hint">One row per inviter. Unlike the main Referral program tab, "Invited" here doesn't require the invitee to have signed up during the period — the referral itself can be arbitrarily old. What matters is their first-ever transaction: not made yet still counts as invited (pending), but one that already happened outside the period permanently excludes them.</span>
         <div id="refProgAltLeaderboardTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="refprog_invited_title">Invited users</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="refProgAltInvitedCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="refProgAltInvitedXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="refprog_invited_hint">One row per invitee behind the leaderboard's "Invited" count — their own account details, referral code, the referrer code they signed up with, KYC status, and first-transaction status.</span>
+        <div id="refProgAltInvitedTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
@@ -1997,11 +2021,11 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3>🎁 Referral program</h3>
-          <p data-i18n="docs_referral_program_desc">The Sep-Dec 2026 referral bonus program's eligibility report. A referral only counts if the invited friend's very first-ever transaction is a Sucor Asset Management fund purchase of at least Rp1,000,000 made with someone's referral code; the bonus (Rp25,000 to each side, in Sucorinvest Money Market Fund units) additionally requires that fund's units to stay unchanged for 30 days. Each row shows both people's contact details, the transaction, days held, and a status — Eligible, Pending (still within the 30-day hold), or Not eligible (with the specific reason, e.g. redeemed early or KYC not verified). An Inviter leaderboard sits above the row-level detail: one line per inviter with how many people they referred and how many transacted at all (any fund, any amount) — broader counts than the eligibility rule itself — next to how many of those referrals qualified, and of those, how many are Pending vs. Eligible. On this leaderboard, "Invited" only counts an invitee if they also registered during the period — an old referral relationship that never leads to a signup/purchase in this window doesn't clutter the list.</p>
+          <p data-i18n="docs_referral_program_desc">The Sep-Dec 2026 referral bonus program's eligibility report. A referral only counts if the invited friend's very first-ever transaction is a Sucor Asset Management fund purchase of at least Rp1,000,000 made with someone's referral code; the bonus (Rp25,000 to each side, in Sucorinvest Money Market Fund units) additionally requires that fund's units to stay unchanged for 30 days. Each row shows both people's contact details, the transaction, days held, and a status — Eligible, Pending (still within the 30-day hold), or Not eligible (with the specific reason, e.g. redeemed early or KYC not verified). An Inviter leaderboard sits above the row-level detail: one line per inviter with how many people they referred and how many transacted at all (any fund, any amount) — broader counts than the eligibility rule itself — next to how many of those referrals qualified, and of those, how many are Pending vs. Eligible. On this leaderboard, "Invited" only counts an invitee if they also registered during the period — an old referral relationship that never leads to a signup/purchase in this window doesn't clutter the list. Below the leaderboard, an Invited users table lists that same "Invited" population one row per person — name, registration date, SID, email, phone, their own referral code, the referrer code they signed up with, KYC status, and first-transaction status — separate from the row-level Referral detail table further down, which only covers invitees whose first-ever transaction met the campaign's own Sucor/≥Rp1jt rule.</p>
         </div>
         <div class="doc-item">
           <h3>🎟️ Referral Program (alt.)</h3>
-          <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition. Here, the referral relationship can be arbitrarily old (no registration-date requirement); what matters is purely the invitee's first-ever transaction. Haven't transacted yet? Still counted as invited (pending — they may still transact before the period ends). Already made their first-ever transaction outside this period? Permanently excluded, since per the T&C only that very first transaction can ever qualify. Use this tab when you want to know "of everyone ever referred, who's still in play for this campaign," rather than "who signed up because of this campaign."</p>
+          <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition (and, correspondingly, which invitees show up in the Invited users table below it). Here, the referral relationship can be arbitrarily old (no registration-date requirement); what matters is purely the invitee's first-ever transaction. Haven't transacted yet? Still counted as invited (pending — they may still transact before the period ends). Already made their first-ever transaction outside this period? Permanently excluded, since per the T&C only that very first transaction can ever qualify. Use this tab when you want to know "of everyone ever referred, who's still in play for this campaign," rather than "who signed up because of this campaign."</p>
         </div>
         <div class="doc-item">
           <h3>🤝 Remisier sharing (GS) / (PWC)</h3>
