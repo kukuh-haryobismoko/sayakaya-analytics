@@ -14,10 +14,6 @@ import * as A from './auth.ts';
 import * as Mail from './mail.ts';
 import * as Sched from './schedules.ts';
 import { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } from './report-helpers.ts';
-import { Buffer } from 'node:buffer';
-import PRESENTATION_SEPTEMBER_BASE64 from './presentation-september.ts';
-import PRESENTATION_JULY_BASE64 from './presentation-july.ts';
-import PRESENTATION_AUGUST_BASE64 from './presentation-august.ts';
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -373,21 +369,32 @@ on('GET', '/api/admin/audit-log', requireSuperuser(async (_req, _params, url) =>
 // Mirrors server/app.js's PRESENTATIONS map/route: two independently
 // grantable tabs ('presentation' for AI Taskforce decks, 'monthly-review' for
 // the rest) rather than one, so an admin can hand out a login scoped to just
-// one deck family. The PDF is inlined as base64 (presentation-*.ts) rather
-// than read from disk — Supabase's eszip bundling has no runtime filesystem
-// to read presentation-docs/ from.
-const PRESENTATIONS: Record<string, { b64: string; tab: string }> = {
-  july: { b64: PRESENTATION_JULY_BASE64, tab: 'presentation' },
-  september: { b64: PRESENTATION_SEPTEMBER_BASE64, tab: 'presentation' },
-  august: { b64: PRESENTATION_AUGUST_BASE64, tab: 'monthly-review' },
+// one deck family. Fetched at request time from a private Supabase Storage
+// bucket ('presentation-decks', service_role only — see the
+// 20260909044217_presentation_decks_bucket.sql migration) rather than
+// inlined as base64 in the function's source: that worked while there were
+// one or two decks, but a third deck pushed the function's total bundle size
+// past the Management API's function-deploy request size limit (413 request
+// entity too large). Storage has no such ceiling.
+const PRESENTATIONS_SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+const PRESENTATIONS_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const PRESENTATIONS: Record<string, { tab: string }> = {
+  july: { tab: 'presentation' },
+  september: { tab: 'presentation' },
+  august: { tab: 'monthly-review' },
 };
 on('GET', '/api/presentations/:month', async (_req, params, _url, user) => {
   const deck = PRESENTATIONS[params.month];
   if (!deck) return json({ error: 'No deck for that month.' }, 404);
   if (!A.userCan(user, deck.tab)) return json({ error: `You do not have access to this section (${deck.tab}).` }, 403);
-  return new Response(new Uint8Array(Buffer.from(deck.b64, 'base64')), {
-    headers: { 'content-type': 'application/pdf' },
+  const res = await fetch(`${PRESENTATIONS_SUPABASE_URL}/storage/v1/object/presentation-decks/${params.month}.pdf`, {
+    headers: {
+      apikey: PRESENTATIONS_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${PRESENTATIONS_SERVICE_ROLE_KEY}`,
+    },
   });
+  if (!res.ok) return json({ error: 'Deck file not found in storage.' }, 502);
+  return new Response(res.body, { headers: { 'content-type': 'application/pdf' } });
 });
 
 // ---- Auth: change your own password ---------------------------------------

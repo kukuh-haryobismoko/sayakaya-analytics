@@ -123,9 +123,26 @@ supabase secrets set --env-file supabase/.env.secrets
 ### 3. Deploy
 
 ```bash
-supabase db push          # applies supabase/migrations/*.sql, incl. dashboard_users.email
+supabase db push          # applies supabase/migrations/*.sql, incl. the presentation-decks bucket
 supabase functions deploy api
 ```
+
+`supabase db push` creates the `presentation-decks` Storage bucket (private —
+see `supabase/migrations/20260909044217_presentation_decks_bucket.sql`) that
+the Presentation tab's decks are fetched from at request time, but it doesn't
+upload file content — do that once per deck:
+
+```bash
+supabase storage cp --linked --experimental "presentation-docs/<file>.pdf" \
+  ss:///presentation-decks/<month>.pdf --content-type application/pdf
+```
+
+`<month>` must match a key in `PRESENTATIONS` in both `server/app.js` and
+`supabase/functions/api/index.ts` (currently `july`, `september`, `august`).
+Decks are **not** inlined as base64 into the function's source the way they
+briefly were — with more than one or two decks that pushed the function's
+total bundle past the Management API's function-deploy request size limit
+(`413 request entity too large`). Storage has no such ceiling.
 
 The Portfolio tab's **Google Sheet** export (supabase/functions/api/sheets.ts)
 reuses `GCP_SA_KEY` from step 2, plus one more secret in
