@@ -1538,16 +1538,20 @@ const referralInvitedUsers = (periodFrom, periodTo, alt = false) => {
         GROUP BY user_id
       )
       SELECT
+        inviter.sid_code AS inviter_sid, COALESCE(inviter_up.name, inviter.email) AS inviter_name,
+        inviter.referral_code AS inviter_referral_code,
         invitee_up.name AS invitee_name, invitee.created_at AS invitee_created_at,
+        invitee.verified_at AS invitee_verified_at,
         invitee.sid_code AS invitee_sid, invitee.email AS invitee_email,
         invitee_up.phone_number AS invitee_phone,
-        invitee.referral_code AS invitee_referral_code, inviter.referral_code AS inviter_referral_code,
+        invitee.referral_code AS invitee_referral_code,
         invitee.verification_status AS kyc_status,
         IFNULL(ft.first_tx.status, 'none') AS transaction_status
       FROM ${USERS} invitee
       JOIN resolved_inviter ri ON ri.invitee_id = invitee.id
       JOIN ${USERS} inviter ON inviter.id = ri.inviter_id
       LEFT JOIN ${USER_PROFILES} invitee_up ON invitee_up.user_id = invitee.id
+      LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
       LEFT JOIN first_tx ft ON ft.user_id = invitee.id
       WHERE ${invitedFilter}
       ORDER BY invitee.created_at DESC`,

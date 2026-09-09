@@ -1968,7 +1968,9 @@ function renderReferralProgram(rows, stats, invited, sel = { kpis: '#refProgKpis
   ], 'No referral activity in this period.');
 
   genTable(sel.invited, invited, [
+    { key: 'inviter_sid', label: 'Inviter SID' }, { key: 'inviter_name', label: 'Inviter name' },
     { key: 'invitee_name', label: 'Name' }, { key: 'invitee_created_at', label: 'Created at', type: 'date' },
+    { key: 'invitee_verified_at', label: 'Verified at', type: 'date' },
     { key: 'invitee_sid', label: 'SID' }, { key: 'invitee_email', label: 'Email' },
     { key: 'invitee_phone', label: 'Phone number' },
     { key: 'invitee_referral_code', label: 'Referral code' }, { key: 'inviter_referral_code', label: 'Referrer code' },
