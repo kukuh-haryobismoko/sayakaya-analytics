@@ -1,0 +1,20 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1280, "h": 720, "title": "01 · Title" },
+    { "file": "SixNumbers.dc.html", "x": 1400, "y": 0, "w": 1280, "h": 720, "title": "02 · Six numbers" },
+    { "file": "Trajectory.dc.html", "x": 2800, "y": 0, "w": 1280, "h": 720, "title": "03 · Jun → Jul → Aug" },
+    { "file": "AumTrend.dc.html", "x": 4200, "y": 0, "w": 1280, "h": 720, "title": "04 · AUM trend" },
+    { "file": "RevenueTrend.dc.html", "x": 5600, "y": 0, "w": 1280, "h": 720, "title": "05 · Revenue trend" },
+    { "file": "Cause.dc.html", "x": 0, "y": 860, "w": 1280, "h": 720, "title": "06 · Two accounts" },
+    { "file": "Concentration.dc.html", "x": 1400, "y": 860, "w": 1280, "h": 720, "title": "07 · Concentration" },
+    { "file": "NetFlow.dc.html", "x": 2800, "y": 860, "w": 1280, "h": 720, "title": "08 · Net flow" },
+    { "file": "Acquisition.dc.html", "x": 4200, "y": 860, "w": 1280, "h": 720, "title": "09 · Acquisition" },
+    { "file": "Uninstalls.dc.html", "x": 5600, "y": 860, "w": 1280, "h": 720, "title": "10 · Pre-uninstall behavior" },
+    { "file": "Referral.dc.html", "x": 0, "y": 1720, "w": 1280, "h": 720, "title": "11 · Referral" },
+    { "file": "Retention.dc.html", "x": 1400, "y": 1720, "w": 1280, "h": 720, "title": "12 · Retention" },
+    { "file": "ProductMix.dc.html", "x": 2800, "y": 1720, "w": 1280, "h": 720, "title": "13 · Product mix" },
+    { "file": "Campaigns.dc.html", "x": 4200, "y": 1720, "w": 1280, "h": 720, "title": "14 · Campaigns" },
+    { "file": "Kpis.dc.html", "x": 5600, "y": 1720, "w": 1280, "h": 720, "title": "15 · KPI set" }
+  ],
+  "launch": { "view": "canvas" }
+}

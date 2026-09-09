@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+    .ax { fill: #8a90a3; font-size: 13px; font-family: "JetBrains Mono", ui-monospace, monospace; }
+    .vl { fill: #14161f; font-size: 15px; font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 700; }
+    .vl2 { fill: #3a50ab; font-size: 11px; font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 700; }
+    .gl { stroke: #e6e9f2; stroke-width: 1; }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600; text-align: right; padding: 8px 16px; background: #eef0fc; }
+    th:first-child { text-align: left; }
+    td { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 16px; text-align: right; padding: 8px 16px; border-bottom: 1px solid #dfe3ee; }
+    td:first-child { text-align: left; font-family: "Inter", system-ui, sans-serif; font-size: 15px; font-weight: 500; }
+    tr:last-child td { border-bottom: 0; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 56px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #3a50ab; font-weight: 600">03 — Acquisition</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 42px; font-weight: 600; letter-spacing: -1.2px">Seven months of decline — and we cannot say why</div>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 16px 24px; display: flex; flex-direction: column; gap: 8px">
+    <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.3px; color: #565b6b; font-weight: 600">Registered that month, verified that month, and — of those verified — how many have since bought</div>
+    <table>
+      <thead>
+        <tr><th>Month</th><th>Registered</th><th>Verified this month</th><th>Of those, bought (to date)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Jan 2026</td><td>471</td><td>165</td><td>77</td></tr>
+        <tr><td>Feb 2026</td><td>236</td><td>106</td><td>48</td></tr>
+        <tr><td>Mar 2026</td><td>262</td><td>129</td><td>45</td></tr>
+        <tr><td>Apr 2026</td><td>217</td><td>93</td><td>35</td></tr>
+        <tr><td>May 2026</td><td>148</td><td>70</td><td>33</td></tr>
+        <tr><td>Jun 2026</td><td>138</td><td>73</td><td>33</td></tr>
+        <tr><td>Jul 2026</td><td style="color: #c00d3f; font-weight: 700">125</td><td style="color: #c00d3f; font-weight: 700">48</td><td>14</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display: flex; gap: 16px">
+    <div style="flex: 1.1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">July funnel</div>
+      <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 20px; font-weight: 700">125 → 45 → 15</div>
+      <div style="font-size: 14px; color: #565b6b; line-height: 1.4">Of July's own 125 registrants: 45 verified (36%), 15 bought within 30 days (12%). The table above instead tracks each month's verified cohort through to a buy. Lowest registration month in fourteen.</div>
+    </div>
+    <div style="flex: 0.85 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">App installs, Jul 2026 (Google Analytics)</div>
+      <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 20px; font-weight: 700">401 <span style="color: #8a90a3; font-weight: 500">dl</span> · <span style="color: #c00d3f">303 unin.</span></div>
+      <div style="font-size: 14px; color: #565b6b; line-height: 1.4">GA sits outside the warehouse and doesn't join to registration, KYC, or buy events — so we can't say <em>when</em> in the funnel an uninstall lands, only that it's a lot of them.</div>
+    </div>
+    <div style="flex: 0.95 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-left: 4px solid #ff3165; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #c00d3f; font-weight: 600">We are blind on channel</div>
+      <div style="font-size: 14px; line-height: 1.4">No UTM or channel field exists on the user record. Not one registration can be attributed to a channel, spend change, or campaign.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

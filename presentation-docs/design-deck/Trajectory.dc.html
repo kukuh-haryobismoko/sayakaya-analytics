@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600; text-align: right; padding: 7px 18px; background: #eef0fc; }
+    th:first-child { text-align: left; }
+    td { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 16px; text-align: right; padding: 7px 18px; border-bottom: 1px solid #dfe3ee; }
+    td:first-child { text-align: left; font-family: "Inter", system-ui, sans-serif; font-size: 16px; font-weight: 500; }
+    tr:last-child td { border-bottom: 0; }
+    .pace { color: #8a90a3; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 44px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #3a50ab; font-weight: 600">02 — Trajectory</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 42px; font-weight: 600; letter-spacing: -1.2px">June → July → August</div>
+    </div>
+    <div style="font-size: 14px; color: #565b6b; line-height: 1.45; max-width: 340px; text-align: right">August is 17 of 31 days. Pace is a naive × 31⁄17 on flows only — balances and people counts are never projected. AUM below is daily-average, which already makes a partial month comparable.</div>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; overflow: hidden">
+    <table>
+      <thead>
+        <tr><th>Metric</th><th>June</th><th>July</th><th>Aug · 17d</th><th>Aug pace</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>AUM, daily avg</td><td>338.2 B</td><td style="color: #c00d3f; font-weight: 700">244.5 B</td><td style="color: #07724d; font-weight: 700">253.1 B</td><td class="pace">—</td></tr>
+        <tr><td>AperD fee revenue</td><td>187.4 M</td><td style="color: #c00d3f; font-weight: 700">143.7 M</td><td>84.5 M</td><td class="pace">154.1 M</td></tr>
+        <tr style="background: #f7f8fc"><td><strong style="font-weight: 650">Net flow</strong></td><td style="color: #c00d3f; font-weight: 700">−113.6 B</td><td style="color: #c00d3f; font-weight: 700">−55.7 B</td><td style="color: #07724d; font-weight: 700">+47.6 B</td><td class="pace" style="color: #07724d">+86.8 B</td></tr>
+        <tr><td>Buy volume</td><td>23.9 B</td><td>83.6 B</td><td>54.3 B</td><td class="pace">99.0 B</td></tr>
+        <tr><td>Sell volume</td><td>137.5 B</td><td>139.4 B</td><td>6.7 B</td><td class="pace">12.2 B</td></tr>
+        <tr><td>Median buy ticket</td><td>2.0 M</td><td style="color: #c00d3f">1.0 M</td><td style="color: #c00d3f">0.5 M</td><td class="pace">—</td></tr>
+        <tr style="background: #f7f8fc"><td><strong style="font-weight: 650">Active investors, rolling 30d (completed buys only)</strong></td><td>283</td><td style="color: #07724d; font-weight: 700">307</td><td style="color: #c00d3f; font-weight: 700">280</td><td class="pace">—</td></tr>
+        <tr><td>Registrations</td><td>138</td><td style="color: #c00d3f">125</td><td>57</td><td class="pace">104</td></tr>
+        <tr><td>Signups via referral</td><td>5</td><td>4</td><td style="color: #07724d; font-weight: 700">11</td><td class="pace">—</td></tr>
+        <tr><td>Top-100 AUM concentration</td><td>85.6%</td><td>80.7%</td><td>84.6%</td><td class="pace">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display: flex; gap: 16px; align-items: stretch; background: #ffffff; border: 1px solid #dfe3ee; border-left: 4px solid #ff3165; border-radius: 12px; padding: 14px 24px">
+    <div style="display: flex; flex-direction: column; gap: 5px">
+      <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: #c00d3f; font-weight: 600">The number nobody will spot on their own</div>
+      <div style="font-size: 17px; line-height: 1.5">The <strong style="font-weight: 650">average</strong> buy ticket quadrupled — Rp 34.3 M in June to Rp 141.4 M in August — while the <strong style="font-weight: 650">median</strong> halved twice, Rp 2.0 M to Rp 0.5 M. A few big cheques now carry the volume; the typical retail purchase keeps shrinking.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

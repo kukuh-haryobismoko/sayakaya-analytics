@@ -170,13 +170,15 @@
           <div class="nav-label"><span data-i18n="nav_group_help">Help</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="docs"><span class="nav-icon">📖</span>Documentations</button>
         </div>
-        <!-- Not superuser-gated — a regular tab like any other, shown to
-             whichever accounts have it checked in Manage users' access
-             picker (e.g. a dedicated "presentation" login with only this
-             tab granted, for sharing at an internal meeting). -->
+        <!-- Not superuser-gated — regular tabs like any other, shown to
+             whichever accounts have them checked in Manage users' access
+             picker (e.g. a dedicated login with only "Monthly Review"
+             granted, for sharing at an internal meeting). Two separate tabs
+             so the two deck families can be granted independently. -->
         <div class="nav-group" data-group="presentation">
           <div class="nav-label"><span>Presentation</span><span class="nav-group-caret"></span></div>
-          <button class="nav-link" data-tab="presentation"><span class="nav-icon">📽️</span>Presentation</button>
+          <button class="nav-link" data-tab="presentation"><span class="nav-icon">📽️</span>AI Taskforce</button>
+          <button class="nav-link" data-tab="monthly-review"><span class="nav-icon">🗓️</span>Monthly Review</button>
         </div>
         <div class="nav-group hidden" id="adminNavGroup" data-group="admin">
           <div class="nav-label"><span data-i18n="nav_group_admin">Admin</span><span class="nav-group-caret"></span></div>
@@ -2063,7 +2065,7 @@ ORDER BY n DESC"></textarea>
         <div class="panel-head"><h2 data-i18n="docs_panel_presentation">Presentation</h2></div>
         <div class="doc-item">
           <h3>📽️ Presentation</h3>
-          <p data-i18n="docs_presentation_desc">Internal meeting decks (e.g. the AI Taskforce update), one sub-section per month, viewable full-screen one page at a time. Not shown to everyone — only accounts an admin has explicitly granted this tab (e.g. a dedicated "presentation" login for sharing at a meeting) can see it, same as any other restricted section.</p>
+          <p data-i18n="docs_presentation_desc">Internal meeting decks, viewable full-screen one page at a time, split into two sidebar tabs granted independently: AI Taskforce (July, September) and Monthly Review (August). Not shown to everyone — only accounts an admin has explicitly granted a tab to (e.g. a dedicated login for sharing at a meeting) can see it, same as any other restricted section.</p>
         </div>
       </div>
 
@@ -2080,13 +2082,13 @@ ORDER BY n DESC"></textarea>
       </div>
     </section>
 
-    <!-- ===================== PRESENTATION (superuser only) — internal
-         meeting decks, one sub-section per month. Add a button + entry in
-         PRESENTATIONS (server/app.js) for each new month's deck. ===== -->
+    <!-- ===================== AI TASKFORCE (not superuser-gated, tab-gated) —
+         internal meeting decks, one sub-section per month. Add a button +
+         entry in PRESENTATIONS (server/app.js) for each new month's deck. ===== -->
     <section id="presentation" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2 data-i18n="presentation_title">Presentation</h2>
+          <h2 data-i18n="presentation_title">AI Taskforce</h2>
           <span class="hint" data-i18n="presentation_hint">Internal meeting decks, viewable full-screen one page at a time.</span>
           <button type="button" class="btn-primary" id="presentBtn">▶ <span data-i18n="presentation_present_btn">Present</span></button>
         </div>
@@ -2101,6 +2103,32 @@ ORDER BY n DESC"></textarea>
           <button type="button" class="pres-nav pres-prev" id="presPrevBtn" aria-label="Previous page">‹</button>
           <button type="button" class="pres-nav pres-next" id="presNextBtn" aria-label="Next page">›</button>
           <div class="presentation-counter" id="presentationCounter">1 / 1</div>
+          <div class="presentation-hint" data-i18n="presentation_exit_hint">Esc to exit · ← → to move</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== MONTHLY REVIEW (not superuser-gated, tab-gated) —
+         same viewer as AI Taskforce, separate tab so it can be granted
+         independently. Add a button + entry in PRESENTATIONS (server/app.js)
+         for each new month's deck. ===== -->
+    <section id="monthly-review" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="monthly_review_title">Monthly Review</h2>
+          <span class="hint" data-i18n="presentation_hint">Internal meeting decks, viewable full-screen one page at a time.</span>
+          <button type="button" class="btn-primary" id="mrPresentBtn">▶ <span data-i18n="presentation_present_btn">Present</span></button>
+        </div>
+        <div class="seg" id="monthlyReviewMonthSeg">
+          <button type="button" class="on" data-month="august" data-i18n="presentation_month_august">August</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div id="monthlyReviewStage" class="presentation-stage">
+          <canvas id="monthlyReviewCanvas"></canvas>
+          <button type="button" class="pres-nav pres-prev" id="mrPrevBtn" aria-label="Previous page">‹</button>
+          <button type="button" class="pres-nav pres-next" id="mrNextBtn" aria-label="Next page">›</button>
+          <div class="presentation-counter" id="monthlyReviewCounter">1 / 1</div>
           <div class="presentation-hint" data-i18n="presentation_exit_hint">Esc to exit · ← → to move</div>
         </div>
       </div>

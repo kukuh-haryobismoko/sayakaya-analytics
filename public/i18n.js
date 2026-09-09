@@ -90,12 +90,14 @@ const I18N = {
     docs_activity_log_desc: `See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio, or changed an account — and when.`,
 
     docs_panel_presentation: `Presentation`,
-    docs_presentation_desc: `Internal meeting decks (e.g. the AI Taskforce update), one sub-section per month, viewable full-screen one page at a time. Not shown to everyone — only accounts an admin has explicitly granted this tab (e.g. a dedicated "presentation" login for sharing at a meeting) can see it, same as any other restricted section.`,
+    docs_presentation_desc: `Internal meeting decks, viewable full-screen one page at a time, split into two sidebar tabs granted independently: AI Taskforce (July, September) and Monthly Review (August). Not shown to everyone — only accounts an admin has explicitly granted a tab to (e.g. a dedicated login for sharing at a meeting) can see it, same as any other restricted section.`,
 
-    presentation_title: `Presentation`,
+    presentation_title: `AI Taskforce`,
+    monthly_review_title: `Monthly Review`,
     presentation_hint: `Internal meeting decks, viewable full-screen one page at a time.`,
     presentation_month_july: `July`,
     presentation_month_september: `September`,
+    presentation_month_august: `August`,
     presentation_present_btn: `Present`,
     presentation_exit_hint: `Esc to exit · ← → to move`,
 
@@ -494,12 +496,14 @@ const I18N = {
     docs_activity_log_desc: `Lihat siapa yang login, mengekspor file, mengajukan pertanyaan Ask, menjalankan query SQL, melihat portofolio seorang investor, atau mengubah akun — dan kapan.`,
 
     docs_panel_presentation: `Presentasi`,
-    docs_presentation_desc: `Materi presentasi rapat internal (mis. update AI Taskforce), satu sub-bagian per bulan, bisa ditampilkan layar penuh satu halaman per satu. Tidak ditampilkan untuk semua orang — hanya akun yang oleh admin sudah diberi akses ke tab ini (mis. login khusus "presentation" untuk dibagikan saat rapat) yang bisa melihatnya, sama seperti bagian terbatas lainnya.`,
+    docs_presentation_desc: `Materi presentasi rapat internal, bisa ditampilkan layar penuh satu halaman per satu, terbagi jadi dua tab sidebar yang aksesnya bisa diberikan terpisah: AI Taskforce (Juli, September) dan Monthly Review (Agustus). Tidak ditampilkan untuk semua orang — hanya akun yang oleh admin sudah diberi akses ke tab tersebut (mis. login khusus untuk dibagikan saat rapat) yang bisa melihatnya, sama seperti bagian terbatas lainnya.`,
 
-    presentation_title: `Presentasi`,
+    presentation_title: `AI Taskforce`,
+    monthly_review_title: `Monthly Review`,
     presentation_hint: `Materi rapat internal, bisa ditampilkan layar penuh satu halaman per satu.`,
     presentation_month_july: `Juli`,
     presentation_month_september: `September`,
+    presentation_month_august: `Agustus`,
     presentation_present_btn: `Presentasikan`,
     presentation_exit_hint: `Esc untuk keluar · ← → untuk berpindah halaman`,
 

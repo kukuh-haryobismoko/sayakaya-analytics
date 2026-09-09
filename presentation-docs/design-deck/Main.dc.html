@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #8a99e8; } a:hover { color: #b3bdf2; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #2c3348; color: #ffffff; padding: 72px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between">
+  <div style="display: flex; flex-direction: column; gap: 20px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; letter-spacing: 2.2px; text-transform: uppercase; color: #8a99e8; font-weight: 500">Monthly meeting · August 2026</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 76px; font-weight: 700; line-height: 1.04; letter-spacing: -2px">SayaKaya<br>August Review</div>
+    <div style="font-size: 21px; color: #b7bdd2; max-width: 780px; line-height: 1.5">July 2026 performance, with June for comparison. Data through 17 August.</div>
+  </div>
+
+  <div style="display: flex; gap: 20px; align-items: stretch">
+    <div style="width: 4px; background: #ffc531; border-radius: 2px; flex: 0 0 4px"></div>
+    <div style="display: flex; flex-direction: column; gap: 10px; padding: 4px 0">
+      <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; letter-spacing: 1.6px; text-transform: uppercase; color: #ffc531; font-weight: 600">Read this before the first number</div>
+      <div style="font-size: 17.5px; line-height: 1.6; color: #e8eaf2; max-width: 1040px">The <strong style="font-weight: 600">RAIZ user segment is excluded from every figure in this deck</strong> — a large, mostly dormant set of accounts with minimal AUM and activity. Including them makes every rate meaningless. Numbers here will be lower than the dashboard, which still counts the full book.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

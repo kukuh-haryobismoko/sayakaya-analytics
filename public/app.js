@@ -3713,7 +3713,10 @@ function switchTab(name) {
   if (name === 'hnwi') loadHnwi();
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
-  if (name === 'presentation') loadPresentation($('#presentationMonthSeg .on')?.dataset.month || 'september');
+  if (name === 'presentation' || name === 'monthly-review') {
+    const cfg = PRES_VIEWS[name];
+    loadPresentation(name, $(`${cfg.seg} .on`)?.dataset.month || cfg.defaultMonth);
+  }
   if (name === 'send-statement') { loadSsLog(); loadSchedules('statement'); }
   if (name === 'send-fund-performance') { loadFpeLog(); loadSchedules('fund_performance'); }
 }
@@ -3724,10 +3727,20 @@ function switchTab(name) {
 // pdf.js, rather than shown in the browser's built-in PDF viewer — that
 // viewer scrolls continuously and can't be driven to "exactly one page,
 // full-screen, no scrolling" from our own Prev/Next buttons.
+//
+// Two independent tabs (AI Taskforce, Monthly Review) share this one viewer —
+// only one is ever visible at a time, so a single set of "current deck" vars
+// is enough; PRES_VIEWS maps each tab name to its own DOM elements.
+const PRES_VIEWS = {
+  presentation: { seg: '#presentationMonthSeg', stage: '#presentationStage', canvas: '#presentationCanvas', counter: '#presentationCounter', defaultMonth: 'september' },
+  'monthly-review': { seg: '#monthlyReviewMonthSeg', stage: '#monthlyReviewStage', canvas: '#monthlyReviewCanvas', counter: '#monthlyReviewCounter', defaultMonth: 'august' },
+};
 const presentationCache = {}; // month -> pdf.js PDFDocumentProxy
+let presActiveView = 'presentation'; // which PRES_VIEWS entry is on-screen
 let presPdfDoc = null;
 let presPageNum = 1;
-async function loadPresentation(month) {
+async function loadPresentation(view, month) {
+  presActiveView = view;
   presPageNum = 1;
   try {
     if (!presentationCache[month]) {
@@ -3747,18 +3760,19 @@ async function presRenderPage(n) {
   if (!presPdfDoc) return;
   presPageNum = Math.max(1, Math.min(n, presPdfDoc.numPages));
   const page = await presPdfDoc.getPage(presPageNum);
-  const stage = $('#presentationStage');
+  const cfg = PRES_VIEWS[presActiveView];
+  const stage = $(cfg.stage);
   const dpr = window.devicePixelRatio || 1;
   const unscaled = page.getViewport({ scale: 1 });
   const fitScale = Math.min(stage.clientWidth / unscaled.width, stage.clientHeight / unscaled.height);
   const viewport = page.getViewport({ scale: fitScale * dpr });
-  const canvas = $('#presentationCanvas');
+  const canvas = $(cfg.canvas);
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   canvas.style.width = `${viewport.width / dpr}px`;
   canvas.style.height = `${viewport.height / dpr}px`;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  $('#presentationCounter').textContent = `${presPageNum} / ${presPdfDoc.numPages}`;
+  $(cfg.counter).textContent = `${presPageNum} / ${presPdfDoc.numPages}`;
 }
 function presNext() { presRenderPage(presPageNum + 1); }
 function presPrev() { presRenderPage(presPageNum - 1); }
@@ -3868,25 +3882,31 @@ function wire() {
   wrapNavLabels();
   wireNavGroups();
   $$('.nav-link').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
-  $$('#presentationMonthSeg button').forEach((b) => b.addEventListener('click', () => {
-    $$('#presentationMonthSeg button').forEach((x) => x.classList.toggle('on', x === b));
-    loadPresentation(b.dataset.month);
-  }));
-  $('#presentBtn').addEventListener('click', () => {
-    const stage = $('#presentationStage');
-    (stage.requestFullscreen || stage.webkitRequestFullscreen)?.call(stage);
+  const presPresentBtn = { presentation: '#presentBtn', 'monthly-review': '#mrPresentBtn' };
+  const presPrevBtnId = { presentation: '#presPrevBtn', 'monthly-review': '#mrPrevBtn' };
+  const presNextBtnId = { presentation: '#presNextBtn', 'monthly-review': '#mrNextBtn' };
+  Object.keys(PRES_VIEWS).forEach((view) => {
+    const cfg = PRES_VIEWS[view];
+    $$(`${cfg.seg} button`).forEach((b) => b.addEventListener('click', () => {
+      $$(`${cfg.seg} button`).forEach((x) => x.classList.toggle('on', x === b));
+      loadPresentation(view, b.dataset.month);
+    }));
+    $(presPresentBtn[view]).addEventListener('click', () => {
+      const stage = $(cfg.stage);
+      (stage.requestFullscreen || stage.webkitRequestFullscreen)?.call(stage);
+    });
+    $(presPrevBtnId[view]).addEventListener('click', presPrev);
+    $(presNextBtnId[view]).addEventListener('click', presNext);
   });
-  $('#presPrevBtn').addEventListener('click', presPrev);
-  $('#presNextBtn').addEventListener('click', presNext);
   // Re-fit the current page to the stage's new size — on entering/exiting
   // fullscreen, and on any plain window resize while the tab is open.
   ['resize', 'fullscreenchange', 'webkitfullscreenchange'].forEach((evt) => {
     window.addEventListener(evt, () => { if (presPdfDoc) presRenderPage(presPageNum); });
   });
-  // Scoped to the Presentation tab being open so arrow keys/space don't hijack
-  // navigation elsewhere in the dashboard.
+  // Scoped to whichever presentation tab is open so arrow keys/space don't
+  // hijack navigation elsewhere in the dashboard.
   document.addEventListener('keydown', (e) => {
-    if (!$('#presentation').classList.contains('active')) return;
+    if (!$(`#${presActiveView}`).classList.contains('active')) return;
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); presNext(); }
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); presPrev(); }
   });

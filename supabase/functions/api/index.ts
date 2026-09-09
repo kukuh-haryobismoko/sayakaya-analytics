@@ -17,6 +17,7 @@ import { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM 
 import { Buffer } from 'node:buffer';
 import PRESENTATION_SEPTEMBER_BASE64 from './presentation-september.ts';
 import PRESENTATION_JULY_BASE64 from './presentation-july.ts';
+import PRESENTATION_AUGUST_BASE64 from './presentation-august.ts';
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -369,20 +370,25 @@ on('GET', '/api/admin/audit-log', requireSuperuser(async (_req, _params, url) =>
 }));
 
 // ---- Presentation decks (internal meetings) --------------------------------
-// Mirrors server/app.js's PRESENTATIONS map/route. The PDF is inlined as
-// base64 (presentation-september.ts) rather than read from disk — Supabase's
-// eszip bundling has no runtime filesystem to read presentation-docs/ from.
-const PRESENTATIONS: Record<string, string> = {
-  july: PRESENTATION_JULY_BASE64,
-  september: PRESENTATION_SEPTEMBER_BASE64,
+// Mirrors server/app.js's PRESENTATIONS map/route: two independently
+// grantable tabs ('presentation' for AI Taskforce decks, 'monthly-review' for
+// the rest) rather than one, so an admin can hand out a login scoped to just
+// one deck family. The PDF is inlined as base64 (presentation-*.ts) rather
+// than read from disk — Supabase's eszip bundling has no runtime filesystem
+// to read presentation-docs/ from.
+const PRESENTATIONS: Record<string, { b64: string; tab: string }> = {
+  july: { b64: PRESENTATION_JULY_BASE64, tab: 'presentation' },
+  september: { b64: PRESENTATION_SEPTEMBER_BASE64, tab: 'presentation' },
+  august: { b64: PRESENTATION_AUGUST_BASE64, tab: 'monthly-review' },
 };
-on('GET', '/api/presentations/:month', requireTab('presentation', async (_req, params) => {
-  const b64 = PRESENTATIONS[params.month];
-  if (!b64) return json({ error: 'No deck for that month.' }, 404);
-  return new Response(new Uint8Array(Buffer.from(b64, 'base64')), {
+on('GET', '/api/presentations/:month', async (_req, params, _url, user) => {
+  const deck = PRESENTATIONS[params.month];
+  if (!deck) return json({ error: 'No deck for that month.' }, 404);
+  if (!A.userCan(user, deck.tab)) return json({ error: `You do not have access to this section (${deck.tab}).` }, 403);
+  return new Response(new Uint8Array(Buffer.from(deck.b64, 'base64')), {
     headers: { 'content-type': 'application/pdf' },
   });
-}));
+});
 
 // ---- Auth: change your own password ---------------------------------------
 // Requires the current password (not just a valid session) so a hijacked-but-

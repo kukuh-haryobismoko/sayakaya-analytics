@@ -279,18 +279,20 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- Presentation decks (internal meetings) --------------------------------
-  // Gated like any other tab (requireTab, not requireSuperuser) so an admin
-  // can hand out a narrowly-scoped login — e.g. a "presentation" account with
-  // only this tab checked in allowed_tabs — without granting superuser.
+  // Two independently grantable tabs — 'presentation' (AI Taskforce decks) and
+  // 'monthly-review' — so an admin can hand out a login scoped to just one
+  // deck family (e.g. a "monthly-review" account) without granting the other.
   // Served from presentation-docs/ rather than public/ so the PDF isn't
   // reachable by URL without such a session. Add one entry per new month's deck.
   const PRESENTATIONS = {
-    july: { label: 'July 2026', file: 'Sayakaya AI taskforce presentation.pdf' },
-    september: { label: 'September 2026', file: 'AI Taskforce Sayakaya - September.pdf' },
+    july: { label: 'July 2026', file: 'Sayakaya AI taskforce presentation.pdf', tab: 'presentation' },
+    september: { label: 'September 2026', file: 'AI Taskforce Sayakaya - September.pdf', tab: 'presentation' },
+    august: { label: 'August 2026', file: 'sayakaya-august-review-deck.pdf', tab: 'monthly-review' },
   };
-  app.get('/api/presentations/:month', requireTab('presentation'), handler(async (req, res) => {
+  app.get('/api/presentations/:month', handler(async (req, res) => {
     const deck = PRESENTATIONS[req.params.month];
     if (!deck) return res.status(404).json({ error: 'No deck for that month.' });
+    if (!Auth.userCan(req.user, deck.tab)) return res.status(403).json({ error: `You do not have access to this section (${deck.tab}).` });
     const pdf = await fs.promises.readFile(path.join(__dirname, '..', 'presentation-docs', deck.file));
     res.type('application/pdf').send(pdf);
   }));

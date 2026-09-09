@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+    .fx { fill: #ffffff; font-size: 15px; font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 700; }
+    .fx2 { fill: #565b6b; font-size: 13px; font-family: "Inter", system-ui, sans-serif; }
+    .fd { fill: #c00d3f; font-size: 12.5px; font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 600; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 48px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #3a50ab; font-weight: 600">03 — Acquisition, continued</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 40px; font-weight: 600; letter-spacing: -1.2px">Before they uninstalled: most never got past KYC</div>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 22px 28px; display: flex; flex-direction: column; gap: 10px">
+    <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.3px; color: #565b6b; font-weight: 600">What the uninstall cohort did, ever, before their last session · Google Analytics, Jul 2026</div>
+    <svg viewBox="0 0 1160 300" style="width: 100%; height: auto; display: block">
+      <rect x="0" y="0" width="780" height="44" rx="6" fill="#3a50ab"></rect>
+      <text class="fx" x="16" y="27">239</text>
+      <text class="fx2" x="796" y="20">opened the app</text>
+      <text class="fx2" x="796" y="37" fill="#8a90a3">100% of the cohort</text>
+
+      <rect x="0" y="60" width="539" height="44" rx="6" fill="#3a50ab" opacity="0.8"></rect>
+      <text class="fx" x="16" y="87">165</text>
+      <text class="fx2" x="555" y="80">signed up</text>
+      <text class="fd" x="555" y="97">−31% vs opened</text>
+
+      <rect x="0" y="120" width="261" height="44" rx="6" fill="#3a50ab" opacity="0.62"></rect>
+      <text class="fx" x="16" y="147" fill="#14161f">80</text>
+      <text class="fx2" x="277" y="140">started KYC</text>
+      <text class="fd" x="277" y="157">−52% vs signed up</text>
+
+      <rect x="0" y="180" width="114" height="44" rx="6" fill="#3a50ab" opacity="0.45"></rect>
+      <text class="fx" x="16" y="207" fill="#14161f">35</text>
+      <text class="fx2" x="130" y="200">finished KYC (verified)</text>
+      <text class="fd" x="130" y="217">−56% vs started KYC</text>
+
+      <rect x="0" y="240" width="29" height="44" rx="6" fill="#ff3165"></rect>
+      <text class="fx2" x="45" y="260" style="font-weight: 700; fill: #c00d3f">9 completed a purchase</text>
+      <text class="fd" x="45" y="277">−74% vs verified · 3.8% of everyone who opened the app</text>
+    </svg>
+  </div>
+
+  <div style="display: flex; gap: 16px">
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Push didn't hold them</div>
+      <div style="font-size: 14px; line-height: 1.4">Of everyone who got a notification, <strong style="font-weight: 650">43% dismissed one</strong> and only <strong style="font-weight: 650">19% ever clicked one</strong> (1.3% click-through overall). In-app messages fared no better — dismissed as often as they were shown.</div>
+    </div>
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">A promo didn't save the sale</div>
+      <div style="font-size: 14px; line-height: 1.4">Up to <strong style="font-weight: 650">14 people</strong> clicked into a promo screen at some point and still ended up in this cohort — a promo click alone isn't a retention signal.</div>
+    </div>
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-left: 4px solid #ff3165; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #c00d3f; font-weight: 600">Some left on purpose</div>
+      <div style="font-size: 14px; line-height: 1.4"><strong style="font-weight: 650">17 people logged out</strong> manually and <strong style="font-weight: 650">4 cleared the app's local data</strong> before disappearing — a deliberate exit, not silent drift, for at least this small group.</div>
+    </div>
+  </div>
+
+  <div style="font-size: 13px; color: #8a90a3; line-height: 1.4">Cohort is the July uninstall population traced in GA (~239 people reached by first_open in this trace, close to the 303 uninstalls on the Acquisition slide — GA doesn't join this to registration/KYC/buy in the warehouse, so these are correlated events, not a proven causal order). "Signed up" sums Google and email/phone success events as parallel paths; not deduplicated against each other.</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

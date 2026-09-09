@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600; text-align: right; padding: 11px 16px; background: #eef0fc; }
+    th:first-child { text-align: left; }
+    td { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 17px; text-align: right; padding: 11px 16px; border-bottom: 1px solid #dfe3ee; }
+    td:first-child { text-align: left; font-family: "Inter", system-ui, sans-serif; font-size: 16px; font-weight: 500; }
+    tr:last-child td { border-bottom: 0; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 60px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #3a50ab; font-weight: 600">04 — Retention</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 46px; font-weight: 600; letter-spacing: -1.2px">Almost nobody comes back</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+    <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Registered users</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 38px; font-weight: 700; letter-spacing: -1.3px; line-height: 1.1">62,882</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Ever transacted</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 38px; font-weight: 700; letter-spacing: -1.3px; line-height: 1.1">7,067</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Active last 30 days (completed buys)</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 38px; font-weight: 700; letter-spacing: -1.3px; line-height: 1.1">280</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Dormant over a year</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 38px; font-weight: 700; letter-spacing: -1.3px; line-height: 1.1; color: #c00d3f">74.9%</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 20px; align-items: flex-start">
+    <div style="flex: 1.35 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; overflow: hidden">
+      <table>
+        <thead>
+          <tr><th>First-buy cohort</th><th>Buyers</th><th>M+1</th><th>M+2</th><th>M+3</th><th>M+6</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Jun 2025</td><td>47</td><td style="font-weight: 700">49%</td><td>30%</td><td>26%</td><td>6%</td></tr>
+          <tr><td>Oct 2025</td><td>53</td><td style="font-weight: 700">51%</td><td>30%</td><td>26%</td><td>13%</td></tr>
+          <tr><td>Nov 2025</td><td>59</td><td style="font-weight: 700">44%</td><td>36%</td><td>25%</td><td>10%</td></tr>
+          <tr><td>Jan 2026</td><td>68</td><td style="font-weight: 700">37%</td><td>12%</td><td>13%</td><td>7%</td></tr>
+          <tr><td>Mar 2026</td><td>42</td><td style="font-weight: 700">33%</td><td>14%</td><td>5%</td><td style="color: #c00d3f">0%</td></tr>
+          <tr><td>Apr 2026</td><td>21</td><td style="font-weight: 700">33%</td><td>10%</td><td>5%</td><td style="color: #c00d3f">0%</td></tr>
+          <tr><td>Jun 2026</td><td>23</td><td style="font-weight: 700">35%</td><td>9%</td><td style="color: #8a90a3">—</td><td style="color: #8a90a3">—</td></tr>
+          <tr><td>Jul 2026</td><td>15</td><td style="font-weight: 700; color: #c00d3f">27%</td><td style="color: #8a90a3">—</td><td style="color: #8a90a3">—</td><td style="color: #8a90a3">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="flex: 1 1 0; display: flex; flex-direction: column; gap: 16px">
+      <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Two things wrong at once</div>
+        <div style="font-size: 17px; line-height: 1.55">The cohorts are <strong style="font-weight: 650">shrinking</strong> — 68 new buyers in January became 15 in July — and each one retains worse than the last.</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #dfe3ee; border-left: 4px solid #ff3165; border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #c00d3f; font-weight: 600">Month 6</div>
+        <div style="font-size: 17px; line-height: 1.55">0% for the March, April and May cohorts — the most recent ones old enough to measure.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
