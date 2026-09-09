@@ -1330,15 +1330,20 @@ const RESOLVED_INVITER_CTE = `resolved_inviter AS (
 // same "first-ever transaction") could each resolve a tie differently
 // between requests, making the leaderboard silently disagree with this
 // detail table over the same set of qualifying invitees.
-// requireInviteeRegisteredInPeriod: true for the main "Referral program" tab,
-// false for "Referral Program (alt.)" — see the two routes in server/app.js.
-// Without it, this query's "qualifying" population (anyone whose first-ever
-// transaction, regardless of when they registered, hits the campaign's own
-// Sucor/>=1jt/period rule) can include invitees the main tab's own
-// referralInviterStats() leaderboard excluded entirely (it requires
-// registration within the period too) — silently breaking the invited >=
-// transacted >= qualifying funnel the leaderboard is merged into.
-const referralProgramDetail = (periodFrom, periodTo, requireInviteeRegisteredInPeriod = false) => ({
+// inviteeDateField: which invitee date gates the qualifying population —
+// 'created_at' (registration date) for the main "Referral program" tab,
+// 'verified_at' (KYC verification date) for "Referral Program (kyc based)" —
+// see the two routes in server/app.js. Same -1-day grace window either way.
+// This must stay in sync with the corresponding referralInviterStats*()
+// leaderboard's own invited-population filter below (registration date vs.
+// verification date, respectively) — otherwise this "qualifying" population
+// (invitees whose first-ever transaction hits the campaign's own
+// Sucor/>=1jt/period rule) could include invitees the leaderboard excluded
+// entirely, silently breaking the invited >= transacted >= qualifying funnel
+// the leaderboard is merged into.
+const referralProgramDetail = (periodFrom, periodTo, inviteeDateField = 'created_at') => {
+  const dateCol = inviteeDateField === 'verified_at' ? 'verified_at' : 'created_at';
+  return {
   sql: `WITH first_tx AS (
       SELECT user_id,
         ARRAY_AGG(STRUCT(id AS tx_id, fund_id, amount, created_at) ORDER BY created_at ASC, id ASC LIMIT 1)[OFFSET(0)] AS first_buy
@@ -1379,7 +1384,7 @@ const referralProgramDetail = (periodFrom, periodTo, requireInviteeRegisteredInP
       JOIN resolved_inviter ri ON ri.invitee_id = invitee.id
       JOIN ${USERS} inviter ON inviter.id = ri.inviter_id
       LEFT JOIN ${USER_PROFILES} inviter_up ON inviter_up.user_id = inviter.id
-      ${requireInviteeRegisteredInPeriod ? 'WHERE DATE(invitee.created_at) BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)' : ''}
+      WHERE DATE(invitee.${dateCol}) BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)
     ),
     fix_snaps AS (
       SELECT sid_code, id AS fund_id, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS snap_date, total_unit
@@ -1409,11 +1414,12 @@ const referralProgramDetail = (periodFrom, periodTo, requireInviteeRegisteredInP
     FROM pairs p
     LEFT JOIN holding h ON h.tx_id = p.tx_id
     ORDER BY p.tx_date DESC`,
-  params: {
-    periodFrom: periodFrom || '2026-09-01',
-    periodTo: periodTo || '2026-12-31',
-  },
-});
+    params: {
+      periodFrom: periodFrom || '2026-09-01',
+      periodTo: periodTo || '2026-12-31',
+    },
+  };
+};
 
 // Referral program leaderboard, per inviter: everyone still relevant to this
 // campaign and how many of those transacted — broader than
@@ -1467,23 +1473,19 @@ const referralInviterStats = (periodFrom, periodTo) => ({
   },
 });
 
-// Leaderboard for "Referral Program (alt.)" — a deliberately looser sibling
-// of referralInviterStats above. That one requires the invitee to have
-// *registered* during the period (else old, dormant referrals who never
-// transact would sit on the leaderboard forever as "pending"). This variant
-// drops that requirement entirely: the referral relationship can be
-// arbitrarily old — the only thing that matters is the invitee's first-ever
-// transaction. No transaction yet -> still "invited" (pending, may still
-// transact before the period ends). A first-ever transaction that already
-// landed outside the period -> excluded (their one shot already happened,
-// elsewhere). This mirrors referralProgramDetail's own qualifying rule
-// (first-ever transaction date, not registration date), so the two sections
-// deliberately show different "Invited" populations side by side.
+// Leaderboard for "Referral Program (kyc based)" — a sibling of
+// referralInviterStats above with one deliberate swap: that one gates
+// "Invited" by the invitee's registration date (invitee.created_at); this one
+// gates it by their KYC verification date (invitee.verified_at) instead, same
+// -1-day grace window. Everything else (transacted_count, grouping) is
+// identical — this is the invitee's verification date, not their signup
+// date, and an invitee who never got verified (verified_at IS NULL) never
+// counts as invited here regardless of how old the referral is.
 const referralInviterStatsAlt = (periodFrom, periodTo) => ({
   sql: `WITH ${RESOLVED_INVITER_CTE},
     invited_all AS (
-      SELECT invitee.id AS invitee_id, inviter.sid_code AS inviter_sid,
-        inviter.referral_code AS inviter_referral_code,
+      SELECT invitee.id AS invitee_id, invitee.verified_at AS invitee_verified_at,
+        inviter.sid_code AS inviter_sid, inviter.referral_code AS inviter_referral_code,
         COALESCE(inviter_up.name, inviter.email) AS inviter_name
       FROM ${USERS} invitee
       JOIN resolved_inviter ri ON ri.invitee_id = invitee.id
@@ -1502,7 +1504,8 @@ const referralInviterStatsAlt = (periodFrom, periodTo) => ({
         DATE(ft.first_tx_at) AS first_tx_date
       FROM invited_all ia
       LEFT JOIN first_tx ft ON ft.user_id = ia.invitee_id
-      WHERE ft.first_tx_at IS NULL OR DATE(ft.first_tx_at) BETWEEN @periodFrom AND @periodTo
+      WHERE DATE(ia.invitee_verified_at)
+        BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)
     )
     SELECT inviter_sid, ANY_VALUE(inviter_referral_code) AS inviter_referral_code, ANY_VALUE(inviter_name) AS inviter_name,
       COUNT(DISTINCT invitee_id) AS invited_count,
@@ -1518,12 +1521,12 @@ const referralInviterStatsAlt = (periodFrom, periodTo) => ({
 // Full roster behind the leaderboards' "Invited" counts above: one row per
 // invitee with their own contact/KYC/referral-code details, not just the
 // per-inviter tallies. `alt` picks the same "invited" population as
-// referralInviterStats (false, registered-in-period) or referralInviterStatsAlt
-// (true, first-tx-in-period-or-none) so the row count always matches the
-// corresponding leaderboard's Invited total.
+// referralInviterStats (false, gated by invitee.created_at) or
+// referralInviterStatsAlt (true, gated by invitee.verified_at instead) so the
+// row count always matches the corresponding leaderboard's Invited total.
 const referralInvitedUsers = (periodFrom, periodTo, alt = false) => {
   const invitedFilter = alt
-    ? '(ft.first_tx.created_at IS NULL OR DATE(ft.first_tx.created_at) BETWEEN @periodFrom AND @periodTo)'
+    ? 'DATE(invitee.verified_at) BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)'
     : 'DATE(invitee.created_at) BETWEEN DATE_SUB(DATE(@periodFrom), INTERVAL 1 DAY) AND DATE(@periodTo)';
   return {
     sql: `WITH ${RESOLVED_INVITER_CTE},

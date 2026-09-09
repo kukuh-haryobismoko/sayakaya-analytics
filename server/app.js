@@ -748,7 +748,7 @@ function createApp({ serveStatic = true } = {}) {
   // ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
   app.get('/api/referral-program/detail', requireTab('referral-program'), handler(async (req, res) => {
     const { from, to } = req.query;
-    const q = Q.referralProgramDetail(from, to, true);
+    const q = Q.referralProgramDetail(from, to, 'created_at');
     res.json(computeReferralEligibility(await runQuery(q.sql, q.params)));
   }));
 
@@ -769,17 +769,19 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Referral program (alt.): same T&C eligibility rule and detail rows
-  // as the section above (an invitee's registration date never mattered to
-  // referralProgramDetail — only their first-ever transaction date), but a
-  // deliberately looser leaderboard: "Invited" here doesn't require the
-  // invitee to have registered during the period, only that they haven't
-  // already burned their first-ever transaction outside it — see
-  // queries.js:referralInviterStatsAlt. Own tab permission ('referral-program-alt')
-  // so it's assignable independently of the main section.
+  // ---- Referral program (kyc based): an exact copy of the section above —
+  // same T&C eligibility rule, same detail-row shape, same leaderboard shape
+  // — with exactly one thing swapped throughout: every place the main tab
+  // gates the funnel by the invitee's registration date (invitee.created_at)
+  // this one gates it by their KYC verification date (invitee.verified_at)
+  // instead, same 1-day grace window. See queries.js:referralInviterStatsAlt
+  // and referralProgramDetail's inviteeDateField param. Own tab permission
+  // ('referral-program-alt', kept as-is so existing dashboard_users.allowed_tabs
+  // grants don't silently break) so it's assignable independently of the main
+  // section.
   app.get('/api/referral-program-alt/detail', requireTab('referral-program-alt'), handler(async (req, res) => {
     const { from, to } = req.query;
-    const q = Q.referralProgramDetail(from, to, false);
+    const q = Q.referralProgramDetail(from, to, 'verified_at');
     res.json(computeReferralEligibility(await runQuery(q.sql, q.params)));
   }));
 
@@ -1276,7 +1278,7 @@ function createApp({ serveStatic = true } = {}) {
       const q = Q.hnwiByFund(req.body.date, req.body.minAum, req.body.maxAum, req.body.minFundAum, req.body.maxFundAum, limit || 20000);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
-      const q = Q.referralProgramDetail(req.body.from, req.body.to, source === 'referral_program_detail');
+      const q = Q.referralProgramDetail(req.body.from, req.body.to, source === 'referral_program_alt_detail' ? 'verified_at' : 'created_at');
       rows = computeReferralEligibility(await runQuery(q.sql, q.params));
     } else if (source === 'referral_program_invited' || source === 'referral_program_alt_invited') {
       const q = Q.referralInvitedUsers(req.body.from, req.body.to, source === 'referral_program_alt_invited');

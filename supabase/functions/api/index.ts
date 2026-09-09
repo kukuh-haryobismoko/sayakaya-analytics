@@ -816,14 +816,14 @@ on('GET', '/api/campaign-revenue/summary', requireTab('campaign-revenue', async 
 }));
 
 // ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
-// requireInviteeRegisteredInPeriod=true here so "qualifying" (and everything
-// derived from it below) is scoped to the same registered-in-period
-// population as referralInviterStats()'s "Invited"/"Transacted" — otherwise
-// an invitee who registered before the period but transacted inside it could
-// count as "qualifying"/"Eligible" while being entirely absent from the
-// leaderboard's own Invited/Transacted, breaking that funnel.
+// inviteeDateField='created_at' here so "qualifying" (and everything derived
+// from it below) is scoped to the same registered-in-period population as
+// referralInviterStats()'s "Invited"/"Transacted" — otherwise an invitee who
+// registered before the period but transacted inside it could count as
+// "qualifying"/"Eligible" while being entirely absent from the leaderboard's
+// own Invited/Transacted, breaking that funnel.
 on('GET', '/api/referral-program/detail', requireTab('referral-program', async (_req, _params, url) => {
-  const q = Q.referralProgramDetail(qp(url, 'from'), qp(url, 'to'), true);
+  const q = Q.referralProgramDetail(qp(url, 'from'), qp(url, 'to'), 'created_at');
   return json(computeReferralEligibility(await runQuery(q.sql, q.params)));
 }));
 
@@ -842,16 +842,18 @@ on('GET', '/api/referral-program/invited', requireTab('referral-program', async 
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Referral program (alt.): same T&C eligibility rule and detail rows
-// as the section above (registration date is deliberately NOT required here,
-// unlike the main tab above — only the invitee's first-ever transaction date
-// matters), matching this tab's own deliberately looser leaderboard:
-// "Invited" here doesn't require the invitee to have registered during the
-// period, only that they haven't already burned their first-ever transaction
-// outside it — see queries.ts:referralInviterStatsAlt. Own tab permission
-// ('referral-program-alt') so it's assignable independently of the main section.
+// ---- Referral program (kyc based): an exact copy of the section above —
+// same T&C eligibility rule, same detail-row shape, same leaderboard shape —
+// with exactly one thing swapped throughout: every place the main tab gates
+// the funnel by the invitee's registration date (invitee.created_at) this
+// one gates it by their KYC verification date (invitee.verified_at) instead,
+// same 1-day grace window. See queries.ts:referralInviterStatsAlt and
+// referralProgramDetail's inviteeDateField param. Own tab permission
+// ('referral-program-alt', kept as-is so existing dashboard_users.allowed_tabs
+// grants don't silently break) so it's assignable independently of the main
+// section.
 on('GET', '/api/referral-program-alt/detail', requireTab('referral-program-alt', async (_req, _params, url) => {
-  const q = Q.referralProgramDetail(qp(url, 'from'), qp(url, 'to'), false);
+  const q = Q.referralProgramDetail(qp(url, 'from'), qp(url, 'to'), 'verified_at');
   return json(computeReferralEligibility(await runQuery(q.sql, q.params)));
 }));
 
@@ -1369,7 +1371,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const q = Q.hnwiByFund(body.date as string, body.minAum as string, body.maxAum as string, body.minFundAum as string, body.maxFundAum as string, (limit as number) || 20000);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
-    const q = Q.referralProgramDetail(body.from as string, body.to as string, source === 'referral_program_detail');
+    const q = Q.referralProgramDetail(body.from as string, body.to as string, source === 'referral_program_alt_detail' ? 'verified_at' : 'created_at');
     rows = computeReferralEligibility(await runQuery(q.sql, q.params));
   } else if (source === 'referral_program_invited' || source === 'referral_program_alt_invited') {
     const q = Q.referralInvitedUsers(body.from as string, body.to as string, source === 'referral_program_alt_invited');

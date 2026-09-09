@@ -154,7 +154,7 @@
           <button class="nav-link" data-tab="user-lifetime"><span class="nav-icon">⏳</span>User lifetime</button>
           <button class="nav-link" data-tab="campaign-revenue"><span class="nav-icon">🎯</span>Campaign revenue</button>
           <button class="nav-link" data-tab="referral-program"><span class="nav-icon">🎁</span>Referral program</button>
-          <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon">🎟️</span>Referral Program (alt.)</button>
+          <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon">🎟️</span>Referral Program (kyc based)</button>
           <button class="nav-link" data-tab="remisier"><span class="nav-icon">🤝</span>Remisier sharing (GS)</button>
           <button class="nav-link" data-tab="remisier-pwc"><span class="nav-icon">🤝</span>Remisier sharing (PWC)</button>
           <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon">🧾</span>Remisier transactions</button>
@@ -1551,12 +1551,13 @@
       </div>
     </section>
 
-    <!-- ===================== REFERRAL PROGRAM (ALT.) — same T&C eligibility rule
-         and detail rows as Referral program above (an invitee's registration
-         date never mattered there — only their first-ever transaction date),
-         but a looser leaderboard: "Invited" here doesn't require the invitee
-         to have registered during the period, only that their first-ever
-         transaction (if any) hasn't already happened outside it. ===================== -->
+    <!-- ===================== REFERRAL PROGRAM (KYC BASED) — same T&C eligibility
+         rule and detail rows as Referral program above (an invitee's
+         registration date never mattered there — only their first-ever
+         transaction date). The one difference: "Invited" here is gated by
+         the invitee's KYC verification date (invitee.verified_at) instead of
+         their registration date (invitee.created_at), same 1-day grace
+         window — see queries.js:referralInviterStatsAlt. ===================== -->
     <section id="referral-program-alt" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -2026,8 +2027,8 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_referral_program_desc">The Sep-Dec 2026 referral bonus program's eligibility report. A referral only counts if the invited friend's very first-ever transaction is a Sucor Asset Management fund purchase of at least Rp1,000,000 made with someone's referral code; the bonus (Rp25,000 to each side, in Sucorinvest Money Market Fund units) additionally requires that fund's units to stay unchanged for 30 days. Each row shows both people's contact details, the transaction, days held, and a status — Eligible, Pending (still within the 30-day hold), or Not eligible (with the specific reason, e.g. redeemed early or KYC not verified). An Inviter leaderboard sits above the row-level detail: one line per inviter with how many people they referred and how many transacted at all (any fund, any amount) — broader counts than the eligibility rule itself — next to how many of those referrals qualified, and of those, how many are Pending vs. Eligible. On this leaderboard, "Invited" only counts an invitee if they also registered during the period — an old referral relationship that never leads to a signup/purchase in this window doesn't clutter the list. Below the leaderboard, an Invited users table lists that same "Invited" population one row per person — name, registration date, SID, email, phone, their own referral code, the referrer code they signed up with, KYC status, and first-transaction status — separate from the row-level Referral detail table further down, which only covers invitees whose first-ever transaction met the campaign's own Sucor/≥Rp1jt rule.</p>
         </div>
         <div class="doc-item">
-          <h3>🎟️ Referral Program (alt.)</h3>
-          <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition (and, correspondingly, which invitees show up in the Invited users table below it). Here, the referral relationship can be arbitrarily old (no registration-date requirement); what matters is purely the invitee's first-ever transaction. Haven't transacted yet? Still counted as invited (pending — they may still transact before the period ends). Already made their first-ever transaction outside this period? Permanently excluded, since per the T&C only that very first transaction can ever qualify. Use this tab when you want to know "of everyone ever referred, who's still in play for this campaign," rather than "who signed up because of this campaign."</p>
+          <h3>🎟️ Referral Program (kyc based)</h3>
+          <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition (and, correspondingly, which invitees show up in the Invited users table below it). Here, "Invited" is gated by the invitee's KYC verification date instead of their registration date (with the same 1-day grace window) — an invitee who was verified inside the period counts as invited even if they registered long before it, and one who's never been verified never counts, no matter how old the referral. Use this tab when you want "who's KYC-verified and in play for this campaign," rather than "who signed up because of this campaign."</p>
         </div>
         <div class="doc-item">
           <h3>🤝 Remisier sharing (GS) / (PWC)</h3>

@@ -1925,7 +1925,7 @@ function buildReferralLeaderboard(rows, stats) {
   return [...bySid.values()].sort((a, b) => b.qualifying - a.qualifying || b.invited - a.invited);
 }
 
-// Shared by both Referral program and Referral Program (alt.) — same KPI/
+// Shared by both Referral program and Referral Program (kyc based) — same KPI/
 // detail/leaderboard shape, different data source (see loadReferralProgram
 // vs loadReferralProgramAlt). `sel` picks which section's DOM ids to fill.
 function renderReferralProgram(rows, stats, invited, sel = { kpis: '#refProgKpis', table: '#refProgTable', leaderboard: '#refProgLeaderboardTable', invited: '#refProgInvitedTable' }) {
