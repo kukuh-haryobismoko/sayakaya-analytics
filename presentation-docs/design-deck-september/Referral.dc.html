@@ -10,49 +10,47 @@
   <style>
     body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
     a { color: #3a50ab; } a:hover { color: #26357a; }
-    .ax { fill: #8a90a3; font-size: 13px; font-family: "JetBrains Mono", ui-monospace, monospace; }
-    .vl { fill: #14161f; font-size: 17px; font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 700; }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th { font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600; text-align: right; padding: 12px 18px; background: #eef0fc; }
+    th:first-child { text-align: left; }
+    td { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 19px; text-align: right; padding: 16px 18px; border-bottom: 1px solid #dfe3ee; }
+    td:first-child { text-align: left; font-family: "Inter", system-ui, sans-serif; font-size: 17px; font-weight: 500; }
+    tr:last-child td { border-bottom: 0; }
   </style>
 </helmet>
-<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 48px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 56px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px">
   <div style="display: flex; flex-direction: column; gap: 6px">
     <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #14c687; font-weight: 600">03 — Acquisition</div>
-    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 40px; font-weight: 600; letter-spacing: -1.2px">Referral went from 3% of signups to 52% in six weeks</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 40px; font-weight: 600; letter-spacing: -1.2px">The referral program's first 10 days</div>
+    <div style="font-size: 15px; color: #565b6b">Scoped to the program's actual launch — 31 Aug through 9 Sep — nothing from before counted.</div>
   </div>
 
-  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 16px 26px; display: flex; flex-direction: column; gap: 10px">
-    <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1.4px; color: #565b6b; font-weight: 600">Referral signups ÷ total registrations, by month</div>
-    <svg viewBox="0 0 1150 190" style="width: 100%; height: auto; display: block">
-      <line x1="0" y1="150" x2="1150" y2="150" stroke="#e6e9f2" stroke-width="1"></line>
-      <rect x="20" y="142" width="220" height="8" fill="#c7cbe0" rx="2"></rect>
-      <rect x="310" y="143" width="220" height="7" fill="#c7cbe0" rx="2"></rect>
-      <rect x="600" y="106" width="220" height="44" fill="#3a50ab" rx="2"></rect>
-      <rect x="890" y="36" width="220" height="114" fill="#14c687" rx="2"></rect>
-      <text class="vl" x="130" y="134" text-anchor="middle" fill="#8a90a3">3.6%</text>
-      <text class="vl" x="420" y="135" text-anchor="middle" fill="#8a90a3">3.2%</text>
-      <text class="vl" x="710" y="98" text-anchor="middle" fill="#3a50ab">20.0%</text>
-      <text class="vl" x="1000" y="28" text-anchor="middle" fill="#07724d">51.9%</text>
-      <text class="ax" x="130" y="170" text-anchor="middle">Jun (5 of 138)</text>
-      <text class="ax" x="420" y="170" text-anchor="middle">Jul (4 of 125)</text>
-      <text class="ax" x="710" y="170" text-anchor="middle">Aug (20 of 100)</text>
-      <text class="ax" x="1000" y="170" text-anchor="middle">Sep, 9d (27 of 52)</text>
-    </svg>
-  </div>
-
-  <div style="display: flex; gap: 14px; align-items: stretch; background: #2c3348; border-radius: 12px; padding: 14px 22px">
-    <div style="width: 4px; background: #14c687; border-radius: 2px; flex: 0 0 4px"></div>
-    <div style="font-size: 17px; line-height: 1.45; color: #ffffff">Two months flat at ~3%, then a step-change in August that's still climbing. Last meeting's cumulative "7.8% of 2026 signups" framing averaged a dead channel with a suddenly-hot one, hiding this. <strong style="font-weight: 650">Something changed in early August</strong> — if the referral page renewal we've asked about since July shipped, this is the result. Worth confirming directly; September's 52% is only 52 people.</div>
+  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; overflow: hidden">
+    <table>
+      <thead>
+        <tr><th>31 Aug – 9 Sep</th><th>Registered</th><th>Activated</th><th>Rate</th><th>Median invested</th></tr>
+      </thead>
+      <tbody>
+        <tr style="background: #eefff9"><td>Via referral</td><td>29</td><td>9</td><td style="color: #07724d; font-weight: 700">31.0%</td><td style="color: #07724d; font-weight: 700">Rp 1.0 M</td></tr>
+        <tr><td>Organic</td><td>29</td><td>3</td><td style="font-weight: 700">10.3%</td><td style="font-weight: 700">Rp 0.23 M</td></tr>
+      </tbody>
+    </table>
   </div>
 
   <div style="display: flex; gap: 20px">
-    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
-      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Still true: referral converts better</div>
-      <div style="font-size: 15px; line-height: 1.4">Across 2026, referral activates at <strong style="font-weight: 650">3.5×</strong> the rate and invests <strong style="font-weight: 650">2.2×</strong> more at the median than organic — real, though smaller than August's reported 4.6×/40×.</div>
+    <div style="flex: 1 1 0; background: #2c3348; border-radius: 12px; padding: 26px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 54px; font-weight: 700; letter-spacing: -2px; line-height: 1; color: #ffffff">50.0%</div>
+      <div style="font-size: 15px; color: #b7bdd2; line-height: 1.4">of all registrations since launch came via referral — 29 of 58</div>
     </div>
-    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
-      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">What to do with this</div>
-      <div style="font-size: 15px; line-height: 1.4">If referral is really working now, it's the highest-leverage lever on the board — 3% of signups two months ago, possibly the majority by October.</div>
+    <div style="flex: 1 1 0; background: #2c3348; border-radius: 12px; padding: 26px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 54px; font-weight: 700; letter-spacing: -2px; line-height: 1; color: #ffffff">3.0× / 4.3×</div>
+      <div style="font-size: 15px; color: #b7bdd2; line-height: 1.4">more likely to activate, more invested at the median than organic — same 10 days</div>
     </div>
+  </div>
+
+  <div style="display: flex; gap: 16px; align-items: stretch; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 20px 26px">
+    <div style="width: 4px; background: #ffc531; border-radius: 2px; flex: 0 0 4px"></div>
+    <div style="font-size: 17px; line-height: 1.5">Early and small — 58 people, 10 days. Strong enough to take seriously, too little to call a trend yet. See the next slide before crediting it as a scalable channel.</div>
   </div>
 </div>
 </x-dc>

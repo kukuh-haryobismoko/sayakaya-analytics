@@ -49,6 +49,16 @@ const RAIZ_CODES = ['RAIZ', 'RAIZKAYA'];
 const FUND_EXCLUDE_SINVEST = ['TP002MMCAVRLIF00', 'TP002IFCAVINLQ00']; // portfolio_with_code
 const FUND_EXCLUDE_IDS = ['sjmIG8YqZOOp9JiAS_-pE', 'xJAj9OpLhRpSNip63uj0b']; // funds.id / mi_fee_logs.mi_fee.fund_id
 
+// The current referral program's actual launch (confirmed 2026-09-10,
+// matches the "Bonus Program MGM SayaKaya" campaign's system start_date of
+// 1 Sep to within a day). referralProgram below is scoped ONLY to this date
+// through pEnd — no data from before it — so it reports the program's own
+// performance, not a monthly trend blended with whatever came before it.
+// If this program is superseded by a new one later, update this date (or
+// stop reporting this section) rather than letting the window silently
+// drift across two different programs.
+const REFERRAL_PROGRAM_LAUNCH = '2026-08-31';
+
 function ymAdd(ym, delta) {
   const [y, m] = ym.split('-').map(Number);
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
@@ -441,6 +451,40 @@ async function main() {
     WHERE u.created_at >= DATETIME(@cStart) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
     GROUP BY ur.referrer_id ORDER BY n_referred DESC LIMIT 10`,
     { raizCodes: RAIZ_CODES, cStart, pEnd });
+
+  // ---- Referral PROGRAM performance, scoped strictly to its own launch date
+  // (REFERRAL_PROGRAM_LAUNCH) through pEnd — nothing from before it. This is
+  // a different question from referralByMonth/referrerConcentration above,
+  // which look at calendar-month trends regardless of when the program
+  // itself started. ----
+  console.error(`Querying referral program performance since ${REFERRAL_PROGRAM_LAUNCH}...`);
+  out.referralProgram = {
+    launchDate: REFERRAL_PROGRAM_LAUNCH,
+    summary: await runQuery(`
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
+      base AS (
+        SELECT u.id, EXISTS(SELECT 1 FROM \`sayakaya.main.user_referrals\` ur WHERE ur.user_id = u.id) via_referral
+        FROM \`sayakaya.main.users\` u
+        WHERE u.created_at >= DATETIME(@launch) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
+      ),
+      buys AS (
+        SELECT user_id, COUNT(*) n_buys, SUM(final_amount) total_invested
+        FROM \`sayakaya.main.transactions\` WHERE type='buy' AND status='completed' GROUP BY user_id
+      )
+      SELECT b.via_referral, COUNT(*) registered, COUNTIF(bu.user_id IS NOT NULL) activated,
+        APPROX_QUANTILES(bu.total_invested, 2)[OFFSET(1)] median_invested
+      FROM base b LEFT JOIN buys bu ON bu.user_id = b.id
+      GROUP BY b.via_referral`,
+      { raizCodes: RAIZ_CODES, launch: REFERRAL_PROGRAM_LAUNCH, pEnd }),
+    referrers: await runQuery(`
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
+      SELECT ur.referrer_id, COUNT(*) n_referred, MIN(u.created_at) first_ref, MAX(u.created_at) last_ref
+      FROM \`sayakaya.main.user_referrals\` ur
+      JOIN \`sayakaya.main.users\` u ON u.id = ur.user_id
+      WHERE u.created_at >= DATETIME(@launch) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
+      GROUP BY ur.referrer_id ORDER BY n_referred DESC`,
+      { raizCodes: RAIZ_CODES, launch: REFERRAL_PROGRAM_LAUNCH, pEnd }),
+  };
 
   // ---- Campaigns active during the review month: users + buy volume ----
   console.error('Querying campaign usage during the review month...');
