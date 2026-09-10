@@ -396,6 +396,52 @@ async function main() {
     FROM base b LEFT JOIN buys bu ON bu.user_id = b.id
     GROUP BY b.via_referral`, { raizCodes: RAIZ_CODES, pEnd });
 
+  // ---- Referral share by month (the cumulative stat above hides monthly
+  // swings — check this every month before trusting the cumulative one) ----
+  console.error('Querying referral share by month...');
+  out.referralByMonth = await runQuery(`
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
+    SELECT FORMAT_DATETIME('%Y-%m', u.created_at) ym,
+      COUNT(*) registered,
+      COUNTIF(EXISTS(SELECT 1 FROM \`sayakaya.main.user_referrals\` ur WHERE ur.user_id = u.id)) via_referral
+    FROM \`sayakaya.main.users\` u
+    WHERE u.created_at >= DATETIME('2026-01-01') AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
+    GROUP BY ym ORDER BY ym`, { raizCodes: RAIZ_CODES, pEnd });
+
+  // ---- Referrer concentration: is growth broad-based or a couple of people?
+  // "Recent" = comparison month start through today; "baseline" = everything
+  // before that. If recent's top-2 share is far above baseline, that's worth
+  // a slide on its own before crediting referral as a scalable channel. ----
+  console.error('Querying referrer concentration (recent vs baseline)...');
+  async function referrerConcentration(start, end) {
+    const rows = await runQuery(`
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
+      refs AS (
+        SELECT ur.referrer_id, COUNT(*) n_referred
+        FROM \`sayakaya.main.user_referrals\` ur
+        JOIN \`sayakaya.main.users\` u ON u.id = ur.user_id
+        WHERE u.created_at >= DATETIME(@start) AND u.created_at < DATETIME(@end) AND u.id NOT IN (SELECT id FROM raiz)
+        GROUP BY ur.referrer_id
+      ),
+      ranked AS (SELECT n_referred, ROW_NUMBER() OVER (ORDER BY n_referred DESC) rn FROM refs)
+      SELECT (SELECT COUNT(*) FROM refs) n_referrers, (SELECT SUM(n_referred) FROM refs) total_referred,
+        (SELECT SUM(n_referred) FROM ranked WHERE rn <= 2) top2_referred
+    `, { raizCodes: RAIZ_CODES, start, end });
+    return rows[0];
+  }
+  out.referrerConcentration = {
+    recent: await referrerConcentration(cStart, pEnd),
+    baseline: await referrerConcentration('2026-01-01', cStart),
+  };
+  out.topReferrers = await runQuery(`
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
+    SELECT ur.referrer_id, COUNT(*) n_referred, MIN(u.created_at) first_ref, MAX(u.created_at) last_ref
+    FROM \`sayakaya.main.user_referrals\` ur
+    JOIN \`sayakaya.main.users\` u ON u.id = ur.user_id
+    WHERE u.created_at >= DATETIME(@cStart) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
+    GROUP BY ur.referrer_id ORDER BY n_referred DESC LIMIT 10`,
+    { raizCodes: RAIZ_CODES, cStart, pEnd });
+
   // ---- Campaigns active during the review month: users + buy volume ----
   console.error('Querying campaign usage during the review month...');
   out.campaigns = await runQuery(`
