@@ -198,6 +198,11 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
 
   const p = otp.payload;
   const seed: NextRunSpec = { frequency: p.frequency, day_of_week: p.dayOfWeek, day_of_month: p.dayOfMonth, run_time: p.runTime };
+  const nextRun = computeNextRun(seed, new Date());
+  // If the first computed occurrence already falls after end_date, the
+  // schedule would never send anything — create it already ended instead of
+  // showing an Active row with a phantom Next run past its own Ends date.
+  const alreadyEnded = p.endDate && jktDateStr(nextRun) > p.endDate;
   const [job] = await rest('/dashboard_scheduled_jobs', {
     method: 'POST',
     headers: { Prefer: 'return=representation' },
@@ -215,8 +220,8 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
       day_of_month: p.dayOfMonth ?? null,
       run_time: p.runTime || '08:00',
       end_date: p.endDate || null,
-      status: 'active',
-      next_run_at: computeNextRun(seed, new Date()).toISOString(),
+      status: alreadyEnded ? 'ended' : 'active',
+      next_run_at: alreadyEnded ? null : nextRun.toISOString(),
       created_by_user_id: p.userId || null,
       created_by_username: p.username || null,
       confirmation_email: p.confirmationEmail,
@@ -349,12 +354,22 @@ export async function runDueJobs(): Promise<{ jobsClaimed: number; recipientsEnq
       continue;
     }
     const nextRun = computeNextRun(job, new Date());
+    // Today's occurrence is due and within end_date, so it still runs — but
+    // if the *next* occurrence would fall after end_date, this is the last
+    // run: end the job now instead of advancing next_run_at into the future,
+    // so the table doesn't show a "Next run" for a schedule that's done.
+    const isLastRun = job.end_date && jktDateStr(nextRun) > job.end_date;
     const claimed = await rest(
       `/dashboard_scheduled_jobs?id=eq.${job.id}&next_run_at=eq.${encodeURIComponent(job.next_run_at || '')}`,
       {
         method: 'PATCH',
         headers: { Prefer: 'return=representation' },
-        body: JSON.stringify({ next_run_at: nextRun.toISOString(), last_run_at: nowIso, run_count: (job.run_count || 0) + 1 }),
+        body: JSON.stringify({
+          next_run_at: isLastRun ? null : nextRun.toISOString(),
+          last_run_at: nowIso,
+          run_count: (job.run_count || 0) + 1,
+          ...(isLastRun ? { status: 'ended' } : {}),
+        }),
       },
     );
     if (!claimed || !claimed.length) continue;
