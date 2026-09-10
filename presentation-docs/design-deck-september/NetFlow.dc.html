@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+    .ax { fill: #8a90a3; font-size: 13px; font-family: "JetBrains Mono", ui-monospace, monospace; }
+    .vl { font-size: 15px; font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 700; }
+    .gl { stroke: #e6e9f2; stroke-width: 1; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #3a50ab; font-weight: 600">02 — Cause</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 46px; font-weight: 600; letter-spacing: -1.2px">August broke the losing streak — September hasn't confirmed it</div>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 28px 32px; display: flex; flex-direction: column; gap: 12px">
+    <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1.4px; color: #565b6b; font-weight: 600">Net flow — buys minus sells · Rp billion · excl. RAIZ</div>
+    <svg viewBox="0 0 720 185" style="width: 100%; height: auto; display: block">
+      <line class="gl" x1="60" y1="19" x2="700" y2="19"></line>
+      <line class="gl" x1="60" y1="127" x2="700" y2="127"></line>
+      <line x1="60" y1="55" x2="700" y2="55" stroke="#8a90a3" stroke-width="1.5"></line>
+      <text class="ax" x="52" y="23" text-anchor="end">+60</text>
+      <text class="ax" x="52" y="59" text-anchor="end">0</text>
+      <text class="ax" x="52" y="131" text-anchor="end">−120</text>
+      <rect x="76" y="40" width="70" height="15" fill="#14c687" rx="4"></rect>
+      <rect x="166" y="55" width="70" height="53" fill="#ff3165" rx="4"></rect>
+      <rect x="256" y="55" width="70" height="58" fill="#ff3165" rx="4"></rect>
+      <rect x="346" y="55" width="70" height="68" fill="#ff3165" rx="4"></rect>
+      <rect x="436" y="55" width="70" height="33" fill="#ff3165" rx="4"></rect>
+      <rect x="526" y="26" width="70" height="29" fill="#14c687" rx="4"></rect>
+      <rect x="616" y="55" width="70" height="6" fill="none" stroke="#c00d3f" stroke-width="2" stroke-dasharray="4 3" rx="3"></rect>
+      <text class="vl" x="111" y="34" text-anchor="middle" fill="#07724d">+25.6</text>
+      <text class="vl" x="201" y="124" text-anchor="middle" fill="#c00d3f">−88.1</text>
+      <text class="vl" x="291" y="129" text-anchor="middle" fill="#c00d3f">−96.9</text>
+      <text class="vl" x="381" y="139" text-anchor="middle" fill="#c00d3f">−113.6</text>
+      <text class="vl" x="471" y="104" text-anchor="middle" fill="#c00d3f">−55.0</text>
+      <text class="vl" x="561" y="20" text-anchor="middle" fill="#07724d">+48.3</text>
+      <text class="vl" x="651" y="77" text-anchor="middle" fill="#c00d3f" font-size="12">−10.0 pace</text>
+      <text class="ax" x="111" y="165" text-anchor="middle">Mar</text>
+      <text class="ax" x="201" y="165" text-anchor="middle">Apr</text>
+      <text class="ax" x="291" y="165" text-anchor="middle">May</text>
+      <text class="ax" x="381" y="165" text-anchor="middle">Jun</text>
+      <text class="ax" x="471" y="165" text-anchor="middle">Jul</text>
+      <text class="ax" x="561" y="165" text-anchor="middle">Aug</text>
+      <text class="ax" x="651" y="165" text-anchor="middle">Sep · 9 days</text>
+    </svg>
+  </div>
+
+  <div style="display: flex; gap: 16px; align-items: stretch; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 22px 26px">
+    <div style="width: 4px; background: #ff3165; border-radius: 2px; flex: 0 0 4px"></div>
+    <div style="font-size: 18px; line-height: 1.55">August was the best net-flow month since March, and the first fully positive month in five. Early September has already slipped back to <strong style="font-weight: 650">−3.0 B in 9 days</strong> (pace −10.0 B) — not enough data yet to call a reversal, but flagging it now rather than after next month's numbers land.</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

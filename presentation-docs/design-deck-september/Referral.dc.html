@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th { font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: #565b6b; font-weight: 600; text-align: right; padding: 14px 18px; background: #eef0fc; }
+    th:first-child { text-align: left; }
+    td { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 21px; text-align: right; padding: 20px 18px; border-bottom: 1px solid #dfe3ee; }
+    td:first-child { text-align: left; font-family: "Inter", system-ui, sans-serif; font-size: 19px; font-weight: 500; }
+    tr:last-child td { border-bottom: 0; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 26px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #14c687; font-weight: 600">03 — Acquisition</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 42px; font-weight: 600; letter-spacing: -1.2px">Referral still wins — the 40× wasn't quite right</div>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; overflow: hidden">
+    <table>
+      <thead>
+        <tr><th>All 2026 signups to date</th><th>Registered</th><th>Activated</th><th>Rate</th><th>Median lifetime buys</th><th>Avg buys</th></tr>
+      </thead>
+      <tbody>
+        <tr style="background: #eefff9"><td>Came via referral</td><td>129</td><td>56</td><td style="color: #07724d; font-weight: 700">43.4%</td><td style="color: #07724d; font-weight: 700">Rp 1.7 M</td><td>3.16</td></tr>
+        <tr><td>Organic — no referrer</td><td>1,620</td><td>202</td><td style="font-weight: 700">12.5%</td><td style="font-weight: 700">Rp 0.77 M</td><td>3.81</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display: flex; gap: 20px">
+    <div style="flex: 1 1 0; background: #2c3348; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 62px; font-weight: 700; letter-spacing: -2px; line-height: 1; color: #ffffff">3.5×</div>
+      <div style="font-size: 16px; color: #b7bdd2; line-height: 1.45">more likely to activate</div>
+    </div>
+    <div style="flex: 1 1 0; background: #2c3348; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 62px; font-weight: 700; letter-spacing: -2px; line-height: 1; color: #ffffff">2.2×</div>
+      <div style="font-size: 16px; color: #b7bdd2; line-height: 1.45">more invested at the median</div>
+    </div>
+    <div style="flex: 2 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: #565b6b; font-weight: 600">And a correction</div>
+      <div style="font-size: 18px; line-height: 1.55">Recomputed this month: <strong style="font-weight: 650">3.5× / 2.2×</strong>, not August's reported 4.6×/40×. Still the widest gap on the board. Referral stays at <strong style="font-weight: 650">7.4% of signups</strong> (7.8% in July).</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 16px; align-items: stretch; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 24px 28px">
+    <div style="width: 4px; background: #14c687; border-radius: 2px; flex: 0 0 4px"></div>
+    <div style="font-size: 19px; line-height: 1.55">July's Marketing ask — <strong style="font-weight: 650">"Tech: referral page to be renewed"</strong> — still hasn't visibly shipped, and referral's share of signups hasn't moved. Same recommendation as last month: prioritise it above new channel spend.</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

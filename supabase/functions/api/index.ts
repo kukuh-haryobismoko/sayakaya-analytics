@@ -382,6 +382,7 @@ const PRESENTATIONS: Record<string, { tab: string }> = {
   july: { tab: 'presentation' },
   september: { tab: 'presentation' },
   august: { tab: 'monthly-review' },
+  'review-september': { tab: 'monthly-review' },
 };
 on('GET', '/api/presentations/:month', async (_req, params, _url, user) => {
   const deck = PRESENTATIONS[params.month];

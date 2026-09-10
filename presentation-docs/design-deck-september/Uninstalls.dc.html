@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+    .fx { fill: #ffffff; font-size: 15px; font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 700; }
+    .fx2 { fill: #565b6b; font-size: 13px; font-family: "Inter", system-ui, sans-serif; }
+    .fd { fill: #c00d3f; font-size: 12.5px; font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 600; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 48px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #3a50ab; font-weight: 600">03 — Acquisition, continued</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 40px; font-weight: 600; letter-spacing: -1.2px">Before they uninstalled: how far this cohort got</div>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 22px 28px; display: flex; flex-direction: column; gap: 10px">
+    <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.3px; color: #565b6b; font-weight: 600">Distinct users who ever fired each event · Google Analytics, Aug 2026 uninstall cohort</div>
+    <svg viewBox="0 0 1160 300" style="width: 100%; height: auto; display: block">
+      <rect x="0" y="0" width="780" height="44" rx="6" fill="#3a50ab"></rect>
+      <text class="fx" x="16" y="27">162</text>
+      <text class="fx2" x="796" y="20">opened the app (first_open)</text>
+      <text class="fx2" x="796" y="37" fill="#8a90a3">100% of the cohort</text>
+
+      <rect x="0" y="60" width="289" height="44" rx="6" fill="#3a50ab" opacity="0.8"></rect>
+      <text class="fx" x="16" y="87">60</text>
+      <text class="fx2" x="305" y="80">signed up (register_success)</text>
+      <text class="fd" x="305" y="97">37% of first_open</text>
+
+      <rect x="0" y="120" width="250" height="44" rx="6" fill="#3a50ab" opacity="0.62"></rect>
+      <text class="fx" x="16" y="147" fill="#14161f">52</text>
+      <text class="fx2" x="266" y="140">started KYC</text>
+      <text class="fd" x="266" y="157">32% of first_open</text>
+
+      <rect x="0" y="180" width="164" height="44" rx="6" fill="#3a50ab" opacity="0.45"></rect>
+      <text class="fx" x="16" y="207" fill="#14161f">34</text>
+      <text class="fx2" x="180" y="200">finished KYC (kyc_success)</text>
+      <text class="fd" x="180" y="217">21% of first_open</text>
+
+      <rect x="0" y="240" width="34" height="44" rx="6" fill="#ff3165"></rect>
+      <text class="fx2" x="50" y="260" style="font-weight: 700; fill: #c00d3f">7 completed a purchase (payment_complete)</text>
+      <text class="fd" x="50" y="277">4.3% of everyone who opened the app</text>
+    </svg>
+  </div>
+
+  <div style="display: flex; gap: 16px">
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Push didn't hold them either</div>
+      <div style="font-size: 14px; line-height: 1.4">Of the 138 people who received a notification, <strong style="font-weight: 650">78% dismissed at least one</strong> and <strong style="font-weight: 650">20% ever clicked one</strong>. In-app messages barely reached this cohort at all — only 7 people ever saw one, too small a sample to read into.</div>
+    </div>
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">A promo didn't save the sale</div>
+      <div style="font-size: 14px; line-height: 1.4">Up to <strong style="font-weight: 650">12 people</strong> clicked into a promo screen at some point and still ended up in this cohort — same finding as July, a promo click alone isn't a retention signal.</div>
+    </div>
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-left: 4px solid #ff3165; border-radius: 12px; padding: 14px 20px; display: flex; flex-direction: column; gap: 5px">
+      <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 1.1px; color: #c00d3f; font-weight: 600">Some left on purpose</div>
+      <div style="font-size: 14px; line-height: 1.4"><strong style="font-weight: 650">12 people logged out</strong> manually and <strong style="font-weight: 650">1 cleared the app's local data</strong> before disappearing — a deliberate exit for at least this small group, same pattern as July.</div>
+    </div>
+  </div>
+
+  <div style="font-size: 13px; color: #8a90a3; line-height: 1.4">Cohort is the August uninstall population traced in GA. This month's export is marginal per-event distinct-user totals, not a per-user ordered trace like July's — so the step rates above read as "at least X people reached Y," not a strict sequential funnel (a person could finish KYC without a recorded register_success, for example). GA still doesn't join to registration/KYC/buy in the warehouse, so these remain correlated events, not a proven causal order.</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 30px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #ff3165; font-weight: 600">02 — Cause</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 46px; font-weight: 600; letter-spacing: -1.2px">Concentration deepened anyway</div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px">
+    <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Top 2 accounts, today</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 46px; font-weight: 700; letter-spacing: -1.6px; line-height: 1.05">27.8%</div>
+      <div style="font-size: 14px; color: #565b6b; line-height: 1.4">of all AUM</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Top 10, today</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 46px; font-weight: 700; letter-spacing: -1.6px; line-height: 1.05">51.9%</div>
+      <div style="font-size: 14px; color: #565b6b; line-height: 1.4">of all AUM</div>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Top 100, today</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 46px; font-weight: 700; letter-spacing: -1.6px; line-height: 1.05">84.8%</div>
+      <div style="font-size: 14px; color: #565b6b; line-height: 1.4">of all AUM</div>
+    </div>
+    <div style="background: #2c3348; border: 1px solid #2c3348; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #8a99e8; font-weight: 600">Top-10 share vs July</div>
+      <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 46px; font-weight: 700; letter-spacing: -1.6px; line-height: 1.05; color: #ffffff">+9.2 pp</div>
+      <div style="font-size: 14px; color: #b7bdd2; line-height: 1.4">42.7% → 51.9%, with no whale event this month</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 20px">
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 26px 28px; display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: #565b6b; font-weight: 600">The other end of the book</div>
+      <div style="font-size: 18px; line-height: 1.6">5,176 accounts hold any AUM at all. <strong style="font-weight: 650">3,821 of them hold under Rp 100,000</strong>, and the median is Rp 13,097. The working customer base is roughly <strong style="font-weight: 650">1,355 accounts</strong> above that floor.</div>
+    </div>
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 26px 28px; display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: #565b6b; font-weight: 600">What this means for the roadmap</div>
+      <div style="font-size: 18px; line-height: 1.6">July's two-account shock wasn't the disease, just the most visible symptom. With no single trigger this time, the book still concentrated <strong style="font-weight: 650">further</strong> at the top-10 level — organic growth among large accounts, not distress.</div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 16px; align-items: stretch; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 22px 26px">
+    <div style="width: 4px; background: #ff3165; border-radius: 2px; flex: 0 0 4px"></div>
+    <div style="font-size: 18px; line-height: 1.55">Still no UTM/channel field, and July's HNWI-support ask for accounts over Rp 1 B has not visibly shipped. Both stand exactly where they stood last meeting.</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

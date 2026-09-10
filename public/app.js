@@ -3735,7 +3735,7 @@ function switchTab(name) {
 // is enough; PRES_VIEWS maps each tab name to its own DOM elements.
 const PRES_VIEWS = {
   presentation: { seg: '#presentationMonthSeg', stage: '#presentationStage', canvas: '#presentationCanvas', counter: '#presentationCounter', defaultMonth: 'september' },
-  'monthly-review': { seg: '#monthlyReviewMonthSeg', stage: '#monthlyReviewStage', canvas: '#monthlyReviewCanvas', counter: '#monthlyReviewCounter', defaultMonth: 'august' },
+  'monthly-review': { seg: '#monthlyReviewMonthSeg', stage: '#monthlyReviewStage', canvas: '#monthlyReviewCanvas', counter: '#monthlyReviewCounter', defaultMonth: 'review-september' },
 };
 const presentationCache = {}; // month -> pdf.js PDFDocumentProxy
 let presActiveView = 'presentation'; // which PRES_VIEWS entry is on-screen

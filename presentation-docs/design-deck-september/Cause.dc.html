@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    a { color: #3a50ab; } a:hover { color: #26357a; }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th { font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: #565b6b; font-weight: 600; text-align: right; padding: 14px 18px; background: #eef0fc; }
+    th:first-child { text-align: left; }
+    td { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 21px; text-align: right; padding: 20px 18px; border-bottom: 1px solid #dfe3ee; }
+    td:first-child { text-align: left; font-family: "Inter", system-ui, sans-serif; font-size: 19px; font-weight: 500; }
+    tr:last-child td { border-bottom: 0; }
+  </style>
+</helmet>
+<div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #07724d; font-weight: 600">02 — Cause</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 42px; font-weight: 600; letter-spacing: -1.2px">No repeat of July's whale event — this time it's broad</div>
+  </div>
+
+  <div style="font-size: 20px; line-height: 1.55; color: #565b6b; max-width: 1050px">July's Rp 50.0 B swing came from two accounts moving Rp 59.5 B between them. August's <strong style="color: #14161f; font-weight: 650">+Rp 1.5 B</strong> swing came from nowhere in particular — the single biggest move all month was <strong style="color: #14161f; font-weight: 650">Rp 3.0 B</strong>, two orders of magnitude smaller.</div>
+
+  <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; overflow: hidden">
+    <table>
+      <thead>
+        <tr><th>Account</th><th>31 Jul</th><th>31 Aug</th><th>Change</th><th>Registered</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Largest single mover*</td><td>5.0 B</td><td>2.0 B</td><td style="color: #c00d3f; font-weight: 700">−3.0 B</td><td style="font-size: 17px; color: #565b6b">Jan 2026</td></tr>
+        <tr><td>Jackson Sulastri†</td><td>21.2 B</td><td>21.9 B</td><td style="color: #07724d; font-weight: 700">+0.7 B</td><td style="font-size: 17px; color: #565b6b">Mar 2023</td></tr>
+        <tr style="background: #f7f8fc"><td>Everyone else — ~5,174 accounts</td><td>236.1 B</td><td>239.9 B</td><td style="color: #07724d; font-weight: 700">+3.8 B</td><td style="font-size: 17px; color: #565b6b">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="font-size: 13.5px; color: #8a90a3; margin-top: -14px">* Largest single AUM move in either direction across all of August, Rp 5.0 B → Rp 2.0 B. † One of July's two large redemptions (jacksonsulastrieipo@gmail.com) — added capital back in August instead of continuing to redeem.</div>
+
+  <div style="display: flex; gap: 16px; align-items: stretch; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 22px 26px">
+    <div style="width: 4px; background: #3a50ab; border-radius: 2px; flex: 0 0 4px"></div>
+    <div style="font-size: 18px; line-height: 1.55">August's turnaround was <strong style="font-weight: 650">broad participation</strong>, not one account reversing course: Rp 69.0 B in buys across 689 orders from 290 different investors, against redemptions of just Rp 20.7 B — a fraction of June and July's sell-off.</div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

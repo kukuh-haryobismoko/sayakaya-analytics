@@ -288,6 +288,7 @@ function createApp({ serveStatic = true } = {}) {
     july: { label: 'July 2026', file: 'Sayakaya AI taskforce presentation.pdf', tab: 'presentation' },
     september: { label: 'September 2026', file: 'AI Taskforce Sayakaya - September.pdf', tab: 'presentation' },
     august: { label: 'August 2026', file: 'sayakaya-august-review-deck.pdf', tab: 'monthly-review' },
+    'review-september': { label: 'September 2026', file: 'sayakaya-september-review-deck.pdf', tab: 'monthly-review' },
   };
   app.get('/api/presentations/:month', handler(async (req, res) => {
     const deck = PRESENTATIONS[req.params.month];
