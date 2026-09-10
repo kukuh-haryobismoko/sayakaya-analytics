@@ -165,7 +165,8 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
   padding: 9px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 2px;
   transition: background-color .15s, color .15s, border-color .15s, transform .15s;
 }
-.nav-icon { display: inline-flex; width: 20px; font-size: 13.5px; margin-right: 8px; opacity: .85; }
+.nav-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; margin-right: 8px; opacity: .85; color: currentColor; }
+.nav-icon svg { width: 16px; height: 16px; }
 .nav-link:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); transform: translateX(2px); }
 .nav-link.active {
   background: var(--indigo); color: #fff; border-left-color: var(--amber);
@@ -245,6 +246,9 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 }
 .panel-head h2 { font-size: 15px; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; }
+.trend-finding { font-size: 14px; font-weight: 600; margin: 2px 0 8px; }
+.trend-finding.up { color: var(--teal); }
+.trend-finding.down { color: var(--rose); }
 
 /* ---------- Presentation page ---------- */
 /* One PDF page rendered onto the canvas at a time (app.js), letterboxed to
@@ -599,7 +603,8 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   .app-shell.sidebar-collapsed .nav-label-text { display: none; }
   .app-shell.sidebar-collapsed .user-panel { justify-content: center; padding: 14px 0; }
   .app-shell.sidebar-collapsed .nav-link { justify-content: center; padding: 10px 0; }
-  .app-shell.sidebar-collapsed .nav-icon { margin-right: 0; font-size: 16px; }
+  .app-shell.sidebar-collapsed .nav-icon { margin-right: 0; }
+  .app-shell.sidebar-collapsed .nav-icon svg { width: 18px; height: 18px; }
   .app-shell.sidebar-collapsed .nav-link.active { border-left: 0; border-top: 3px solid var(--amber); }
 }
 

@@ -1596,8 +1596,8 @@ on('POST', '/api/schedules/preview', requireScheduleKindTab(async (req) => {
   return json({ count });
 }));
 
-// Step 1 of creating a schedule: validate + email a 6-digit code to the
-// confirmation email. Nothing is scheduled yet — the full config is held in
+// Validates the config and emails a 6-digit code to the confirmation
+// email. Nothing is scheduled yet — the full config is held in
 // dashboard_schedule_otps until confirmed (or it expires in 10 minutes).
 on('POST', '/api/schedules/otp/request', requireScheduleKindTab(async (req, _params, _url, user) => {
   const b = await bodyOf(req);
@@ -1625,7 +1625,7 @@ on('POST', '/api/schedules/otp/request', requireScheduleKindTab(async (req, _par
   return json({ ok: true, otpId, recipientCount: count });
 }));
 
-// Step 2: verifying the code is what actually creates the schedule.
+// Verifying the code here is what actually creates the schedule.
 on('POST', '/api/schedules/otp/confirm', requireAnyTab(['send-statement', 'send-fund-performance'], async (req, _params, _url, user) => {
   const body = await bodyOf(req);
   const otpId = body.otpId as string | undefined;

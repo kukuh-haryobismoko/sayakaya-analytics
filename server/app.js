@@ -1471,8 +1471,8 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ count });
   }));
 
-  // Step 1 of creating a schedule: validate + email a 6-digit code to the
-  // confirmation email. Nothing is scheduled yet — the full config is held in
+  // Validates the config and emails a 6-digit code to the confirmation
+  // email. Nothing is scheduled yet — the full config is held in
   // dashboard_schedule_otps until confirmed (or it expires in 10 minutes).
   app.post('/api/schedules/otp/request', requireScheduleKindTab, handler(async (req, res) => {
     const {
@@ -1495,7 +1495,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ ok: true, otpId, recipientCount: count });
   }));
 
-  // Step 2: verifying the code is what actually creates the schedule.
+  // Verifying the code here is what actually creates the schedule.
   app.post('/api/schedules/otp/confirm', requireEitherScheduleTab, handler(async (req, res) => {
     const { otpId, code } = req.body || {};
     if (!otpId || !code) return res.status(400).json({ error: 'otpId and code are required.' });

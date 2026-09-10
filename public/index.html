@@ -37,6 +37,37 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+<!-- Inline icon sprite: self-hosted, zero dependency, reused via <use> below. -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+<symbol id="i-bar-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="20" y1="20" x2="20" y2="14"/></symbol>
+<symbol id="i-trend-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,17 9,11 13,15 21,7"/><polyline points="15,7 21,7 21,13"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/></symbol>
+<symbol id="i-sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V12"/><path d="M12 12C12 8 9 6 5 6c0 4 3 7 7 6"/><path d="M12 12c0-4 3-6 7-6 0 4-3 7-7 6"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-7 8-7s8 2.6 8 7"/></symbol>
+<symbol id="i-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polygon points="15,9 13,13 9,15 11,11"/></symbol>
+<symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 00-5.7 5l-5 5 2 2 5-5a4 4 0 005-5.7l-2.3 2.3-2-2z"/></symbol>
+<symbol id="i-receipt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.3L14 21l-2-1.3L10 21l-2-1.3L6 21V3z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></symbol>
+<symbol id="i-id-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="8" cy="12" r="2"/><line x1="13" y1="10" x2="18" y2="10"/><line x1="13" y1="14" x2="18" y2="14"/></symbol>
+<symbol id="i-gem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6,8 12,3 18,8 12,20"/><line x1="6" y1="8" x2="18" y2="8"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3,7 12,13 21,7"/></symbol>
+<symbol id="i-calculator" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="7" y1="7" x2="17" y2="7"/><circle cx="8" cy="12" r="0.8" fill="currentColor"/><circle cx="12" cy="12" r="0.8" fill="currentColor"/><circle cx="16" cy="12" r="0.8" fill="currentColor"/><circle cx="8" cy="16" r="0.8" fill="currentColor"/><circle cx="12" cy="16" r="0.8" fill="currentColor"/><circle cx="16" cy="16" r="0.8" fill="currentColor"/></symbol>
+<symbol id="i-coin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 15.5c0 1.4 1.3 2.5 3 2.5s3-1 3-2.3c0-3-6-1.7-6-4.7 0-1.3 1.3-2.3 3-2.3s3 1.1 3 2.5"/><line x1="12" y1="6" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="18"/></symbol>
+<symbol id="i-line-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,4 4,20 20,20"/><polyline points="7,15 10,11 13,13 18,6"/></symbol>
+<symbol id="i-hourglass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10M7 21h10M8 3c0 5.5 4 6.5 4 9s-4 3.5-4 9M16 3c0 5.5-4 6.5-4 9s4 3.5 4 9"/></symbol>
+<symbol id="i-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="9" width="16" height="11" rx="1"/><line x1="4" y1="9" x2="20" y2="9"/><line x1="12" y1="9" x2="12" y2="20"/><path d="M12 9c-1-4-6-4-6-1s3 1 6 1z"/><path d="M12 9c1-4 6-4 6-1s-3 1-6 1z"/></symbol>
+<symbol id="i-ticket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a2 2 0 010 4v4a2 2 0 002 2h12a2 2 0 002-2v-4a2 2 0 010-4V6a2 2 0 00-2-2H6a2 2 0 00-2 2z"/><line x1="14" y1="4" x2="14" y2="20" stroke-dasharray="2 2"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M11 6l1-1a3 3 0 014 4l-1 1"/><path d="M13 18l-1 1a3 3 0 01-4-4l1-1"/></symbol>
+<symbol id="i-forecast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="6"/><circle cx="10" cy="9" r="1" fill="currentColor"/><line x1="6" y1="20" x2="18" y2="20" stroke-dasharray="2 2"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="6"/><line x1="15" y1="15" x2="20" y2="20"/></symbol>
+<symbol id="i-flask" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5.5 9a2 2 0 001.7 3h11.6a2 2 0 001.7-3L14 9V3"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-2-1.5-5-2-8-1v13c3-1 6-.5 8 1 2-1.5 5-2 8-1V5c-3-1-6-.5-8 1z"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></symbol>
+<symbol id="i-scroll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></symbol>
+<symbol id="i-export" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="15"/><polyline points="8,7 12,3 16,7"/><path d="M5 15v4a2 2 0 002 2h10a2 2 0 002-2v-4"/></symbol>
+</svg>
   <!-- Login gate -->
   <div id="gate" class="gate">
     <div class="gate-card" id="gate-login">
@@ -129,46 +160,46 @@
       <nav class="nav">
         <div class="nav-group" data-group="dashboards">
           <div class="nav-label"><span data-i18n="nav_group_dashboards">Dashboards</span><span class="nav-group-caret"></span></div>
-          <button class="nav-link active" data-tab="overview"><span class="nav-icon">📊</span>Overview</button>
-          <button class="nav-link" data-tab="aum"><span class="nav-icon">📈</span>AUM history</button>
-          <button class="nav-link" data-tab="performance"><span class="nav-icon">🎯</span>Performance</button>
-          <button class="nav-link" data-tab="growth"><span class="nav-icon">🌱</span>Growth</button>
+          <button class="nav-link active" data-tab="overview"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Overview</button>
+          <button class="nav-link" data-tab="aum"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-up"></use></svg></span>AUM history</button>
+          <button class="nav-link" data-tab="performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Performance</button>
+          <button class="nav-link" data-tab="growth"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-sprout"></use></svg></span>Growth</button>
         </div>
         <div class="nav-group" data-group="investor">
           <div class="nav-label"><span data-i18n="nav_group_investor">Investor</span><span class="nav-group-caret"></span></div>
-          <button class="nav-link" data-tab="portfolio"><span class="nav-icon">👤</span>Portfolio (PWC)</button>
-          <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon">🧭</span>Portfolio Explorer (GS)</button>
-          <button class="nav-link" data-tab="portfolio-fix"><span class="nav-icon">🛠️</span>Portfolio Explorer (Main)</button>
-          <button class="nav-link" data-tab="portfolio-tx"><span class="nav-icon">🧾</span>Portfolio (TX)</button>
-          <button class="nav-link" data-tab="portfolio-sinvest"><span class="nav-icon">📇</span>Portfolio (SInvest)</button>
-          <button class="nav-link" data-tab="hnwi"><span class="nav-icon">💎</span>HNWI</button>
-          <button class="nav-link" data-tab="send-statement"><span class="nav-icon">📧</span>Send statement</button>
-          <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon">📊</span>Send fund performance</button>
+          <button class="nav-link" data-tab="portfolio"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user"></use></svg></span>Portfolio (PWC)</button>
+          <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg></span>Portfolio Explorer (GS)</button>
+          <button class="nav-link" data-tab="portfolio-fix"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg></span>Portfolio Explorer (Main)</button>
+          <button class="nav-link" data-tab="portfolio-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Portfolio (TX)</button>
+          <button class="nav-link" data-tab="portfolio-sinvest"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg></span>Portfolio (SInvest)</button>
+          <button class="nav-link" data-tab="hnwi"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg></span>HNWI</button>
+          <button class="nav-link" data-tab="send-statement"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Send statement</button>
+          <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Send fund performance</button>
         </div>
         <div class="nav-group" data-group="operations">
           <div class="nav-label"><span data-i18n="nav_group_operations">Operations &amp; Finance</span><span class="nav-group-caret"></span></div>
-          <button class="nav-link" data-tab="reconciliation"><span class="nav-icon">🧮</span>Reconciliation</button>
-          <button class="nav-link" data-tab="sinvest-tx"><span class="nav-icon">📇</span>SInvest transactions</button>
-          <button class="nav-link" data-tab="revenue"><span class="nav-icon">💰</span>Revenue (PWC)</button>
-          <button class="nav-link" data-tab="revenue2"><span class="nav-icon">💹</span>Revenue (GS)</button>
-          <button class="nav-link" data-tab="user-lifetime"><span class="nav-icon">⏳</span>User lifetime</button>
-          <button class="nav-link" data-tab="campaign-revenue"><span class="nav-icon">🎯</span>Campaign revenue</button>
-          <button class="nav-link" data-tab="referral-program"><span class="nav-icon">🎁</span>Referral program</button>
-          <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon">🎟️</span>Referral Program (kyc based)</button>
-          <button class="nav-link" data-tab="remisier"><span class="nav-icon">🤝</span>Remisier sharing (GS)</button>
-          <button class="nav-link" data-tab="remisier-pwc"><span class="nav-icon">🤝</span>Remisier sharing (PWC)</button>
-          <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon">🧾</span>Remisier transactions</button>
-          <button class="nav-link" data-tab="predict"><span class="nav-icon">🔮</span>Predict</button>
+          <button class="nav-link" data-tab="reconciliation"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calculator"></use></svg></span>Reconciliation</button>
+          <button class="nav-link" data-tab="sinvest-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg></span>SInvest transactions</button>
+          <button class="nav-link" data-tab="revenue"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-coin"></use></svg></span>Revenue (PWC)</button>
+          <button class="nav-link" data-tab="revenue2"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-line-chart"></use></svg></span>Revenue (GS)</button>
+          <button class="nav-link" data-tab="user-lifetime"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-hourglass"></use></svg></span>User lifetime</button>
+          <button class="nav-link" data-tab="campaign-revenue"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Campaign revenue</button>
+          <button class="nav-link" data-tab="referral-program"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gift"></use></svg></span>Referral program</button>
+          <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Referral Program (kyc based)</button>
+          <button class="nav-link" data-tab="remisier"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg></span>Remisier sharing (GS)</button>
+          <button class="nav-link" data-tab="remisier-pwc"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg></span>Remisier sharing (PWC)</button>
+          <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Remisier transactions</button>
+          <button class="nav-link" data-tab="predict"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-forecast"></use></svg></span>Predict</button>
         </div>
         <div class="nav-group" data-group="tools">
           <div class="nav-label"><span>Tools</span><span class="nav-group-caret"></span></div>
-          <button class="nav-link" data-tab="ask"><span class="nav-icon">💬</span>Ask</button>
-          <button class="nav-link" data-tab="explorer"><span class="nav-icon">🔍</span>Data explorer</button>
-          <button class="nav-link" data-tab="sql"><span class="nav-icon">🧪</span>SQL lab</button>
+          <button class="nav-link" data-tab="ask"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-chat"></use></svg></span>Ask</button>
+          <button class="nav-link" data-tab="explorer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-search"></use></svg></span>Data explorer</button>
+          <button class="nav-link" data-tab="sql"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-flask"></use></svg></span>SQL lab</button>
         </div>
         <div class="nav-group" data-group="help">
           <div class="nav-label"><span data-i18n="nav_group_help">Help</span><span class="nav-group-caret"></span></div>
-          <button class="nav-link" data-tab="docs"><span class="nav-icon">📖</span>Documentations</button>
+          <button class="nav-link" data-tab="docs"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-book"></use></svg></span>Documentations</button>
         </div>
         <!-- Not superuser-gated — regular tabs like any other, shown to
              whichever accounts have them checked in Manage users' access
@@ -177,13 +208,13 @@
              so the two deck families can be granted independently. -->
         <div class="nav-group" data-group="presentation">
           <div class="nav-label"><span>Presentation</span><span class="nav-group-caret"></span></div>
-          <button class="nav-link" data-tab="presentation"><span class="nav-icon">📽️</span>AI Taskforce</button>
-          <button class="nav-link" data-tab="monthly-review"><span class="nav-icon">🗓️</span>Monthly Review</button>
+          <button class="nav-link" data-tab="presentation"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-monitor"></use></svg></span>AI Taskforce</button>
+          <button class="nav-link" data-tab="monthly-review"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calendar"></use></svg></span>Monthly Review</button>
         </div>
         <div class="nav-group hidden" id="adminNavGroup" data-group="admin">
           <div class="nav-label"><span data-i18n="nav_group_admin">Admin</span><span class="nav-group-caret"></span></div>
-          <button class="nav-link" data-tab="admin"><span class="nav-icon">🛡️</span>Manage users</button>
-          <button class="nav-link" data-tab="activity-log"><span class="nav-icon">📜</span>Activity log</button>
+          <button class="nav-link" data-tab="admin"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-shield"></use></svg></span>Manage users</button>
+          <button class="nav-link" data-tab="activity-log"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-scroll"></use></svg></span>Activity log</button>
         </div>
       </nav>
 
@@ -218,7 +249,7 @@
       </header>
 
       <main>
-    <!-- ===================== USER PORTFOLIO ===================== -->
+    <!-- USER PORTFOLIO -->
     <section id="portfolio" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
@@ -274,10 +305,10 @@
       </div>
     </section>
 
-    <!-- ===================== SEND STATEMENT — email an investor their portfolio
+    <!-- SEND STATEMENT — email an investor their portfolio
          (holdings only, no fund performance) and/or their monthly transaction
          e-statement, for a chosen as-of date / month. Separate from Portfolio
-         (PWC) on purpose — this is a sending tool, not a lookup dashboard. ===== -->
+         (PWC) on purpose — this is a sending tool, not a lookup dashboard. -->
     <section id="send-statement" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
@@ -516,9 +547,9 @@
       </dialog>
     </section>
 
-    <!-- ===================== SEND FUND PERFORMANCE — broadcast the Reksa Dana
+    <!-- SEND FUND PERFORMANCE — broadcast the Reksa Dana
          Update PDF to a picked or pasted list of emails. Separate tool from
-         Send statement, which is scoped to one investor at a time. ===================== -->
+         Send statement, which is scoped to one investor at a time. -->
     <section id="send-fund-performance" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="fpe_recipients_title">Recipients</h2><span class="hint" data-i18n="fpe_recipients_hint">Search registered users to add their email, or paste a list below — either or both.</span></div>
@@ -698,7 +729,7 @@
       </dialog>
     </section>
 
-    <!-- ===================== PORTFOLIO (FIX) — same as PWC above, sourced from mi_fee_logs.portfolio_fix ===================== -->
+    <!-- PORTFOLIO (FIX) — same as PWC above, sourced from mi_fee_logs.portfolio_fix -->
     <section id="portfolio-fix" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
@@ -754,7 +785,7 @@
       </div>
     </section>
 
-    <!-- ===================== PORTFOLIO (TX) — live holdings, avg buy price from the transaction ledger, no as-of-date ===================== -->
+    <!-- PORTFOLIO (TX) — live holdings, avg buy price from the transaction ledger, no as-of-date -->
     <section id="portfolio-tx" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
@@ -810,7 +841,7 @@
       </div>
     </section>
 
-    <!-- ===================== PORTFOLIO (SINVEST) — same as Portfolio (TX), sourced from the sinvest.trx_history custodian feed ===================== -->
+    <!-- PORTFOLIO (SINVEST) — same as Portfolio (TX), sourced from the sinvest.trx_history custodian feed -->
     <section id="portfolio-sinvest" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
@@ -866,7 +897,7 @@
       </div>
     </section>
 
-    <!-- ===================== PORTFOLIO EXPLORER (goal_snapshots) ===================== -->
+    <!-- PORTFOLIO EXPLORER (goal_snapshots) -->
     <section id="portfolio-explorer" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
@@ -917,7 +948,7 @@
       </div>
     </section>
 
-    <!-- ===================== HNWI (High Net Worth Individual) ===================== -->
+    <!-- HNWI (High Net Worth Individual) -->
     <section id="hnwi" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -963,7 +994,7 @@
       </div>
     </section>
 
-    <!-- ===================== OVERVIEW ===================== -->
+    <!-- OVERVIEW -->
     <section id="overview" class="view active">
       <div id="kpis" class="kpi-grid"></div>
 
@@ -1046,7 +1077,7 @@
       </div>
     </section>
 
-    <!-- ===================== AUM HISTORY ===================== -->
+    <!-- AUM HISTORY -->
     <section id="aum" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1061,6 +1092,7 @@
             <button class="btn-ghost" id="aumXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
+        <div id="aumTrendFinding" class="trend-finding" hidden></div>
         <span class="hint" data-i18n="aum_history_hint">End-of-period AUM (point-in-time) and revenue (aperd_share, summed). Uses the date range above. Source: mi_fee_logs.mi_fee.</span>
         <div class="chart-wrap" style="margin-top:14px"><canvas id="aumChart"></canvas></div>
       </div>
@@ -1070,7 +1102,7 @@
       </div>
     </section>
 
-    <!-- ===================== PRODUCT PERFORMANCE ===================== -->
+    <!-- PRODUCT PERFORMANCE -->
     <section id="performance" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1138,7 +1170,7 @@
       </div>
     </section>
 
-    <!-- ===================== GROWTH ===================== -->
+    <!-- GROWTH -->
     <section id="growth" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1193,7 +1225,7 @@
       </div>
     </section>
 
-    <!-- ===================== RECONCILIATION ===================== -->
+    <!-- RECONCILIATION -->
     <section id="reconciliation" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1203,12 +1235,13 @@
             <button class="btn-ghost" id="recXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
+        <div id="recTrendFinding" class="trend-finding" hidden></div>
         <span class="hint" data-i18n="recon_hint">Daily completed-transaction totals by type: main.transactions.completed_at (app) vs sinvest.trx_history.Input_Date (custodian), matched on transaction type. "ALL" is the per-day total across types; the backoffice doesn't yet book Liquidation/Transfer/Unit Adjustment, so those types may show custodian-only rows. Uses the date range above. A large amount_diff flags a day worth investigating.</span>
         <div id="recTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
 
-    <!-- ===================== SINVEST TRANSACTIONS (raw KSEI/SInvest custodian feed) ===================== -->
+    <!-- SINVEST TRANSACTIONS (raw KSEI/SInvest custodian feed) -->
     <section id="sinvest-tx" class="view">
       <div class="panel">
         <div class="panel-head wrap"><h2>SInvest transactions</h2></div>
@@ -1252,7 +1285,7 @@
       </div>
     </section>
 
-    <!-- ===================== REVENUE (management fee) ===================== -->
+    <!-- REVENUE (management fee) -->
     <section id="revenue" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1277,6 +1310,7 @@
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="rev_trend">Revenue trend</h2></div>
+        <div id="revTrendFinding" class="trend-finding" hidden></div>
         <div class="chart-wrap"><canvas id="revTrendChart"></canvas></div>
       </div>
 
@@ -1309,7 +1343,7 @@
       </div>
     </section>
 
-    <!-- ===================== REVENUE v2 (goal_snapshots) ===================== -->
+    <!-- REVENUE v2 (goal_snapshots) -->
     <section id="revenue2" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1334,6 +1368,7 @@
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="rev_trend">Revenue trend</h2></div>
+        <div id="rev2TrendFinding" class="trend-finding" hidden></div>
         <div class="chart-wrap"><canvas id="rev2TrendChart"></canvas></div>
       </div>
 
@@ -1366,7 +1401,7 @@
       </div>
     </section>
 
-    <!-- ===================== USER LIFETIME (portfolio_with_code, per investor) ===================== -->
+    <!-- USER LIFETIME (portfolio_with_code, per investor) -->
     <section id="user-lifetime" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1434,7 +1469,7 @@
       </div>
     </section>
 
-    <!-- ===================== CAMPAIGN REVENUE (bonus_portfolios) ===================== -->
+    <!-- CAMPAIGN REVENUE (bonus_portfolios) -->
     <section id="campaign-revenue" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1501,7 +1536,7 @@
       </div>
     </section>
 
-    <!-- ===================== REFERRAL PROGRAM (Sep-Dec 2026 T&C) ===================== -->
+    <!-- REFERRAL PROGRAM (Sep-Dec 2026 T&C) -->
     <section id="referral-program" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1551,13 +1586,13 @@
       </div>
     </section>
 
-    <!-- ===================== REFERRAL PROGRAM (KYC BASED) — same T&C eligibility
+    <!-- REFERRAL PROGRAM (KYC BASED) — same T&C eligibility
          rule and detail rows as Referral program above (an invitee's
          registration date never mattered there — only their first-ever
          transaction date). The one difference: "Invited" here is gated by
          the invitee's KYC verification date (invitee.verified_at) instead of
          their registration date (invitee.created_at), same 1-day grace
-         window — see queries.js:referralInviterStatsAlt. ===================== -->
+         window — see queries.js:referralInviterStatsAlt. -->
     <section id="referral-program-alt" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -1607,7 +1642,7 @@
       </div>
     </section>
 
-    <!-- ===================== REMISIER SHARING (goal_snapshots) ===================== -->
+    <!-- REMISIER SHARING (goal_snapshots) -->
     <section id="remisier" class="view">
       <div class="panel">
         <div class="panel-head wrap"><h2>Remisier (GS)</h2></div>
@@ -1659,7 +1694,7 @@
       </div>
     </section>
 
-    <!-- ===================== REMISIER SHARING (portfolio_with_code) ===================== -->
+    <!-- REMISIER SHARING (portfolio_with_code) -->
     <section id="remisier-pwc" class="view">
       <div class="panel">
         <div class="panel-head wrap"><h2>Remisier (PWC)</h2></div>
@@ -1711,7 +1746,7 @@
       </div>
     </section>
 
-    <!-- ===================== REMISIER TRANSACTIONS ===================== -->
+    <!-- REMISIER TRANSACTIONS -->
     <section id="remisier-tx" class="view">
       <div class="panel">
         <div class="panel-head wrap"><h2>Remisier transactions</h2></div>
@@ -1744,7 +1779,7 @@
       </div>
     </section>
 
-    <!-- ===================== PREDICT (ML) ===================== -->
+    <!-- PREDICT (ML) -->
     <section id="predict" class="view">
       <div id="mlBanner" class="panel hidden" style="border-color:var(--amber)" data-i18n-html="predict_ml_banner">
         <strong>Forecasts &amp; churn scoring need the models.</strong>
@@ -1869,7 +1904,7 @@
             <span class="hint" data-i18n="common_vs">vs</span>
             <select id="askChartY"></select>
             <input id="askChartHint" type="text" data-i18n-placeholder="ask_chart_hint_ph" placeholder="Optional: describe the chart you want" style="flex:1; min-width:180px" />
-            <button class="btn-ghost" id="askChartSuggest" data-i18n="common_suggest">✨ Suggest</button>
+            <button class="btn-ghost" id="askChartSuggest" data-i18n="common_suggest">Suggest</button>
           </div>
           <div id="askChartMsg" class="ask-chart-msg hidden"></div>
           <div id="askChartWrap" class="chart-wrap hidden"><canvas id="askChart"></canvas></div>
@@ -1895,7 +1930,7 @@
       </div>
     </section>
 
-    <!-- ===================== SQL LAB ===================== -->
+    <!-- SQL LAB -->
     <section id="sql" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="sql_lab_title">SQL lab</h2><span class="hint" data-i18n="sql_lab_hint">Read-only. SELECT / WITH only. Results capped to 5,000 rows.</span></div>
@@ -1920,7 +1955,7 @@ ORDER BY n DESC"></textarea>
       </div>
     </section>
 
-    <!-- ===================== DOCUMENTATION (plain-language guide) ===================== -->
+    <!-- DOCUMENTATION (plain-language guide) -->
     <section id="docs" class="view">
       <div class="panel doc-intro">
         <div class="panel-head"><h2 data-i18n="docs_getting_started">Getting started</h2></div>
@@ -1938,19 +1973,19 @@ ORDER BY n DESC"></textarea>
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="docs_panel_dashboards">Dashboards</h2></div>
         <div class="doc-item">
-          <h3>📊 Overview</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Overview</h3>
           <p data-i18n="docs_overview_desc">The single-page snapshot of the whole business: total assets under management, user counts, buy/sell volume, a transaction trend chart, fund breakdowns, and a map of where investors are located across Indonesia.</p>
         </div>
         <div class="doc-item">
-          <h3>📈 AUM history</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-up"></use></svg> AUM history</h3>
           <p data-i18n="docs_aum_desc">How total assets under management (and the platform's own revenue) have moved over time.</p>
         </div>
         <div class="doc-item">
-          <h3>🎯 Performance</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Performance</h3>
           <p data-i18n="docs_performance_desc">How each fund's price (NAV) has performed — pick a time window from 1 day up to 5 years and compare funds side by side.</p>
         </div>
         <div class="doc-item">
-          <h3>🌱 Growth</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-sprout"></use></svg> Growth</h3>
           <p data-i18n="docs_growth_desc">Marketing and growth numbers: how well promo campaigns performed, who's referring the most new investors, and which funds people switch between most.</p>
         </div>
       </div>
@@ -1961,39 +1996,39 @@ ORDER BY n DESC"></textarea>
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="docs_panel_investor">Investor</h2></div>
         <div class="doc-item">
-          <h3>👤 Portfolio (PWC)</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user"></use></svg> Portfolio (PWC)</h3>
           <p>Look up one investor by their SID code, name, or email, then see exactly what funds they currently hold, how their money has grown over different periods, and their AUM history over time.</p>
         </div>
         <div class="doc-item">
-          <h3>🧭 Portfolio Explorer (GS)</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg> Portfolio Explorer (GS)</h3>
           <p>Same idea as Portfolio (PWC) — search for an investor and see their holdings — but from a second data source, organized by the investor's savings goals, and viewable as of any past date.</p>
         </div>
         <div class="doc-item">
-          <h3>🛠️ Portfolio Explorer (Main)</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg> Portfolio Explorer (Main)</h3>
           <p>Same as Portfolio (PWC) — same as-of-date snapshot feature — but sourced from a corrected daily table (mi_fee_logs.portfolio_fix) whose average buy price is weighted by unit instead of averaged per lot, fixing a cost-basis bug in the original portfolio_with_code pipeline.</p>
         </div>
         <div class="doc-item">
-          <h3>🧾 Portfolio (TX)</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Portfolio (TX)</h3>
           <p>Investor lookup whose average buy price is computed directly from the transaction ledger, not from portfolios.initial_price — only completed buy/SWITCH_IN/reinvestment/transfer_in transactions affect the average; sells never change it. Supports an as-of date (reconstructed purely from transactions up to that date; bonus holdings only show live, since bonus_portfolios has no history). Lets you uncheck individual fund rows (e.g. dust balances) before exporting.</p>
         </div>
         <div class="doc-item">
-          <h3>📇 Portfolio (SInvest)</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> Portfolio (SInvest)</h3>
           <p>Same as Portfolio (TX), but every number is built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table — a second, independent source for cross-checking one investor's holdings and average buy price.</p>
         </div>
         <div class="doc-item">
-          <h3>📧 Send statement</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Send statement</h3>
           <p>Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's own date of birth on file (DDMMYYYY) as its open password — left unlocked if we have no birthdate for them — and the default letter tells them the password format. The Batch send box below sends the same documents (same portfolio date/e-statement month) to many investors at once — paste a list of emails and/or SIDs (one per line, or comma-separated), and it looks each one up and emails whichever ones it finds; anything not matched to an investor is reported back, not silently skipped. The "+ New schedule" button turns this into a recurring send (daily/weekly/monthly, at a chosen WIB time) instead of a one-off — creating one requires a one-time code emailed to whoever sets it up, and by default it runs indefinitely, but an optional end date can be set so it stops itself after its last scheduled send. Every scheduled send is logged in the same history as manual sends.</p>
         </div>
         <div class="doc-item">
-          <h3>📊 Send fund performance</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Send fund performance</h3>
           <p>Broadcasts the "Reksa Dana Update" PDF (all fund types, NAV as of a chosen date) to a list of email addresses — search registered users to add their email, and/or paste a list of emails directly (one per line, or comma-separated). Sends one email per recipient, so one bad address doesn't block the rest. Separate tool from Send statement, which is scoped to one investor's own documents; this one can go to any list of emails, investor or not. Has its own send-history log, same as Send statement, and the same "+ New schedule" recurring/end-date option.</p>
         </div>
         <div class="doc-item">
-          <h3>💎 HNWI</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg> HNWI</h3>
           <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below defaults to that same investor list; applying its own Min/Max fund AUM filter switches it to generate its own list by fund holding amount instead, independent of the filter above.</p>
         </div>
         <div class="doc-item">
-          <h3>📤 Google Sheet export</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-export"></use></svg> Google Sheet export</h3>
           <p>Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) has a <b>Google Sheet</b> button next to its PDF buttons — one click adds a new tab, named with the investor and a timestamp, to one shared tracker spreadsheet, with the same investor info and holdings table as the "PDF (portfolio only)" export (no fund-performance breakdown), then opens straight to the new tab. Ask a superuser for the tracker sheet's link if you don't have it yet.</p>
         </div>
       </div>
@@ -2003,15 +2038,15 @@ ORDER BY n DESC"></textarea>
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="docs_panel_operations">Operations &amp; Finance</h2></div>
         <div class="doc-item">
-          <h3>🧮 Reconciliation</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calculator"></use></svg> Reconciliation</h3>
           <p data-i18n="docs_reconciliation_desc">A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.</p>
         </div>
         <div class="doc-item">
-          <h3>📇 SInvest transactions</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> SInvest transactions</h3>
           <p>Browse the raw KSEI/SInvest custodian feed (sinvest.trx_history) directly — the same source Reconciliation compares against, but row-by-row and filterable/exportable, for tracing a specific transaction or investor.</p>
         </div>
         <div class="doc-item">
-          <h3>💰 Revenue (PWC) / 💹 Revenue (GS)</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-coin"></use></svg> Revenue (PWC) / <svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-line-chart"></use></svg> Revenue (GS)</h3>
           <p data-i18n="docs_revenue_desc">How much revenue/fees Sayakaya itself has earned, broken down by fund and investment manager, from each of the two data sources the platform tracks (PWC and GS).</p>
         </div>
         <div class="doc-item">
@@ -2019,27 +2054,27 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_user_lifetime_desc">The same fee revenue as Revenue (PWC), but answered per investor instead of per fund: what each one earns the platform, next to how long they've been with us — when they registered, when they first bought, and how long they've stayed invested. Click any investor for their month-by-month, fund-by-fund breakdown.</p>
         </div>
         <div class="doc-item">
-          <h3>🎯 Campaign revenue</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Campaign revenue</h3>
           <p data-i18n="docs_campaign_revenue_desc">What each promo campaign earned back. A buy settled with a promo code locks those units up, and this estimates the management fee they earn while they stay invested — until the investor redeems early, or sells them after the holding period ends. Shown next to the campaign's bonus payout so you can see which promos paid for themselves.</p>
         </div>
         <div class="doc-item">
-          <h3>🎁 Referral program</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gift"></use></svg> Referral program</h3>
           <p data-i18n="docs_referral_program_desc">The Sep-Dec 2026 referral bonus program's eligibility report. A referral only counts if the invited friend's very first-ever transaction is a Sucor Asset Management fund purchase of at least Rp1,000,000 made with someone's referral code; the bonus (Rp25,000 to each side, in Sucorinvest Money Market Fund units) additionally requires that fund's units to stay unchanged for 30 days. Each row shows both people's contact details, the transaction, days held, and a status — Eligible, Pending (still within the 30-day hold), or Not eligible (with the specific reason, e.g. redeemed early or KYC not verified). An Inviter leaderboard sits above the row-level detail: one line per inviter with how many people they referred and how many transacted at all (any fund, any amount) — broader counts than the eligibility rule itself — next to how many of those referrals qualified, and of those, how many are Pending vs. Eligible. On this leaderboard, "Invited" only counts an invitee if they also registered during the period — an old referral relationship that never leads to a signup/purchase in this window doesn't clutter the list. Below the leaderboard, an Invited users table lists that same "Invited" population one row per person — name, registration date, SID, email, phone, their own referral code, the referrer code they signed up with, KYC status, and first-transaction status — separate from the row-level Referral detail table further down, which only covers invitees whose first-ever transaction met the campaign's own Sucor/≥Rp1jt rule.</p>
         </div>
         <div class="doc-item">
-          <h3>🎟️ Referral Program (kyc based)</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg> Referral Program (kyc based)</h3>
           <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition (and, correspondingly, which invitees show up in the Invited users table below it). Here, "Invited" is gated by the invitee's KYC verification date instead of their registration date (with the same 1-day grace window) — an invitee who was verified inside the period counts as invited even if they registered long before it, and one who's never been verified never counts, no matter how old the referral. Use this tab when you want "who's KYC-verified and in play for this campaign," rather than "who signed up because of this campaign."</p>
         </div>
         <div class="doc-item">
-          <h3>🤝 Remisier sharing (GS) / (PWC)</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg> Remisier sharing (GS) / (PWC)</h3>
           <p>Calculates how much revenue-share is owed to remisiers (referral partners) based on the AUM they've brought in, from each data source.</p>
         </div>
         <div class="doc-item">
-          <h3>🧾 Remisier transactions</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Remisier transactions</h3>
           <p>The underlying transaction-level detail behind the remisier sharing numbers, searchable and filterable.</p>
         </div>
         <div class="doc-item">
-          <h3>🔮 Predict</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-forecast"></use></svg> Predict</h3>
           <p data-i18n="docs_predict_desc">Machine-learning forecasts: projected AUM and transaction volume, which investors are at risk of leaving (churn), and retention trends over time.</p>
         </div>
       </div>
@@ -2049,15 +2084,15 @@ ORDER BY n DESC"></textarea>
       <div class="panel">
         <div class="panel-head"><h2>Tools</h2></div>
         <div class="doc-item">
-          <h3>💬 Ask</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-chat"></use></svg> Ask</h3>
           <p>Type a question in plain language — like "top 10 funds by AUM" — and get an answer with a chart, no technical knowledge needed. You can ask follow-up questions, exclude things by name, and request a specific chart type or color. Restricted columns (passwords, KYC fields) are always left out of the results — superusers can tick "Include restricted columns" and confirm their password to see them for one question.</p>
         </div>
         <div class="doc-item">
-          <h3>🔍 Data explorer</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-search"></use></svg> Data explorer</h3>
           <p>Browse the underlying data tables directly with filters, for when you need to see the raw records themselves rather than a summarized dashboard.</p>
         </div>
         <div class="doc-item">
-          <h3>🧪 SQL lab</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-flask"></use></svg> SQL lab</h3>
           <p>For technical users: write and run your own read-only database query. Restricted columns (passwords, KYC fields) are always left out of the results — superusers can tick "Include restricted columns" and confirm their password to see them for one query.</p>
         </div>
       </div>
@@ -2065,7 +2100,7 @@ ORDER BY n DESC"></textarea>
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="docs_panel_presentation">Presentation</h2></div>
         <div class="doc-item">
-          <h3>📽️ Presentation</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-monitor"></use></svg> Presentation</h3>
           <p data-i18n="docs_presentation_desc">Internal meeting decks, viewable full-screen one page at a time, split into two sidebar tabs granted independently: AI Taskforce (July, September) and Monthly Review (August, September). Not shown to everyone — only accounts an admin has explicitly granted a tab to (e.g. a dedicated login for sharing at a meeting) can see it, same as any other restricted section.</p>
         </div>
       </div>
@@ -2073,19 +2108,19 @@ ORDER BY n DESC"></textarea>
       <div class="panel hidden" id="docsAdminSection">
         <div class="panel-head"><h2 data-i18n="docs_panel_admin">Admin (superuser only)</h2></div>
         <div class="doc-item">
-          <h3>🛡️ Manage users</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-shield"></use></svg> Manage users</h3>
           <p data-i18n="docs_manage_users_desc">Create dashboard login accounts for your team, and choose exactly which sections each person is allowed to see.</p>
         </div>
         <div class="doc-item">
-          <h3>📜 Activity log</h3>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-scroll"></use></svg> Activity log</h3>
           <p data-i18n="docs_activity_log_desc">See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio, or changed an account — and when.</p>
         </div>
       </div>
     </section>
 
-    <!-- ===================== AI TASKFORCE (not superuser-gated, tab-gated) —
+    <!-- AI TASKFORCE (not superuser-gated, tab-gated) —
          internal meeting decks, one sub-section per month. Add a button +
-         entry in PRESENTATIONS (server/app.js) for each new month's deck. ===== -->
+         entry in PRESENTATIONS (server/app.js) for each new month's deck. -->
     <section id="presentation" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -2109,10 +2144,10 @@ ORDER BY n DESC"></textarea>
       </div>
     </section>
 
-    <!-- ===================== MONTHLY REVIEW (not superuser-gated, tab-gated) —
+    <!-- MONTHLY REVIEW (not superuser-gated, tab-gated) —
          same viewer as AI Taskforce, separate tab so it can be granted
          independently. Add a button + entry in PRESENTATIONS (server/app.js)
-         for each new month's deck. ===== -->
+         for each new month's deck. -->
     <section id="monthly-review" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -2136,7 +2171,7 @@ ORDER BY n DESC"></textarea>
       </div>
     </section>
 
-    <!-- ===================== ADMIN (superuser only) ===================== -->
+    <!-- ADMIN (superuser only) -->
     <section id="admin" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -2149,7 +2184,7 @@ ORDER BY n DESC"></textarea>
       <dialog id="adminUserModal" class="admin-modal">
         <div class="panel-head wrap"><h2 id="adminFormTitle">Add user</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
         <div class="callout">
-          <span class="callout-icon" aria-hidden="true">🛡️</span>
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-shield"></use></svg></span>
           <span id="adminModalHint" data-i18n="admin_modal_hint">Choose which sections this person can access. Superusers always see everything.</span>
         </div>
         <div class="filters" style="margin-top:12px">
@@ -2167,7 +2202,7 @@ ORDER BY n DESC"></textarea>
       </dialog>
     </section>
 
-    <!-- ===================== ACTIVITY LOG (superuser only) ===================== -->
+    <!-- ACTIVITY LOG (superuser only) -->
     <section id="activity-log" class="view">
       <div class="panel">
         <div class="panel-head wrap">

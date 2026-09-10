@@ -115,9 +115,7 @@ function applyChartDefaults() {
 }
 applyChartDefaults();
 
-// ====================================================================
-//  USER PORTFOLIO (search by SID, print one investor's holdings)
-// ====================================================================
+// USER PORTFOLIO (search by SID, print one investor's holdings)
 async function searchPortfolioUsers() {
   const q = $('#pfSearchInput').value.trim();
   if (!q) return;
@@ -269,11 +267,9 @@ function renderPfPerformance(rows) {
   $('#pfPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
 }
 
-// ====================================================================
-//  PORTFOLIO (FIX) — same feature/logic as Portfolio (PWC) above, but the
-//  as-of-date snapshot reads from mi_fee_logs.portfolio_fix (unit-weighted
-//  avg_buy_price) instead of portfolio_with_code.
-// ====================================================================
+// PORTFOLIO (FIX) — same feature/logic as Portfolio (PWC) above, but the
+// as-of-date snapshot reads from mi_fee_logs.portfolio_fix (unit-weighted
+// avg_buy_price) instead of portfolio_with_code.
 async function searchPfxUsers() {
   const q = $('#pfxSearchInput').value.trim();
   if (!q) return;
@@ -381,14 +377,12 @@ function renderPfxPerformance(rows) {
   $('#pfxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
 }
 
-// ====================================================================
-//  PORTFOLIO (TX) — holdings with avg_buy_price computed from the
-//  transaction ledger instead of portfolios.initial_price. As-of-date
-//  reconstructs units/average purely from transactions up to that date;
-//  bonus holdings only ever show in the live view (no bonus history exists).
-//  AUM chart/performance reuse portfolio_fix (market-value history, never
-//  affected by the cost-basis bug).
-// ====================================================================
+// PORTFOLIO (TX) — holdings with avg_buy_price computed from the
+// transaction ledger instead of portfolios.initial_price. As-of-date
+// reconstructs units/average purely from transactions up to that date;
+// bonus holdings only ever show in the live view (no bonus history exists).
+// AUM chart/performance reuse portfolio_fix (market-value history, never
+// affected by the cost-basis bug).
 async function searchPtxUsers() {
   const q = $('#ptxSearchInput').value.trim();
   if (!q) return;
@@ -498,12 +492,10 @@ function renderPtxPerformance(rows) {
   $('#ptxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
 }
 
-// ====================================================================
-//  PORTFOLIO (SINVEST) — same as Portfolio (TX) above, but holdings are
-//  built entirely from the KSEI/SInvest custodian feed (sinvest.trx_history)
-//  instead of the app's own transactions table. AUM chart/performance still
-//  reuse portfolio_fix, same as Portfolio (TX).
-// ====================================================================
+// PORTFOLIO (SINVEST) — same as Portfolio (TX) above, but holdings are
+// built entirely from the KSEI/SInvest custodian feed (sinvest.trx_history)
+// instead of the app's own transactions table. AUM chart/performance still
+// reuse portfolio_fix, same as Portfolio (TX).
 async function searchPsiUsers() {
   const q = $('#psiSearchInput').value.trim();
   if (!q) return;
@@ -609,10 +601,8 @@ function renderPsiPerformance(rows) {
   $('#psiPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
 }
 
-// ====================================================================
-//  PORTFOLIO EXPLORER (goal_snapshots — point-in-time holdings by date,
-//  merged by fund and also broken out by goal for the preview only)
-// ====================================================================
+// PORTFOLIO EXPLORER (goal_snapshots — point-in-time holdings by date,
+// merged by fund and also broken out by goal for the preview only)
 async function searchExplorerUsers() {
   const q = $('#peSearchInput').value.trim();
   if (!q) return;
@@ -697,11 +687,9 @@ function renderPeByGoal(rows) {
   }).join('');
 }
 
-// ====================================================================
-//  HNWI (High Net Worth Individual) — investors at/above an AUM threshold,
-//  as of a date, from portfolio_with_code (mirrors Portfolio's -1 day
-//  correction: created_at is a day ahead of the AUM date it represents).
-// ====================================================================
+// HNWI (High Net Worth Individual) — investors at/above an AUM threshold,
+// as of a date, from portfolio_with_code (mirrors Portfolio's -1 day
+// correction: created_at is a day ahead of the AUM date it represents).
 let hnwiDateDefaulted = false;
 let hnwiByFundOwnFilter = false; // tracks which of the two exclusive by-fund modes is active
 function hnwiTotalParams() {
@@ -775,9 +763,7 @@ function loadHnwi() {
   return Promise.all([loadHnwiTotal(), loadHnwiByFund(false)]);
 }
 
-// ====================================================================
-//  OVERVIEW
-// ====================================================================
+// OVERVIEW
 let overviewLoaded = false;
 async function loadOverview() {
   overviewLoaded = true;
@@ -882,7 +868,7 @@ async function renderGeoChart(rows) {
 }
 
 function renderTopCities(rows) {
-  if (!rows.length) { $('#topCitiesTable').innerHTML = '<div class="empty">No data.</div>'; return; }
+  if (!rows.length) { $('#topCitiesTable').innerHTML = '<div class="empty">No investors matched this date range.</div>'; return; }
   const body = rows.map((r, i) => `<tr>
       <td class="num">${i + 1}</td>
       <td>${val(r.city_name)}</td>
@@ -1033,9 +1019,7 @@ async function loadTopFunds() {
   loadTopFundsTable();
 }
 
-// ====================================================================
-//  PREDICT (ML: forecasts, churn, retention)
-// ====================================================================
+// PREDICT (ML: forecasts, churn, retention)
 let predictLoaded = false;
 let fcHorizon = 30;
 
@@ -1159,7 +1143,7 @@ async function loadRetention() {
   $('#retentionHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
   try {
     const rows = await api('/api/retention/cohorts?months=12');
-    if (!rows.length) { $('#retentionHeatmap').innerHTML = '<div class="empty">Not enough data.</div>'; return; }
+    if (!rows.length) { $('#retentionHeatmap').innerHTML = '<div class="empty">Not enough buy history yet to build cohorts.</div>'; return; }
     // pivot: cohort -> {offset: users}
     const cohorts = {};
     let maxOffset = 0;
@@ -1228,9 +1212,7 @@ async function loadAumRetention() {
   } catch (e) { $('#aumRetentionHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
-// ====================================================================
-//  AUM HISTORY
-// ====================================================================
+// AUM HISTORY
 let aumGran = 'month';
 let aumCache = [];
 
@@ -1242,6 +1224,7 @@ async function loadAumHistory() {
     aumCache = data;
     renderAumChart(data);
     renderAumTable(data);
+    renderAumTrendFinding(data);
   } catch (e) { $('#aumTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
@@ -1274,8 +1257,32 @@ function renderAumChart(data) {
   });
 }
 
+// Live panel headlines — a real, specific finding computed from whatever
+// data the panel just fetched, instead of a generic static title. Never a
+// fixed claim: re-runs on every load, so it can't go stale the way a
+// hardcoded subtitle would, and hides itself when there isn't enough data
+// to say anything.
+//
+// renderSeriesTrendFinding: for a first-vs-last time series (AUM, revenue).
+function renderSeriesTrendFinding(elId, rows, key, label) {
+  const el = $(elId);
+  if (!el) return;
+  const points = rows.map((d) => Number(val(d[key])) || 0).filter((v) => v > 0);
+  if (points.length < 2) { el.hidden = true; return; }
+  const first = points[0], last = points[points.length - 1];
+  const pct = (last - first) / first * 100;
+  const dir = pct >= 0 ? 'up' : 'down';
+  el.className = `trend-finding ${dir}`;
+  el.textContent = `${label} ${dir} ${Math.abs(pct).toFixed(1)}% over this range — ${idrFull(first)} → ${idrFull(last)}`;
+  el.hidden = false;
+}
+
+function renderAumTrendFinding(data) {
+  renderSeriesTrendFinding('#aumTrendFinding', data, 'aum', 'AUM');
+}
+
 function renderAumTable(data) {
-  if (!data.length) { $('#aumTable').innerHTML = '<div class="empty">No data in this range.</div>'; return; }
+  if (!data.length) { $('#aumTable').innerHTML = '<div class="empty">No AUM snapshots in this date range — widen the date filter.</div>'; return; }
   const rows = data.map((d, i) => {
     const aum = Number(val(d.aum)) || 0;
     const prev = i > 0 ? Number(val(data[i - 1].aum)) || 0 : null;
@@ -1294,9 +1301,7 @@ function renderAumTable(data) {
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 
-// ====================================================================
-//  PRODUCT PERFORMANCE (NAV % change per fund type, external Apollo DB)
-// ====================================================================
+// PRODUCT PERFORMANCE (NAV % change per fund type, external Apollo DB)
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
 let perfCache = [];
 let perfTrendLoaded = false;
@@ -1475,9 +1480,7 @@ function renderPerformanceDetail() {
   $('#perfDetailTable').innerHTML = `<table><thead><tr><th>Fund</th><th>Type</th><th>Tanggal Emisi</th><th class="num">NAV</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
-// ====================================================================
-//  GROWTH (campaigns, referrals, switching, manager/demographic AUM)
-// ====================================================================
+// GROWTH (campaigns, referrals, switching, manager/demographic AUM)
 let growthLoaded = false;
 function genTable(sel, rows, cols, emptyMsg) {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
@@ -1503,7 +1506,7 @@ async function loadGrowth() {
     { key: 'promo_code', label: 'Promo' }, { key: 'quota', label: 'Quota', type: 'num' },
     { key: 'used_quota', label: 'Used', type: 'num' }, { key: 'redemption_pct', label: 'Redemption', type: 'pct' },
     { key: 'bonus_amount', label: 'Bonus/redemption', type: 'idr' }, { key: 'est_cost', label: 'Est. cost', type: 'idr' },
-  ], 'No campaigns.')).catch((e) => $('#campTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No campaigns in this range — widen the date filter.')).catch((e) => $('#campTable').innerHTML = `<div class="empty">${e.message}</div>`);
 
   api('/api/referrals/top').then((rows) => genTable('#refTable', rows, [
     { key: 'referral_code', label: 'Code' }, { key: 'referrer', label: 'Referrer' },
@@ -1527,9 +1530,25 @@ async function loadGrowth() {
   ], 'No data.')).catch((e) => $('#incomeTable').innerHTML = `<div class="empty">${e.message}</div>`);
 }
 
-// ====================================================================
-//  RECONCILIATION (app ledger vs custodian feed)
-// ====================================================================
+// RECONCILIATION (app ledger vs custodian feed)
+// Different shape from the trend panels above — there's no "first vs last"
+// here, the real question is "how much is actually off right now" — so this
+// reports a live discrepancy total instead of a % change.
+function renderReconciliationFinding(rows) {
+  const el = $('#recTrendFinding');
+  if (!rows.length) { el.hidden = true; return; }
+  const totalDiff = rows.reduce((s, r) => s + Math.abs(Number(val(r.amount_diff)) || 0), 0);
+  const flagged = rows.filter((r) => Math.abs(Number(val(r.amount_diff)) || 0) > 0).length;
+  if (flagged === 0) {
+    el.className = 'trend-finding up';
+    el.textContent = `No discrepancies in this range — ${rows.length} rows checked, all reconciled.`;
+  } else {
+    el.className = 'trend-finding down';
+    el.textContent = `${flagged} of ${rows.length} rows show a discrepancy, totalling ${idrFull(totalDiff)}.`;
+  }
+  el.hidden = false;
+}
+
 async function loadReconciliation() {
   const r = currentRange();
   $('#recTable').innerHTML = '<div class="loading">Comparing ledgers…</div>';
@@ -1542,12 +1561,14 @@ async function loadReconciliation() {
       { key: 'sinvest_count', label: 'Custodian tx', type: 'num' }, { key: 'sinvest_amount', label: 'Custodian amount', type: 'idr' },
       { key: 'amount_diff', label: 'Diff', type: 'idr' },
     ], 'No data in this range.');
-  } catch (e) { $('#recTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+    renderReconciliationFinding(rows);
+  } catch (e) {
+    $('#recTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#recTrendFinding').hidden = true;
+  }
 }
 
-// ====================================================================
-//  REVENUE (management fee earned per fund/month)
-// ====================================================================
+// REVENUE (management fee earned per fund/month)
 function renderRevenueTrend(rows, chartId = 'revTrendChart') {
   if (!rows.length) return;
   paint(chartId, {
@@ -1587,6 +1608,7 @@ async function loadRevenue() {
       api(`/api/revenue/summary?${qs}`),
     ]);
     renderRevenueTrend(summary);
+    renderSeriesTrendFinding('#revTrendFinding', summary, 'total_management_fee', 'Management fee revenue');
     genTable('#revDetailTable', detail, [
       { key: 'period', label: 'Period', type: 'date' },
       { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
@@ -1608,12 +1630,11 @@ async function loadRevenue() {
   } catch (e) {
     $('#revDetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
     $('#revSummaryTable').innerHTML = '';
+    $('#revTrendFinding').hidden = true;
   }
 }
 
-// ====================================================================
-//  REVENUE v2 (same calculation as Revenue above, AUM from goal_snapshots)
-// ====================================================================
+// REVENUE v2 (same calculation as Revenue above, AUM from goal_snapshots)
 let rev2Gran = 'month';
 
 async function loadRevenue2() {
@@ -1627,6 +1648,7 @@ async function loadRevenue2() {
       api(`/api/revenue-v2/summary?${qs}`),
     ]);
     renderRevenueTrend(summary, 'rev2TrendChart');
+    renderSeriesTrendFinding('#rev2TrendFinding', summary, 'total_management_fee', 'Management fee revenue');
     genTable('#rev2DetailTable', detail, [
       { key: 'period', label: 'Period', type: 'date' },
       { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
@@ -1648,12 +1670,11 @@ async function loadRevenue2() {
   } catch (e) {
     $('#rev2DetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
     $('#rev2SummaryTable').innerHTML = '';
+    $('#rev2TrendFinding').hidden = true;
   }
 }
 
-// ====================================================================
-//  USER LIFETIME (Revenue (PWC) math per investor + lifetime dates)
-// ====================================================================
+// USER LIFETIME (Revenue (PWC) math per investor + lifetime dates)
 let ulGran = 'month';
 let ulLoaded = false;
 let ulSelected = null; // { sid, name } — used by the drill-down + its exports
@@ -1769,9 +1790,7 @@ async function loadUserLifetime() {
   }
 }
 
-// ====================================================================
-//  CAMPAIGN REVENUE (management fee earned on promo-locked units)
-// ====================================================================
+// CAMPAIGN REVENUE (management fee earned on promo-locked units)
 let crGran = 'month';
 let crLoaded = false;
 
@@ -1865,9 +1884,7 @@ async function loadCampaignRevenue() {
   }
 }
 
-// ====================================================================
-//  REFERRAL PROGRAM (Sep-Dec 2026 T&C eligibility report)
-// ====================================================================
+// REFERRAL PROGRAM (Sep-Dec 2026 T&C eligibility report)
 let refProgLoaded = false;
 
 function refProgRange() {
@@ -1978,12 +1995,10 @@ function renderReferralProgram(rows, stats, invited, sel = { kpis: '#refProgKpis
   ], 'No invited users in this period.');
 }
 
-// ====================================================================
-//  REFERRAL PROGRAM (ALT.) — same eligibility/detail rows as the section
-//  above, but a looser leaderboard (see queries.js:referralInviterStatsAlt):
-//  "Invited" doesn't require the invitee to have registered in the period,
-//  only that their first-ever transaction (if any) isn't already outside it.
-// ====================================================================
+// REFERRAL PROGRAM (ALT.) — same eligibility/detail rows as the section
+// above, but a looser leaderboard (see queries.js:referralInviterStatsAlt):
+// "Invited" doesn't require the invitee to have registered in the period,
+// only that their first-ever transaction (if any) isn't already outside it.
 let refProgAltLoaded = false;
 
 function refProgAltRange() {
@@ -2010,10 +2025,8 @@ async function loadReferralProgramAlt() {
   }
 }
 
-// ====================================================================
-//  REMISIER SHARING (goal_snapshots — one remisier's users, AperD share
-//  split between remisier and Sayakaya)
-// ====================================================================
+// REMISIER SHARING (goal_snapshots — one remisier's users, AperD share
+// split between remisier and Sayakaya)
 let remGranularity = 'day';
 
 // UI takes a whole percent (e.g. 60); the API/DB deal in fractions (0.6),
@@ -2079,10 +2092,8 @@ async function loadRemisier() {
   }
 }
 
-// ====================================================================
-//  REMISIER SHARING (portfolio_with_code — same math, AUM from the
-//  original Revenue tab's source instead of goal_snapshots)
-// ====================================================================
+// REMISIER SHARING (portfolio_with_code — same math, AUM from the
+// original Revenue tab's source instead of goal_snapshots)
 let remPwcGranularity = 'day';
 
 function remPwcPortionFraction() { return (Number($('#remPwcPortion').value) || 0) / 100; }
@@ -2255,9 +2266,7 @@ async function loadSitx() {
   } catch (e) { $('#sitxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
-// ====================================================================
-//  EXPLORER (multi-table)
-// ====================================================================
+// EXPLORER (multi-table)
 function tagClass(v) {
   const k = String(v).toLowerCase();
   if (['buy', 'completed', 'active', 'verified'].includes(k)) return k === 'completed' || k === 'buy' ? k : 'completed';
@@ -2376,9 +2385,7 @@ function renderExTable(d, rows) {
   $('#exTable').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
-// ====================================================================
-//  SQL LAB
-// ====================================================================
+// SQL LAB
 let sqlCache = [];
 
 async function runSql() {
@@ -2430,9 +2437,7 @@ function renderGenericTable(sel, rows, emptyMsg = 'Query returned no rows.') {
   $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>${note}`;
 }
 
-// ====================================================================
-//  EXPORTS
-// ====================================================================
+// EXPORTS
 
 // Portfolio PDF column picker. 'Fund Name' isn't listed — it's always kept
 // server-side as the row identity column.
@@ -2524,12 +2529,10 @@ async function pushToSheet(body) {
   toast('Google Sheet ready');
 }
 
-// ====================================================================
-//  SEND STATEMENT (email an investor their portfolio — holdings only, no
-//  fund performance — and/or their monthly transaction e-statement).
-//  Separate tab from Portfolio (PWC) on purpose: this is a sending tool,
-//  not a lookup dashboard, so it gets its own search + selection state.
-// ====================================================================
+// SEND STATEMENT (email an investor their portfolio — holdings only, no
+// fund performance — and/or their monthly transaction e-statement).
+// Separate tab from Portfolio (PWC) on purpose: this is a sending tool,
+// not a lookup dashboard, so it gets its own search + selection state.
 async function searchSendStatementUsers() {
   const q = $('#ssSearchInput').value.trim();
   if (!q) return;
@@ -2692,11 +2695,9 @@ async function sendSsBatchEmail() {
   } catch (e) { toast(e.message); }
 }
 
-// ====================================================================
-//  SEND FUND PERFORMANCE (broadcast the Reksa Dana Update PDF to a picked
-//  or pasted list of emails). Separate tool from Send statement, which is
-//  scoped to one investor's own portfolio/e-statement.
-// ====================================================================
+// SEND FUND PERFORMANCE (broadcast the Reksa Dana Update PDF to a picked
+// or pasted list of emails). Separate tool from Send statement, which is
+// scoped to one investor's own portfolio/e-statement.
 async function searchFpeUsers() {
   const q = $('#fpeSearchInput').value.trim();
   if (!q) return;
@@ -2790,13 +2791,11 @@ async function loadFpeLog() {
   } catch (e) { $('#fpeLogTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
-// ====================================================================
-//  SCHEDULED / AUTOMATED SENDING — shared by Send statement ('statement')
-//  and Send fund performance ('fund_performance'); server/schedules.js does
-//  the actual scheduling/OTP/recipient-resolution work. A schedule is only
-//  ever created via the OTP request/confirm pair — there's no direct
-//  "create" call from here.
-// ====================================================================
+// SCHEDULED / AUTOMATED SENDING — shared by Send statement ('statement')
+// and Send fund performance ('fund_performance'); server/schedules.js does
+// the actual scheduling/OTP/recipient-resolution work. A schedule is only
+// ever created via the OTP request/confirm pair — there's no direct
+// "create" call from here.
 function schedCfg(kind) {
   return kind === 'statement' ? { kind, prefix: 'ssSched' } : { kind, prefix: 'fpeSched' };
 }
@@ -3028,9 +3027,7 @@ async function schedConfirmOtp(kind) {
   } catch (e) { toast(e.message); }
 }
 
-// ====================================================================
-//  ASK (natural language)
-// ====================================================================
+// ASK (natural language)
 let askSqlCache = '';
 let askTablesLoaded = false;
 let askRowsCache = [];
@@ -3335,9 +3332,7 @@ async function suggestAskChart(question, rows, hint) {
   renderAskChart();
 }
 
-// ====================================================================
-//  ADMIN (superuser only — manage dashboard accounts + tab permissions)
-// ====================================================================
+// ADMIN (superuser only — manage dashboard accounts + tab permissions)
 // Derives the tab list from the nav itself (id + visible label) rather than
 // hardcoding a second copy — adding a tab to the nav automatically makes it
 // selectable here too.
@@ -3624,9 +3619,7 @@ function wireChangePassword() {
   });
 }
 
-// ====================================================================
-//  WIRING
-// ====================================================================
+// WIRING
 // Set on login/session-restore (applyPermissions) — null until then.
 let currentUser = null;
 // Visible to every logged-in user regardless of their allowedTabs — it's a
