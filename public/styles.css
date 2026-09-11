@@ -384,6 +384,7 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   border-radius: 10px; padding: 12px 14px; font-size: 13px; line-height: 1.5;
 }
 .callout-icon { font-size: 15px; line-height: 1; flex: 0 0 auto; }
+.callout-icon svg { width: 18px; height: 18px; display: block; }
 
 .btn-primary.lg { padding: 12px 22px; border-radius: 10px; font-size: 14px; }
 
@@ -413,6 +414,11 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 .exp { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ---------- Row action menu (e.g. Admin users table) ---------- */
+.row-menu-btn {
+  width: 30px; height: 30px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.row-menu-btn svg { width: 16px; height: 16px; }
 .dropdown-multi-panel.menu-sm { width: 170px; padding: 6px; }
 .row-menu-item {
   display: block; width: 100%; text-align: left; background: none; border: none;
