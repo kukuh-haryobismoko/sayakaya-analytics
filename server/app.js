@@ -537,15 +537,17 @@ function createApp({ serveStatic = true } = {}) {
     const s = Q.userPortfolioSplit(userId);
     const p = Q.userPerformanceFix(sid);
     const a = Q.userAumHistoryFix(sid);
-    const [dRows, holdings, splitRows, performance, history] = await Promise.all([
+    const rt = Q.userRecentTransactions(userId);
+    const [dRows, holdings, splitRows, performance, history, recentTx] = await Promise.all([
       runQuery(d.sql, d.params),
       runQuery(h.sql, h.params),
       runQuery(s.sql, s.params),
       runQuery(p.sql, p.params),
       runQuery(a.sql, a.params),
+      runQuery(rt.sql, rt.params),
     ]);
     const latestDate = dRows[0]?.latest_date || null;
-    res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+    res.json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null, latestDate });
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_fix', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
@@ -564,13 +566,15 @@ function createApp({ serveStatic = true } = {}) {
     const s = Q.userPortfolioSplit(userId);
     const p = Q.userPerformanceFix(sid);
     const a = Q.userAumHistoryFix(sid);
-    const [holdings, splitRows, performance, history] = await Promise.all([
+    const rt = Q.userRecentTransactions(userId);
+    const [holdings, splitRows, performance, history, recentTx] = await Promise.all([
       runQuery(h.sql, h.params),
       runQuery(s.sql, s.params),
       runQuery(p.sql, p.params),
       runQuery(a.sql, a.params),
+      runQuery(rt.sql, rt.params),
     ]);
-    res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null });
+    res.json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null });
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_tx', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
@@ -586,13 +590,15 @@ function createApp({ serveStatic = true } = {}) {
     const s = Q.userPortfolioSplit(userId);
     const p = Q.userPerformanceFix(sid);
     const a = Q.userAumHistoryFix(sid);
-    const [holdings, splitRows, performance, history] = await Promise.all([
+    const rt = Q.sinvestTransactions({ sid, limit: 8 });
+    const [holdings, splitRows, performance, history, recentTx] = await Promise.all([
       runQuery(h.sql, h.params),
       runQuery(s.sql, s.params),
       runQuery(p.sql, p.params),
       runQuery(a.sql, a.params),
+      runQuery(rt.sql, rt.params),
     ]);
-    res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null });
+    res.json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null });
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_sinvest', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 

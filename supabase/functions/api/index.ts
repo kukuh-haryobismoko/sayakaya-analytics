@@ -621,16 +621,18 @@ on('GET', '/api/portfolio-fix', requireTab('portfolio-fix', async (_req, _params
   const s = Q.userPortfolioSplit(userId);
   const p = Q.userPerformanceFix(sid);
   const a = Q.userAumHistoryFix(sid);
-  const [dRows, holdings, splitRows, performance, history] = await Promise.all([
+  const rt = Q.userRecentTransactions(userId);
+  const [dRows, holdings, splitRows, performance, history, recentTx] = await Promise.all([
     runQuery(d.sql, d.params),
     runQuery(h.sql, h.params),
     runQuery(s.sql, s.params),
     runQuery(p.sql, p.params),
     runQuery(a.sql, a.params),
+    runQuery(rt.sql, rt.params),
   ]);
   const latestDate = (dRows[0]?.latest_date as string) || null;
   await A.logEvent(user!.id, user!.username, 'view_portfolio_fix', `SID ${sid}${date ? ` as of ${date}` : ''}`);
-  return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+  return json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null, latestDate });
 }));
 
 // ---- Portfolio (TX): holdings with avg_buy_price computed straight from
@@ -649,14 +651,16 @@ on('GET', '/api/portfolio-tx', requireTab('portfolio-tx', async (_req, _params, 
   const s = Q.userPortfolioSplit(userId);
   const p = Q.userPerformanceFix(sid);
   const a = Q.userAumHistoryFix(sid);
-  const [holdings, splitRows, performance, history] = await Promise.all([
+  const rt = Q.userRecentTransactions(userId);
+  const [holdings, splitRows, performance, history, recentTx] = await Promise.all([
     runQuery(h.sql, h.params),
     runQuery(s.sql, s.params),
     runQuery(p.sql, p.params),
     runQuery(a.sql, a.params),
+    runQuery(rt.sql, rt.params),
   ]);
   await A.logEvent(user!.id, user!.username, 'view_portfolio_tx', `SID ${sid}${date ? ` as of ${date}` : ''}`);
-  return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null });
+  return json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null });
 }));
 
 // ---- Portfolio (SInvest): same as Portfolio (TX), but holdings are built
@@ -672,14 +676,16 @@ on('GET', '/api/portfolio-sinvest', requireTab('portfolio-sinvest', async (_req,
   const s = Q.userPortfolioSplit(userId);
   const p = Q.userPerformanceFix(sid);
   const a = Q.userAumHistoryFix(sid);
-  const [holdings, splitRows, performance, history] = await Promise.all([
+  const rt = Q.sinvestTransactions({ sid, limit: 8 });
+  const [holdings, splitRows, performance, history, recentTx] = await Promise.all([
     runQuery(h.sql, h.params),
     runQuery(s.sql, s.params),
     runQuery(p.sql, p.params),
     runQuery(a.sql, a.params),
+    runQuery(rt.sql, rt.params),
   ]);
   await A.logEvent(user!.id, user!.username, 'view_portfolio_sinvest', `SID ${sid}${date ? ` as of ${date}` : ''}`);
-  return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null });
+  return json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null });
 }));
 
 // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------

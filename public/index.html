@@ -790,12 +790,18 @@
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_aum_over_time">AUM over time</h2></div>
+          <div id="pfxGrowthFinding" class="trend-finding" hidden></div>
           <div class="chart-wrap"><canvas id="pfxAumChart"></canvas></div>
         </div>
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_holdings">Holdings</h2></div>
           <div id="pfxHoldings" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_recent_activity">Recent activity</h2></div>
+          <div id="pfxRecentTx" class="table-wrap"></div>
         </div>
 
         <div class="panel">
@@ -846,12 +852,18 @@
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_aum_over_time">AUM over time</h2></div>
+          <div id="ptxGrowthFinding" class="trend-finding" hidden></div>
           <div class="chart-wrap"><canvas id="ptxAumChart"></canvas></div>
         </div>
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_holdings">Holdings</h2></div>
           <div id="ptxHoldings" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_recent_activity">Recent activity</h2></div>
+          <div id="ptxRecentTx" class="table-wrap"></div>
         </div>
 
         <div class="panel">
@@ -902,12 +914,18 @@
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_aum_over_time">AUM over time</h2></div>
+          <div id="psiGrowthFinding" class="trend-finding" hidden></div>
           <div class="chart-wrap"><canvas id="psiAumChart"></canvas></div>
         </div>
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_holdings">Holdings</h2></div>
           <div id="psiHoldings" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_recent_activity">Recent activity</h2></div>
+          <div id="psiRecentTx" class="table-wrap"></div>
         </div>
 
         <div class="panel">
@@ -958,6 +976,7 @@
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="pe_holdings_by_fund">Holdings by fund</h2><span class="hint" data-i18n="pe_holdings_by_fund_hint">Merged across all goals, as of the picked date.</span></div>
+          <div id="peFinding" class="trend-finding" hidden></div>
           <div id="peHoldings" class="table-wrap"></div>
         </div>
 
@@ -1028,6 +1047,7 @@
             <button class="on" data-g="month" data-i18n="common_month">Month</button>
           </div>
         </div>
+        <div id="trendFinding" class="trend-finding" hidden></div>
         <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
       </div>
 
@@ -1450,6 +1470,7 @@
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="ul_trend">Revenue &amp; investors over time</h2></div>
+        <div id="ulTrendFinding" class="trend-finding" hidden></div>
         <div class="chart-wrap"><canvas id="ulTrendChart"></canvas></div>
       </div>
 
@@ -1515,6 +1536,7 @@
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="cr_trend">Campaign revenue trend</h2></div>
+        <div id="crTrendFinding" class="trend-finding" hidden></div>
         <div class="chart-wrap"><canvas id="crTrendChart"></canvas></div>
       </div>
 
@@ -1712,6 +1734,7 @@
             <button class="btn-ghost" id="remSummaryXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
+        <div id="remSummaryFinding" class="trend-finding" hidden></div>
         <div id="remSummaryTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
     </section>
@@ -1764,6 +1787,7 @@
             <button class="btn-ghost" id="remPwcSummaryXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
+        <div id="remPwcSummaryFinding" class="trend-finding" hidden></div>
         <div id="remPwcSummaryTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
     </section>

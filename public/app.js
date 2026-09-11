@@ -326,10 +326,12 @@ async function loadPfxUser() {
   $('#pfxKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#pfxHoldings').innerHTML = '';
   $('#pfxPerformance').innerHTML = '';
+  $('#pfxRecentTx').innerHTML = '';
+  $('#pfxGrowthFinding').hidden = true;
   pfxSelected.excludedFunds = null; // re-derive dust defaults for whatever holdings this load returns
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
-    const { holdings, split, performance, history, asOfDate, latestDate } = await api(`/api/portfolio-fix?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    const { holdings, split, performance, history, recentTx, asOfDate, latestDate } = await api(`/api/portfolio-fix?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
     pfxSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate), latest = val(latestDate);
     $('#pfxSnapshotInfo').textContent = asOf
@@ -339,6 +341,11 @@ async function loadPfxUser() {
     renderPfxHoldings(holdings);
     renderPfxPerformance(performance);
     renderPfxAumChart(history);
+    renderSeriesTrendFinding('#pfxGrowthFinding', history, 'amount', 'Portfolio value');
+    genTable('#pfxRecentTx', recentTx, [
+      { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
+      { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
+    ], 'No transactions yet.');
   } catch (e) { $('#pfxKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
@@ -439,10 +446,12 @@ async function loadPtxUser() {
   $('#ptxKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#ptxHoldings').innerHTML = '';
   $('#ptxPerformance').innerHTML = '';
+  $('#ptxRecentTx').innerHTML = '';
+  $('#ptxGrowthFinding').hidden = true;
   ptxSelected.excludedFunds = null;
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
-    const { holdings, split, performance, history, asOfDate } = await api(`/api/portfolio-tx?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    const { holdings, split, performance, history, recentTx, asOfDate } = await api(`/api/portfolio-tx?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
     ptxSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate);
     $('#ptxSnapshotInfo').textContent = asOf
@@ -452,6 +461,11 @@ async function loadPtxUser() {
     renderPtxHoldings(holdings);
     renderPtxPerformance(performance);
     renderPtxAumChart(history);
+    renderSeriesTrendFinding('#ptxGrowthFinding', history, 'amount', 'Portfolio value');
+    genTable('#ptxRecentTx', recentTx, [
+      { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
+      { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
+    ], 'No transactions yet.');
   } catch (e) { $('#ptxKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
@@ -552,10 +566,12 @@ async function loadPsiUser() {
   $('#psiKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#psiHoldings').innerHTML = '';
   $('#psiPerformance').innerHTML = '';
+  $('#psiRecentTx').innerHTML = '';
+  $('#psiGrowthFinding').hidden = true;
   psiSelected.excludedFunds = null;
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
-    const { holdings, split, performance, history, asOfDate } = await api(`/api/portfolio-sinvest?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    const { holdings, split, performance, history, recentTx, asOfDate } = await api(`/api/portfolio-sinvest?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
     psiSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate);
     $('#psiSnapshotInfo').textContent = asOf
@@ -565,6 +581,11 @@ async function loadPsiUser() {
     renderPsiHoldings(holdings);
     renderPsiPerformance(performance);
     renderPsiAumChart(history);
+    renderSeriesTrendFinding('#psiGrowthFinding', history, 'amount', 'Portfolio value');
+    genTable('#psiRecentTx', recentTx, [
+      { key: 'transaction_date', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'net_amount', label: 'Amount', type: 'idr' },
+    ], 'No transactions yet.');
   } catch (e) { $('#psiKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
@@ -657,6 +678,7 @@ async function selectExplorerUser(userId, sid, name, email) {
 
 async function loadExplorerPortfolio() {
   if (!peSelected) return;
+  $('#peFinding').hidden = true;
   const dateParam = $('#peDate').value ? `&date=${$('#peDate').value}` : '';
   try {
     const { asOfDate, latestDate, holdings, byGoal } = await api(`/api/portfolio-explorer?userId=${encodeURIComponent(peSelected.userId)}&sid=${encodeURIComponent(peSelected.sid)}${dateParam}`);
@@ -669,7 +691,22 @@ async function loadExplorerPortfolio() {
     renderPeKpis(holdings, byGoal);
     renderPeHoldings(holdings);
     renderPeByGoal(byGoal);
+    renderPeFinding(holdings);
   } catch (e) { $('#peKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// Live best/worst gain headline from this snapshot's own held funds —
+// gain_pct is already computed per fund by the goalUserHoldings query.
+function renderPeFinding(holdings) {
+  const el = $('#peFinding');
+  const withPct = holdings.filter((h) => val(h.gain_pct) != null);
+  if (withPct.length < 2) { el.hidden = true; return; }
+  const best = withPct.reduce((a, b) => (Number(val(b.gain_pct)) > Number(val(a.gain_pct)) ? b : a));
+  const worst = withPct.reduce((a, b) => (Number(val(b.gain_pct)) < Number(val(a.gain_pct)) ? b : a));
+  el.className = 'trend-finding';
+  el.innerHTML = `Best holding: <span style="color:var(--teal)">${val(best.fund)} +${Number(val(best.gain_pct)).toFixed(2)}%</span>` +
+    ` &nbsp;·&nbsp; Worst holding: <span style="color:var(--rose)">${val(worst.fund)} ${Number(val(worst.gain_pct)).toFixed(2)}%</span>`;
+  el.hidden = false;
 }
 
 function renderPeKpis(holdings, byGoal) {
@@ -942,8 +979,10 @@ function renderKpis(o) {
 
 async function loadTrends(gran) {
   const r = currentRange();
+  $('#trendFinding').hidden = true;
   try {
     const data = await api(`/api/trends?from=${r.from}&to=${r.to}&granularity=${gran}`);
+    renderSeriesTrendFinding('#trendFinding', data, 'buy_volume', 'Buy volume');
     const labels = data.map((d) => val(d.bucket));
     paint('trendChart', {
       type: 'bar',
@@ -1814,6 +1853,7 @@ async function loadUserLifetime() {
   $('#ulDetailPanel').classList.add('hidden');
   $('#ulUsersTable').innerHTML = '<div class="loading">Computing per-investor revenue…</div>';
   $('#ulSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  $('#ulTrendFinding').hidden = true;
   const qs = `from=${r.from}&to=${r.to}&fund=${encodeURIComponent(r.fund)}&mi=${encodeURIComponent(r.mi)}`;
   try {
     const [users, summary] = await Promise.all([
@@ -1821,6 +1861,7 @@ async function loadUserLifetime() {
       api(`/api/user-lifetime/summary?${qs}&granularity=${ulGran}`),
     ]);
     renderUlTrend(summary);
+    renderSeriesTrendFinding('#ulTrendFinding', summary, 'total_aperd_share', 'AperD revenue');
     renderUlUsers(users);
     genTable('#ulSummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' },
@@ -1872,6 +1913,7 @@ async function loadCampaignRevenue() {
   const r = crRange();
   ['#crCampaignsTable', '#crDetailTable', '#crSummaryTable'].forEach((s) =>
     $(s).innerHTML = '<div class="loading">Computing campaign revenue…</div>');
+  $('#crTrendFinding').hidden = true;
   const qs = `from=${r.from}&to=${r.to}&promo=${encodeURIComponent(r.promo)}`;
   try {
     const [campaigns, detail, summary] = await Promise.all([
@@ -1880,6 +1922,7 @@ async function loadCampaignRevenue() {
       api(`/api/campaign-revenue/summary?${qs}&granularity=${crGran}`),
     ]);
     renderCrTrend(summary);
+    renderSeriesTrendFinding('#crTrendFinding', summary, 'total_aperd_share', 'AperD revenue');
     genTable('#crCampaignsTable', campaigns, [
       { key: 'promo_code', label: 'Promo' }, { key: 'campaign_name', label: 'Campaign' },
       { key: 'campaign_type', label: 'Type' },
@@ -2098,6 +2141,7 @@ async function loadRemisier() {
   $('#remUsersTable').innerHTML = '<div class="loading">Loading…</div>';
   $('#remDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#remSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  $('#remSummaryFinding').hidden = true;
   const qs = `field=${encodeURIComponent(p.field)}&code=${encodeURIComponent(p.code)}&from=${p.from}&to=${p.to}&granularity=${p.granularity}&portion=${p.portion}`;
   try {
     const [users, detail, summary] = await Promise.all([
@@ -2105,6 +2149,7 @@ async function loadRemisier() {
       api(`/api/remisier/revenue?${qs}`),
       api(`/api/remisier/revenue/summary?${qs}`),
     ]);
+    renderSeriesTrendFinding('#remSummaryFinding', summary, 'total_remisier_fee_net', 'Remisier fee (net)');
     genTable('#remUsersTable', users, [
       { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
       { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
@@ -2163,6 +2208,7 @@ async function loadRemisierPwc() {
   $('#remPwcUsersTable').innerHTML = '<div class="loading">Loading…</div>';
   $('#remPwcDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#remPwcSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
+  $('#remPwcSummaryFinding').hidden = true;
   const qs = `field=${encodeURIComponent(p.field)}&code=${encodeURIComponent(p.code)}&from=${p.from}&to=${p.to}&granularity=${p.granularity}&portion=${p.portion}`;
   try {
     const [users, detail, summary] = await Promise.all([
@@ -2170,6 +2216,7 @@ async function loadRemisierPwc() {
       api(`/api/remisier/revenue-pwc?${qs}`),
       api(`/api/remisier/revenue-pwc/summary?${qs}`),
     ]);
+    renderSeriesTrendFinding('#remPwcSummaryFinding', summary, 'total_remisier_fee_net', 'Remisier fee (net)');
     genTable('#remPwcUsersTable', users, [
       { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
       { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
