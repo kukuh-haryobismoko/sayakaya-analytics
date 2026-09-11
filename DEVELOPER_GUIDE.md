@@ -275,10 +275,18 @@ been worth extracting).
 
 ### `server/ml.js` — BigQuery ML calls
 Thin wrappers around `ML.FORECAST` / `ML.PREDICT` SQL against models trained by
-`setup/ml_models.sql` (see `PREDICTIVE-MODELS.md` for the one-time setup).
-`status()` throws if the models don't exist yet — `server/app.js`'s
-`/api/ml/status` catches that and reports `{ ready: false }` so the frontend
-can show the "run the setup SQL" banner instead of erroring.
+`setup/ml_models.sql` (see `PREDICTIVE-MODELS.md`). `status()` throws if the
+models don't exist yet — `server/app.js`'s `/api/ml/status` catches that and
+reports `{ ready: false }` so the frontend can show the "run the setup SQL"
+banner instead of erroring.
+
+### `server/ml-train.js` — retrains the models
+Re-runs the `CREATE OR REPLACE MODEL`/`VIEW` statements from
+`setup/ml_models.sql`, unlike everything else in `ml.js` (which only ever
+reads). Called monthly by a Netlify Scheduled Function
+(`/api/cron/retrain-models`) and on demand by a superuser's "Retrain now"
+button in the Predict tab (`/api/ml/retrain`). Needs its own write-capable
+credential scope — see PREDICTIVE-MODELS.md's Permissions section.
 
 ---
 
@@ -385,6 +393,7 @@ itself; most are further scoped to one nav tab via `requireTab(...)` in
 | `GCP_SA_KEY` | Whole service-account JSON as one env var (used on Netlify, where you can't ship a key file) |
 | `PORT` | Standalone server port (default 8080) |
 | `MAX_BYTES_BILLED` | Hard cap on bytes scanned per query — cost guardrail (default 2GB) |
+| `ML_TRAIN_MAX_BYTES_BILLED` | Same idea, for the monthly model-retraining job only (server/ml-train.js, PREDICTIVE-MODELS.md) — separate cap since training scans full history tables (default 50GB) |
 | `BQ_LOCATION` | BigQuery region (`asia-southeast2`) |
 | `SUPABASE_URL` | Backs per-user login — accounts/sessions live in this Supabase project's Postgres (`dashboard_users`/`dashboard_sessions`), reached over PostgREST. |
 | `SUPABASE_SERVICE_ROLE_KEY` | From the Supabase dashboard → Settings → API. The Edge Function deploy gets this injected automatically; Netlify/standalone needs it set explicitly. |

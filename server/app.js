@@ -14,6 +14,7 @@ const { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
 const { ask, askEnabled, TABLES, suggestChart } = require('./ask');
 const EX = require('./explore');
 const ML = require('./ml');
+const MLTrain = require('./ml-train');
 const PDF = require('./pdf');
 const SHEETS = require('./sheets');
 const Mail = require('./mail');
@@ -151,7 +152,7 @@ function createApp({ serveStatic = true } = {}) {
   app.use('/api', async (req, res, next) => {
     if (req.path === '/health' || req.path === '/auth/login'
       || req.path === '/auth/forgot-password' || req.path === '/auth/reset-password'
-      || req.path === '/cron/run-due-schedules') return next();
+      || req.path === '/cron/run-due-schedules' || req.path === '/cron/retrain-models') return next();
     try {
       const authHeader = req.get('authorization') || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -873,6 +874,22 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/churn/overview', requireTab('predict'), handler(async (_req, res) => res.json(await ML.churnOverview())));
   app.get('/api/retention/cohorts', requireTab('predict'), handler(async (req, res) => res.json(await ML.retentionCohorts(req.query.months))));
   app.get('/api/retention/aum-cohorts', requireTab('predict'), handler(async (req, res) => res.json(await ML.aumRetentionCohorts(req.query.months))));
+
+  // When these models last (re)trained, and who/what triggered it — read
+  // from the audit log rather than a dedicated table, since a training run
+  // is already a loggable event and this is its only consumer.
+  app.get('/api/ml/retrain-status', requireTab('predict'), handler(async (_req, res) => {
+    const [last] = await Auth.listAuditLog({ action: 'ml_retrain', limit: 1 });
+    res.json(last ? { lastRetrainedAt: last.created_at, lastRetrainedBy: last.username, detail: last.detail } : { lastRetrainedAt: null });
+  }));
+  // Manual "Retrain now" — superuser-gated since it burns real BigQuery
+  // compute on demand (the automatic path is the monthly cron below).
+  app.post('/api/ml/retrain', requireSuperuser, handler(async (req, res) => {
+    const result = await MLTrain.retrainModels();
+    const detail = result.steps.map((s) => `${s.step}: ${s.ok ? 'ok' : `failed (${s.error})`}`).join('; ');
+    await Auth.logEvent(req.user.id, req.user.username, 'ml_retrain', detail);
+    res.json(result);
+  }));
 
   // ---- Generic multi-table explorer -----------------------------------------
   app.get('/api/explore/_meta', requireTab('explorer'), handler(async (_req, res) => {
@@ -1616,6 +1633,20 @@ function createApp({ serveStatic = true } = {}) {
     if (!expected) return res.status(500).json({ error: 'CRON_SECRET is not configured on the server.' });
     if (req.get('x-cron-key') !== expected) return res.status(401).json({ error: 'Unauthorized.' });
     res.json(await Sched.runDueJobs());
+  }));
+
+  // ---- Scheduled ML retraining: same external-scheduler shape as the cron
+  // route above (Netlify Scheduled Function, monthly — see netlify.toml),
+  // just a different job. Kept as its own route/secret check rather than
+  // folding into run-due-schedules so the two can be scheduled independently.
+  app.post('/api/cron/retrain-models', handler(async (req, res) => {
+    const expected = process.env.CRON_SECRET;
+    if (!expected) return res.status(500).json({ error: 'CRON_SECRET is not configured on the server.' });
+    if (req.get('x-cron-key') !== expected) return res.status(401).json({ error: 'Unauthorized.' });
+    const result = await MLTrain.retrainModels();
+    const detail = result.steps.map((s) => `${s.step}: ${s.ok ? 'ok' : `failed (${s.error})`}`).join('; ');
+    await Auth.logEvent(null, 'cron', 'ml_retrain', detail);
+    res.json(result);
   }));
 
   // ---- Static frontend (standalone hosts only) ------------------------------

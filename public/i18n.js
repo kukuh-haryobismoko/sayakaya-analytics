@@ -324,6 +324,9 @@ const I18N = {
     remtx_referrer_ph: `referrer_code(s), partial match, comma separated`,
     remtx_sales_ph: `sales_code(s), partial match, comma separated`,
 
+    predict_model_status: `Model status`,
+    predict_retrain_now: `Retrain now`,
+    predict_retrain_checking: `Checking last retrain…`,
     predict_aum_forecast: `AUM forecast`,
     predict_tx_forecast: `Transaction (buy volume) forecast`,
     predict_churn_risk: `Churn risk (current holders)`,
@@ -731,6 +734,9 @@ const I18N = {
     remtx_referrer_ph: `referrer_code, kecocokan sebagian, dipisah koma`,
     remtx_sales_ph: `sales_code, kecocokan sebagian, dipisah koma`,
 
+    predict_model_status: `Status model`,
+    predict_retrain_now: `Latih ulang sekarang`,
+    predict_retrain_checking: `Memeriksa pelatihan ulang terakhir…`,
     predict_aum_forecast: `Prediksi AUM`,
     predict_tx_forecast: `Prediksi transaksi (volume beli)`,
     predict_churn_risk: `Risiko churn (pemegang saat ini)`,

@@ -1103,7 +1103,39 @@ async function loadPredict() {
   loadChurnOverview();
   loadRetention();
   loadAumRetention();
+  loadMlRetrainStatus();
   predictLoaded = true;
+}
+
+// "Last retrained" line above the forecast panels — read from the audit log
+// (see /api/ml/retrain-status) rather than a live model timestamp, since the
+// audit log already records who/what triggered each retrain.
+async function loadMlRetrainStatus() {
+  try {
+    const { lastRetrainedAt, lastRetrainedBy } = await api('/api/ml/retrain-status');
+    $('#mlRetrainStatus').textContent = lastRetrainedAt
+      ? `Last retrained ${toJakartaTime(lastRetrainedAt)} WIB by ${lastRetrainedBy}.`
+      : 'Never retrained through the app yet — models may still be from a manual setup/ml_models.sql run.';
+  } catch (e) { $('#mlRetrainStatus').textContent = e.message; }
+}
+
+async function retrainMlModels() {
+  const btn = $('#mlRetrainBtn');
+  btn.disabled = true;
+  const prevLabel = btn.textContent;
+  btn.textContent = 'Retraining… this can take a few minutes';
+  $('#mlRetrainStatus').textContent = 'Retraining models now — forecasts/churn scores will use the new fit once this finishes.';
+  try {
+    const result = await api('/api/ml/retrain', { method: 'POST' });
+    const failed = result.steps.filter((s) => !s.ok);
+    toast(failed.length ? `Retrain finished with ${failed.length} failed step(s) — see Model status.` : 'Models retrained.');
+    await loadMlRetrainStatus();
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
 }
 
 function renderForecast(canvasId, data, label) {
@@ -3883,6 +3915,7 @@ function applyPermissions(user) {
   $('#docsAdminSection').classList.toggle('hidden', !user.isSuperuser);
   $('#sqlUnredactRow').classList.toggle('hidden', !user.isSuperuser);
   $('#askUnredactRow').classList.toggle('hidden', !user.isSuperuser);
+  $('#mlRetrainBtn').classList.toggle('hidden', !user.isSuperuser);
   $$('.nav-link[data-tab]').forEach((t) => {
     const allowed = SUPERUSER_ONLY_TABS.includes(t.dataset.tab) ? user.isSuperuser : userCan(t.dataset.tab);
     t.classList.toggle('hidden', !allowed);
@@ -4272,6 +4305,7 @@ function wire() {
   });
   $('#churnCsv').addEventListener('click', () => download({ source: 'churn_risk', format: 'csv', filename: 'churn_risk', limit: 5000 }, 'churn_risk.csv'));
   $('#churnXlsx').addEventListener('click', () => download({ source: 'churn_risk', format: 'xlsx', filename: 'churn_risk', limit: 5000 }, 'churn_risk.xlsx'));
+  $('#mlRetrainBtn').addEventListener('click', retrainMlModels);
 
   // largest funds by AUM — by fund / by investment manager, as of a date,
   // with an exclude-funds menu (also affects the MI rollup)

@@ -35,6 +35,10 @@ them. Mutations, multi-statements, and the `password` column are blocked.
    BigQuery data. Roles needed:
    - `roles/bigquery.dataViewer` (read the tables)
    - `roles/bigquery.jobUser` (run queries — queries are billed to the project)
+   - `roles/bigquery.dataEditor`, scoped to just the `ml` dataset — lets the
+     monthly/on-demand model retrain (see PREDICTIVE-MODELS.md) create/replace
+     the BQML models. Skip this if you don't use the Predict tab's automated
+     retraining and are fine running `setup/ml_models.sql` by hand instead.
 
 ### Creating the service-account key
 
@@ -76,6 +80,7 @@ Open **http://localhost:8080**.
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to your service-account JSON. |
 | `PORT` | Port the app serves on (default 8080). |
 | `MAX_BYTES_BILLED` | Hard cap on bytes scanned per query — your cost guardrail. Default 2 GB. |
+| `ML_TRAIN_MAX_BYTES_BILLED` | Byte cap for the monthly model-retraining job only (PREDICTIVE-MODELS.md) — kept separate since training scans full history tables. Default 50 GB. |
 | `BQ_LOCATION` | BigQuery location. The `main` dataset is in `asia-southeast2`. |
 | `SUPABASE_URL` | Backs per-user login (accounts + sessions live in Supabase Postgres). `https://<project-ref>.supabase.co`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | From the Supabase dashboard → Settings → API. |

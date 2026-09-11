@@ -16,39 +16,58 @@ same region. The app stays read-only: it only *calls* the trained models with
 The retention and churn-rate sections work immediately. The forecasts and churn
 *scoring* need the models to exist first.
 
-## One-time setup
+## Retraining
 
-The models are created by running `setup/ml_models.sql` **once**. Re-run anytime
-to retrain on fresh data. Because creating a model is a write, this needs an
-account with create-model permission — the app's read-only service account
-cannot (and should not) do it.
+The models retrain **automatically, monthly** (the 1st of each month, via a
+Netlify Scheduled Function → `POST /api/cron/retrain-models`, same shape as
+the e-statement schedule cron — see `netlify/functions/cron-retrain-models.js`
+and `netlify.toml`). A superuser can also trigger it on demand from the
+**Predict** tab's "Retrain now" button (`POST /api/ml/retrain`) — useful right
+after a data shift you don't want to wait for the schedule on. Both call the
+same job, `server/ml-train.js` (`supabase/functions/api/ml-train.ts` on the
+Supabase backend), which re-runs the exact statements in `setup/ml_models.sql`
+against BigQuery. That file stays the source of truth for what gets trained;
+the job is just what lets the app re-run it itself instead of an operator
+pasting it into the BigQuery console. Each run is logged to the audit log
+(`ml_retrain`) — the Predict tab reads the latest one to show "Last retrained
+… by …" above the forecast panels.
 
-**Permissions to run the setup:** an account (your user, or a separate setup
-service account) with, on project `sayakaya`:
-- `roles/bigquery.jobUser`
-- `roles/bigquery.dataEditor` on (at least) the new `ml` dataset
-- read access to `main` and `mi_fee_logs`
+You can still run `setup/ml_models.sql` by hand any time (e.g. to bootstrap
+the models before the first scheduled/manual retrain, or to train outside the
+app entirely) — nothing about the automated path requires it.
 
-**Run it:**
+**Permissions:** creating/replacing a model is a write, so — unlike every
+other query in this app — the retrain job needs write access. The app's
+service account (the same one every dashboard query already runs as) needs
+`roles/bigquery.dataEditor` scoped to the `ml` dataset, in addition to its
+existing `roles/bigquery.jobUser` and `roles/bigquery.dataViewer` on `main`/
+`mi_fee_logs`. This is a deliberate, narrow exception to the "read-only app
+credential" rule below — scoped to one dataset, not the whole project. Grant
+it once:
 
 ```bash
-# with the bq CLI (part of the gcloud SDK):
-bq query --use_legacy_sql=false --project_id=sayakaya < setup/ml_models.sql
+bq add-iam-policy-binding \
+  --member='serviceAccount:YOUR_SA_EMAIL@sayakaya.iam.gserviceaccount.com' \
+  --role='roles/bigquery.dataEditor' \
+  sayakaya:ml
 ```
 
-or paste each statement into the BigQuery console. Training takes a few minutes.
+(or BigQuery console → the `ml` dataset → Sharing → Permissions → Add
+principal → paste the service account email → role `BigQuery Data Editor`).
+Until this is granted, `/api/ml/retrain` and the monthly cron will fail with
+`Access Denied: ... bigquery.datasets.create` (or, once the dataset exists,
+a model-create equivalent) — the audit log entry for that run will show it.
 
-**Let the app read the models:** the app's own service account needs
-`roles/bigquery.dataViewer` on the `ml` dataset (so `ML.FORECAST`/`ML.PREDICT`
-can read the models). If your app service account already has project-level Data
-Viewer, this is covered.
-
-## Cost
-
-Training scans your data and uses slot time — typically a few hundred MB to a
-couple of GB per run, billed once per retrain. Calling the models (what the app
-does on each page load) is cheap and stays under the app's `MAX_BYTES_BILLED`
-cap. Retrain on a schedule only as often as you need (weekly/monthly is plenty).
+**Cost:** training scans your data and uses slot time — typically a few
+hundred MB to a couple of GB per run, billed once per retrain. Training
+queries use their own cap, `ML_TRAIN_MAX_BYTES_BILLED` (default 50 GB, see
+`server/ml-train.js`), separate from the interactive dashboard cap
+(`MAX_BYTES_BILLED`) — training reads full history tables that only grow, so
+tying it to the same cap as page-load queries would mean bumping both every
+time one needs headroom. Calling the models (what the app does on each page
+load) is cheap and stays under `MAX_BYTES_BILLED` as usual. Monthly is the
+default cadence — change it in `netlify.toml`'s `[functions."cron-retrain-models"]`
+block if you need it more or less often.
 
 ## Checking quality
 

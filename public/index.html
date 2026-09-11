@@ -1827,6 +1827,16 @@
 
     <!-- PREDICT (ML) -->
     <section id="predict" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="predict_model_status">Model status</h2>
+          <div class="exp">
+            <button class="btn-ghost hidden" id="mlRetrainBtn" data-i18n="predict_retrain_now">Retrain now</button>
+          </div>
+        </div>
+        <span class="hint" id="mlRetrainStatus" data-i18n="predict_retrain_checking">Checking last retrain…</span>
+      </div>
+
       <div id="mlBanner" class="panel hidden" style="border-color:var(--amber)" data-i18n-html="predict_ml_banner">
         <strong>Forecasts &amp; churn scoring need the models.</strong>
         Run <code>setup/ml_models.sql</code> once in BigQuery (see PREDICTIVE-MODELS.md), then reload.

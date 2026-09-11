@@ -61,10 +61,11 @@ In the Netlify UI: **Site configuration → Environment variables → Add a vari
 
 | Key | Value |
 |---|---|
-| `GCP_SA_KEY` | The **entire contents** of your `service-account.json`, pasted as one value. |
+| `GCP_SA_KEY` | The **entire contents** of your `service-account.json`, pasted as one value. Needs `roles/bigquery.dataEditor` scoped to the `ml` dataset in addition to the read-only roles below, so the monthly model retrain (PREDICTIVE-MODELS.md) can create/replace models — see that doc for the exact grant. |
 | `GCP_PROJECT_ID` | `sayakaya` |
 | `BQ_LOCATION` | `asia-southeast2` |
 | `MAX_BYTES_BILLED` | `2000000000` (your 2 GB-per-query cost cap) |
+| `ML_TRAIN_MAX_BYTES_BILLED` | Optional. Byte cap for the monthly model-retraining job (see PREDICTIVE-MODELS.md), separate from `MAX_BYTES_BILLED` since it scans full history tables. Default 50 GB. |
 | `SUPABASE_URL` | `https://<your-project-ref>.supabase.co` — backs per-user login (see below). |
 | `SUPABASE_SERVICE_ROLE_KEY` | From the Supabase dashboard → Settings → API. Supabase's own Edge Function gets this injected automatically; Netlify needs it set explicitly. |
 | `ANTHROPIC_API_KEY` | Optional. Enables the **Ask** tab (plain-English questions → SQL). Get one at console.anthropic.com/settings/keys. |

@@ -26,6 +26,13 @@
 [functions."cron-run-schedules"]
   schedule = "*/15 * * * *"
 
+# Monthly model retraining (server/ml-train.js) — re-runs setup/ml_models.sql
+# on the 1st of each month so AUM/transaction forecasts and the churn model
+# adapt to new data without a manual BigQuery console step. Same CRON_SECRET
+# as above; see netlify/functions/cron-retrain-models.js.
+[functions."cron-retrain-models"]
+  schedule = "0 0 1 * *"
+
 # Send every API call to the Express function. status 200 = rewrite (URL stays /api/...).
 [[redirects]]
   from = "/api/*"

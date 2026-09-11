@@ -8,6 +8,7 @@ import { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } from './export.ts';
 import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
+import * as MLTrain from './ml-train.ts';
 import { portfolioReport, fundPerformanceReport, val } from './pdf.ts';
 import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
@@ -954,6 +955,22 @@ on('GET', '/api/churn/overview', requireTab('predict', async () => json(await ML
 on('GET', '/api/retention/cohorts', requireTab('predict', async (_req, _params, url) => json(await ML.retentionCohorts(qp(url, 'months')))));
 on('GET', '/api/retention/aum-cohorts', requireTab('predict', async (_req, _params, url) => json(await ML.aumRetentionCohorts(qp(url, 'months')))));
 
+// When these models last (re)trained, and who/what triggered it — read from
+// the audit log rather than a dedicated table, since a training run is
+// already a loggable event and this is its only consumer.
+on('GET', '/api/ml/retrain-status', requireTab('predict', async () => {
+  const [last] = await A.listAuditLog({ action: 'ml_retrain', limit: 1 });
+  return json(last ? { lastRetrainedAt: last.created_at, lastRetrainedBy: last.username, detail: last.detail } : { lastRetrainedAt: null });
+}));
+// Manual "Retrain now" — superuser-gated since it burns real BigQuery
+// compute on demand (the automatic path is the monthly cron below).
+on('POST', '/api/ml/retrain', requireSuperuser(async (_req, _params, _url, user) => {
+  const result = await MLTrain.retrainModels();
+  const detail = result.steps.map((s) => `${s.step}: ${s.ok ? 'ok' : `failed (${s.error})`}`).join('; ');
+  await A.logEvent(user!.id, user!.username, 'ml_retrain', detail);
+  return json(result);
+}));
+
 // ---- Generic multi-table explorer -----------------------------------------
 on('GET', '/api/explore/_meta', requireTab('explorer', () => json(EX.meta())));
 
@@ -1749,6 +1766,19 @@ on('POST', '/api/cron/run-due-schedules', async (req) => {
   return json(await Sched.runDueJobs());
 });
 
+// ---- Scheduled ML retraining: same external-scheduler shape as the cron
+// route above (Netlify Scheduled Function, monthly — see netlify.toml), just
+// a different job. See server/ml-train.js's header comment for why.
+on('POST', '/api/cron/retrain-models', async (req) => {
+  const expected = Deno.env.get('CRON_SECRET');
+  if (!expected) return json({ error: 'CRON_SECRET is not configured on the server.' }, 500);
+  if (req.headers.get('x-cron-key') !== expected) return json({ error: 'Unauthorized.' }, 401);
+  const result = await MLTrain.retrainModels();
+  const detail = result.steps.map((s) => `${s.step}: ${s.ok ? 'ok' : `failed (${s.error})`}`).join('; ');
+  await A.logEvent(null, 'cron', 'ml_retrain', detail);
+  return json(result);
+});
+
 // ---- Serve ------------------------------------------------------------------
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -1768,7 +1798,7 @@ Deno.serve(async (req) => {
   let user: A.DashboardUser | null = null;
   const authExempt = pathname === '/api/health' || pathname === '/api/auth/login'
     || pathname === '/api/auth/forgot-password' || pathname === '/api/auth/reset-password'
-    || pathname === '/api/cron/run-due-schedules';
+    || pathname === '/api/cron/run-due-schedules' || pathname === '/api/cron/retrain-models';
   if (!authExempt) {
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
