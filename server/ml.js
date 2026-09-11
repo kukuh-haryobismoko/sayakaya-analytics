@@ -155,9 +155,10 @@ async function retentionCohorts(months = 12) {
 // they've put in. netflow is buy-minus-sell only: SWITCH_IN/SWITCH_OUT/
 // reinvestment don't move cash across the platform boundary, so they're
 // excluded, matching the buy/sell convention used elsewhere (see overviewTx).
-// mi_fee_logs.portfolios alone scans ~4.4GB (unpartitioned, 107M rows) —
-// over this app's default 4GB per-query cap (see bigquery.js) — so this call
-// passes an explicit higher maxBytes rather than the global default.
+// mi_fee_logs.portfolios alone scans several GB (unpartitioned, 107M+ rows)
+// and keeps growing, so this inherits the operator-configured MAX_BYTES_BILLED
+// (see bigquery.js) instead of a hardcoded cap that would need bumping by
+// hand every time the table grows past it.
 async function aumRetentionCohorts(months = 12) {
   const m = Math.min(parseInt(months, 10) || 12, 24);
   const rows = await runQuery(`
@@ -209,7 +210,7 @@ async function aumRetentionCohorts(months = 12) {
       ROUND(SUM(cum_netflow)) AS netflow
     FROM withcum
     GROUP BY cohort, month_offset
-    ORDER BY cohort, month_offset`, {}, { maxBytes: 5_000_000_000 });
+    ORDER BY cohort, month_offset`, {});
   return rows;
 }
 
