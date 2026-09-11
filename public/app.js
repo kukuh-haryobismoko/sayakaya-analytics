@@ -61,6 +61,17 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2600);
 }
 
+// SVG icon references for spots app.js builds HTML itself (KPI cards, a
+// couple of callouts) — reuses the same sprite defined once in index.html,
+// see antislop pass: real icons instead of emoji.
+const icon = (id) => `<svg viewBox="0 0 24 24"><use href="#i-${id}"></use></svg>`;
+const ICONS = {
+  coin: icon('coin'), users: icon('users'), user: icon('user'), userPlus: icon('user-plus'),
+  trendUp: icon('trend-up'), trendDown: icon('trend-down'), activity: icon('activity'),
+  receipt: icon('receipt'), folder: icon('folder'), check: icon('check'),
+  hourglass: icon('hourglass'), xCircle: icon('x-circle'), eye: icon('eye'), eyeOff: icon('eye-off'), more: icon('more'),
+};
+
 function val(x) { return x && typeof x === 'object' && 'value' in x ? x.value : x; }
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
@@ -918,14 +929,14 @@ function kpi(label, value, sub, cls = '', icon = '') {
 }
 function renderKpis(o) {
   $('#kpis').innerHTML = [
-    kpi(t('kpi_platform_aum'), idr(val(o.platform_aum)), `${num(val(o.investing_users))} ${t('kpi_investing_users')}`, 'accent', '💰'),
-    kpi(t('kpi_total_users'), num(val(o.total_users)), `${num(val(o.verified_users))} ${t('kpi_verified')} (${pct(val(o.verified_users), val(o.total_users))})`, '', '👥'),
-    kpi(t('kpi_buy_volume'), idr(val(o.buy_volume)), `${num(val(o.buy_count))} ${t('kpi_completed_buys')}`, 'accent', '📈'),
-    kpi(t('kpi_sell_volume'), idr(val(o.sell_volume)), `${num(val(o.sell_count))} ${t('kpi_completed_sells')}`, 'warn', '📉'),
-    kpi(t('kpi_active_users'), num(val(o.active_users)), t('kpi_ge1_tx'), 'amber', '⚡'),
-    kpi(t('kpi_transactions'), num(val(o.total_tx)), t('kpi_all_statuses'), '', '🧾'),
-    kpi(t('kpi_active_funds'), num(val(o.active_funds)), `${num(val(o.total_funds))} ${t('kpi_total_in_catalog')}`, 'amber', '🗂️'),
-    kpi(t('kpi_new_users_30d'), num(val(o.new_users_30d)), t('kpi_rolling_window'), '', '✨'),
+    kpi(t('kpi_platform_aum'), idr(val(o.platform_aum)), `${num(val(o.investing_users))} ${t('kpi_investing_users')}`, 'accent', ICONS.coin),
+    kpi(t('kpi_total_users'), num(val(o.total_users)), `${num(val(o.verified_users))} ${t('kpi_verified')} (${pct(val(o.verified_users), val(o.total_users))})`, '', ICONS.users),
+    kpi(t('kpi_buy_volume'), idr(val(o.buy_volume)), `${num(val(o.buy_count))} ${t('kpi_completed_buys')}`, 'accent', ICONS.trendUp),
+    kpi(t('kpi_sell_volume'), idr(val(o.sell_volume)), `${num(val(o.sell_count))} ${t('kpi_completed_sells')}`, 'warn', ICONS.trendDown),
+    kpi(t('kpi_active_users'), num(val(o.active_users)), t('kpi_ge1_tx'), 'amber', ICONS.activity),
+    kpi(t('kpi_transactions'), num(val(o.total_tx)), t('kpi_all_statuses'), '', ICONS.receipt),
+    kpi(t('kpi_active_funds'), num(val(o.active_funds)), `${num(val(o.total_funds))} ${t('kpi_total_in_catalog')}`, 'amber', ICONS.folder),
+    kpi(t('kpi_new_users_30d'), num(val(o.new_users_30d)), t('kpi_rolling_window'), '', ICONS.userPlus),
   ].join('');
 }
 
@@ -1989,12 +2000,12 @@ function renderReferralProgram(rows, stats, invited, sel = { kpis: '#refProgKpis
   const inviters = new Set(rows.map((r) => val(r.inviter_sid)).filter(Boolean)).size;
   const bonusTotal = eligible * 50000; // Rp25,000 to inviter + Rp25,000 to invitee, per eligible referral.
   $(sel.kpis).innerHTML = [
-    kpi(t('refprog_kpi_inviters'), num(inviters), '', '', '🧑‍🤝‍🧑'),
-    kpi(t('refprog_kpi_invitees'), num(rows.length), '', '', '➕'),
-    kpi(t('refprog_kpi_eligible'), num(eligible), '', 'accent', '✅'),
-    kpi(t('refprog_kpi_pending'), num(pending), '', 'amber', '⏳'),
-    kpi(t('refprog_kpi_not_eligible'), num(notEligible), '', 'warn', '🚫'),
-    kpi(t('refprog_kpi_bonus_total'), idr(bonusTotal), t('refprog_kpi_bonus_total_sub'), 'accent', '💰'),
+    kpi(t('refprog_kpi_inviters'), num(inviters), '', '', ICONS.users),
+    kpi(t('refprog_kpi_invitees'), num(rows.length), '', '', ICONS.user),
+    kpi(t('refprog_kpi_eligible'), num(eligible), '', 'accent', ICONS.check),
+    kpi(t('refprog_kpi_pending'), num(pending), '', 'amber', ICONS.hourglass),
+    kpi(t('refprog_kpi_not_eligible'), num(notEligible), '', 'warn', ICONS.xCircle),
+    kpi(t('refprog_kpi_bonus_total'), idr(bonusTotal), t('refprog_kpi_bonus_total_sub'), 'accent', ICONS.coin),
   ].join('');
 
   genTable(sel.table, rows, [
@@ -2920,7 +2931,7 @@ async function openSchedDetail(kind, id) {
       return;
     }
     const note = preview
-      ? '<div class="callout" style="margin-bottom:12px"><span class="callout-icon" aria-hidden="true">👀</span><span>Preview — this schedule hasn\'t run yet. Recipients below are resolved live and may change by the time it actually sends.</span></div>'
+      ? `<div class="callout" style="margin-bottom:12px"><span class="callout-icon" aria-hidden="true">${ICONS.eye}</span><span>Preview — this schedule hasn't run yet. Recipients below are resolved live and may change by the time it actually sends.</span></div>`
       : '';
     const rows = recipients.map((r) => {
       const sentLabel = num(r.sent_count || 0) + (r.failed_count ? ` sent · ${num(r.failed_count)} failed` : ' sent');
@@ -3335,7 +3346,7 @@ function prepareAskChart(rows) {
 }
 
 // Asks Claude to suggest a chart type/x/y for the current rows; only called
-// from the explicit "✨ Suggest" button, never automatically. `hint` carries
+// from the explicit "Suggest" button, never automatically. `hint` carries
 // an optional free-text ask (e.g. "as a donut chart"). If the model can't
 // (or won't) honor the request, it always comes back with a plain-language
 // "reason" instead of silently doing nothing — show that instead of leaving
@@ -3459,7 +3470,7 @@ function renderAdminUsers(users) {
       <td class="mono">${String(u.createdAt || '').slice(0, 10)}</td>
       <td>
         <div class="dropdown-multi row-actions">
-          <button type="button" class="dropdown-multi-btn row-menu-btn" data-row-menu="${u.id}" aria-label="Actions">⚙</button>
+          <button type="button" class="dropdown-multi-btn row-menu-btn" data-row-menu="${u.id}" aria-label="Actions">${ICONS.more}</button>
           <div class="dropdown-multi-panel menu-sm">
             <button type="button" class="row-menu-item" data-edit="${u.id}">Edit access</button>
             <button type="button" class="row-menu-item danger" data-delete="${u.id}" data-username="${u.username || u.email}">Delete</button>
@@ -3632,7 +3643,7 @@ function wireChangePassword() {
       const input = $('#' + btn.dataset.for);
       const show = input.type === 'password';
       input.type = show ? 'text' : 'password';
-      btn.textContent = show ? '🙈' : '👁';
+      btn.innerHTML = show ? ICONS.eyeOff : ICONS.eye;
       btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
     });
   });
@@ -3648,7 +3659,7 @@ function wireChangePassword() {
       $('#changePwCurrent').value = ''; $('#changePwNew').value = ''; $('#changePwConfirm').value = '';
       $$('.pw-toggle').forEach((btn) => {
         $('#' + btn.dataset.for).type = 'password';
-        btn.textContent = '👁'; btn.setAttribute('aria-label', 'Show password');
+        btn.innerHTML = ICONS.eye; btn.setAttribute('aria-label', 'Show password');
       });
       $('#changePwPanel').classList.add('hidden');
       toast('Password updated');

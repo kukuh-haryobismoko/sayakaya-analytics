@@ -305,7 +305,8 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 }
 .kpi:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(26,29,46,.08), 0 12px 28px rgba(26,29,46,.08); }
 .kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--indigo); }
-.kpi-icon { position: absolute; right: 10px; bottom: 2px; font-size: 46px; line-height: 1; opacity: .16; pointer-events: none; }
+.kpi-icon { position: absolute; right: 10px; bottom: 2px; line-height: 1; opacity: .16; pointer-events: none; color: currentColor; }
+.kpi-icon svg { width: 46px; height: 46px; display: block; }
 .kpi-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
 .kpi-value { font-family: "Space Grotesk"; font-weight: 700; font-size: 26px; margin-top: 6px; font-variant-numeric: tabular-nums; position: relative; }
 .kpi-sub { color: var(--muted); font-size: 12px; margin-top: 4px; position: relative; }
@@ -440,8 +441,10 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 .pw-toggle {
   position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
   width: 26px; height: 26px; padding: 0; border: none; background: none; cursor: pointer;
-  font-size: 14px; line-height: 1; opacity: .6; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  color: currentColor; opacity: .6; border-radius: 6px;
 }
+.pw-toggle svg { width: 16px; height: 16px; }
 .pw-toggle:hover { opacity: 1; background: var(--hover-bg); }
 
 /* Tab-access picker: one section per sidebar group, tabs stacked vertically
