@@ -158,9 +158,11 @@ async function loadPortfolioUser() {
   $('#pfKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#pfHoldings').innerHTML = '';
   $('#pfPerformance').innerHTML = '';
+  $('#pfRecentTx').innerHTML = '';
+  $('#pfGrowthFinding').hidden = true;
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
-    const { holdings, split, performance, history, asOfDate, latestDate } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    const { holdings, split, performance, history, recentTx, asOfDate, latestDate } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
     pfSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate), latest = val(latestDate);
     $('#pfSnapshotInfo').textContent = asOf
@@ -170,6 +172,11 @@ async function loadPortfolioUser() {
     renderPfHoldings(holdings);
     renderPfPerformance(performance);
     renderPfAumChart(history);
+    renderSeriesTrendFinding('#pfGrowthFinding', history, 'amount', 'Portfolio value');
+    genTable('#pfRecentTx', recentTx, [
+      { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
+      { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
+    ], 'No transactions yet.');
   } catch (e) { $('#pfKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
@@ -739,9 +746,21 @@ async function loadHnwiTotal() {
       ...HNWI_CONTACT_COLS, ...HNWI_RISK_COLS,
       { key: 'total_aum', label: 'Total AUM', type: 'idr' }, { key: 'aum_date', label: 'AUM date', type: 'date' },
     ], 'No investors at or above this AUM threshold.');
+    renderHnwiFinding(totals);
   } catch (e) {
     $('#hnwiTotalTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#hnwiFinding').hidden = true;
   }
+}
+// Live headline for the HNWI list — count + combined AUM at whatever
+// threshold is currently filtered, recomputed every time the filter changes.
+function renderHnwiFinding(rows) {
+  const el = $('#hnwiFinding');
+  if (!rows.length) { el.hidden = true; return; }
+  const totalAum = rows.reduce((s, r) => s + (Number(val(r.total_aum)) || 0), 0);
+  el.className = 'trend-finding';
+  el.textContent = `${rows.length} investor${rows.length === 1 ? '' : 's'} qualify — ${idrFull(totalAum)} combined AUM.`;
+  el.hidden = false;
 }
 async function loadHnwiByFund(useOwnFilter = hnwiByFundOwnFilter) {
   hnwiByFundOwnFilter = useOwnFilter;
@@ -1441,6 +1460,23 @@ function updatePerfTypeFilterBtn() {
   $('#perfTypeFilterBtn').textContent = n ? `${n} type${n === 1 ? '' : 's'} picked` : t('common_all_fund_types');
 }
 
+// Live best/worst headline for whatever funds are currently filtered —
+// 1-month return, the shortest period with enough history to mean anything
+// but not so short it's just daily noise. Falls back to 1D if too few funds
+// have a full month of NAV history yet.
+function renderPerfDetailFinding(funds) {
+  const el = $('#perfDetailFinding');
+  const period = funds.filter((f) => f['1M'] != null).length >= 2 ? '1M' : '1D';
+  const withPct = funds.filter((f) => f[period] != null);
+  if (withPct.length < 2) { el.hidden = true; return; }
+  const best = withPct.reduce((a, b) => (Number(b[period]) > Number(a[period]) ? b : a));
+  const worst = withPct.reduce((a, b) => (Number(b[period]) < Number(a[period]) ? b : a));
+  el.className = 'trend-finding';
+  el.innerHTML = `Best ${period}: <span style="color:var(--teal)">${best.name} +${Number(best[period]).toFixed(2)}%</span>` +
+    ` &nbsp;·&nbsp; Worst ${period}: <span style="color:var(--rose)">${worst.name} ${Number(worst[period]).toFixed(2)}%</span>`;
+  el.hidden = false;
+}
+
 // pivot flat (type, name, period, pct_change) rows into one row per fund
 function pivotByFund(rows) {
   const byFund = {};
@@ -1466,7 +1502,8 @@ function renderPerformanceDetail() {
   $('#perfDetailAsOfInfo').textContent = latestDate
     ? `Showing NAV as of ${latestDate}${$('#perfDetailAsOf').value ? ' (most recent on or before the date picked above)' : ' (latest available)'}.`
     : '';
-  if (!funds.length) { $('#perfDetailTable').innerHTML = '<div class="empty">No matching fund.</div>'; return; }
+  if (!funds.length) { $('#perfDetailTable').innerHTML = '<div class="empty">No matching fund.</div>'; $('#perfDetailFinding').hidden = true; return; }
+  renderPerfDetailFinding(funds);
   const head = PERF_PERIODS.map((p) => `<th class="num">${p}</th>`).join('');
   const body = funds.map((f) => {
     const cells = PERF_PERIODS.map((p) => {

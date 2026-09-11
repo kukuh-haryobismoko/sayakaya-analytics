@@ -39,6 +39,9 @@
 <body>
 <!-- Inline icon sprite: self-hosted, zero dependency, reused via <use> below. -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+<symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><circle cx="12" cy="8" r="0.9" fill="currentColor"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><path d="M16 8.5a3 3 0 010 5.8"/><path d="M21 20c0-2.8-1.8-5-4.5-5.7"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M14 3v5h5"/></symbol>
 <symbol id="i-bar-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="4" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="20" y1="20" x2="20" y2="14"/></symbol>
 <symbol id="i-trend-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,17 9,11 13,15 21,7"/><polyline points="15,7 21,7 21,13"/></symbol>
 <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor"/></symbol>
@@ -282,7 +285,7 @@
           </div>
           <span class="hint" id="pfUserSub"></span>
           <div class="callout" style="margin-top:8px">
-            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
             <span id="pfSnapshotInfo">Live holdings (current units × today's NAV). Pick a date to see a historical snapshot from mi_fee_logs.portfolio_with_code instead.</span>
           </div>
           <div id="pfKpis" class="kpi-grid" style="margin-top:14px"></div>
@@ -290,12 +293,18 @@
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_aum_over_time">AUM over time</h2></div>
+          <div id="pfGrowthFinding" class="trend-finding" hidden></div>
           <div class="chart-wrap"><canvas id="pfAumChart"></canvas></div>
         </div>
 
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_holdings">Holdings</h2></div>
           <div id="pfHoldings" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_recent_activity">Recent activity</h2></div>
+          <div id="pfRecentTx" class="table-wrap"></div>
         </div>
 
         <div class="panel">
@@ -338,7 +347,7 @@
           </div>
 
           <div class="callout" style="margin-top:14px">
-            <span class="callout-icon" aria-hidden="true">📄</span>
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-file"></use></svg></span>
             <span data-i18n="ss_hint">Portfolio is sent as holdings only (no fund performance breakdown). Leave the portfolio date blank for live holdings (today).</span>
           </div>
 
@@ -451,7 +460,7 @@
           </div>
 
           <div class="callout hidden" id="ssSchedCountPreview" style="margin-top:12px">
-            <span class="callout-icon" aria-hidden="true">👥</span>
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>
             <span id="ssSchedCountPreviewText"></span>
           </div>
 
@@ -579,7 +588,7 @@
           </div>
         </div>
         <div class="callout" style="margin-top:14px">
-          <span class="callout-icon" aria-hidden="true">📄</span>
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-file"></use></svg></span>
           <span data-i18n="fpe_hint">Attaches the Reksa Dana Update PDF (all fund types, NAV as of the date above) to one email per recipient.</span>
         </div>
         <div class="exp" style="margin-top:16px">
@@ -644,7 +653,7 @@
           </div>
 
           <div class="callout hidden" id="fpeSchedCountPreview" style="margin-top:12px">
-            <span class="callout-icon" aria-hidden="true">👥</span>
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>
             <span id="fpeSchedCountPreviewText"></span>
           </div>
 
@@ -762,7 +771,7 @@
           </div>
           <span class="hint" id="pfxUserSub"></span>
           <div class="callout" style="margin-top:8px">
-            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
             <span id="pfxSnapshotInfo">Live holdings (current units × today's NAV). Pick a date to see a historical snapshot from mi_fee_logs.portfolio_fix instead.</span>
           </div>
           <div id="pfxKpis" class="kpi-grid" style="margin-top:14px"></div>
@@ -818,7 +827,7 @@
           </div>
           <span class="hint" id="ptxUserSub"></span>
           <div class="callout" style="margin-top:8px">
-            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
             <span id="ptxSnapshotInfo">Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).</span>
           </div>
           <div id="ptxKpis" class="kpi-grid" style="margin-top:14px"></div>
@@ -874,7 +883,7 @@
           </div>
           <span class="hint" id="psiUserSub"></span>
           <div class="callout" style="margin-top:8px">
-            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
             <span id="psiSnapshotInfo">Live holdings (current units × today's NAV), built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table. Average buy price only reflects completed BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN rows — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.</span>
           </div>
           <div id="psiKpis" class="kpi-grid" style="margin-top:14px"></div>
@@ -930,7 +939,7 @@
           </div>
           <span class="hint" id="peUserSub"></span>
           <div class="callout" style="margin-top:8px">
-            <span class="callout-icon" aria-hidden="true">ℹ️</span>
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
             <span id="peSnapshotInfo"></span>
           </div>
           <div id="peKpis" class="kpi-grid" style="margin-top:14px"></div>
@@ -971,6 +980,7 @@
             <button class="btn-ghost" id="hnwiTotalXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
+        <div id="hnwiFinding" class="trend-finding" hidden></div>
         <div id="hnwiTotalTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -1165,6 +1175,7 @@
             <button class="btn-ghost" id="perfDetailPdf" data-i18n="common_pdf">PDF</button>
           </div>
         </div>
+        <div id="perfDetailFinding" class="trend-finding" hidden></div>
         <span class="hint" id="perfDetailAsOfInfo"></span>
         <div id="perfDetailTable" class="table-wrap tall" style="margin-top:10px"></div>
       </div>

@@ -802,6 +802,19 @@ const userAumHistory = (sid) => ({
   params: { sid },
 });
 
+// Most recent completed transactions for one investor — powers the "latest
+// activity" line on their Portfolio (PWC) lookup, a live fact rather than a
+// static claim.
+const userRecentTransactions = (userId, limit = 8) => ({
+  sql: `SELECT t.type, t.final_amount, t.completed_at, f.name AS fund
+    FROM ${TX} t
+    LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+    WHERE t.user_id = @userId AND t.status = 'completed'
+    ORDER BY t.completed_at DESC
+    LIMIT @limit`,
+  params: { userId, limit },
+});
+
 const userPerformance = (sid) => ({
   sql: `WITH daily AS (
       SELECT DATE(created_at) AS d, SUM(amount) AS amount
@@ -2849,7 +2862,7 @@ module.exports = {
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail, fundNavTrend, fundList,
-  userSearch, usersByIdentifiers, userContact, userTransactions, userHoldings, scheduleRecipientRecap, userPortfolioSplit, userPerformance, userAumHistory,
+  userSearch, usersByIdentifiers, userContact, userTransactions, userRecentTransactions, userHoldings, scheduleRecipientRecap, userPortfolioSplit, userPerformance, userAumHistory,
   userHoldingsLatestDate, userHoldingsAsOf,
   userPerformanceFix, userAumHistoryFix, userHoldingsLatestDateFix, userHoldingsAsOfFix,
   allInvestorsWithAum, allRegisteredUsersWithEmail,

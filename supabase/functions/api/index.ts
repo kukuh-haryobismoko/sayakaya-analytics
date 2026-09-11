@@ -589,12 +589,14 @@ on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url, u
   const s = Q.userPortfolioSplit(userId);
   const p = Q.userPerformance(sid);
   const a = Q.userAumHistory(sid);
-  const [dRows, holdings, splitRows, performance, history] = await Promise.all([
+  const rt = Q.userRecentTransactions(userId);
+  const [dRows, holdings, splitRows, performance, history, recentTx] = await Promise.all([
     runQuery(d.sql, d.params),
     runQuery(h.sql, h.params),
     runQuery(s.sql, s.params),
     runQuery(p.sql, p.params),
     runQuery(a.sql, a.params),
+    runQuery(rt.sql, rt.params),
   ]);
   const latestDate = (dRows[0]?.latest_date as string) || null;
   // A named individual's holdings, not aggregate BigQuery analytics — worth
@@ -603,7 +605,7 @@ on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url, u
   // Regular/bonus split is always current-live (portfolios/bonus_portfolios
   // don't have history), so it doesn't make sense to show it as if it were
   // "as of" a past date — omit it in that mode rather than show a misleading number.
-  return json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+  return json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null, latestDate });
 }));
 
 // ---- Portfolio (Fix): same as Portfolio (PWC) above, but the as-of-date

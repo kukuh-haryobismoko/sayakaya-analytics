@@ -506,18 +506,20 @@ function createApp({ serveStatic = true } = {}) {
     const s = Q.userPortfolioSplit(userId);
     const p = Q.userPerformance(sid);
     const a = Q.userAumHistory(sid);
-    const [dRows, holdings, splitRows, performance, history] = await Promise.all([
+    const rt = Q.userRecentTransactions(userId);
+    const [dRows, holdings, splitRows, performance, history, recentTx] = await Promise.all([
       runQuery(d.sql, d.params),
       runQuery(h.sql, h.params),
       runQuery(s.sql, s.params),
       runQuery(p.sql, p.params),
       runQuery(a.sql, a.params),
+      runQuery(rt.sql, rt.params),
     ]);
     const latestDate = dRows[0]?.latest_date || null;
     // Regular/bonus split is always current-live (portfolios/bonus_portfolios
     // don't have history), so it doesn't make sense to show it as if it were
     // "as of" a past date — omit it in that mode rather than show a misleading number.
-    res.json({ holdings, split: date ? null : splitRows[0], performance, history, asOfDate: date || null, latestDate });
+    res.json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null, latestDate });
     // A named individual's holdings, not aggregate BigQuery analytics — worth
     // its own audit trail entry (who looked up which investor, and when).
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio', `SID ${sid}${date ? ` as of ${date}` : ''}`);

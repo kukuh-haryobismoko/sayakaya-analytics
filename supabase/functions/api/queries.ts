@@ -819,6 +819,19 @@ export const userAumHistory = (sid: string): Query => ({
   params: { sid },
 });
 
+// Most recent completed transactions for one investor — powers the "latest
+// activity" line on their Portfolio (PWC) lookup, a live fact rather than a
+// static claim.
+export const userRecentTransactions = (userId: string, limit = 8): Query => ({
+  sql: `SELECT t.type, t.final_amount, t.completed_at, f.name AS fund
+    FROM ${TX} t
+    LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+    WHERE t.user_id = @userId AND t.status = 'completed'
+    ORDER BY t.completed_at DESC
+    LIMIT @limit`,
+  params: { userId, limit },
+});
+
 export const userPerformance = (sid: string): Query => ({
   sql: `WITH daily AS (
       SELECT DATE(created_at) AS d, SUM(amount) AS amount
