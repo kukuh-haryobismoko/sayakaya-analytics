@@ -15,8 +15,8 @@
     { "file": "Retention.dc.html", "x": 2800, "y": 1720, "w": 1280, "h": 720, "title": "13 · Retention" },
     { "file": "HoldingCohort.dc.html", "x": 4200, "y": 1720, "w": 1280, "h": 720, "title": "14 · Holding-decrement cohort" },
     { "file": "ProductMix.dc.html", "x": 5600, "y": 1720, "w": 1280, "h": 720, "title": "15 · Product mix" },
-    { "file": "Campaigns.dc.html", "x": 0, "y": 2580, "w": 1280, "h": 720, "title": "16 · Campaigns" },
-    { "file": "Kpis.dc.html", "x": 1400, "y": 2580, "w": 1280, "h": 720, "title": "17 · KPI set" }
+    { "file": "Kpis.dc.html", "x": 0, "y": 2580, "w": 1280, "h": 720, "title": "16 · KPI set" },
+    { "file": "Summary.dc.html", "x": 1400, "y": 2580, "w": 1280, "h": 720, "title": "17 · Summary" }
   ],
   "launch": { "view": "canvas" }
 }
