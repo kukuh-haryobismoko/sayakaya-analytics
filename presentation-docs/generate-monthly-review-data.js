@@ -292,63 +292,76 @@ async function main() {
     FROM joined j
     GROUP BY j.cohort_month ORDER BY j.cohort_month`, { raizCodes: RAIZ_CODES });
 
-  // ---- Holding-decrement (churn) cohort: same shape as cohortRetention above,
-  // but from portfolio_with_code holdings instead of buy transactions. Cohort
-  // month = first month a sid_code shows any total holding (summed units
-  // across all funds, excl. RAIZ + the 2 excluded funds); at each later
-  // offset, "decremented" means that month's total units are LOWER than the
-  // prior month's (redemption or partial sell-down; 0 counts as maximal
-  // decrement). Requires a synthetic 0 for months with zero rows at all, so
-  // this builds an explicit month grid per cohort user rather than only
-  // aggregating months where a row happens to exist.
-  console.error('Querying holding-decrement (churn) cohort (portfolio_with_code)...');
-  out.holdingDecrementCohort = await runQuery(`
+  // ---- AUM retention cohorts: same cohort assignment as the first-buy
+  // cohort table above (first completed 'buy' transaction month, excl.
+  // RAIZ, capped to the same 8-month lookback), so cohort sizes here are
+  // identical to that table's — same population, two different lenses.
+  // "Retained" at month offset M = cumulative netflow (buy minus sell
+  // transactions, cohort month through M) is still >= 0, i.e. money in
+  // is still >= money out, matching the live dashboard's "AUM retention
+  // cohorts" panel's definition (server/ml.js's aumRetentionCohorts).
+  // Deliberately NOT sourced from mi_fee_logs.portfolios like that panel:
+  // tried that first, and it inflates Jan-Mar 2026 cohort sizes with
+  // accounts whose actual first buy was back in 2022-2024, only now
+  // getting their first row in that table, a backfill artifact
+  // analogous to portfolio_with_code's Jan-2026 feed start elsewhere in
+  // this script. Building netflow straight from transactions (which the
+  // first-buy cohort already trusts) sidesteps that table entirely.
+  console.error('Querying AUM retention cohorts (first-buy cohort x cumulative netflow)...');
+  out.aumRetentionCohorts = await runQuery(`
     WITH raiz AS (
-      SELECT DISTINCT sid_code FROM \`sayakaya.main.users\`
-      WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) AND sid_code IS NOT NULL
+      SELECT id FROM \`sayakaya.main.users\`
+      WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)
     ),
-    daily AS (
-      SELECT p.sid_code, DATE(p.created_at,'Asia/Jakarta') d, SUM(p.total_unit) units
-      FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` p
-      LEFT JOIN raiz r ON r.sid_code = p.sid_code
-      WHERE r.sid_code IS NULL AND p.sinvest_code NOT IN UNNEST(@fundExcludeSinvest)
-        AND p.created_at >= TIMESTAMP('2025-01-01') AND p.created_at < TIMESTAMP(@pEnd)
-      GROUP BY p.sid_code, d
+    first_buy AS (
+      SELECT user_id, MIN(completed_at) first_at
+      FROM \`sayakaya.main.transactions\`
+      WHERE type='buy' AND status='completed' AND user_id NOT IN (SELECT id FROM raiz)
+      GROUP BY user_id
     ),
-    monthly AS (
-      -- last snapshot day within each calendar month, per user
-      SELECT sid_code, DATE_TRUNC(d, MONTH) ym_month,
-        ARRAY_AGG(units ORDER BY d DESC LIMIT 1)[OFFSET(0)] units
-      FROM daily GROUP BY sid_code, ym_month
+    cohort_users AS (
+      SELECT user_id, DATE_TRUNC(DATE(first_at), MONTH) AS cohort
+      FROM first_buy
+      WHERE DATE_TRUNC(DATE(first_at), MONTH) >= DATE_SUB(DATE_TRUNC(DATE(@pEnd), MONTH), INTERVAL 8 MONTH)
     ),
-    cohort AS (
-      SELECT sid_code, MIN(ym_month) cohort_month FROM monthly WHERE units > 0 GROUP BY sid_code
-      HAVING MIN(ym_month) >= DATE '2025-06-01'
+    monthly_flow AS (
+      SELECT user_id, DATE_TRUNC(DATE(completed_at), MONTH) AS m,
+        SUM(IF(type='buy', final_amount, 0)) - SUM(IF(type='sell', final_amount, 0)) AS flow
+      FROM \`sayakaya.main.transactions\`
+      WHERE status='completed' AND type IN ('buy','sell') AND user_id NOT IN (SELECT id FROM raiz)
+      GROUP BY user_id, m
+    ),
+    months AS (
+      SELECT month_start FROM UNNEST(GENERATE_DATE_ARRAY(
+        DATE_SUB(DATE_TRUNC(DATE(@pEnd), MONTH), INTERVAL 8 MONTH),
+        DATE_TRUNC(DATE(@pEnd), MONTH),
+        INTERVAL 1 MONTH
+      )) AS month_start
     ),
     grid AS (
-      SELECT c.sid_code, c.cohort_month, off,
-        DATE_ADD(c.cohort_month, INTERVAL off MONTH) ym_month
-      FROM cohort c, UNNEST(GENERATE_ARRAY(0, 6)) off
+      SELECT cu.user_id, cu.cohort, mo.month_start AS m
+      FROM cohort_users cu CROSS JOIN months mo
+      WHERE mo.month_start >= cu.cohort
     ),
     joined AS (
-      SELECT g.sid_code, g.cohort_month, g.off, IFNULL(m.units, 0) units
+      SELECT g.user_id, g.cohort, g.m,
+        DATE_DIFF(g.m, g.cohort, MONTH) AS month_offset,
+        COALESCE(mf.flow, 0) AS flow
       FROM grid g
-      LEFT JOIN monthly m ON m.sid_code = g.sid_code AND m.ym_month = g.ym_month
-      WHERE g.ym_month <= DATE_TRUNC(DATE(@pEnd), MONTH)
+      LEFT JOIN monthly_flow mf ON mf.user_id = g.user_id AND mf.m = g.m
     ),
-    withPrev AS (
-      SELECT *, LAG(units) OVER (PARTITION BY sid_code ORDER BY off) prev_units
+    withcum AS (
+      SELECT *, SUM(flow) OVER (PARTITION BY user_id ORDER BY m ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_netflow
       FROM joined
     )
-    SELECT FORMAT_DATE('%Y-%m', w.cohort_month) cohort_month,
-      (SELECT COUNT(*) FROM cohort c2 WHERE c2.cohort_month = w.cohort_month) cohort_size,
-      COUNTIF(off=1) m1_n, COUNTIF(off=1 AND units < prev_units) m1_decrement,
-      COUNTIF(off=2) m2_n, COUNTIF(off=2 AND units < prev_units) m2_decrement,
-      COUNTIF(off=3) m3_n, COUNTIF(off=3 AND units < prev_units) m3_decrement,
-      COUNTIF(off=6) m6_n, COUNTIF(off=6 AND units < prev_units) m6_decrement
-    FROM withPrev w
-    GROUP BY w.cohort_month ORDER BY w.cohort_month`,
-    { raizCodes: RAIZ_CODES, fundExcludeSinvest: FUND_EXCLUDE_SINVEST, pEnd });
+    SELECT FORMAT_DATE('%Y-%m', cohort) AS cohort, month_offset,
+      COUNT(DISTINCT user_id) AS cohort_size,
+      COUNT(DISTINCT IF(cum_netflow >= 0, user_id, NULL)) AS users,
+      ROUND(SUM(cum_netflow)) AS netflow
+    FROM withcum
+    GROUP BY cohort, month_offset
+    ORDER BY cohort, month_offset`,
+    { raizCodes: RAIZ_CODES, pEnd });
 
   // ---- Product & revenue mix: top funds by AUM, review vs comparison ----
   console.error('Querying product & revenue mix (top funds)...');

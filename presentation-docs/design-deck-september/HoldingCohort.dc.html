@@ -11,47 +11,104 @@
     body { margin: 0; font-family: "Inter", system-ui, -apple-system, sans-serif; }
     a { color: #3a50ab; } a:hover { color: #26357a; }
     table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-    th { font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600; text-align: right; padding: 7px 16px; background: #eef0fc; }
+    th { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: #565b6b; font-weight: 600; text-align: right; padding: 6px 14px; background: #eef0fc; }
     th:first-child { text-align: left; }
-    td { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 15px; text-align: right; padding: 7px 16px; border-bottom: 1px solid #dfe3ee; }
-    td:first-child { text-align: left; font-family: "Inter", system-ui, sans-serif; font-size: 14px; font-weight: 500; }
+    td { font-family: "JetBrains Mono", ui-monospace, monospace; text-align: right; padding: 5px 14px; border-bottom: 1px solid #dfe3ee; }
+    td:first-child { text-align: left; font-family: "Inter", system-ui, sans-serif; font-size: 13.5px; font-weight: 500; }
     tr:last-child td { border-bottom: 0; }
+    .pct { font-size: 14px; font-weight: 700; }
+    .nf { font-size: 10.5px; color: #8a90a3; }
   </style>
 </helmet>
 <div style="width: 1280px; height: 720px; background: #f2f4f9; color: #14161f; padding: 44px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
   <div style="display: flex; flex-direction: column; gap: 5px">
     <div style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #3a50ab; font-weight: 600">04 — Retention, a different lens</div>
-    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 36px; font-weight: 600; letter-spacing: -1.2px">A new cohort: who's actually reducing their holdings</div>
+    <div style="font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 34px; font-weight: 600; letter-spacing: -1.1px">Same cohorts, a money lens: who's still net-positive</div>
   </div>
 
-  <div style="font-size: 14.5px; line-height: 1.4; color: #565b6b; max-width: 1080px">The previous slide tracks <strong style="color: #14161f; font-weight: 600">repeat buy transactions</strong>. This one tracks <strong style="color: #14161f; font-weight: 600">total units held</strong> (all funds, from portfolio_with_code, excl. RAIZ + the 2 excluded funds) — it catches partial sell-downs and full redemptions a buy-transaction cohort can't see, and covers everyone who ever held a position, including bonus-only holders.</div>
+  <div style="font-size: 14px; line-height: 1.4; color: #565b6b; max-width: 1080px">The previous slide tracks <strong style="color: #14161f; font-weight: 600">whether someone bought again</strong>. This one tracks <strong style="color: #14161f; font-weight: 600">cumulative money in vs. out</strong>: buy minus sell since each cohort's first purchase, checked at each month mark (excl. RAIZ). Same cohorts as the previous slide, first-buy-transaction month, so sizes match exactly.</div>
 
   <div style="background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; overflow: hidden">
     <table>
       <thead>
-        <tr><th>First-holding cohort</th><th>Holders</th><th>M+1 decrement</th><th>M+2</th><th>M+3</th><th>M+6</th></tr>
+        <tr><th>First-buy cohort</th><th>Size</th><th>M+1</th><th>M+2</th><th>M+3</th><th>M+6</th></tr>
       </thead>
       <tbody>
-        <tr><td>Jan 2026*</td><td>5,220</td><td style="font-weight: 700">4%</td><td>5%</td><td>3%</td><td>3%</td></tr>
-        <tr><td>Feb 2026</td><td>56</td><td style="font-weight: 700">16%</td><td>14%</td><td>16%</td><td>7%</td></tr>
-        <tr><td>Mar 2026</td><td>48</td><td style="font-weight: 700">15%</td><td>19%</td><td>17%</td><td>10%</td></tr>
-        <tr><td>Apr 2026</td><td>38</td><td style="font-weight: 700">24%</td><td>26%</td><td>24%</td><td style="color: #8a90a3">—</td></tr>
-        <tr><td>May 2026</td><td>24</td><td style="font-weight: 700">8%</td><td style="color: #c00d3f">50%</td><td>12%</td><td style="color: #8a90a3">—</td></tr>
-        <tr><td>Jun 2026</td><td>26</td><td style="font-weight: 700">8%</td><td>23%</td><td>4%</td><td style="color: #8a90a3">—</td></tr>
-        <tr><td>Jul 2026</td><td>17</td><td style="font-weight: 700">35%</td><td>18%</td><td style="color: #8a90a3">—</td><td style="color: #8a90a3">—</td></tr>
-        <tr><td>Aug 2026</td><td>23</td><td style="font-weight: 700; color: #c00d3f">30%</td><td style="color: #8a90a3">—</td><td style="color: #8a90a3">—</td><td style="color: #8a90a3">—</td></tr>
+        <tr>
+          <td>Jan 2026</td><td class="pct">89</td>
+          <td><div class="pct">85%</div><div class="nf">+Rp 142.2 B</div></td>
+          <td><div class="pct">81%</div><div class="nf">+Rp 118.6 B</div></td>
+          <td><div class="pct">78%</div><div class="nf">+Rp 96.5 B</div></td>
+          <td><div class="pct" style="color: #c00d3f">70%</div><div class="nf" style="color: #c00d3f">−Rp 28.6 B</div></td>
+        </tr>
+        <tr>
+          <td>Feb 2026</td><td class="pct">39</td>
+          <td><div class="pct">97%</div><div class="nf">+Rp 8.7 B</div></td>
+          <td><div class="pct">97%</div><div class="nf">+Rp 10.3 B</div></td>
+          <td><div class="pct">97%</div><div class="nf">+Rp 9.9 B</div></td>
+          <td><div class="pct" style="color: #c00d3f">87%</div><div class="nf" style="color: #c00d3f">−Rp 2.3 B</div></td>
+        </tr>
+        <tr>
+          <td>Mar 2026</td><td class="pct">42</td>
+          <td><div class="pct">86%</div><div class="nf">+Rp 25.3 B</div></td>
+          <td><div class="pct">81%</div><div class="nf">+Rp 411.3 M</div></td>
+          <td><div class="pct">71%</div><div class="nf">+Rp 311.7 M</div></td>
+          <td><div class="pct">76%</div><div class="nf">+Rp 794.1 M</div></td>
+        </tr>
+        <tr>
+          <td>Apr 2026</td><td class="pct">25</td>
+          <td><div class="pct">88%</div><div class="nf">+Rp 424.6 M</div></td>
+          <td><div class="pct">88%</div><div class="nf">+Rp 115.9 M</div></td>
+          <td><div class="pct">84%</div><div class="nf">+Rp 215.0 M</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+        </tr>
+        <tr>
+          <td>May 2026</td><td class="pct">19</td>
+          <td><div class="pct">79%</div><div class="nf">+Rp 179.9 M</div></td>
+          <td><div class="pct">79%</div><div class="nf">+Rp 185.4 M</div></td>
+          <td><div class="pct">74%</div><div class="nf">+Rp 189.1 M</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+        </tr>
+        <tr>
+          <td>Jun 2026</td><td class="pct">24</td>
+          <td><div class="pct">79%</div><div class="nf">+Rp 42.3 M</div></td>
+          <td><div class="pct">75%</div><div class="nf">+Rp 43.2 M</div></td>
+          <td><div class="pct">75%</div><div class="nf">+Rp 41.4 M</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+        </tr>
+        <tr>
+          <td>Jul 2026</td><td class="pct">16</td>
+          <td><div class="pct">63%</div><div class="nf">+Rp 154.6 M</div></td>
+          <td><div class="pct">63%</div><div class="nf">+Rp 171.0 M</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+        </tr>
+        <tr>
+          <td>Aug 2026</td><td class="pct">18</td>
+          <td><div class="pct" style="color: #c00d3f">33%</div><div class="nf" style="color: #c00d3f">+Rp 102.1 M</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+        </tr>
+        <tr>
+          <td>Sep 2026</td><td class="pct">27</td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+          <td><div class="pct" style="color: #8a90a3">—</div></td>
+        </tr>
       </tbody>
     </table>
   </div>
 
   <div style="display: flex; gap: 14px">
     <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-radius: 12px; padding: 12px 18px; display: flex; flex-direction: column; gap: 4px">
-      <div style="font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Read differently than churn</div>
-      <div style="font-size: 14px; line-height: 1.35">Most cohorts sit at 15–35% decrement by M+1 — the majority keep at least as much as they started with. May's 50% at M+2 is 12 people; too small to read as a trend.</div>
+      <div style="font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #565b6b; font-weight: 600">Buying again and staying invested are different things</div>
+      <div style="font-size: 13.5px; line-height: 1.35">February's cohort re-bought only 41% of the time by M+1 on the previous slide, but 97% are still net-positive here, they just haven't come back to buy more. Most cohorts hold 70-97% net-positive well past M+1.</div>
     </div>
-    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-left: 4px solid #ff3165; border-radius: 12px; padding: 12px 18px; display: flex; flex-direction: column; gap: 4px">
-      <div style="font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #c00d3f; font-weight: 600">* Jan 2026 isn't a real cohort</div>
-      <div style="font-size: 14px; line-height: 1.35">The holdings feed starts 14 Jan 2026 — that row is everyone already holding a position when tracking began, not people who started holding that month.</div>
+    <div style="flex: 1 1 0; background: #ffffff; border: 1px solid #dfe3ee; border-left: 4px solid #c00d3f; border-radius: 12px; padding: 12px 18px; display: flex; flex-direction: column; gap: 4px">
+      <div style="font-size: 11.5px; text-transform: uppercase; letter-spacing: 1.1px; color: #c00d3f; font-weight: 600">Two things worth watching</div>
+      <div style="font-size: 13.5px; line-height: 1.35">January's M+6 total flips to <strong style="font-weight: 650">−Rp 28.6 B</strong> even though 70% of the cohort is individually still net-positive, a handful of large redemptions outweighing everyone else, consistent with the concentration seen earlier. August's 33% M+1 is the lowest in the table and too fresh to explain yet.</div>
     </div>
   </div>
 </div>
