@@ -37,34 +37,6 @@ const { runQuery } = require('../server/bigquery');
 
 const RAIZ_CODES = ['RAIZ', 'RAIZKAYA'];
 
-// Institutional/corporate accounts (users.is_institution = TRUE) — confirmed
-// 2026-09-16 as the actual explanation for last review's biggest open
-// question (net flow vs. account-level AUM change not reconciling). One
-// institutional account (sid_code CPD3009FUH01396, a PT-suffixed corporate
-// client onboarded via SYSINSTADM) alone did Rp 50 B in August buys — more
-// than the entire month's reported net flow. Across all 39 institutional
-// accounts (37 onboarded Jan 2026, none since), August's Rp 47.3 B of the
-// Rp 48.3 B reported net flow was institutional; genuine retail net flow was
-// ~Rp 1.0 B, matching the account-level AUM table almost exactly. Same
-// pattern (institutional flows dominating) recurs most other months back to
-// March. These accounts also hold ~Rp 73-77 B (~28-29%) of total platform
-// AUM fairly stably, including 3 of the top 10 accounts by holding, so the
-// account-concentration numbers were conflating institutional treasury
-// concentration with retail HNWI concentration.
-//
-// Excluded — same way as RAIZ, alongside it — from every query about
-// CUSTOMER BEHAVIOR: net flow, buy/sell volume, active investors, whale
-// detection, account concentration, registrations, referral, retention/
-// cohorts. NOT excluded from aumTrendByMonth/revenueTrendByMonth/productMix
-// (the headline AUM/revenue trend) or campaigns — those measure the size of
-// the book, and institutional AUM is real, fee-paying business, not a
-// dormant/test segment like RAIZ. Concentration's total_aum is the one
-// exception: its denominator is also institution-excluded (a "top 10 as %
-// of AUM" that mixes an institution-inclusive denominator with an
-// institution-excluded numerator would be internally inconsistent), and it
-// reports institution_aum separately so nothing is hidden.
-const INSTITUTION_FILTER = 'is_institution = TRUE';
-
 // Two funds excluded from every AUM/holdings/revenue figure platform-wide
 // (confirmed 2026-09-10): Avrist Liquid Fund (sinvest TP002MMCAVRLIF00,
 // 240,757 holders — the RAIZ-adjacent default money-market fund) and Avrist
@@ -165,9 +137,8 @@ async function main() {
   // ---- Buy/sell volume, net flow, median buy ticket, active investors ----
   async function txStats(start, end) {
     const rows = await runQuery(`
-      WITH excl AS (
-        SELECT id FROM \`sayakaya.main.users\`
-        WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE
+      WITH raiz AS (
+        SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)
       )
       SELECT
         ROUND(SUM(IF(t.type='buy' AND t.status='completed', t.final_amount, 0))) buy_volume,
@@ -178,7 +149,7 @@ async function main() {
         COUNT(DISTINCT IF(t.type='buy' AND t.status='completed', t.user_id, NULL)) active_investors
       FROM \`sayakaya.main.transactions\` t
       WHERE t.completed_at >= TIMESTAMP(@start) AND t.completed_at < TIMESTAMP(@end)
-        AND t.user_id NOT IN (SELECT id FROM excl)`,
+        AND t.user_id NOT IN (SELECT id FROM raiz)`,
       { raizCodes: RAIZ_CODES, start, end });
     return rows[0];
   }
@@ -192,11 +163,11 @@ async function main() {
   // ---- Active investors, rolling 30d as of end of review month vs today ----
   async function active30d(asOf) {
     const rows = await runQuery(`
-      WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE)
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
       SELECT COUNT(DISTINCT user_id) n FROM \`sayakaya.main.transactions\`
       WHERE type='buy' AND status='completed'
         AND completed_at >= TIMESTAMP_SUB(TIMESTAMP(@asOf), INTERVAL 30 DAY) AND completed_at < TIMESTAMP(@asOf)
-        AND user_id NOT IN (SELECT id FROM excl)`, { raizCodes: RAIZ_CODES, asOf });
+        AND user_id NOT IN (SELECT id FROM raiz)`, { raizCodes: RAIZ_CODES, asOf });
     return rows[0].n;
   }
   console.error('Querying active-investors-30d (end of review month, today)...');
@@ -205,22 +176,22 @@ async function main() {
   // ---- Registrations + referral signups, per month, Jan-partial ----
   console.error('Querying registration trend...');
   out.registrationsByMonth = await runQuery(`
-    WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE)
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
     SELECT FORMAT_DATETIME('%Y-%m', u.created_at) ym,
       COUNT(*) registered,
       COUNTIF(u.verification_status='verified') verified_ever
     FROM \`sayakaya.main.users\` u
     WHERE u.created_at >= DATETIME('2026-01-01') AND u.created_at < DATETIME(@pEnd)
-      AND u.id NOT IN (SELECT id FROM excl)
+      AND u.id NOT IN (SELECT id FROM raiz)
     GROUP BY ym ORDER BY ym`, { raizCodes: RAIZ_CODES, pEnd });
 
   // ---- Registration -> first buy within 30 days, per cohort month ----
   console.error('Querying registration -> first-buy-within-30d cohorts...');
   out.regToFirstBuy = await runQuery(`
-    WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE),
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
     reg AS (
       SELECT id, created_at FROM \`sayakaya.main.users\`
-      WHERE created_at >= DATETIME('2026-01-01') AND created_at < DATETIME(@pEnd) AND id NOT IN (SELECT id FROM excl)
+      WHERE created_at >= DATETIME('2026-01-01') AND created_at < DATETIME(@pEnd) AND id NOT IN (SELECT id FROM raiz)
     ),
     first_buy AS (
       SELECT user_id, MIN(completed_at) first_buy_at FROM \`sayakaya.main.transactions\`
@@ -239,21 +210,18 @@ async function main() {
     // matches how the August deck's own "31 Jul" column was actually a Jul
     // month-end AUM-by-account cut, not a live rewind either.
     const rows = await runQuery(`
-      WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE),
-      inst AS (SELECT id FROM \`sayakaya.main.users\` WHERE is_institution = TRUE),
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
       active AS (
         SELECT user_id, fund_id, unit FROM \`sayakaya.main.portfolios\` WHERE deleted_at IS NULL AND unit > 0
         UNION ALL
         SELECT user_id, fund_id, unit FROM \`sayakaya.main.bonus_portfolios\` WHERE status = 'on_going'
       ),
-      per_user_all AS (
+      per_user AS (
         SELECT a.user_id, SUM(a.unit * f.latest_nav_value) aum
         FROM active a JOIN \`sayakaya.main.funds\` f ON f.id = a.fund_id
-        WHERE a.fund_id NOT IN UNNEST(@fundExcludeIds)
-          AND a.user_id NOT IN (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
+        WHERE a.user_id NOT IN (SELECT id FROM raiz) AND a.fund_id NOT IN UNNEST(@fundExcludeIds)
         GROUP BY a.user_id HAVING aum > 0
       ),
-      per_user AS (SELECT * FROM per_user_all WHERE user_id NOT IN (SELECT id FROM excl)),
       ranked AS (SELECT aum, ROW_NUMBER() OVER (ORDER BY aum DESC) rn, COUNT(*) OVER () n FROM per_user)
       SELECT
         (SELECT SUM(aum) FROM per_user) total_aum,
@@ -262,9 +230,7 @@ async function main() {
         (SELECT SUM(aum) FROM ranked WHERE rn <= 10) top10_aum,
         (SELECT SUM(aum) FROM ranked WHERE rn <= 100) top100_aum,
         (SELECT COUNT(*) FROM per_user WHERE aum < 100000) accounts_under_100k,
-        (SELECT APPROX_QUANTILES(aum, 2)[OFFSET(1)] FROM per_user) median_aum,
-        (SELECT SUM(aum) FROM per_user_all WHERE user_id IN (SELECT id FROM inst)) institution_aum,
-        (SELECT COUNT(*) FROM per_user_all WHERE user_id IN (SELECT id FROM inst)) institution_accounts_with_aum`,
+        (SELECT APPROX_QUANTILES(aum, 2)[OFFSET(1)] FROM per_user) median_aum`,
       { raizCodes: RAIZ_CODES, fundExcludeIds: FUND_EXCLUDE_IDS });
     return rows[0];
   }
@@ -274,10 +240,7 @@ async function main() {
   // ---- Whale detection: biggest AUM movers over the review month ----
   console.error('Querying biggest AUM movers over the review month (whale detection)...');
   out.topMovers = await runQuery(`
-    WITH excl AS (
-      SELECT DISTINCT sid_code FROM \`sayakaya.main.users\`
-      WHERE (UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE) AND sid_code IS NOT NULL
-    ),
+    WITH raiz AS (SELECT DISTINCT sid_code FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) AND sid_code IS NOT NULL),
     start_snap AS (
       SELECT sid_code, SUM(amount) aum FROM \`sayakaya.mi_fee_logs.portfolio_with_code\`
       WHERE DATE(created_at,'Asia/Jakarta') = DATE_SUB(DATE(@rStart), INTERVAL 1 DAY)
@@ -293,26 +256,26 @@ async function main() {
     SELECT COALESCE(s.sid_code, e.sid_code) sid_code,
       IFNULL(s.aum,0) start_aum, IFNULL(e.aum,0) end_aum, IFNULL(e.aum,0) - IFNULL(s.aum,0) change
     FROM start_snap s FULL OUTER JOIN end_snap e ON s.sid_code = e.sid_code
-    LEFT JOIN excl x ON x.sid_code = COALESCE(s.sid_code, e.sid_code)
-    WHERE x.sid_code IS NULL
+    LEFT JOIN raiz r ON r.sid_code = COALESCE(s.sid_code, e.sid_code)
+    WHERE r.sid_code IS NULL
     ORDER BY change ASC LIMIT 10`, { raizCodes: RAIZ_CODES, rStart, rEnd, fundExcludeSinvest: FUND_EXCLUDE_SINVEST });
 
   // ---- Retention: registered/ever-transacted/dormant + first-buy cohort table ----
   console.error('Querying retention headline + cohort table...');
   const retRows = await runQuery(`
-    WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE)
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
     SELECT
-      (SELECT COUNT(*) FROM \`sayakaya.main.users\` WHERE id NOT IN (SELECT id FROM excl)) registered,
-      (SELECT COUNT(DISTINCT user_id) FROM \`sayakaya.main.transactions\` WHERE type='buy' AND status='completed' AND user_id NOT IN (SELECT id FROM excl)) ever_bought,
-      (SELECT COUNT(DISTINCT user_id) FROM \`sayakaya.main.transactions\` WHERE type='buy' AND status='completed' AND completed_at >= TIMESTAMP_SUB(TIMESTAMP(@pEnd), INTERVAL 365 DAY) AND user_id NOT IN (SELECT id FROM excl)) bought_last_365d`,
+      (SELECT COUNT(*) FROM \`sayakaya.main.users\` WHERE id NOT IN (SELECT id FROM raiz)) registered,
+      (SELECT COUNT(DISTINCT user_id) FROM \`sayakaya.main.transactions\` WHERE type='buy' AND status='completed' AND user_id NOT IN (SELECT id FROM raiz)) ever_bought,
+      (SELECT COUNT(DISTINCT user_id) FROM \`sayakaya.main.transactions\` WHERE type='buy' AND status='completed' AND completed_at >= TIMESTAMP_SUB(TIMESTAMP(@pEnd), INTERVAL 365 DAY) AND user_id NOT IN (SELECT id FROM raiz)) bought_last_365d`,
     { raizCodes: RAIZ_CODES, pEnd });
   out.retentionHeadline = retRows[0];
 
   out.cohortRetention = await runQuery(`
-    WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE),
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
     buys AS (
       SELECT user_id, completed_at FROM \`sayakaya.main.transactions\`
-      WHERE type='buy' AND status='completed' AND user_id NOT IN (SELECT id FROM excl)
+      WHERE type='buy' AND status='completed' AND user_id NOT IN (SELECT id FROM raiz)
     ),
     first_buy AS (SELECT user_id, MIN(completed_at) first_at FROM buys GROUP BY user_id),
     cohort AS (SELECT user_id, DATE_TRUNC(DATE(first_at), MONTH) cohort_month FROM first_buy WHERE DATE(first_at) >= DATE '2025-06-01'),
@@ -346,14 +309,14 @@ async function main() {
   // first-buy cohort already trusts) sidesteps that table entirely.
   console.error('Querying AUM retention cohorts (first-buy cohort x cumulative netflow)...');
   out.aumRetentionCohorts = await runQuery(`
-    WITH excl AS (
+    WITH raiz AS (
       SELECT id FROM \`sayakaya.main.users\`
-      WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE
+      WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)
     ),
     first_buy AS (
       SELECT user_id, MIN(completed_at) first_at
       FROM \`sayakaya.main.transactions\`
-      WHERE type='buy' AND status='completed' AND user_id NOT IN (SELECT id FROM excl)
+      WHERE type='buy' AND status='completed' AND user_id NOT IN (SELECT id FROM raiz)
       GROUP BY user_id
     ),
     cohort_users AS (
@@ -365,7 +328,7 @@ async function main() {
       SELECT user_id, DATE_TRUNC(DATE(completed_at), MONTH) AS m,
         SUM(IF(type='buy', final_amount, 0)) - SUM(IF(type='sell', final_amount, 0)) AS flow
       FROM \`sayakaya.main.transactions\`
-      WHERE status='completed' AND type IN ('buy','sell') AND user_id NOT IN (SELECT id FROM excl)
+      WHERE status='completed' AND type IN ('buy','sell') AND user_id NOT IN (SELECT id FROM raiz)
       GROUP BY user_id, m
     ),
     months AS (
@@ -438,11 +401,11 @@ async function main() {
   // ---- Referral effectiveness, all-time-to-date ----
   console.error('Querying referral effectiveness...');
   out.referral = await runQuery(`
-    WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE),
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
     base AS (
       SELECT u.id, EXISTS(SELECT 1 FROM \`sayakaya.main.user_referrals\` ur WHERE ur.user_id = u.id) via_referral
       FROM \`sayakaya.main.users\` u
-      WHERE u.created_at >= DATETIME('2026-01-01') AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM excl)
+      WHERE u.created_at >= DATETIME('2026-01-01') AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
     ),
     buys AS (
       SELECT user_id, COUNT(*) n_buys, SUM(final_amount) total_invested
@@ -460,12 +423,12 @@ async function main() {
   // swings — check this every month before trusting the cumulative one) ----
   console.error('Querying referral share by month...');
   out.referralByMonth = await runQuery(`
-    WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE)
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
     SELECT FORMAT_DATETIME('%Y-%m', u.created_at) ym,
       COUNT(*) registered,
       COUNTIF(EXISTS(SELECT 1 FROM \`sayakaya.main.user_referrals\` ur WHERE ur.user_id = u.id)) via_referral
     FROM \`sayakaya.main.users\` u
-    WHERE u.created_at >= DATETIME('2026-01-01') AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM excl)
+    WHERE u.created_at >= DATETIME('2026-01-01') AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
     GROUP BY ym ORDER BY ym`, { raizCodes: RAIZ_CODES, pEnd });
 
   // ---- Referrer concentration: is growth broad-based or a couple of people?
@@ -475,12 +438,12 @@ async function main() {
   console.error('Querying referrer concentration (recent vs baseline)...');
   async function referrerConcentration(start, end) {
     const rows = await runQuery(`
-      WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE),
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
       refs AS (
         SELECT ur.referrer_id, COUNT(*) n_referred
         FROM \`sayakaya.main.user_referrals\` ur
         JOIN \`sayakaya.main.users\` u ON u.id = ur.user_id
-        WHERE u.created_at >= DATETIME(@start) AND u.created_at < DATETIME(@end) AND u.id NOT IN (SELECT id FROM excl)
+        WHERE u.created_at >= DATETIME(@start) AND u.created_at < DATETIME(@end) AND u.id NOT IN (SELECT id FROM raiz)
         GROUP BY ur.referrer_id
       ),
       ranked AS (SELECT n_referred, ROW_NUMBER() OVER (ORDER BY n_referred DESC) rn FROM refs)
@@ -494,11 +457,11 @@ async function main() {
     baseline: await referrerConcentration('2026-01-01', cStart),
   };
   out.topReferrers = await runQuery(`
-    WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE)
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
     SELECT ur.referrer_id, COUNT(*) n_referred, MIN(u.created_at) first_ref, MAX(u.created_at) last_ref
     FROM \`sayakaya.main.user_referrals\` ur
     JOIN \`sayakaya.main.users\` u ON u.id = ur.user_id
-    WHERE u.created_at >= DATETIME(@cStart) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM excl)
+    WHERE u.created_at >= DATETIME(@cStart) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
     GROUP BY ur.referrer_id ORDER BY n_referred DESC LIMIT 10`,
     { raizCodes: RAIZ_CODES, cStart, pEnd });
 
@@ -511,11 +474,11 @@ async function main() {
   out.referralProgram = {
     launchDate: REFERRAL_PROGRAM_LAUNCH,
     summary: await runQuery(`
-      WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE),
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
       base AS (
         SELECT u.id, EXISTS(SELECT 1 FROM \`sayakaya.main.user_referrals\` ur WHERE ur.user_id = u.id) via_referral
         FROM \`sayakaya.main.users\` u
-        WHERE u.created_at >= DATETIME(@launch) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM excl)
+        WHERE u.created_at >= DATETIME(@launch) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
       ),
       buys AS (
         SELECT user_id, COUNT(*) n_buys, SUM(final_amount) total_invested
@@ -527,11 +490,11 @@ async function main() {
       GROUP BY b.via_referral`,
       { raizCodes: RAIZ_CODES, launch: REFERRAL_PROGRAM_LAUNCH, pEnd }),
     referrers: await runQuery(`
-      WITH excl AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) OR is_institution = TRUE)
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
       SELECT ur.referrer_id, COUNT(*) n_referred, MIN(u.created_at) first_ref, MAX(u.created_at) last_ref
       FROM \`sayakaya.main.user_referrals\` ur
       JOIN \`sayakaya.main.users\` u ON u.id = ur.user_id
-      WHERE u.created_at >= DATETIME(@launch) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM excl)
+      WHERE u.created_at >= DATETIME(@launch) AND u.created_at < DATETIME(@pEnd) AND u.id NOT IN (SELECT id FROM raiz)
       GROUP BY ur.referrer_id ORDER BY n_referred DESC`,
       { raizCodes: RAIZ_CODES, launch: REFERRAL_PROGRAM_LAUNCH, pEnd }),
   };
