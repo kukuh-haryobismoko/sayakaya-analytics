@@ -24,6 +24,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.repository == 'kukuh-haryobismoko/sayakaya-analytics'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

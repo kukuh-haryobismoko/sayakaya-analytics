@@ -16,6 +16,9 @@ on:
 
 jobs:
   run-due-schedules:
+    # ponytail: this repo is pushed to two GitHub remotes (personal + office); guard
+    # so the schedule only ever fires from the canonical one, never both.
+    if: github.repository == 'kukuh-haryobismoko/sayakaya-analytics'
     runs-on: ubuntu-latest
     steps:
       - name: Ping run-due-schedules
