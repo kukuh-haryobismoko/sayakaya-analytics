@@ -7,8 +7,11 @@ name: Deploy to Cloud Run
 # README.md "Deploying" for the one-time GCP setup this depends on.
 
 on:
-  push:
-    branches: [main]
+  # ponytail: push trigger disabled until the GCP-side WIF setup is done
+  # (GCP_WIF_PROVIDER / GCP_DEPLOY_SA secrets) — was failing on every push.
+  # Re-enable by uncommenting once that's ready.
+  # push:
+  #   branches: [main]
   workflow_dispatch:
 
 env:
