@@ -1,0 +1,43 @@
+name: Deploy to Cloud Run
+
+# Auto-deploys sayakaya-analytics to Cloud Run on every push to main.
+# Only runs from the office repo — the personal repo is a mirror, not a
+# deploy source. Auth is keyless (Workload Identity Federation): no
+# service-account JSON key is stored anywhere. See DEVELOPER_GUIDE.md /
+# README.md "Deploying" for the one-time GCP setup this depends on.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: sayakaya
+  REGION: asia-southeast2
+  SERVICE: sayakaya-analytics
+
+jobs:
+  deploy:
+    if: github.repository == 'kukuh-sayakaya/sayakaya-analytics'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --source . \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --quiet
