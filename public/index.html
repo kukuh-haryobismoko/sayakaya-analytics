@@ -1036,7 +1036,23 @@
 
     <!-- OVERVIEW -->
     <section id="overview" class="view active">
-      <div id="kpis" class="kpi-grid"></div>
+      <div class="filters" style="margin-bottom:10px">
+        <label><span data-i18n="ov_aum_as_of">Platform AUM as of</span> <input type="date" id="ovAumDate" /></label>
+        <div class="dropdown-multi" id="ovFundFilterDropdown">
+          <button type="button" class="dropdown-multi-btn" id="ovFundFilterBtn" data-i18n="ov_all_funds">All funds</button>
+          <div class="dropdown-multi-panel align-left" id="ovFundFilterPanel">
+            <input id="ovFundFilterSearch" type="text" data-i18n-placeholder="common_search_funds_ph" placeholder="Search funds…" />
+            <div class="dropdown-multi-actions">
+              <button type="button" class="link-btn" id="ovFundFilterSelectAll" data-i18n="common_select_all">Select all</button>
+              <button type="button" class="link-btn" id="ovFundFilterClear" data-i18n="common_clear">Clear</button>
+            </div>
+            <div id="ovFundFilterList" class="dropdown-multi-list"></div>
+          </div>
+        </div>
+        <button id="ovFundFilterApply" class="btn-primary" data-i18n="apply">Apply</button>
+      </div>
+      <span class="hint" data-i18n="ov_fund_filter_hint">Platform AUM uses its own as-of date above and only counts active funds, independent of the transaction date range at the top of the page. The fund filter scopes the KPIs and charts above the Largest funds table to the selected fund(s); total, verified, and new user counts stay platform-wide, and the Largest funds table has its own fund picker.</span>
+      <div id="kpis" class="kpi-grid" style="margin-top:14px"></div>
 
       <div class="panel">
         <div class="panel-head">
@@ -1134,7 +1150,7 @@
           </div>
         </div>
         <div id="aumTrendFinding" class="trend-finding" hidden></div>
-        <span class="hint" data-i18n="aum_history_hint">End-of-period AUM (point-in-time) and revenue (aperd_share, summed). Uses the date range above. Source: mi_fee_logs.mi_fee.</span>
+        <span class="hint" data-i18n="aum_history_hint">End-of-period AUM (point-in-time) and revenue (aperd_share, summed), active funds only. Uses the date range above. Source: mi_fee_logs.mi_fee.</span>
         <div class="chart-wrap" style="margin-top:14px"><canvas id="aumChart"></canvas></div>
       </div>
       <div class="panel">

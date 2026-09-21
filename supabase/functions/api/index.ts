@@ -228,6 +228,14 @@ function qp(url: URL, name: string): string | undefined {
 function qpAll(url: URL, name: string): string[] {
   return url.searchParams.getAll(name);
 }
+// Overview fund-filter dropdown: ?fundIds=1,2,3 -> ['1','2','3']. funds.id
+// is a STRING column in BigQuery, so these stay strings (see queries.ts'
+// normalizeFundIds). Same shape as the ?excludeFunds= parsing used by
+// /api/funds/top below.
+function parseFundIds(url: URL): string[] {
+  const raw = qp(url, 'fundIds');
+  return raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+}
 async function bodyOf(req: Request): Promise<Record<string, unknown>> {
   try {
     return (await req.json()) || {};
@@ -469,26 +477,34 @@ on('POST', '/api/auth/reset-password', async (req) => {
 });
 
 // ---- Overview (KPIs) ------------------------------------------------------
+// aumDate is the Platform AUM card's own "as of" date, deliberately separate
+// from from/to (which only scope buy/sell/transaction figures) — see
+// platformAumAsOf in queries.ts for why. Required, same as /api/funds/top
+// below; the frontend always defaults it (to the latest available date)
+// before this route is ever called.
 on('GET', '/api/overview', requireTab('overview', async (_req, _params, url) => {
   const from = qp(url, 'from'); const to = qp(url, 'to');
+  const aumDate = qp(url, 'aumDate');
+  if (!aumDate) return json({ error: 'aumDate is required.' }, 400);
+  const fundIds = parseFundIds(url);
   const [users, aum, tx, funds] = await Promise.all([
     runQuery(Q.overviewUsers().sql, Q.overviewUsers().params),
-    runQuery(Q.overviewAum().sql, Q.overviewAum().params),
-    runQuery(Q.overviewTx(from, to).sql, Q.overviewTx(from, to).params),
-    runQuery(Q.overviewFunds().sql, Q.overviewFunds().params),
+    runQuery(Q.platformAumAsOf(aumDate, fundIds).sql, Q.platformAumAsOf(aumDate, fundIds).params),
+    runQuery(Q.overviewTx(from, to, fundIds).sql, Q.overviewTx(from, to, fundIds).params),
+    runQuery(Q.overviewFunds(fundIds).sql, Q.overviewFunds(fundIds).params),
   ]);
   return json({ ...users[0], ...aum[0], ...tx[0], ...funds[0] });
 }));
 
 // ---- Trends ---------------------------------------------------------------
 on('GET', '/api/trends', requireTab('overview', async (_req, _params, url) => {
-  const q = Q.trends(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
+  const q = Q.trends(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
 
 // ---- Breakdowns -----------------------------------------------------------
 on('GET', '/api/breakdown/:dimension', requireTab('overview', async (_req, params, url) => {
-  const q = Q.breakdownBy(params.dimension, qp(url, 'from'), qp(url, 'to'));
+  const q = Q.breakdownBy(params.dimension, qp(url, 'from'), qp(url, 'to'), parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
 
@@ -507,11 +523,12 @@ on('GET', '/api/funds/top', requireTab('overview', async (_req, _params, url) =>
   const q = Q.largestFundsAum(qp(url, 'groupBy') || 'fund', date, exclude);
   return json(await runQuery(q.sql, q.params));
 }));
-on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance'], async () => {
-  const q = Q.fundTypes();
+on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance'], async (_req, _params, url) => {
+  const q = Q.fundTypes(parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
-on('GET', '/api/funds/list', requireTab('performance', async (_req, _params, url) => {
+// Shared by Overview (fund-filter dropdown) and Performance (trend picker).
+on('GET', '/api/funds/list', requireAnyTab(['overview', 'performance'], async (_req, _params, url) => {
   const q = Q.fundList(qp(url, 'type'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -525,16 +542,16 @@ on('GET', '/api/users/verification', requireTab('overview', async () => {
   const q = Q.verificationBreakdown();
   return json(await runQuery(q.sql, q.params));
 }));
-on('GET', '/api/users/by-province', requireTab('overview', async () => {
-  const q = Q.usersByProvince();
+on('GET', '/api/users/by-province', requireTab('overview', async (_req, _params, url) => {
+  const q = Q.usersByProvince(parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
 on('GET', '/api/users/top-cities', requireTab('overview', async (_req, _params, url) => {
-  const q = Q.topCitiesByInvestors(qp(url, 'limit'));
+  const q = Q.topCitiesByInvestors(qp(url, 'limit'), parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
 on('GET', '/api/users/top-cities-aum', requireTab('overview', async (_req, _params, url) => {
-  const q = Q.topCitiesByAum(qp(url, 'limit'));
+  const q = Q.topCitiesByAum(qp(url, 'limit'), parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
 

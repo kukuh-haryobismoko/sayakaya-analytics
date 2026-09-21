@@ -42,6 +42,18 @@ const FUND_MI_FILTER_SQL = `
   (@fund = '' OR UPPER(f.name) LIKE CONCAT('%', UPPER(@fund), '%') OR UPPER(f.sinvest_code) LIKE CONCAT('%', UPPER(@fund), '%'))
   AND (@mi = '' OR UPPER(COALESCE(im.common_name, im.name)) LIKE CONCAT('%', UPPER(@mi), '%'))`;
 
+// "Only these funds" filter shared by the Overview fund-filter dropdown.
+// Same convention as excludeFunds below: omit the clause (and the param)
+// entirely when nothing was picked, so an unfiltered call never binds an
+// empty array. funds.id / *.fund_id are STRING columns in BigQuery, not
+// INT64 — keep ids as strings so @fundIds infers as ARRAY<STRING>.
+const normalizeFundIds = (fundIds?: string[]): string[] => (Array.isArray(fundIds) ? fundIds : []).map((v) => String(v).trim()).filter(Boolean);
+function fundIdsClause(params: Record<string, unknown>, col: string, ids: string[], joiner = ' AND '): string {
+  if (!ids.length) return '';
+  params.fundIds = ids;
+  return `${joiner}${col} IN UNNEST(@fundIds)`;
+}
+
 // ---- Overview KPIs ----------------------------------------------------------
 
 export const overviewUsers = (): Query => ({
@@ -53,52 +65,46 @@ export const overviewUsers = (): Query => ({
   params: {},
 });
 
-export const overviewAum = (): Query => ({
-  sql: `WITH active AS (
-      SELECT p.user_id, p.unit, p.fund_id
-      FROM \`sayakaya.main.portfolios\` p
-      WHERE p.deleted_at IS NULL AND p.unit > 0
-      UNION ALL
-      SELECT bp.user_id, bp.unit, bp.fund_id
-      FROM \`sayakaya.main.bonus_portfolios\` bp
-      WHERE bp.status = 'on_going'
-    )
-    SELECT
-      ROUND(SUM(a.unit * f.latest_nav_value)) AS platform_aum,
-      COUNT(DISTINCT a.user_id) AS investing_users,
-      COUNT(*) AS holdings
-    FROM active a
-    JOIN \`sayakaya.main.funds\` f ON f.id = a.fund_id`,
-  params: {},
-});
+export const overviewTx = (from?: string, to?: string, fundIds: string[] = []): Query => {
+  const ids = normalizeFundIds(fundIds);
+  const params = range(from, to);
+  const fundFilter = fundIdsClause(params, 'fund_id', ids);
+  return {
+    sql: `SELECT
+        COUNT(*) AS total_tx,
+        COUNTIF(type='buy'  AND status='completed') AS buy_count,
+        COUNTIF(type='sell' AND status='completed') AS sell_count,
+        SUM(IF(type='buy'  AND status='completed', final_amount, 0)) AS buy_volume,
+        SUM(IF(type='sell' AND status='completed', final_amount, 0)) AS sell_volume,
+        COUNT(DISTINCT user_id) AS active_users
+      FROM ${TX}
+      WHERE DATE(created_at) BETWEEN @from AND @to${fundFilter}`,
+    params,
+  };
+};
 
-export const overviewTx = (from?: string, to?: string): Query => ({
-  sql: `SELECT
-      COUNT(*) AS total_tx,
-      COUNTIF(type='buy'  AND status='completed') AS buy_count,
-      COUNTIF(type='sell' AND status='completed') AS sell_count,
-      SUM(IF(type='buy'  AND status='completed', final_amount, 0)) AS buy_volume,
-      SUM(IF(type='sell' AND status='completed', final_amount, 0)) AS sell_volume,
-      COUNT(DISTINCT user_id) AS active_users
-    FROM ${TX}
-    WHERE DATE(created_at) BETWEEN @from AND @to`,
-  params: range(from, to),
-});
-
-export const overviewFunds = (): Query => ({
-  sql: `SELECT
-      COUNTIF(listing_status='ACTIVE') AS active_funds,
-      COUNT(*) AS total_funds
-    FROM ${FUNDS}`,
-  params: {},
-});
+export const overviewFunds = (fundIds: string[] = []): Query => {
+  const ids = normalizeFundIds(fundIds);
+  const params: Record<string, unknown> = {};
+  const fundFilter = fundIdsClause(params, 'id', ids, ' WHERE ');
+  return {
+    sql: `SELECT
+        COUNTIF(listing_status='ACTIVE') AS active_funds,
+        COUNT(*) AS total_funds
+      FROM ${FUNDS}${fundFilter}`,
+    params,
+  };
+};
 
 // ---- Time series ------------------------------------------------------------
 
-export const trends = (from?: string, to?: string, granularity = 'month'): Query => {
+export const trends = (from?: string, to?: string, granularity = 'month', fundIds: string[] = []): Query => {
   const fmt = granularity === 'day' ? '%Y-%m-%d'
     : granularity === 'week' ? '%Y-%W'
     : '%Y-%m';
+  const ids = normalizeFundIds(fundIds);
+  const params = range(from, to);
+  const fundFilter = fundIdsClause(params, 'fund_id', ids);
   return {
     sql: `SELECT
         FORMAT_TIMESTAMP('${fmt}', created_at) AS bucket,
@@ -108,38 +114,46 @@ export const trends = (from?: string, to?: string, granularity = 'month'): Query
         SUM(IF(type='sell' AND status='completed', final_amount, 0)) AS sell_volume,
         COUNT(DISTINCT user_id) AS active_users
       FROM ${TX}
-      WHERE DATE(created_at) BETWEEN @from AND @to
+      WHERE DATE(created_at) BETWEEN @from AND @to${fundFilter}
       GROUP BY bucket ORDER BY bucket`,
-    params: range(from, to),
+    params,
   };
 };
 
 // ---- Breakdowns -------------------------------------------------------------
 
-export const breakdownBy = (column: string, from?: string, to?: string): Query => {
+export const breakdownBy = (column: string, from?: string, to?: string, fundIds: string[] = []): Query => {
   const allowed: Record<string, string> = { status: 'status', type: 'type', payment_method: 'payment_method', payment_gateway: 'payment_gateway' };
   const col = allowed[column] || 'status';
+  const ids = normalizeFundIds(fundIds);
+  const params = range(from, to);
+  const fundFilter = fundIdsClause(params, 'fund_id', ids);
   return {
     sql: `SELECT
         IFNULL(${col}, '(none)') AS label,
         COUNT(*) AS count,
         SUM(IFNULL(final_amount, 0)) AS volume
       FROM ${TX}
-      WHERE DATE(created_at) BETWEEN @from AND @to
+      WHERE DATE(created_at) BETWEEN @from AND @to${fundFilter}
       GROUP BY label ORDER BY count DESC`,
-    params: range(from, to),
+    params,
   };
 };
 
 // ---- Funds ------------------------------------------------------------------
 
-export const fundTypes = (): Query => ({
-  sql: `SELECT type AS label, COUNT(*) AS count, SUM(IFNULL(latest_aum_value,0)) AS aum
-    FROM ${FUNDS}
-    WHERE listing_status='ACTIVE'
-    GROUP BY type ORDER BY aum DESC`,
-  params: {},
-});
+export const fundTypes = (fundIds: string[] = []): Query => {
+  const ids = normalizeFundIds(fundIds);
+  const params: Record<string, unknown> = {};
+  const fundFilter = fundIdsClause(params, 'id', ids);
+  return {
+    sql: `SELECT type AS label, COUNT(*) AS count, SUM(IFNULL(latest_aum_value,0)) AS aum
+      FROM ${FUNDS}
+      WHERE listing_status='ACTIVE'${fundFilter}
+      GROUP BY type ORDER BY aum DESC`,
+    params,
+  };
+};
 
 // ---- Users ------------------------------------------------------------------
 
@@ -202,28 +216,33 @@ export const txFilterValues = (): Query => ({
 // ---- AUM history (from mi_fee_logs.mi_fee: daily AUM + revenue per fund) -----
 // AUM is a point-in-time stock: daily = sum across funds that day; monthly =
 // end-of-month value. Revenue (aperd_share_per_day) is a flow: always summed.
+// Joined to FUNDS and filtered to listing_status='ACTIVE' — a liquidated fund
+// stops being a real ongoing position once it's inactive, so its AUM
+// shouldn't keep counting past that point. Same rule as platformAumAsOf below.
 export const aumHistory = (from?: string, to?: string, granularity = 'month'): Query => {
   const r = range(from, to);
   if (granularity === 'day') {
     return {
       sql: `SELECT
-          FORMAT_DATE('%Y-%m-%d', DATE(created_at)) AS bucket,
-          ROUND(SUM(AUM)) AS aum,
-          ROUND(SUM(aperd_share_per_day)) AS revenue,
-          COUNT(DISTINCT fund_id) AS funds
-        FROM ${MIFEE}
-        WHERE DATE(created_at) BETWEEN @from AND @to
+          FORMAT_DATE('%Y-%m-%d', DATE(m.created_at)) AS bucket,
+          ROUND(SUM(m.AUM)) AS aum,
+          ROUND(SUM(m.aperd_share_per_day)) AS revenue,
+          COUNT(DISTINCT m.fund_id) AS funds
+        FROM ${MIFEE} m
+        JOIN ${FUNDS} f ON f.id = m.fund_id
+        WHERE DATE(m.created_at) BETWEEN @from AND @to AND f.listing_status = 'ACTIVE'
         GROUP BY bucket ORDER BY bucket`,
       params: r,
     };
   }
   return {
     sql: `WITH daily AS (
-        SELECT DATE(created_at) AS d,
-          SUM(AUM) AS aum, SUM(aperd_share_per_day) AS revenue,
-          COUNT(DISTINCT fund_id) AS funds
-        FROM ${MIFEE}
-        WHERE DATE(created_at) BETWEEN @from AND @to
+        SELECT DATE(m.created_at) AS d,
+          SUM(m.AUM) AS aum, SUM(m.aperd_share_per_day) AS revenue,
+          COUNT(DISTINCT m.fund_id) AS funds
+        FROM ${MIFEE} m
+        JOIN ${FUNDS} f ON f.id = m.fund_id
+        WHERE DATE(m.created_at) BETWEEN @from AND @to AND f.listing_status = 'ACTIVE'
         GROUP BY d
       )
       SELECT FORMAT_DATE('%Y-%m', d) AS bucket,
@@ -332,7 +351,7 @@ export const fundList = (type?: string): Query => {
   let typeFilter = '';
   if (type) { typeFilter = 'AND type = @type'; params.type = type; }
   return {
-    sql: `SELECT name, type FROM ${FUNDS}
+    sql: `SELECT id, name, type FROM ${FUNDS}
       WHERE listing_status = 'ACTIVE' AND latest_aum_value IS NOT NULL ${typeFilter}
       ORDER BY latest_aum_value DESC`,
     params,
@@ -1192,16 +1211,50 @@ export const largestFundsAum = (groupBy = 'fund', date?: string, excludeFunds: s
   };
 };
 
-// Platform AUM (live holdings, same definition as the Overview KPI) split by
-// investor demographic — risk tolerance and income bracket.
-const ACTIVE_CTE = `active AS (
-      SELECT p.user_id, p.unit, p.fund_id FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0
-      UNION ALL
-      SELECT bp.user_id, bp.unit, bp.fund_id FROM \`sayakaya.main.bonus_portfolios\` bp WHERE bp.status = 'on_going'
-    )`;
+// Platform AUM KPI card, as of a chosen date — deliberately its own date
+// (defaults to the latest available, via largestFundsLatestDate above),
+// decoupled from the buy/sell/transaction date range at the top of the page:
+// that range never scoped this figure, which was confusing when the two
+// pickers sat side by side. Same source/shape as largestFundsAum just above
+// (portfolio_with_code, -1 day correction), rolled up to one platform total
+// instead of per-fund/manager rows. Joined to FUNDS and filtered to
+// listing_status='ACTIVE' — a liquidated fund stops being a real ongoing
+// position once it's inactive (its NAV/AUM just stays frozen at whatever it
+// was on its last day), so it shouldn't keep counting toward "current"
+// platform AUM after that point.
+export const platformAumAsOf = (date?: string, fundIds: string[] = []): Query => {
+  const ids = normalizeFundIds(fundIds);
+  const params: Record<string, unknown> = { date };
+  const fundFilter = fundIdsClause(params, 'p.id', ids);
+  return {
+    sql: `SELECT
+        ROUND(SUM(p.amount)) AS platform_aum,
+        COUNT(DISTINCT p.sid_code) AS investing_users
+      FROM ${PORT_WITH_CODE} p
+      JOIN ${FUNDS} f ON f.id = p.id
+      WHERE DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY) = @date AND p.total_unit > 0 AND f.listing_status = 'ACTIVE'${fundFilter}`,
+    params,
+  };
+};
 
-export const aumByRisk = (): Query => ({
-  sql: `WITH ${ACTIVE_CTE}
+// Platform AUM from live holdings (funds.latest_nav_value) split by investor
+// demographic — risk tolerance and income bracket. Note this is a different
+// AUM definition than the Overview KPI/Largest funds table above, which both
+// read a portfolio_with_code snapshot instead; the two can disagree slightly.
+// fundIds narrows "active" to selected funds (used by the Overview map/city
+// tables); callers that don't take a fund filter just pass an empty array.
+function activeCte(params: Record<string, unknown>, ids: string[]): string {
+  return `active AS (
+      SELECT p.user_id, p.unit, p.fund_id FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0${fundIdsClause(params, 'p.fund_id', ids)}
+      UNION ALL
+      SELECT bp.user_id, bp.unit, bp.fund_id FROM \`sayakaya.main.bonus_portfolios\` bp WHERE bp.status = 'on_going'${fundIdsClause(params, 'bp.fund_id', ids)}
+    )`;
+}
+
+export const aumByRisk = (): Query => {
+  const params: Record<string, unknown> = {};
+  return {
+    sql: `WITH ${activeCte(params, [])}
     SELECT IFNULL(up.investment_risk_tolerance, '(unknown)') AS label,
       COUNT(DISTINCT a.user_id) AS investors,
       ROUND(SUM(a.unit * f.latest_nav_value)) AS aum
@@ -1209,11 +1262,14 @@ export const aumByRisk = (): Query => ({
     JOIN ${FUNDS} f ON f.id = a.fund_id
     LEFT JOIN ${USER_PROFILES} up ON up.user_id = a.user_id
     GROUP BY label ORDER BY aum DESC`,
-  params: {},
-});
+    params,
+  };
+};
 
-export const aumByIncome = (): Query => ({
-  sql: `WITH ${ACTIVE_CTE}
+export const aumByIncome = (): Query => {
+  const params: Record<string, unknown> = {};
+  return {
+    sql: `WITH ${activeCte(params, [])}
     SELECT
       CASE
         WHEN up.monthly_income IS NULL THEN '(unknown)'
@@ -1237,8 +1293,9 @@ export const aumByIncome = (): Query => ({
     JOIN ${FUNDS} f ON f.id = a.fund_id
     LEFT JOIN ${USER_PROFILES} up ON up.user_id = a.user_id
     GROUP BY label, ord ORDER BY ord`,
-  params: {},
-});
+    params,
+  };
+};
 
 // ---- Geographic distribution (Overview map) ---------------------------------
 // user_profiles.id_address_city is NOT a free-text city name — it's the exact
@@ -1255,9 +1312,17 @@ const CITY_LOOKUP_CTE = `city_lookup AS (
 // One row per province — investor count + live AUM, for the Overview choropleth.
 // province_name here must exactly match the `province_name` property baked into
 // public/data/indonesia-provinces.json (see that file's generation notes).
-export const usersByProvince = (): Query => ({
-  sql: `WITH ${CITY_LOOKUP_CTE},
-    ${ACTIVE_CTE},
+// fundIds, when given, also switches investor_count/total_aum from "every
+// investor" to "investors holding one of the selected funds" (LEFT -> INNER
+// join on aum_by_user, which is itself already scoped to those funds).
+export const usersByProvince = (fundIds: string[] = []): Query => {
+  const ids = normalizeFundIds(fundIds);
+  const params: Record<string, unknown> = {};
+  const active = activeCte(params, ids);
+  const aumJoin = ids.length ? 'JOIN' : 'LEFT JOIN';
+  return {
+    sql: `WITH ${CITY_LOOKUP_CTE},
+    ${active},
     aum_by_user AS (
       SELECT a.user_id, SUM(a.unit * f.latest_nav_value) AS aum
       FROM active a JOIN ${FUNDS} f ON f.id = a.fund_id
@@ -1268,20 +1333,26 @@ export const usersByProvince = (): Query => ({
       ROUND(SUM(IFNULL(abu.aum, 0))) AS total_aum
     FROM ${USER_PROFILES} up
     JOIN city_lookup cl ON cl.city_code = up.id_address_city
-    LEFT JOIN aum_by_user abu ON abu.user_id = up.user_id
+    ${aumJoin} aum_by_user abu ON abu.user_id = up.user_id
     GROUP BY cl.province_name
     ORDER BY investor_count DESC`,
-  params: {},
-});
+    params,
+  };
+};
 
 // Top cities by investor count, and separately by AUM — the finer-grained
 // companion to the province map (508 distinct cities is too many to put on
 // one map at a glance, so these are ranked lists instead of a second map).
 // Same join/shape for both, ordered differently — hence the shared builder.
-function topCitiesQuery(limit: number | string, orderBy: 'investor_count' | 'total_aum'): Query {
+// Same fundIds behavior as usersByProvince above.
+function topCitiesQuery(limit: number | string, orderBy: 'investor_count' | 'total_aum', fundIds: string[] = []): Query {
+  const ids = normalizeFundIds(fundIds);
+  const params: Record<string, unknown> = { limit: parseInt(String(limit), 10) };
+  const active = activeCte(params, ids);
+  const aumJoin = ids.length ? 'JOIN' : 'LEFT JOIN';
   return {
     sql: `WITH ${CITY_LOOKUP_CTE},
-      ${ACTIVE_CTE},
+      ${active},
       aum_by_user AS (
         SELECT a.user_id, SUM(a.unit * f.latest_nav_value) AS aum
         FROM active a JOIN ${FUNDS} f ON f.id = a.fund_id
@@ -1292,15 +1363,15 @@ function topCitiesQuery(limit: number | string, orderBy: 'investor_count' | 'tot
         ROUND(SUM(IFNULL(abu.aum, 0))) AS total_aum
       FROM ${USER_PROFILES} up
       JOIN city_lookup cl ON cl.city_code = up.id_address_city
-      LEFT JOIN aum_by_user abu ON abu.user_id = up.user_id
+      ${aumJoin} aum_by_user abu ON abu.user_id = up.user_id
       GROUP BY cl.city_name, cl.province_name
       ORDER BY ${orderBy} DESC
       LIMIT @limit`,
-    params: { limit: parseInt(String(limit), 10) },
+    params,
   };
 }
-export const topCitiesByInvestors = (limit: number | string = 15): Query => topCitiesQuery(limit, 'investor_count');
-export const topCitiesByAum = (limit: number | string = 15): Query => topCitiesQuery(limit, 'total_aum');
+export const topCitiesByInvestors = (limit: number | string = 15, fundIds: string[] = []): Query => topCitiesQuery(limit, 'investor_count', fundIds);
+export const topCitiesByAum = (limit: number | string = 15, fundIds: string[] = []): Query => topCitiesQuery(limit, 'total_aum', fundIds);
 
 // Referral leaderboard: who brought in the most $ via referral_code/referrer_code.
 export const topReferrers = (limit: number | string = 20): Query => ({

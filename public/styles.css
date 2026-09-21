@@ -403,6 +403,11 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   transition: opacity .15s ease, transform .15s ease, visibility .15s;
 }
 .dropdown-multi-panel.open { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
+/* Default panels open leftward (right: 0) because their buttons normally sit
+   near the right edge of a filter row. A button near the LEFT edge instead
+   (e.g. the Overview fund filter) needs this to open rightward, or the panel
+   overflows under the sidebar (sidebar z-index: 30 > this panel's 20). */
+.dropdown-multi-panel.align-left { left: 0; right: auto; }
 /* Direct-child selector so this only styles the search box, not the checkbox
    inputs nested inside .dropdown-multi-list — a plain "input" descendant
    selector was also matching those and forcing them to width:100%. */
@@ -411,6 +416,12 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   border-radius: 7px; padding: 7px 9px; background: var(--input-bg); color: var(--ink); font: inherit;
 }
 .dropdown-multi-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+.dropdown-multi-actions { display: flex; gap: 10px; margin-bottom: 8px; }
+/* Plain-text button for a small in-panel action (e.g. "Select all" / "Clear"
+   above a checkbox list) — same look as .gate-link, generalized past the
+   login gate it was first written for. */
+.link-btn { background: none; border: 0; color: var(--muted); font-size: 12px; cursor: pointer; padding: 0; font-family: inherit; }
+.link-btn:hover { color: var(--indigo); text-decoration: underline; }
 .exp { display: flex; gap: 6px; flex-wrap: wrap; }
 
 /* ---------- Row action menu (e.g. Admin users table) ---------- */

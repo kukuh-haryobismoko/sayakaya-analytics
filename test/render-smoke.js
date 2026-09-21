@@ -88,6 +88,25 @@ const referralProgram = [{ inviter_sid: 'IDD1', inviter_name: 'A', inviter_ifua:
   baseline_unit: '1000', min_unit_in_window: '1000', status: 'Eligible', reason: null }];
 const referralInviterStats = [{ inviter_sid: 'IDD1', inviter_referral_code: 'REF1', inviter_name: 'A', invited_count: 8, transacted_count: 3 }];
 
+// Overview tab: KPIs (platform_aum is now date-scoped via #ovAumDate, not the
+// from/to range), trend/breakdown charts, AUM-by-type, investor map, top
+// cities, and the fund-filter dropdown's own option list.
+const overviewKpis = { platform_aum: '1.2e13', investing_users: 4200,
+  total_users: 12000, verified_users: 9000, new_users_30d: 150, buy_volume: '3e11', buy_count: 800,
+  sell_volume: '1e11', sell_count: 200, active_users: 900, total_tx: 1200, active_funds: 40, total_funds: 45 };
+const overviewTrends = [{ bucket: '2026-09', buy_count: 10, sell_count: 4, buy_volume: '1e10', sell_volume: '2e9', active_users: 50 }];
+const overviewBreakdown = [{ label: 'buy', count: 10, volume: '1e10' }];
+const overviewVerification = [{ label: 'verified', count: 9000 }];
+const overviewFundTypes = [{ label: 'Money Market', count: 10, aum: '5e12' }];
+// id is a short opaque string in the real schema (BigQuery funds.id / *.fund_id
+// are STRING, not INT64) — kept non-numeric here so a stray parseInt() on the
+// fund-filter path would fail this test instead of shipping broken.
+const overviewFundList = [{ id: 'PlFsTEcPFZCWZNeBOQ7Qw', name: 'Sucorinvest Money Market Fund', type: 'Money Market' }];
+const overviewProvince = [{ province_name: 'DKI Jakarta', investor_count: 3000, total_aum: '6e12' }];
+const overviewTopCities = [{ city_name: 'Jakarta Selatan', province_name: 'DKI Jakarta', investor_count: 1500 }];
+const overviewTopCitiesAum = [{ city_name: 'Jakarta Selatan', province_name: 'DKI Jakarta', total_aum: '3e12' }];
+const overviewTopFunds = [{ label: 'Sucorinvest Money Market Fund', aum: '5e12', investors: 2000 }];
+
 sandbox.api = async (path) => {
   if (path.startsWith('/api/user-lifetime/summary')) return summaryUL;
   if (path.startsWith('/api/user-lifetime/detail'))  return [];
@@ -99,11 +118,28 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/referral-program-alt/inviter-stats')) return referralInviterStats;
   if (path.startsWith('/api/referral-program/detail'))    return referralProgram;
   if (path.startsWith('/api/referral-program/inviter-stats')) return referralInviterStats;
+  if (path.startsWith('/api/overview')) {
+    // The route 400s without aumDate in the real server (queries.js'
+    // platformAumAsOf needs it) — assert the client always sends it, same
+    // way the real one would reject a request that forgot to.
+    if (!path.includes('aumDate=')) throw new Error('missing aumDate: ' + path);
+    return overviewKpis;
+  }
+  if (path.startsWith('/api/trends'))                return overviewTrends;
+  if (path.startsWith('/api/breakdown/'))             return overviewBreakdown;
+  if (path.startsWith('/api/users/verification'))    return overviewVerification;
+  if (path.startsWith('/api/funds/types'))            return overviewFundTypes;
+  if (path.startsWith('/api/funds/list'))             return overviewFundList;
+  if (path.startsWith('/api/funds/top/latest-date'))  return { latestDate: '2026-09-15' };
+  if (path.startsWith('/api/funds/top'))              return overviewTopFunds;
+  if (path.startsWith('/api/users/by-province'))      return overviewProvince;
+  if (path.startsWith('/api/users/top-cities-aum'))   return overviewTopCitiesAum;
+  if (path.startsWith('/api/users/top-cities'))       return overviewTopCities;
   throw new Error('unexpected path ' + path);
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
@@ -115,6 +151,31 @@ sandbox.api = async (path) => {
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
     console.log(`FAIL  ${sel} -> ${why}`);
     errors.push(`${sel} did not render a table: ${why}`);
+  }
+  // Overview KPI grid is cards, not a table — just check it rendered.
+  const kpisHtml = get('#kpis')._html;
+  if (kpisHtml.includes('kpi-value')) {
+    console.log('ok    #kpis');
+  } else {
+    console.log(`FAIL  #kpis -> ${kpisHtml.slice(0, 200) || '(never rendered)'}`);
+    errors.push('#kpis did not render KPI cards');
+  }
+  // Platform AUM's own "as of" date input should default to the latest
+  // available date from /api/funds/top/latest-date, same as #topFundsDate.
+  const aumDateVal = get('#ovAumDate').value;
+  if (aumDateVal === '2026-09-15') {
+    console.log('ok    #ovAumDate defaulted');
+  } else {
+    console.log(`FAIL  #ovAumDate -> ${aumDateVal || '(empty)'}`);
+    errors.push('#ovAumDate did not default to the latest available date');
+  }
+  // Fund-filter dropdown checklist, populated from /api/funds/list.
+  const fundListHtml = get('#ovFundFilterList')._html;
+  if (fundListHtml.includes('Sucorinvest Money Market Fund')) {
+    console.log('ok    #ovFundFilterList');
+  } else {
+    console.log(`FAIL  #ovFundFilterList -> ${fundListHtml.slice(0, 200) || '(never rendered)'}`);
+    errors.push('#ovFundFilterList did not render the fund checklist');
   }
   if (errors.length) { console.log(`\n${errors.length} failure(s):\n` + errors.join('\n')); process.exit(1); }
   console.log('\nAll section loaders rendered.');

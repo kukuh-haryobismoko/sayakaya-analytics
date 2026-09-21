@@ -832,14 +832,71 @@ function loadHnwi() {
 
 // OVERVIEW
 let overviewLoaded = false;
+
+// Overview-wide fund filter — a separate multi-select from the "Select funds"
+// exclude-list further down this tab (that one only narrows the Largest
+// funds table). Reads straight from the checklist, same as topFundsExcluded()
+// below, so there's no separate state var to keep in sync.
+let overviewFundOptionsLoaded = false;
+async function loadOverviewFundOptions() {
+  let funds = [];
+  try { funds = await api('/api/funds/list'); } catch { return; }
+  $('#ovFundFilterList').innerHTML = funds.map((f) =>
+    `<label class="ask-table-chk"><input type="checkbox" value="${val(f.id)}"> ${val(f.name)}</label>`).join('');
+}
+function overviewFundIdsPicked() {
+  return $$('#ovFundFilterList input:checked').map((el) => el.value).filter(Boolean);
+}
+function overviewFundQs() {
+  const ids = overviewFundIdsPicked();
+  return ids.length ? `fundIds=${ids.join(',')}` : '';
+}
+function updateOverviewFundFilterBtn() {
+  const n = overviewFundIdsPicked().length;
+  $('#ovFundFilterBtn').textContent = n
+    ? t('ov_funds_selected').replace('{n}', n).replace('{s}', n === 1 ? '' : 's')
+    : t('ov_all_funds');
+}
+function filterOverviewFundList() {
+  const q = $('#ovFundFilterSearch').value.trim().toLowerCase();
+  $$('#ovFundFilterList label').forEach((lbl) => {
+    lbl.style.display = lbl.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+function overviewFundFilterSelectAll() {
+  $$('#ovFundFilterList input[type=checkbox]').forEach((cb) => { cb.checked = true; });
+  updateOverviewFundFilterBtn();
+}
+function overviewFundFilterClear() {
+  $$('#ovFundFilterList input[type=checkbox]').forEach((cb) => { cb.checked = false; });
+  updateOverviewFundFilterBtn();
+}
+
+// Platform AUM's own "as of" date — deliberately separate from the from/to
+// range above (that range only ever scoped buy/sell/transaction figures,
+// never AUM, which was confusing with both pickers sitting side by side).
+// Same defaulting pattern as topFundsDate below: fetch the latest available
+// date once, on first load.
+let ovAumDateDefaulted = false;
+
 async function loadOverview() {
   overviewLoaded = true;
+  if (!overviewFundOptionsLoaded) { overviewFundOptionsLoaded = true; loadOverviewFundOptions(); }
+  if (!ovAumDateDefaulted) {
+    ovAumDateDefaulted = true;
+    try {
+      const { latestDate } = await api('/api/funds/top/latest-date');
+      if (latestDate && !$('#ovAumDate').value) $('#ovAumDate').value = val(latestDate);
+    } catch { /* leave blank — /api/overview below will surface the error */ }
+  }
   const r = currentRange();
-  const qs = `?from=${r.from}&to=${r.to}`;
+  const fundQs = overviewFundQs();
+  const qs = `?from=${r.from}&to=${r.to}${fundQs ? '&' + fundQs : ''}`;
+  const aumQs = `?aumDate=${$('#ovAumDate').value}${fundQs ? '&' + fundQs : ''}&from=${r.from}&to=${r.to}`;
   $('#kpis').innerHTML = '<div class="loading">Loading metrics…</div>';
 
   try {
-    const o = await api('/api/overview' + qs);
+    const o = await api('/api/overview' + aumQs);
     renderKpis(o);
   } catch (e) { $('#kpis').innerHTML = `<div class="empty">${e.message}</div>`; }
 
@@ -849,11 +906,11 @@ async function loadOverview() {
   api('/api/breakdown/type' + qs).then(renderTypeChart).catch(() => {});
   api('/api/breakdown/status' + qs).then(renderStatusChart).catch(() => {});
   api('/api/users/verification').then(renderVerifyChart).catch(() => {});
-  api('/api/funds/types').then(renderFundTypeChart).catch(() => {});
+  api('/api/funds/types' + (fundQs ? '?' + fundQs : '')).then(renderFundTypeChart).catch(() => {});
   loadTopFunds();
-  api('/api/users/by-province').then(renderGeoChart).catch(() => {});
-  api('/api/users/top-cities?limit=15').then(renderTopCities).catch(() => {});
-  api('/api/users/top-cities-aum?limit=15').then(renderTopCitiesAum).catch(() => {});
+  api('/api/users/by-province' + (fundQs ? '?' + fundQs : '')).then(renderGeoChart).catch(() => {});
+  api('/api/users/top-cities?limit=15' + (fundQs ? '&' + fundQs : '')).then(renderTopCities).catch(() => {});
+  api('/api/users/top-cities-aum?limit=15' + (fundQs ? '&' + fundQs : '')).then(renderTopCitiesAum).catch(() => {});
 }
 
 // ---- Investor distribution map (chartjs-chart-geo choropleth) -------------
@@ -967,7 +1024,9 @@ function kpi(label, value, sub, cls = '', icon = '') {
 function renderKpis(o) {
   $('#kpis').innerHTML = [
     kpi(t('kpi_platform_aum'), idr(val(o.platform_aum)), `${num(val(o.investing_users))} ${t('kpi_investing_users')}`, 'accent', ICONS.coin),
-    kpi(t('kpi_total_users'), num(val(o.total_users)), `${num(val(o.verified_users))} ${t('kpi_verified')} (${pct(val(o.verified_users), val(o.total_users))})`, '', ICONS.users),
+    kpi(t('kpi_total_investors'), num(val(o.investing_users)),
+      `${num(val(o.total_users))} ${t('kpi_total_users')}<br>${num(val(o.verified_users))} ${t('kpi_verified')} (${pct(val(o.verified_users), val(o.total_users))})`,
+      '', ICONS.users),
     kpi(t('kpi_buy_volume'), idr(val(o.buy_volume)), `${num(val(o.buy_count))} ${t('kpi_completed_buys')}`, 'accent', ICONS.trendUp),
     kpi(t('kpi_sell_volume'), idr(val(o.sell_volume)), `${num(val(o.sell_count))} ${t('kpi_completed_sells')}`, 'warn', ICONS.trendDown),
     kpi(t('kpi_active_users'), num(val(o.active_users)), t('kpi_ge1_tx'), 'amber', ICONS.activity),
@@ -979,9 +1038,10 @@ function renderKpis(o) {
 
 async function loadTrends(gran) {
   const r = currentRange();
+  const fundQs = overviewFundQs();
   $('#trendFinding').hidden = true;
   try {
-    const data = await api(`/api/trends?from=${r.from}&to=${r.to}&granularity=${gran}`);
+    const data = await api(`/api/trends?from=${r.from}&to=${r.to}&granularity=${gran}${fundQs ? '&' + fundQs : ''}`);
     renderSeriesTrendFinding('#trendFinding', data, 'buy_volume', 'Buy volume');
     const labels = data.map((d) => val(d.bucket));
     paint('trendChart', {
@@ -4306,6 +4366,23 @@ function wire() {
   $('#churnCsv').addEventListener('click', () => download({ source: 'churn_risk', format: 'csv', filename: 'churn_risk', limit: 5000 }, 'churn_risk.csv'));
   $('#churnXlsx').addEventListener('click', () => download({ source: 'churn_risk', format: 'xlsx', filename: 'churn_risk', limit: 5000 }, 'churn_risk.xlsx'));
   $('#mlRetrainBtn').addEventListener('click', retrainMlModels);
+
+  // Overview-wide fund filter (KPIs, trend/breakdown charts, AUM by fund
+  // type, investor map, top cities) — separate from the exclude-list below.
+  // #ovAumDate rides along on the same Apply click (read directly inside
+  // loadOverview()), matching how #topFundsDate below only re-queries on its
+  // own explicit Apply too.
+  $('#ovFundFilterApply').addEventListener('click', () => { updateOverviewFundFilterBtn(); loadOverview(); });
+  $('#ovFundFilterSearch').addEventListener('input', filterOverviewFundList);
+  $('#ovFundFilterSelectAll').addEventListener('click', overviewFundFilterSelectAll);
+  $('#ovFundFilterClear').addEventListener('click', overviewFundFilterClear);
+  $('#ovFundFilterBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#ovFundFilterPanel').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#ovFundFilterDropdown')) $('#ovFundFilterPanel').classList.remove('open');
+  });
 
   // largest funds by AUM — by fund / by investment manager, as of a date,
   // with an exclude-funds menu (also affects the MI rollup)

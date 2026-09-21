@@ -51,6 +51,8 @@ const I18N = {
     range_from: `From`,
     range_to: `To`,
     apply: `Apply`,
+    common_select_all: `Select all`,
+    common_clear: `Clear`,
     theme_auto: `Auto`,
     theme_light: `Light`,
     theme_dark: `Dark`,
@@ -68,8 +70,8 @@ const I18N = {
     docs_li_language: `<b>Language</b> — top-right: switch between English and Bahasa Indonesia at any time; your choice is remembered.`,
 
     docs_panel_dashboards: `Dashboards`,
-    docs_overview_desc: `The single-page snapshot of the whole business: total assets under management, user counts, buy/sell volume, a transaction trend chart, fund breakdowns, and a map of where investors are located across Indonesia. The "Largest funds by AUM" table lists every fund/MI as of a date you pick (not just the top 10), and you can select which funds to include — deselecting a fund also removes its AUM from its MI's total.`,
-    docs_aum_desc: `How total assets under management (and the platform's own revenue) have moved over time.`,
+    docs_overview_desc: `The single-page snapshot of the whole business: total assets under management, user counts, buy/sell volume, a transaction trend chart, fund breakdowns, and a map of where investors are located across Indonesia. The Platform AUM card has its own as-of date (separate from the buy/sell date range at the top of the page) and only counts funds still listed as active, since a liquidated fund's balance shouldn't keep counting after it stops being an active position. A fund filter above the KPIs narrows AUM, transactions, and the fund charts to one or more chosen funds. The "Largest funds by AUM" table lists every fund/MI as of a date you pick (not just the top 10), and you can select which funds to include — deselecting a fund also removes its AUM from its MI's total.`,
+    docs_aum_desc: `How total assets under management (and the platform's own revenue) have moved over time, counting only funds still listed as active. A fund's balance stops counting once it's liquidated or delisted.`,
     docs_performance_desc: `How each fund's price (NAV) has performed — pick a time window from 1 day up to 5 years and compare funds side by side.`,
     docs_growth_desc: `Marketing and growth numbers: how well promo campaigns performed, who's referring the most new investors, and which funds people switch between most.`,
 
@@ -245,6 +247,10 @@ const I18N = {
     ov_investor_distribution: `Investor distribution by province`,
     ov_top_cities_investors: `Top cities by investors`,
     ov_top_cities_aum: `Top cities by AUM`,
+    ov_aum_as_of: `Platform AUM as of`,
+    ov_all_funds: `All funds`,
+    ov_funds_selected: `{n} fund{s} selected`,
+    ov_fund_filter_hint: `Platform AUM uses its own as-of date above and only counts active funds, independent of the transaction date range at the top of the page. The fund filter scopes the KPIs and charts above the Largest funds table to the selected fund(s); total, verified, and new user counts stay platform-wide, and the Largest funds table has its own fund picker.`,
     ov_largest_funds: `Largest funds by AUM`,
     ov_by_fund: `By fund`,
     ov_by_manager: `By investment manager`,
@@ -252,7 +258,7 @@ const I18N = {
     ov_largest_funds_hint: `Every fund/MI holding a position on the chosen date (not just the top 10). AUM = sum of holding value, investors = distinct investors holding a position. Deselect a fund to drop it from the numbers below — its MI's total reflects the removal too. Source: mi_fee_logs.portfolio_with_code, one day before its own created_at — this goes back further than portfolio_fix, which only starts in early August.`,
 
     aum_history_title: `AUM & revenue history`,
-    aum_history_hint: `End-of-period AUM (point-in-time) and revenue (aperd_share, summed). Uses the date range above. Source: mi_fee_logs.mi_fee.`,
+    aum_history_hint: `End-of-period AUM (point-in-time) and revenue (aperd_share, summed), active funds only. Uses the date range above. Source: mi_fee_logs.mi_fee.`,
 
     perf_trend_title: `Fund performance trend`,
     perf_trend_hint: `Daily NAV (actual price). Pick funds to compare them directly, or leave none picked to show the top performers by % change. Source: sayakaya.main.snapshots.`,
@@ -390,7 +396,8 @@ const I18N = {
     // ---- Phase 3: KPI cards + chart legends (added 2026-08-03) ----
     kpi_platform_aum: `Platform AUM`,
     kpi_investing_users: `investing users`,
-    kpi_total_users: `Total users`,
+    kpi_total_investors: `Total investors`,
+    kpi_total_users: `total users`,
     kpi_verified: `verified`,
     kpi_buy_volume: `Buy volume (range)`,
     kpi_completed_buys: `completed buys`,
@@ -461,6 +468,8 @@ const I18N = {
     range_from: `Dari`,
     range_to: `Sampai`,
     apply: `Terapkan`,
+    common_select_all: `Pilih semua`,
+    common_clear: `Bersihkan`,
     theme_auto: `Otomatis`,
     theme_light: `Terang`,
     theme_dark: `Gelap`,
@@ -478,8 +487,8 @@ const I18N = {
     docs_li_language: `<b>Bahasa</b> — kanan atas: beralih antara Bahasa Inggris dan Bahasa Indonesia kapan saja; pilihan Anda akan diingat.`,
 
     docs_panel_dashboards: `Dasbor`,
-    docs_overview_desc: `Ringkasan satu halaman untuk seluruh bisnis: total dana kelolaan (AUM), jumlah pengguna, volume beli/jual, grafik tren transaksi, rincian per produk, dan peta sebaran investor di seluruh Indonesia. Tabel "Produk terbesar berdasarkan AUM" menampilkan semua produk/MI per tanggal pilihan (bukan hanya 10 teratas), dan Anda bisa memilih produk mana saja yang ikut dihitung — membatalkan pilihan sebuah produk juga mengurangi AUM-nya dari total MI-nya.`,
-    docs_aum_desc: `Bagaimana total dana kelolaan (AUM) dan pendapatan platform berubah dari waktu ke waktu.`,
+    docs_overview_desc: `Ringkasan satu halaman untuk seluruh bisnis: total dana kelolaan (AUM), jumlah pengguna, volume beli/jual, grafik tren transaksi, rincian per produk, dan peta sebaran investor di seluruh Indonesia. Kartu AUM platform punya tanggal acuannya sendiri (terpisah dari rentang tanggal beli/jual di bagian atas halaman) dan hanya menghitung produk yang masih berstatus aktif, karena saldo produk yang sudah dilikuidasi seharusnya tidak lagi dihitung setelah produk itu tidak aktif. Filter produk di atas KPI membatasi AUM, transaksi, dan grafik produk ke satu atau beberapa produk pilihan. Tabel "Produk terbesar berdasarkan AUM" menampilkan semua produk/MI per tanggal pilihan (bukan hanya 10 teratas), dan Anda bisa memilih produk mana saja yang ikut dihitung — membatalkan pilihan sebuah produk juga mengurangi AUM-nya dari total MI-nya.`,
+    docs_aum_desc: `Bagaimana total dana kelolaan (AUM) dan pendapatan platform berubah dari waktu ke waktu, hanya menghitung produk yang masih berstatus aktif. Saldo sebuah produk berhenti dihitung begitu produk itu dilikuidasi atau dihapus dari pencatatan.`,
     docs_performance_desc: `Bagaimana kinerja harga (NAV) tiap produk — pilih rentang waktu dari 1 hari hingga 5 tahun dan bandingkan beberapa produk sekaligus.`,
     docs_growth_desc: `Angka pemasaran dan pertumbuhan: seberapa efektif kampanye promo, siapa yang paling banyak mereferensikan investor baru, dan produk apa yang paling sering dipindahkan (switching) investor.`,
 
@@ -655,6 +664,10 @@ const I18N = {
     ov_investor_distribution: `Sebaran investor per provinsi`,
     ov_top_cities_investors: `Kota teratas berdasarkan jumlah investor`,
     ov_top_cities_aum: `Kota teratas berdasarkan AUM`,
+    ov_aum_as_of: `AUM platform per tanggal`,
+    ov_all_funds: `Semua produk`,
+    ov_funds_selected: `{n} produk dipilih`,
+    ov_fund_filter_hint: `AUM platform memakai tanggal acuannya sendiri di atas dan hanya menghitung produk yang aktif, terpisah dari rentang tanggal transaksi di bagian atas halaman. Filter produk membatasi KPI dan grafik di atas tabel Produk terbesar ke produk yang dipilih; total, terverifikasi, dan pengguna baru tetap mencakup seluruh platform, dan tabel Produk terbesar punya pemilih produknya sendiri.`,
     ov_largest_funds: `Produk terbesar berdasarkan AUM`,
     ov_by_fund: `Berdasarkan produk`,
     ov_by_manager: `Berdasarkan manajer investasi`,
@@ -662,7 +675,7 @@ const I18N = {
     ov_largest_funds_hint: `Semua produk/MI yang punya posisi pada tanggal terpilih (bukan hanya 10 teratas). AUM = total nilai kepemilikan, investor = jumlah investor unik yang memiliki posisi. Hilangkan centang pada produk untuk membuangnya dari angka di bawah — total MI-nya ikut berkurang. Sumber: mi_fee_logs.portfolio_with_code, satu hari sebelum created_at-nya sendiri — datanya lebih ke belakang dibanding portfolio_fix, yang baru tersedia mulai awal Agustus.`,
 
     aum_history_title: `Riwayat AUM & pendapatan`,
-    aum_history_hint: `AUM akhir periode (point-in-time) dan pendapatan (aperd_share, dijumlahkan). Menggunakan rentang tanggal di atas. Sumber: mi_fee_logs.mi_fee.`,
+    aum_history_hint: `AUM akhir periode (point-in-time) dan pendapatan (aperd_share, dijumlahkan), hanya produk aktif. Menggunakan rentang tanggal di atas. Sumber: mi_fee_logs.mi_fee.`,
 
     perf_trend_title: `Tren performa produk`,
     perf_trend_hint: `NAV harian (harga aktual). Pilih produk untuk membandingkannya secara langsung, atau jangan pilih apa pun untuk melihat performa terbaik berdasarkan % perubahan. Sumber: sayakaya.main.snapshots.`,
@@ -800,7 +813,8 @@ const I18N = {
     // ---- Phase 3: KPI cards + chart legends (added 2026-08-03) ----
     kpi_platform_aum: `AUM platform`,
     kpi_investing_users: `pengguna berinvestasi`,
-    kpi_total_users: `Total pengguna`,
+    kpi_total_investors: `Total investor`,
+    kpi_total_users: `total pengguna`,
     kpi_verified: `terverifikasi`,
     kpi_buy_volume: `Volume beli (rentang)`,
     kpi_completed_buys: `pembelian selesai`,
