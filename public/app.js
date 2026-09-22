@@ -2459,6 +2459,59 @@ async function loadSitx() {
   } catch (e) { $('#sitxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
+// ---- nested: Users transactions (any investor, by SID/email/name) --------
+const utx = { limit: 50, offset: 0, total: 0 };
+
+async function loadUtxFundOptions() {
+  let funds = [];
+  try { funds = await api('/api/funds/list'); } catch { return; }
+  $('#utxFund').insertAdjacentHTML('beforeend', funds.map((f) =>
+    `<option value="${val(f.id)}">${val(f.name)}</option>`).join(''));
+}
+
+function utxParams() {
+  return {
+    q: $('#utxSearch').value.trim(),
+    type: $('#utxType').value,
+    status: $('#utxStatus').value,
+    fundId: $('#utxFund').value,
+    from: $('#utxFrom').value,
+    to: $('#utxTo').value,
+  };
+}
+
+async function loadUtx() {
+  const p = utxParams();
+  if (!p.q) { toast('Enter a SID, email, or name to search.'); return; }
+  $('#utxTable').innerHTML = '<div class="loading">Loading…</div>';
+  const qs = new URLSearchParams({ q: p.q });
+  if (p.type) qs.set('type', p.type);
+  if (p.status) qs.set('status', p.status);
+  if (p.fundId) qs.set('fundId', p.fundId);
+  if (p.from) qs.set('from', p.from);
+  if (p.to) qs.set('to', p.to);
+  qs.set('limit', utx.limit); qs.set('offset', utx.offset);
+  try {
+    const { rows, total } = await api(`/api/users-transactions?${qs}`);
+    utx.total = total;
+    genTable('#utxTable', rows, [
+      { key: 'created_at', label: 'Date', type: 'date' },
+      { key: 'transaction_number', label: 'Trx #' },
+      { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
+      { key: 'fund_name', label: 'Fund' },
+      { key: 'unit', label: 'Unit', type: 'num' },
+      { key: 'value_per_unit', label: 'NAV', type: 'num' },
+      { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
+    ], 'No transactions match these filters.');
+    const start = total ? utx.offset + 1 : 0;
+    const end = Math.min(utx.offset + utx.limit, total);
+    $('#utxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
+    $('#utxPrev').disabled = utx.offset === 0;
+    $('#utxNext').disabled = end >= total;
+  } catch (e) { $('#utxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
 // EXPLORER (multi-table)
 function tagClass(v) {
   const k = String(v).toLowerCase();
@@ -4574,6 +4627,17 @@ function wire() {
   $('#sitxXlsx').addEventListener('click', () => download(
     { source: 'sinvest_transactions', format: 'xlsx', filename: 'sinvest_transactions', ...sitxParams() }, 'sinvest_transactions.xlsx'));
 
+  // users transactions
+  $('#utxRun').addEventListener('click', () => { utx.offset = 0; loadUtx(); });
+  $('#utxPrev').addEventListener('click', () => { utx.offset = Math.max(0, utx.offset - utx.limit); loadUtx(); });
+  $('#utxNext').addEventListener('click', () => { utx.offset += utx.limit; loadUtx(); });
+  $('#utxCsv').addEventListener('click', () => download(
+    { source: 'users_transactions', format: 'csv', filename: 'users_transactions', ...utxParams() }, 'users_transactions.csv'));
+  $('#utxXlsx').addEventListener('click', () => download(
+    { source: 'users_transactions', format: 'xlsx', filename: 'users_transactions', ...utxParams() }, 'users_transactions.xlsx'));
+  $('#utxPdf').addEventListener('click', () => download(
+    { source: 'users_transactions', format: 'pdf', filename: 'users_transactions', ...utxParams() }, 'users_transactions.pdf'));
+
   $('#gran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $$('#gran button').forEach((x) => x.classList.toggle('on', x === b));
@@ -4739,6 +4803,7 @@ function wireGate() {
 // Runs once we know who's logged in (fresh login or a restored session).
 async function boot() {
   loadRemTxFilterOptions();
+  loadUtxFundOptions();
   // Overview is the landing tab. If this user isn't allowed on it,
   // applyPermissions() already switched to their first allowed tab (and
   // triggered that tab's own loader) before boot() runs — don't double-load.

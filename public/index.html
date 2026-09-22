@@ -189,6 +189,7 @@
           <button class="nav-link" data-tab="hnwi"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg></span>HNWI</button>
           <button class="nav-link" data-tab="send-statement"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Send statement</button>
           <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Send fund performance</button>
+          <button class="nav-link" data-tab="users-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Users transactions</button>
         </div>
         <div class="nav-group" data-group="operations">
           <div class="nav-label"><span data-i18n="nav_group_operations">Operations &amp; Finance</span><span class="nav-group-caret"></span></div>
@@ -747,6 +748,60 @@
           <button class="btn-ghost" id="fpeSchedDetailCloseBtn" data-i18n="common_close">Close</button>
         </div>
       </dialog>
+    </section>
+
+    <!-- USERS TRANSACTIONS — any investor's transactions by SID/email/name,
+         with type/status/fund/date filters. Same shape as Remisier
+         transactions (remisier-tx) below, keyed by investor identity
+         instead of referrer/sales code. -->
+    <section id="users-tx" class="view">
+      <div class="panel">
+        <div class="panel-head wrap"><h2>Users transactions</h2></div>
+        <div class="ask-bar" style="flex-wrap:wrap">
+          <input id="utxSearch" type="text" autocomplete="off" data-i18n-placeholder="utx_search_ph" placeholder="SID, email, or name" />
+          <select id="utxType">
+            <option value="" data-i18n="common_all_types">All types</option>
+            <option value="buy">buy</option>
+            <option value="sell">sell</option>
+            <option value="liquidation">liquidation</option>
+            <option value="reinvestment">reinvestment</option>
+            <option value="SWITCH_IN">SWITCH_IN</option>
+            <option value="SWITCH_OUT">SWITCH_OUT</option>
+          </select>
+          <select id="utxStatus" style="max-width:170px">
+            <option value="" data-i18n="common_all_statuses">All statuses</option>
+            <option value="completed">completed</option>
+            <option value="verified">verified</option>
+            <option value="verified_by_operational">verified_by_operational</option>
+            <option value="completed_payment">completed_payment</option>
+            <option value="pending_payment">pending_payment</option>
+            <option value="cancelled">cancelled</option>
+            <option value="expired">expired</option>
+          </select>
+          <select id="utxFund" style="max-width:180px"><option value="" data-i18n="ov_all_funds">All funds</option></select>
+          <label><span data-i18n="range_from">From</span> <input type="date" id="utxFrom" /></label>
+          <label><span data-i18n="range_to">To</span> <input type="date" id="utxTo" /></label>
+          <button id="utxRun" class="btn-primary" data-i18n="common_run">Run</button>
+        </div>
+        <span class="hint" data-i18n="utx_hint">Search by SID code, email, or name (partial match, required). Type, status, fund, and the date range (on transaction date) are optional refinements.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_tx_detail">Transaction detail</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="utxCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="utxXlsx" data-i18n="common_excel">Excel</button>
+            <button class="btn-ghost" id="utxPdf" data-i18n="common_pdf">PDF</button>
+          </div>
+        </div>
+        <div id="utxTable" class="table-wrap tall" style="margin-top:14px"></div>
+        <div class="pager">
+          <button id="utxPrev" class="btn-ghost" data-i18n="common_prev">← Prev</button>
+          <span id="utxPageinfo" class="mono"></span>
+          <button id="utxNext" class="btn-ghost" data-i18n="common_next">Next →</button>
+        </div>
+      </div>
     </section>
 
     <!-- PORTFOLIO (FIX) — same as PWC above, sourced from mi_fee_logs.portfolio_fix -->
@@ -2094,6 +2149,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Send fund performance</h3>
           <p>Broadcasts the "Reksa Dana Update" PDF (all fund types, NAV as of a chosen date) to a list of email addresses — search registered users to add their email, and/or paste a list of emails directly (one per line, or comma-separated). Sends one email per recipient, so one bad address doesn't block the rest. Separate tool from Send statement, which is scoped to one investor's own documents; this one can go to any list of emails, investor or not. Has its own send-history log, same as Send statement, and the same "+ New schedule" recurring/end-date option.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Users transactions</h3>
+          <p>Browse any investor's transactions by SID code, email, or name (partial match, required), with the buyer's contact info and fund name attached to every row: same join as Remisier transactions, but searched by investor identity instead of referrer/sales code. Refine further by transaction type, status, fund, or date range. Exports to CSV, Excel, or PDF.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg> HNWI</h3>

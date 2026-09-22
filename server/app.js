@@ -60,6 +60,7 @@ const EXPORT_SOURCE_TAB = {
   remisier_revenue_pwc_summary: 'remisier-pwc',
   remisier_transactions: 'remisier-tx',
   sinvest_transactions: 'sinvest-tx',
+  users_transactions: 'users-tx',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
   referral_program_detail: 'referral-program',
@@ -432,9 +433,9 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.largestFundsAum(req.query.groupBy, date, exclude);
     res.json(await runQuery(q.sql, q.params));
   }));
-  // Shared by Overview and Performance — allow either.
+  // Shared by Overview, Performance, and Users transactions (fund filter) — allow any.
   const requireOverviewOrPerformance = (req, res, next) => {
-    if (Auth.userCan(req.user, 'overview') || Auth.userCan(req.user, 'performance')) return next();
+    if (Auth.userCan(req.user, 'overview') || Auth.userCan(req.user, 'performance') || Auth.userCan(req.user, 'users-tx')) return next();
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/funds/types', requireOverviewOrPerformance, handler(async (req, res) => {
@@ -492,6 +493,18 @@ function createApp({ serveStatic = true } = {}) {
     const [rows, countRows] = await Promise.all([
       runQuery(q.sql, q.params),
       runQuery(q.countSql, q.params),
+    ]);
+    res.json({ rows, total: Number(countRows[0]?.total || 0) });
+  }));
+
+  // ---- Users transactions (any investor, by SID/email/name) -----------------
+  app.get('/api/users-transactions', requireTab('users-tx'), handler(async (req, res) => {
+    const { q, type, status, fundId, from, to, limit, offset } = req.query;
+    if (!q) return res.status(400).json({ error: 'A SID, email, or name search is required.' });
+    const query = Q.usersTransactions({ q, type, status, fundId, from, to, limit: limit || 50, offset: offset || 0 });
+    const [rows, countRows] = await Promise.all([
+      runQuery(query.sql, query.params),
+      runQuery(query.countSql, query.params),
     ]);
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
@@ -1309,6 +1322,15 @@ function createApp({ serveStatic = true } = {}) {
     } else if (source === 'sinvest_transactions') {
       const q = Q.sinvestTransactions({ from: req.body.from, to: req.body.to, type: req.body.type, sid: req.body.sid, search: req.body.search, limit: limit || 100000, offset: 0 });
       rows = await runQuery(q.sql, q.params);
+    } else if (source === 'users_transactions') {
+      const { q: searchQ, type, status, fundId, from, to } = req.body;
+      if (!searchQ) return res.status(400).json({ error: 'A SID, email, or name search is required.' });
+      const q = Q.usersTransactions({ q: searchQ, type, status, fundId, from, to, limit: limit || 100000, offset: 0 });
+      rows = await runQuery(q.sql, q.params);
+      if (format === 'pdf') {
+        const buf = await PDF.usersTransactionsReport(rows, { username, query: searchQ });
+        return sendPdf(res, buf, filename, username);
+      }
     } else if (source === 'hnwi_total') {
       if (!req.body.date) return res.status(400).json({ error: 'date is required.' });
       const q = Q.hnwiTotal(req.body.date, req.body.minAum, req.body.maxAum, limit || 5000);

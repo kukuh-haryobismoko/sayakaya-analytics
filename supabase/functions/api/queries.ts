@@ -2363,6 +2363,55 @@ export function remisierTransactions(
   };
 }
 
+// ---- Users transactions: any investor's transactions by SID/email/name
+// (partial match, caller requires at least one — this table has hundreds of
+// thousands of rows), with type/status/fund/date refinements on top. Same
+// users/user_profiles/funds join as remisierTransactions above, just keyed
+// by investor identity instead of referrer/sales code.
+export interface UsersTransactionsArgs {
+  q?: string; type?: string; status?: string; fundId?: string;
+  from?: string; to?: string; limit?: number | string; offset?: number | string;
+}
+
+export function usersTransactions(
+  { q, type, status, fundId, from, to, limit = 100, offset = 0 }: UsersTransactionsArgs,
+): Query {
+  const params: Record<string, unknown> = {
+    ...range(from, to),
+    limit: parseInt(String(limit), 10),
+    offset: parseInt(String(offset), 10),
+  };
+  let where = 'DATE(t.created_at) BETWEEN @from AND @to';
+  const term = String(q || '').trim();
+  if (term) {
+    where += ' AND (LOWER(u.sid_code) LIKE @q OR LOWER(u.email) LIKE @q OR LOWER(up.name) LIKE @q)';
+    params.q = `%${term.toLowerCase()}%`;
+  }
+  if (type) { where += ' AND t.type = @type'; params.type = type; }
+  if (status) { where += ' AND t.status = @status'; params.status = status; }
+  if (fundId) { where += ' AND t.fund_id = @fundId'; params.fundId = fundId; }
+  return {
+    sql: `SELECT
+        t.id, t.transaction_number, t.type, t.status, t.created_at,
+        t.unit, t.amount, t.final_amount, t.value_per_unit,
+        u.sid_code AS sid, u.email, up.name, up.phone_number AS phone,
+        f.name AS fund_name
+      FROM ${TX} t
+      JOIN ${USERS} u ON u.id = t.user_id
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+      WHERE ${where}
+      ORDER BY t.created_at DESC
+      LIMIT @limit OFFSET @offset`,
+    params,
+    countSql: `SELECT COUNT(*) AS total
+      FROM ${TX} t
+      JOIN ${USERS} u ON u.id = t.user_id
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      WHERE ${where}`,
+  };
+}
+
 // ---- Revenue v2: same shape/columns as revenueDetail/revenueMonthlySummary
 // above, but AUM comes from goal_snapshots instead of
 // mi_fee_logs.portfolio_with_code — goal_snapshots.date is already the

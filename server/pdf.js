@@ -444,10 +444,40 @@ function transactionStatement({ contact, transactions }, monthLabel, options = {
   return bufferDoc(doc);
 }
 
+// Users transactions export — rows span many investors (unlike TX_COLS
+// above, which already has its one investor's contact in the letterhead),
+// so each row carries its own SID/name/email/phone. Landscape for the extra
+// columns, same as fundPerformanceReport.
+const USERS_TX_COLS = (width) => [
+  { key: 'created_at', label: 'Date', width: width * 0.08, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : '—'; } },
+  { key: 'type', label: 'Type', width: width * 0.08 },
+  { key: 'status', label: 'Status', width: width * 0.10 },
+  { key: 'sid', label: 'SID', width: width * 0.10 },
+  { key: 'name', label: 'Name', width: width * 0.15 },
+  { key: 'email', label: 'Email', width: width * 0.17 },
+  { key: 'phone', label: 'Phone', width: width * 0.10 },
+  { key: 'fund_name', label: 'Fund', width: width * 0.13 },
+  { key: 'amount', label: 'Amount', width: width * 0.09, align: 'right', format: idNum },
+];
+
+function usersTransactionsReport(rows, options = {}) {
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 });
+  if (options.username) doc.info.Author = options.username;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  perfReportHeader(doc, 'Users transactions', options.query ? `Search: ${options.query}` : formatDateID());
+  if (rows.length) {
+    table(doc, USERS_TX_COLS(width), rows, { fontSize: 7 });
+  } else {
+    doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No transactions match these filters.');
+  }
+  return bufferDoc(doc);
+}
+
 module.exports = {
   portfolioReport,
   transactionStatement,
   fundPerformanceReport,
+  usersTransactionsReport,
   // Exported for server/sheets.js, so the Google Sheets export mirrors this
   // PDF's exact columns, number formatting, and disclaimer text instead of
   // re-implementing them.

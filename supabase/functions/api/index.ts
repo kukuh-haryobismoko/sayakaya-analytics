@@ -9,7 +9,7 @@ import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
 import * as MLTrain from './ml-train.ts';
-import { portfolioReport, fundPerformanceReport, val } from './pdf.ts';
+import { portfolioReport, fundPerformanceReport, usersTransactionsReport, val } from './pdf.ts';
 import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 import * as Mail from './mail.ts';
@@ -52,6 +52,7 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   remisier_revenue_pwc_summary: 'remisier-pwc',
   remisier_transactions: 'remisier-tx',
   sinvest_transactions: 'sinvest-tx',
+  users_transactions: 'users-tx',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
   referral_program_detail: 'referral-program',
@@ -527,8 +528,8 @@ on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance'], async (
   const q = Q.fundTypes(parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
-// Shared by Overview (fund-filter dropdown) and Performance (trend picker).
-on('GET', '/api/funds/list', requireAnyTab(['overview', 'performance'], async (_req, _params, url) => {
+// Shared by Overview (fund-filter dropdown), Performance (trend picker), and Users transactions (fund filter).
+on('GET', '/api/funds/list', requireAnyTab(['overview', 'performance', 'users-tx'], async (_req, _params, url) => {
   const q = Q.fundList(qp(url, 'type'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -578,6 +579,22 @@ on('GET', '/api/sinvest-transactions', requireTab('sinvest-tx', async (_req, _pa
   const q = Q.sinvestTransactions({
     from: qp(url, 'from'), to: qp(url, 'to'),
     type: qp(url, 'type'), sid: qp(url, 'sid'), search: qp(url, 'search'),
+    limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
+  });
+  const [rows, countRows] = await Promise.all([
+    runQuery(q.sql, q.params),
+    runQuery(q.countSql!, q.params),
+  ]);
+  return json({ rows, total: Number(countRows[0]?.total || 0) });
+}));
+
+// ---- Users transactions (any investor, by SID/email/name) -----------------
+on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params, url) => {
+  const q2 = qp(url, 'q');
+  if (!q2) return json({ error: 'A SID, email, or name search is required.' }, 400);
+  const q = Q.usersTransactions({
+    q: q2, type: qp(url, 'type'), status: qp(url, 'status'), fundId: qp(url, 'fundId'),
+    from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
   });
   const [rows, countRows] = await Promise.all([
@@ -1412,6 +1429,20 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
   } else if (source === 'sinvest_transactions') {
     const q = Q.sinvestTransactions({ from: body.from as string, to: body.to as string, type: body.type as string, sid: body.sid as string, search: body.search as string, limit: limit || 100000, offset: 0 });
     rows = await runQuery(q.sql, q.params);
+  } else if (source === 'users_transactions') {
+    const searchQ = body.q as string;
+    if (!searchQ) return json({ error: 'A SID, email, or name search is required.' }, 400);
+    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
+    rows = await runQuery(q.sql, q.params);
+    if (format === 'pdf') {
+      const buf = await usersTransactionsReport(rows, { username, query: searchQ });
+      return new Response(new Uint8Array(buf), {
+        headers: {
+          'content-type': 'application/pdf',
+          'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
+        },
+      });
+    }
   } else if (source === 'hnwi_total') {
     if (!body.date) return json({ error: 'date is required.' }, 400);
     const q = Q.hnwiTotal(body.date as string, body.minAum as string, body.maxAum as string, (limit as number) || 5000);

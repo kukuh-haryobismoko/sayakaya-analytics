@@ -330,6 +330,9 @@ const I18N = {
     remtx_referrer_ph: `referrer_code(s), partial match, comma separated`,
     remtx_sales_ph: `sales_code(s), partial match, comma separated`,
 
+    utx_search_ph: `SID, email, or name`,
+    utx_hint: `Search by SID code, email, or name (partial match, required). Type, status, fund, and the date range (on transaction date) are optional refinements.`,
+
     predict_model_status: `Model status`,
     predict_retrain_now: `Retrain now`,
     predict_retrain_checking: `Checking last retrain…`,
@@ -746,6 +749,9 @@ const I18N = {
     remtx_filters_hint: `Difilter berdasarkan tanggal transaksi. Setiap kode adalah kecocokan sebagian yang tidak peka huruf besar/kecil (mis. CE cocok dengan CELIA/CENIA) — isi satu kolom untuk filter tunggal, atau keduanya agar cocok dengan salah satu, dan kedua kolom menerima banyak kode dipisah koma.`,
     remtx_referrer_ph: `referrer_code, kecocokan sebagian, dipisah koma`,
     remtx_sales_ph: `sales_code, kecocokan sebagian, dipisah koma`,
+
+    utx_search_ph: `SID, email, atau nama`,
+    utx_hint: `Cari berdasarkan kode SID, email, atau nama (kecocokan sebagian, wajib diisi). Jenis, status, produk, dan rentang tanggal (berdasarkan tanggal transaksi) adalah filter tambahan opsional.`,
 
     predict_model_status: `Status model`,
     predict_retrain_now: `Latih ulang sekarang`,
