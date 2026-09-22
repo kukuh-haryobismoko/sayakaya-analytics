@@ -776,11 +776,13 @@ const HNWI_RISK_COLS = [
 ];
 async function hnwiEnsureDate() {
   if (!hnwiDateDefaulted) {
-    hnwiDateDefaulted = true;
     try {
       const { latestDate } = await api('/api/hnwi/latest-date');
-      if (latestDate && !$('#hnwiDate').value) $('#hnwiDate').value = val(latestDate);
-    } catch { /* leave blank — user can still pick a date manually */ }
+      if (latestDate) {
+        hnwiDateDefaulted = true;
+        if (!$('#hnwiDate').value) $('#hnwiDate').value = val(latestDate);
+      }
+    } catch { /* leave blank and retry on next load — user can still pick a date manually */ }
   }
   return !!$('#hnwiDate').value;
 }
@@ -883,11 +885,13 @@ async function loadOverview() {
   overviewLoaded = true;
   if (!overviewFundOptionsLoaded) { overviewFundOptionsLoaded = true; loadOverviewFundOptions(); }
   if (!ovAumDateDefaulted) {
-    ovAumDateDefaulted = true;
     try {
       const { latestDate } = await api('/api/funds/top/latest-date');
-      if (latestDate && !$('#ovAumDate').value) $('#ovAumDate').value = val(latestDate);
-    } catch { /* leave blank — /api/overview below will surface the error */ }
+      if (latestDate) {
+        ovAumDateDefaulted = true;
+        if (!$('#ovAumDate').value) $('#ovAumDate').value = val(latestDate);
+      }
+    } catch { /* leave blank and retry on next load — /api/overview below will surface the error meanwhile */ }
   }
   const r = currentRange();
   const fundQs = overviewFundQs();
@@ -1136,11 +1140,13 @@ function loadTopFundsTable() {
 }
 async function loadTopFunds() {
   if (!topFundsDateDefaulted) {
-    topFundsDateDefaulted = true;
     try {
       const { latestDate } = await api('/api/funds/top/latest-date');
-      if (latestDate && !$('#topFundsDate').value) $('#topFundsDate').value = val(latestDate);
-    } catch { /* leave blank — user can still pick a date manually */ }
+      if (latestDate) {
+        topFundsDateDefaulted = true;
+        if (!$('#topFundsDate').value) $('#topFundsDate').value = val(latestDate);
+      }
+    } catch { /* leave blank and retry on next load — user can still pick a date manually */ }
   }
   const date = $('#topFundsDate').value;
   if (!date) { $('#topFunds').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
