@@ -2553,6 +2553,7 @@ async function loadEvcUsers() {
       { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
       { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
       { key: 'created_at', label: 'Registered at', type: 'date' }, { key: 'verified_at', label: 'Verified at', type: 'date' },
+      { key: 'verification_status', label: 'KYC status' },
     ], 'No users tagged with this code in this range.');
     const start = total ? evcUsers.offset + 1 : 0;
     const end = Math.min(evcUsers.offset + evcUsers.limit, total);

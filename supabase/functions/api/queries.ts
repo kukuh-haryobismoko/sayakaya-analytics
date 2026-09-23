@@ -2438,7 +2438,7 @@ export const eventCodeUsers = (
   const where = `${eventCodeWhere(field)} AND DATE(u.created_at) BETWEEN @from AND @to`;
   return {
     sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email,
-        u.referrer_code, u.sales_code, u.created_at, u.verified_at
+        u.referrer_code, u.sales_code, u.created_at, u.verified_at, u.verification_status
       FROM ${USERS} u
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
       WHERE ${where}
@@ -2460,7 +2460,7 @@ export const eventCodeFunnel = (field: string | undefined, codes: string[] | str
   const r = range(from, to);
   return {
     sql: `WITH tagged AS (
-        SELECT u.id AS user_id, u.verified_at
+        SELECT u.id AS user_id, u.verification_status
         FROM ${USERS} u
         WHERE ${eventCodeWhere(field)}
           AND DATE(u.created_at) BETWEEN @from AND @to
@@ -2474,7 +2474,7 @@ export const eventCodeFunnel = (field: string | undefined, codes: string[] | str
       )
       SELECT
         COUNT(*) AS tagged,
-        COUNTIF(tg.verified_at IS NOT NULL) AS verified,
+        COUNTIF(tg.verification_status = 'verified') AS verified,
         COUNTIF(COALESCE(tc.tx_count, 0) >= 1) AS transacted,
         COUNTIF(COALESCE(tc.tx_count, 0) >= 2) AS repeat_transacted
       FROM tagged tg
