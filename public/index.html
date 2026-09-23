@@ -201,6 +201,7 @@
           <button class="nav-link" data-tab="campaign-revenue"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Campaign revenue</button>
           <button class="nav-link" data-tab="referral-program"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gift"></use></svg></span>Referral program</button>
           <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Referral Program (kyc based)</button>
+          <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
           <button class="nav-link" data-tab="remisier"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg></span>Remisier sharing (GS)</button>
           <button class="nav-link" data-tab="remisier-pwc"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg></span>Remisier sharing (PWC)</button>
           <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Remisier transactions</button>
@@ -1757,6 +1758,102 @@
       </div>
     </section>
 
+    <!-- EVENT CODE TRACKING (generic — no event/code table exists yet, see
+         server/queries.js:eventCodeWhere. field picks which users column an
+         eventual event's codes will land in, same selector as Remisier
+         below; swap in a real event-specific query once one is defined. -->
+    <section id="event-code" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="evc_filters_title">Event code</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="evcFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="evcTo" /></label>
+            <button id="evcApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="ask-bar" style="flex-wrap:wrap; margin-top:10px">
+          <select id="evcField">
+            <option value="sales_code">users.sales_code</option>
+            <option value="referrer_code">users.referrer_code</option>
+          </select>
+          <input id="evcCodes" type="text" autocomplete="off" data-i18n-placeholder="evc_codes_ph" placeholder="Event code(s), partial match, comma separated" style="min-width:260px" />
+        </div>
+        <span class="hint" data-i18n="evc_hint">No dedicated event/code table exists yet, so this matches whichever of users.sales_code or users.referrer_code the event ends up using. From/To filters by registration date (when a user got tagged with the code) — it drives the funnel, cohort, and user list below. Transaction detail further down filters by transaction date instead.</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="evc_funnel_title">Funnel</h2></div>
+        <span class="hint" data-i18n="evc_funnel_hint">Generic 4-step funnel: tagged with the code → KYC verified → made a transaction → made a repeat transaction. Swap in the event's real steps once it has its own rules.</span>
+        <div id="evcFunnel" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="evc_users_title">Users tagged with this code</h2></div>
+        <div id="evcUsersTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_tx_detail">Transaction detail</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="evcTxCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="evcTxXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <div class="ask-bar" style="flex-wrap:wrap">
+          <select id="evcTxType">
+            <option value="" data-i18n="common_all_types">All types</option>
+            <option value="buy">buy</option>
+            <option value="sell">sell</option>
+            <option value="liquidation">liquidation</option>
+            <option value="reinvestment">reinvestment</option>
+            <option value="SWITCH_IN">SWITCH_IN</option>
+            <option value="SWITCH_OUT">SWITCH_OUT</option>
+          </select>
+          <select id="evcTxStatus" style="max-width:170px">
+            <option value="" data-i18n="common_all_statuses">All statuses</option>
+            <option value="completed">completed</option>
+            <option value="verified">verified</option>
+            <option value="verified_by_operational">verified_by_operational</option>
+            <option value="completed_payment">completed_payment</option>
+            <option value="pending_payment">pending_payment</option>
+            <option value="cancelled">cancelled</option>
+            <option value="expired">expired</option>
+          </select>
+          <label><span data-i18n="range_from">From</span> <input type="date" id="evcTxFrom" /></label>
+          <label><span data-i18n="range_to">To</span> <input type="date" id="evcTxTo" /></label>
+          <button id="evcTxRun" class="btn-primary" data-i18n="common_run">Run</button>
+        </div>
+        <span class="hint" data-i18n="evc_tx_hint">Uses the same field/code(s) above, but its own date range — on transaction date, not registration date.</span>
+        <div id="evcTxTable" class="table-wrap tall" style="margin-top:14px"></div>
+        <div class="pager">
+          <button id="evcTxPrev" class="btn-ghost" data-i18n="common_prev">← Prev</button>
+          <span id="evcTxPageinfo" class="mono"></span>
+          <button id="evcTxNext" class="btn-ghost" data-i18n="common_next">Next →</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="evc_cohort_reg_title">Cohort retention — by registration date</h2>
+          <div class="seg" id="evcGran">
+            <button data-g="day" data-i18n="common_day">Day</button>
+            <button data-g="week" class="on" data-i18n="common_week">Week</button>
+            <button data-g="month" data-i18n="common_month">Month</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="evc_cohort_reg_hint">Cohort = the period a tagged user registered in (Day/Week/Month, pick above — also applies to the first-transaction cohort below). Includes every tagged user, even ones who never transacted. % retained = users from that cohort who made a transaction in each later period, up to 12 periods out.</span>
+        <div id="evcCohortRegHeatmap" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="evc_cohort_tx_title">Cohort retention — by first transaction date</h2></div>
+        <span class="hint" data-i18n="evc_cohort_tx_hint">Cohort = the period a tagged user's first transaction landed in — same basis as the Predict tab's retention cohorts. Only includes tagged users who transacted at least once. % retained = users from that cohort who made another transaction in each later period, up to 12 periods out.</span>
+        <div id="evcCohortTxHeatmap" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
     <!-- REMISIER SHARING (goal_snapshots) -->
     <section id="remisier" class="view">
       <div class="panel">
@@ -2195,6 +2292,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg> Referral Program (kyc based)</h3>
           <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition (and, correspondingly, which invitees show up in the Invited users table below it). Here, "Invited" is gated by the invitee's KYC verification date instead of their registration date (with the same 1-day grace window) — an invitee who was verified inside the period counts as invited even if they registered long before it, and one who's never been verified never counts, no matter how old the referral. Use this tab when you want "who's KYC-verified and in play for this campaign," rather than "who signed up because of this campaign."</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Event code tracking</h3>
+          <p>A generic, ready-to-use tab for tracking an event's own referral/sales code, built ahead of any actual event — no code or campaign has been set up yet, so pick whichever of users.sales_code or users.referrer_code the event ends up using, then type in its code(s). Shows a funnel (tagged with the code → KYC verified → transacted → transacted again), the list of tagged users, their transaction detail (own date range, exportable), and a cohort retention table with the grain — Day/Week/Month — picked at run time. Update this write-up once the real event's rules replace the generic funnel/cohort steps.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg> Remisier sharing (GS) / (PWC)</h3>

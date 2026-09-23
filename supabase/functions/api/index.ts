@@ -59,6 +59,7 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   referral_program_alt_detail: 'referral-program-alt',
   referral_program_invited: 'referral-program',
   referral_program_alt_invited: 'referral-program-alt',
+  event_code_transactions: 'event-code',
 };
 
 // Splits flat detail rows into one worksheet per distinct value of keyField —
@@ -596,6 +597,48 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
     q: q2, type: qp(url, 'type'), status: qp(url, 'status'), fundId: qp(url, 'fundId'),
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
+  });
+  const [rows, countRows] = await Promise.all([
+    runQuery(q.sql, q.params),
+    runQuery(q.countSql!, q.params),
+  ]);
+  return json({ rows, total: Number(countRows[0]?.total || 0) });
+}));
+
+// ---- Event code tracking (generic — see queries.ts:eventCodeWhere for why
+// `field` still picks referrer_code vs sales_code instead of a real event
+// column) — funnel, tagged users, cohort, and transaction detail for
+// whatever referral/sales codes an eventual event hands out. ----------------
+on('GET', '/api/event-code/users', requireTab('event-code', async (_req, _params, url) => {
+  const codes = qpAll(url, 'codes');
+  if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
+  const q = Q.eventCodeUsers(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/event-code/funnel', requireTab('event-code', async (_req, _params, url) => {
+  const codes = qpAll(url, 'codes');
+  if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
+  const q = Q.eventCodeFunnel(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'));
+  const rows = await runQuery(q.sql, q.params);
+  return json(rows[0] || { tagged: 0, verified: 0, transacted: 0, repeat_transacted: 0 });
+}));
+on('GET', '/api/event-code/cohort', requireTab('event-code', async (_req, _params, url) => {
+  const codes = qpAll(url, 'codes');
+  if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
+  const q = Q.eventCodeCohort(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'), qp(url, 'grain'), qp(url, 'periods'), qp(url, 'basis'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/event-code/transactions', requireTab('event-code', async (_req, _params, url) => {
+  const codes = qpAll(url, 'codes');
+  if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
+  const field = qp(url, 'field');
+  const referrerCodes = field === 'referrer_code' ? codes : [];
+  const salesCodes = field === 'referrer_code' ? [] : codes;
+  const q = Q.remisierTransactions({
+    referrerCodes, salesCodes,
+    type: qp(url, 'type'), status: qp(url, 'status'),
+    from: qp(url, 'from'), to: qp(url, 'to'),
+    limit: qp(url, 'limit') || 100, offset: qp(url, 'offset') || 0,
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -1443,6 +1486,14 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
         },
       });
     }
+  } else if (source === 'event_code_transactions') {
+    const codes = (body.codes as string[]) || [];
+    if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
+    const field = body.field as string;
+    const referrerCodes = field === 'referrer_code' ? codes : [];
+    const salesCodes = field === 'referrer_code' ? [] : codes;
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
+    rows = await runQuery(q.sql, q.params);
   } else if (source === 'hnwi_total') {
     if (!body.date) return json({ error: 'date is required.' }, 400);
     const q = Q.hnwiTotal(body.date as string, body.minAum as string, body.maxAum as string, (limit as number) || 5000);

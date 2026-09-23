@@ -2412,6 +2412,130 @@ export function usersTransactions(
   };
 }
 
+// ---- Event code tracking (generic): an event that doesn't exist yet will
+// hand out its own referral/sales codes, but neither the codes nor even
+// which users column they'll land in are decided yet. So, like the Remisier
+// tabs above, `field` picks referrer_code or sales_code at query time
+// instead of hardcoding one, and `codes` is whatever wildcard list the
+// caller types in — swap in a real field/column once the event defines one.
+const normalizeCodes = (codes: string[] | string): string[] =>
+  (Array.isArray(codes) ? codes : [codes]).map((c) => String(c).trim().toUpperCase()).filter(Boolean);
+const eventCodeWhere = (field?: string): string => {
+  const col = remisierFieldColumn(field);
+  return `u.${col} IS NOT NULL AND EXISTS (SELECT 1 FROM UNNEST(@codes) c WHERE UPPER(u.${col}) LIKE CONCAT('%', c, '%'))`;
+};
+
+// Users tagged with the code, registered in the window — the population the
+// funnel and cohort below are computed over.
+export const eventCodeUsers = (field: string | undefined, codes: string[] | string, from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email,
+        u.referrer_code, u.sales_code, u.created_at, u.verified_at
+      FROM ${USERS} u
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      WHERE ${eventCodeWhere(field)}
+        AND DATE(u.created_at) BETWEEN @from AND @to
+      ORDER BY u.created_at`,
+    params: { ...r, codes: normalizeCodes(codes) },
+  };
+};
+
+// Generic 4-step acquisition funnel (tagged -> KYC verified -> transacted ->
+// repeat transacted) since the event's own rules don't exist yet — swap or
+// extend the steps once they're defined. "Transacted" mirrors the referral
+// program's own convention: a completed-or-in-flight buy (type='buy', not
+// expired/cancelled), not necessarily settled yet.
+export const eventCodeFunnel = (field: string | undefined, codes: string[] | string, from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH tagged AS (
+        SELECT u.id AS user_id, u.verified_at
+        FROM ${USERS} u
+        WHERE ${eventCodeWhere(field)}
+          AND DATE(u.created_at) BETWEEN @from AND @to
+      ),
+      tx_counts AS (
+        SELECT t.user_id, COUNT(*) AS tx_count
+        FROM ${TX} t
+        JOIN tagged tg ON tg.user_id = t.user_id
+        WHERE t.type = 'buy' AND t.status NOT IN ('expired', 'cancelled')
+        GROUP BY t.user_id
+      )
+      SELECT
+        COUNT(*) AS tagged,
+        COUNTIF(tg.verified_at IS NOT NULL) AS verified,
+        COUNTIF(COALESCE(tc.tx_count, 0) >= 1) AS transacted,
+        COUNTIF(COALESCE(tc.tx_count, 0) >= 2) AS repeat_transacted
+      FROM tagged tg
+      LEFT JOIN tx_counts tc ON tc.user_id = tg.user_id`,
+    params: { ...r, codes: normalizeCodes(codes) },
+  };
+};
+
+// Cohort retention, grain picked at query time (day/week/month/quarter), two
+// bases to choose from since "cohort" is ambiguous for an acquisition code:
+//   - 'registration' (default): cohort = the period a tagged user registered
+//     in. Includes every tagged user, even ones who never transacted — an
+//     acquisition-funnel view (of everyone tagged, how many converted when).
+//   - 'first_tx': cohort = the period a tagged user's first buy transaction
+//     landed in, same basis as ml.ts:retentionCohorts. Excludes tagged users
+//     with no qualifying transaction at all (they have no first_tx to anchor
+//     on) — a pure engagement/repeat-purchase view.
+// Either way, retained-in-a-later-period means "made a buy transaction in
+// it". `periods` caps how many offsets past cohort 0 to compute (capped at
+// 52, same idea as ml.ts:retentionCohorts' month cap) so a day-grain cohort
+// from years ago doesn't blow up into thousands of columns.
+export const eventCodeCohort = (
+  field: string | undefined, codes: string[] | string, from: string | undefined, to: string | undefined,
+  grain?: string, periods?: number | string, basis?: string,
+): Query => {
+  const r = range(from, to);
+  const part = granularityPart(grain, 'WEEK');
+  const n = Math.min(parseInt(String(periods), 10) || 12, 52);
+  const taggedCte = basis === 'first_tx'
+    ? `tagged AS (
+        SELECT ft.user_id, DATE_TRUNC(DATE(ft.first_tx_at), ${part}) AS cohort
+        FROM (
+          SELECT u.id AS user_id,
+            ARRAY_AGG(t.created_at ORDER BY t.created_at ASC LIMIT 1)[OFFSET(0)] AS first_tx_at
+          FROM ${USERS} u
+          JOIN ${TX} t ON t.user_id = u.id AND t.type = 'buy' AND t.status NOT IN ('expired', 'cancelled')
+          WHERE ${eventCodeWhere(field)}
+            AND DATE(u.created_at) BETWEEN @from AND @to
+          GROUP BY u.id
+        ) ft
+      )`
+    : `tagged AS (
+        SELECT u.id AS user_id, DATE_TRUNC(DATE(u.created_at), ${part}) AS cohort
+        FROM ${USERS} u
+        WHERE ${eventCodeWhere(field)}
+          AND DATE(u.created_at) BETWEEN @from AND @to
+      )`;
+  return {
+    sql: `WITH ${taggedCte},
+      cohort_sizes AS (
+        SELECT cohort, COUNT(*) AS cohort_size FROM tagged GROUP BY cohort
+      ),
+      act AS (
+        SELECT DISTINCT t.user_id, DATE_TRUNC(DATE(t.created_at), ${part}) AS p
+        FROM ${TX} t
+        JOIN tagged tg ON tg.user_id = t.user_id
+        WHERE t.type = 'buy' AND t.status NOT IN ('expired', 'cancelled')
+      )
+      SELECT tg.cohort, DATE_DIFF(a.p, tg.cohort, ${part}) AS period_offset,
+        COUNT(DISTINCT a.user_id) AS users,
+        ANY_VALUE(cs.cohort_size) AS cohort_size
+      FROM tagged tg
+      JOIN act a ON a.user_id = tg.user_id
+      JOIN cohort_sizes cs ON cs.cohort = tg.cohort
+      WHERE DATE_DIFF(a.p, tg.cohort, ${part}) BETWEEN 0 AND ${n}
+      GROUP BY tg.cohort, period_offset
+      ORDER BY tg.cohort, period_offset`,
+    params: { ...r, codes: normalizeCodes(codes) },
+  };
+};
+
 // ---- Revenue v2: same shape/columns as revenueDetail/revenueMonthlySummary
 // above, but AUM comes from goal_snapshots instead of
 // mi_fee_logs.portfolio_with_code — goal_snapshots.date is already the

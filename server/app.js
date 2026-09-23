@@ -67,6 +67,7 @@ const EXPORT_SOURCE_TAB = {
   referral_program_alt_detail: 'referral-program-alt',
   referral_program_invited: 'referral-program',
   referral_program_alt_invited: 'referral-program-alt',
+  event_code_transactions: 'event-code',
 };
 
 // Splits flat detail rows into one worksheet per distinct value of keyField —
@@ -505,6 +506,46 @@ function createApp({ serveStatic = true } = {}) {
     const [rows, countRows] = await Promise.all([
       runQuery(query.sql, query.params),
       runQuery(query.countSql, query.params),
+    ]);
+    res.json({ rows, total: Number(countRows[0]?.total || 0) });
+  }));
+
+  // ---- Event code tracking (generic — see queries.js:eventCodeWhere for why
+  // `field` still picks referrer_code vs sales_code instead of a real event
+  // column) — funnel, tagged users, cohort, and transaction detail for
+  // whatever referral/sales codes an eventual event hands out. ----------------
+  app.get('/api/event-code/users', requireTab('event-code'), handler(async (req, res) => {
+    const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
+    if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
+    const { field, from, to } = req.query;
+    const q = Q.eventCodeUsers(field, codes, from, to);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/event-code/funnel', requireTab('event-code'), handler(async (req, res) => {
+    const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
+    if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
+    const { field, from, to } = req.query;
+    const q = Q.eventCodeFunnel(field, codes, from, to);
+    const rows = await runQuery(q.sql, q.params);
+    res.json(rows[0] || { tagged: 0, verified: 0, transacted: 0, repeat_transacted: 0 });
+  }));
+  app.get('/api/event-code/cohort', requireTab('event-code'), handler(async (req, res) => {
+    const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
+    if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
+    const { field, from, to, grain, periods, basis } = req.query;
+    const q = Q.eventCodeCohort(field, codes, from, to, grain, periods, basis);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/event-code/transactions', requireTab('event-code'), handler(async (req, res) => {
+    const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
+    if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
+    const { field, from, to, type, status, limit, offset } = req.query;
+    const referrerCodes = field === 'referrer_code' ? codes : [];
+    const salesCodes = field === 'referrer_code' ? [] : codes;
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100, offset: offset || 0 });
+    const [rows, countRows] = await Promise.all([
+      runQuery(q.sql, q.params),
+      runQuery(q.countSql, q.params),
     ]);
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
@@ -1331,6 +1372,14 @@ function createApp({ serveStatic = true } = {}) {
         const buf = await PDF.usersTransactionsReport(rows, { username, query: searchQ });
         return sendPdf(res, buf, filename, username);
       }
+    } else if (source === 'event_code_transactions') {
+      const codes = req.body.codes || [];
+      if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
+      const { field, type, status, from, to } = req.body;
+      const referrerCodes = field === 'referrer_code' ? codes : [];
+      const salesCodes = field === 'referrer_code' ? [] : codes;
+      const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100000, offset: 0 });
+      rows = await runQuery(q.sql, q.params);
     } else if (source === 'hnwi_total') {
       if (!req.body.date) return res.status(400).json({ error: 'date is required.' });
       const q = Q.hnwiTotal(req.body.date, req.body.minAum, req.body.maxAum, limit || 5000);

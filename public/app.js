@@ -2512,6 +2512,144 @@ async function loadUtx() {
   } catch (e) { $('#utxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
+// EVENT CODE TRACKING (generic — no event/code table exists yet, see
+// queries.js:eventCodeWhere; field still picks referrer_code/sales_code like
+// Remisier does, since that's where a code would live today). No tab-switch
+// auto-load, same as Remisier — needs a code typed in first.
+let evcGranularity = 'week';
+const evcTx = { limit: 100, offset: 0, total: 0 };
+
+function evcCodesArr() {
+  return $('#evcCodes').value.split(',').map((s) => s.trim()).filter(Boolean);
+}
+function evcBaseQs() {
+  const qs = new URLSearchParams({ field: $('#evcField').value, from: $('#evcFrom').value, to: $('#evcTo').value });
+  evcCodesArr().forEach((c) => qs.append('codes', c));
+  return qs;
+}
+
+function renderEvcFunnel(f) {
+  const tagged = Number(val(f.tagged)) || 0;
+  const verified = Number(val(f.verified)) || 0;
+  const transacted = Number(val(f.transacted)) || 0;
+  const repeat = Number(val(f.repeat_transacted)) || 0;
+  $('#evcFunnel').innerHTML = [
+    kpi(t('evc_kpi_tagged'), num(tagged), '', 'accent', ICONS.userPlus),
+    kpi(t('evc_kpi_verified'), num(verified), pct(verified, tagged), '', ICONS.check),
+    kpi(t('evc_kpi_transacted'), num(transacted), pct(transacted, tagged), 'accent', ICONS.activity),
+    kpi(t('evc_kpi_repeat'), num(repeat), pct(repeat, tagged), '', ICONS.hourglass),
+  ].join('');
+}
+
+async function loadEventCode() {
+  if (!evcCodesArr().length) { toast('Enter at least one event code.'); return; }
+  const qs = evcBaseQs();
+  $('#evcFunnel').innerHTML = '<div class="loading">Loading…</div>';
+  $('#evcUsersTable').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const [funnel, users] = await Promise.all([
+      api(`/api/event-code/funnel?${qs}`),
+      api(`/api/event-code/users?${qs}`),
+    ]);
+    renderEvcFunnel(funnel);
+    genTable('#evcUsersTable', users, [
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+      { key: 'created_at', label: 'Registered at', type: 'date' }, { key: 'verified_at', label: 'Verified at', type: 'date' },
+    ], 'No users tagged with this code in this range.');
+  } catch (e) {
+    $('#evcFunnel').innerHTML = '';
+    $('#evcUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+  loadEvcCohort();
+}
+
+const EVC_GRAIN_LABEL = { day: 'D', week: 'W', month: 'M' };
+function renderEvcCohort(sel, rows) {
+  if (!rows.length) { $(sel).innerHTML = '<div class="empty">Not enough tagged/transacting users yet to build cohorts.</div>'; return; }
+  const prefix = EVC_GRAIN_LABEL[evcGranularity] || 'P';
+  const cohorts = {};
+  let maxOffset = 0;
+  rows.forEach((r) => {
+    const c = val(r.cohort), o = Number(val(r.period_offset)), u = Number(val(r.users));
+    (cohorts[c] = cohorts[c] || { size: Number(val(r.cohort_size)) || 0, cells: {} }).cells[o] = u;
+    if (o > maxOffset) maxOffset = o;
+  });
+  const heads = ['<th class="coh">Cohort</th>', '<th class="num">Size</th>'];
+  for (let o = 0; o <= maxOffset; o++) heads.push(`<th>${prefix}${o}</th>`);
+  const body = Object.keys(cohorts).sort().map((c) => {
+    const { size, cells } = cohorts[c];
+    let tds = `<td class="coh">${c}</td><td class="num">${num(size)}</td>`;
+    for (let o = 0; o <= maxOffset; o++) {
+      const u = cells[o];
+      if (u == null || !size) { tds += '<td>·</td>'; continue; }
+      const pctv = u / size;
+      const bg = `rgba(${C.heatRgb},${(0.12 + pctv * 0.8).toFixed(2)})`;
+      tds += `<td class="heat" style="background:${bg}">${Math.round(pctv * 100)}%</td>`;
+    }
+    return `<tr>${tds}</tr>`;
+  }).join('');
+  $(sel).innerHTML = `<table><thead><tr>${heads.join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// Two separate cohorts, same grain, fetched side by side — see
+// queries.js:eventCodeCohort for why "cohort" needs both a registration and
+// a first-transaction basis for an acquisition code.
+async function loadEvcCohort() {
+  if (!evcCodesArr().length) return;
+  $('#evcCohortRegHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
+  $('#evcCohortTxHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
+  const regQs = evcBaseQs(); regQs.set('grain', evcGranularity); regQs.set('basis', 'registration');
+  const txQs = evcBaseQs(); txQs.set('grain', evcGranularity); txQs.set('basis', 'first_tx');
+  try { renderEvcCohort('#evcCohortRegHeatmap', await api(`/api/event-code/cohort?${regQs}`)); }
+  catch (e) { $('#evcCohortRegHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
+  try { renderEvcCohort('#evcCohortTxHeatmap', await api(`/api/event-code/cohort?${txQs}`)); }
+  catch (e) { $('#evcCohortTxHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+function evcTxParams() {
+  return {
+    field: $('#evcField').value,
+    codes: evcCodesArr(),
+    type: $('#evcTxType').value,
+    status: $('#evcTxStatus').value,
+    from: $('#evcTxFrom').value,
+    to: $('#evcTxTo').value,
+  };
+}
+
+async function loadEvcTx() {
+  const p = evcTxParams();
+  if (!p.codes.length) { toast('Enter at least one event code.'); return; }
+  $('#evcTxTable').innerHTML = '<div class="loading">Loading…</div>';
+  const qs = new URLSearchParams({ field: p.field });
+  p.codes.forEach((c) => qs.append('codes', c));
+  if (p.type) qs.set('type', p.type);
+  if (p.status) qs.set('status', p.status);
+  if (p.from) qs.set('from', p.from);
+  if (p.to) qs.set('to', p.to);
+  qs.set('limit', evcTx.limit); qs.set('offset', evcTx.offset);
+  try {
+    const { rows, total } = await api(`/api/event-code/transactions?${qs}`);
+    evcTx.total = total;
+    genTable('#evcTxTable', rows, [
+      { key: 'created_at', label: 'Date', type: 'date' },
+      { key: 'transaction_number', label: 'Trx #' },
+      { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'fund_type', label: 'Fund type' },
+      { key: 'unit', label: 'Unit', type: 'num' },
+      { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
+      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+    ], 'No transactions match these filters.');
+    const start = total ? evcTx.offset + 1 : 0;
+    const end = Math.min(evcTx.offset + evcTx.limit, total);
+    $('#evcTxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
+    $('#evcTxPrev').disabled = evcTx.offset === 0;
+    $('#evcTxNext').disabled = end >= total;
+  } catch (e) { $('#evcTxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
 // EXPLORER (multi-table)
 function tagClass(v) {
   const k = String(v).toLowerCase();
@@ -4637,6 +4775,21 @@ function wire() {
     { source: 'users_transactions', format: 'xlsx', filename: 'users_transactions', ...utxParams() }, 'users_transactions.xlsx'));
   $('#utxPdf').addEventListener('click', () => download(
     { source: 'users_transactions', format: 'pdf', filename: 'users_transactions', ...utxParams() }, 'users_transactions.pdf'));
+
+  // event code tracking
+  $('#evcApply').addEventListener('click', loadEventCode);
+  $('#evcGran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#evcGran button').forEach((x) => x.classList.toggle('on', x === b));
+    evcGranularity = b.dataset.g; loadEvcCohort();
+  });
+  $('#evcTxRun').addEventListener('click', () => { evcTx.offset = 0; loadEvcTx(); });
+  $('#evcTxPrev').addEventListener('click', () => { evcTx.offset = Math.max(0, evcTx.offset - evcTx.limit); loadEvcTx(); });
+  $('#evcTxNext').addEventListener('click', () => { evcTx.offset += evcTx.limit; loadEvcTx(); });
+  $('#evcTxCsv').addEventListener('click', () => download(
+    { source: 'event_code_transactions', format: 'csv', filename: 'event_code_transactions', ...evcTxParams() }, 'event_code_transactions.csv'));
+  $('#evcTxXlsx').addEventListener('click', () => download(
+    { source: 'event_code_transactions', format: 'xlsx', filename: 'event_code_transactions', ...evcTxParams() }, 'event_code_transactions.xlsx'));
 
   $('#gran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
