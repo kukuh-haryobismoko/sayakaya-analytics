@@ -2426,18 +2426,28 @@ const eventCodeWhere = (field?: string): string => {
 };
 
 // Users tagged with the code, registered in the window — the population the
-// funnel and cohort below are computed over.
-export const eventCodeUsers = (field: string | undefined, codes: string[] | string, from?: string, to?: string): Query => {
+// funnel and cohort below are computed over. Paginated: a real code can be a
+// platform-wide default/organic value shared by hundreds of thousands of
+// users (confirmed in production — not just a hypothetical), so this list
+// can't assume "one code = a small cohort" the way remisierUsers does.
+export const eventCodeUsers = (
+  field: string | undefined, codes: string[] | string, from?: string, to?: string,
+  limit: number | string = 100, offset: number | string = 0,
+): Query => {
   const r = range(from, to);
+  const where = `${eventCodeWhere(field)} AND DATE(u.created_at) BETWEEN @from AND @to`;
   return {
     sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email,
         u.referrer_code, u.sales_code, u.created_at, u.verified_at
       FROM ${USERS} u
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-      WHERE ${eventCodeWhere(field)}
-        AND DATE(u.created_at) BETWEEN @from AND @to
-      ORDER BY u.created_at`,
-    params: { ...r, codes: normalizeCodes(codes) },
+      WHERE ${where}
+      ORDER BY u.created_at
+      LIMIT @limit OFFSET @offset`,
+    params: { ...r, codes: normalizeCodes(codes), limit: parseInt(String(limit), 10), offset: parseInt(String(offset), 10) },
+    countSql: `SELECT COUNT(*) AS total
+      FROM ${USERS} u
+      WHERE ${where}`,
   };
 };
 

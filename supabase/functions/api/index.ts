@@ -612,8 +612,12 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
 on('GET', '/api/event-code/users', requireTab('event-code', async (_req, _params, url) => {
   const codes = qpAll(url, 'codes');
   if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
-  const q = Q.eventCodeUsers(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'));
-  return json(await runQuery(q.sql, q.params));
+  const q = Q.eventCodeUsers(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'), qp(url, 'limit') || 100, qp(url, 'offset') || 0);
+  const [rows, countRows] = await Promise.all([
+    runQuery(q.sql, q.params),
+    runQuery(q.countSql!, q.params),
+  ]);
+  return json({ rows, total: Number(countRows[0]?.total || 0) });
 }));
 on('GET', '/api/event-code/funnel', requireTab('event-code', async (_req, _params, url) => {
   const codes = qpAll(url, 'codes');

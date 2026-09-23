@@ -2517,6 +2517,7 @@ async function loadUtx() {
 // Remisier does, since that's where a code would live today). No tab-switch
 // auto-load, same as Remisier — needs a code typed in first.
 let evcGranularity = 'week';
+const evcUsers = { limit: 100, offset: 0, total: 0 };
 const evcTx = { limit: 100, offset: 0, total: 0 };
 
 function evcCodesArr() {
@@ -2541,26 +2542,35 @@ function renderEvcFunnel(f) {
   ].join('');
 }
 
-async function loadEventCode() {
-  if (!evcCodesArr().length) { toast('Enter at least one event code.'); return; }
+async function loadEvcUsers() {
   const qs = evcBaseQs();
-  $('#evcFunnel').innerHTML = '<div class="loading">Loading…</div>';
+  qs.set('limit', evcUsers.limit); qs.set('offset', evcUsers.offset);
   $('#evcUsersTable').innerHTML = '<div class="loading">Loading…</div>';
   try {
-    const [funnel, users] = await Promise.all([
-      api(`/api/event-code/funnel?${qs}`),
-      api(`/api/event-code/users?${qs}`),
-    ]);
-    renderEvcFunnel(funnel);
-    genTable('#evcUsersTable', users, [
+    const { rows, total } = await api(`/api/event-code/users?${qs}`);
+    evcUsers.total = total;
+    genTable('#evcUsersTable', rows, [
       { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
       { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
       { key: 'created_at', label: 'Registered at', type: 'date' }, { key: 'verified_at', label: 'Verified at', type: 'date' },
     ], 'No users tagged with this code in this range.');
-  } catch (e) {
-    $('#evcFunnel').innerHTML = '';
-    $('#evcUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
-  }
+    const start = total ? evcUsers.offset + 1 : 0;
+    const end = Math.min(evcUsers.offset + evcUsers.limit, total);
+    $('#evcUsersPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
+    $('#evcUsersPrev').disabled = evcUsers.offset === 0;
+    $('#evcUsersNext').disabled = end >= total;
+  } catch (e) { $('#evcUsersTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+async function loadEventCode() {
+  if (!evcCodesArr().length) { toast('Enter at least one event code.'); return; }
+  const qs = evcBaseQs();
+  $('#evcFunnel').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    renderEvcFunnel(await api(`/api/event-code/funnel?${qs}`));
+  } catch (e) { $('#evcFunnel').innerHTML = ''; toast(e.message); }
+  evcUsers.offset = 0;
+  loadEvcUsers();
   loadEvcCohort();
 }
 
@@ -4778,6 +4788,8 @@ function wire() {
 
   // event code tracking
   $('#evcApply').addEventListener('click', loadEventCode);
+  $('#evcUsersPrev').addEventListener('click', () => { evcUsers.offset = Math.max(0, evcUsers.offset - evcUsers.limit); loadEvcUsers(); });
+  $('#evcUsersNext').addEventListener('click', () => { evcUsers.offset += evcUsers.limit; loadEvcUsers(); });
   $('#evcGran').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     $$('#evcGran button').forEach((x) => x.classList.toggle('on', x === b));

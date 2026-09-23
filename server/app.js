@@ -517,9 +517,13 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/event-code/users', requireTab('event-code'), handler(async (req, res) => {
     const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
     if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
-    const { field, from, to } = req.query;
-    const q = Q.eventCodeUsers(field, codes, from, to);
-    res.json(await runQuery(q.sql, q.params));
+    const { field, from, to, limit, offset } = req.query;
+    const q = Q.eventCodeUsers(field, codes, from, to, limit || 100, offset || 0);
+    const [rows, countRows] = await Promise.all([
+      runQuery(q.sql, q.params),
+      runQuery(q.countSql, q.params),
+    ]);
+    res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
   app.get('/api/event-code/funnel', requireTab('event-code'), handler(async (req, res) => {
     const codes = req.query.codes == null ? [] : [].concat(req.query.codes);

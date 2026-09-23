@@ -1790,7 +1790,13 @@
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="evc_users_title">Users tagged with this code</h2></div>
+        <span class="hint" data-i18n="evc_users_hint">Paginated — a code can be a platform-wide default shared by hundreds of thousands of users, not necessarily a small personal cohort.</span>
         <div id="evcUsersTable" class="table-wrap tall" style="margin-top:14px"></div>
+        <div class="pager">
+          <button id="evcUsersPrev" class="btn-ghost" data-i18n="common_prev">← Prev</button>
+          <span id="evcUsersPageinfo" class="mono"></span>
+          <button id="evcUsersNext" class="btn-ghost" data-i18n="common_next">Next →</button>
+        </div>
       </div>
 
       <div class="panel">
