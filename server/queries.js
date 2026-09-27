@@ -206,22 +206,17 @@ const txFilterValues = () => ({
 // Joined to FUNDS and filtered to listing_status='ACTIVE' — a liquidated fund
 // stops being a real ongoing position once it's inactive, so its AUM
 // shouldn't keep counting past that point. Same rule as platformAumAsOf below.
+//
+// Root cause columns: ΔAUM = net flow (completed buy − sell) + market effect
+// (the rest: NAV moves, reinvestments, bonus units). mi_fee's row for day D
+// already includes transactions completed on D−1 (daily ΔAUM vs net flow
+// correlates 0.998 at that lag, 0.36 same-day), hence the +1 day shift below.
+// Switching nets to ~0 platform-wide, so it only shows up in the per-fund
+// drill (aumHistoryDrill). market_effect is NULL on the first row (no prior
+// period in range to diff against).
+const AUM_FLOW_DATE = 'DATE_ADD(DATE(t.completed_at), INTERVAL 1 DAY)';
 const aumHistory = (from, to, granularity = 'month') => {
-  const r = range(from, to);
-  if (granularity === 'day') {
-    return {
-      sql: `SELECT
-          FORMAT_DATE('%Y-%m-%d', DATE(m.created_at)) AS bucket,
-          ROUND(SUM(m.AUM)) AS aum,
-          ROUND(SUM(m.aperd_share_per_day)) AS revenue,
-          COUNT(DISTINCT m.fund_id) AS funds
-        FROM ${MIFEE} m
-        JOIN ${FUNDS} f ON f.id = m.fund_id
-        WHERE DATE(m.created_at) BETWEEN @from AND @to AND f.listing_status = 'ACTIVE'
-        GROUP BY bucket ORDER BY bucket`,
-      params: r,
-    };
-  }
+  const fmt = granularity === 'day' ? '%Y-%m-%d' : '%Y-%m';
   return {
     sql: `WITH daily AS (
         SELECT DATE(m.created_at) AS d,
@@ -231,15 +226,83 @@ const aumHistory = (from, to, granularity = 'month') => {
         JOIN ${FUNDS} f ON f.id = m.fund_id
         WHERE DATE(m.created_at) BETWEEN @from AND @to AND f.listing_status = 'ACTIVE'
         GROUP BY d
+      ),
+      flows AS (
+        SELECT ${AUM_FLOW_DATE} AS d,
+          SUM(IF(t.type = 'buy', t.final_amount, 0)) AS subs,
+          SUM(IF(t.type = 'sell', t.final_amount, 0)) AS reds
+        FROM ${TX} t
+        JOIN ${FUNDS} f ON f.id = t.fund_id
+        WHERE t.status = 'completed' AND t.type IN ('buy', 'sell') AND f.listing_status = 'ACTIVE'
+          AND ${AUM_FLOW_DATE} BETWEEN @from AND @to
+        GROUP BY d
+      ),
+      buckets AS (
+        SELECT FORMAT_DATE('${fmt}', d) AS bucket,
+          ARRAY_AGG(aum ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS aum,
+          SUM(revenue) AS revenue, MAX(funds) AS funds,
+          SUM(IFNULL(subs, 0)) AS subs, SUM(IFNULL(reds, 0)) AS reds
+        FROM daily LEFT JOIN flows USING (d)
+        GROUP BY bucket
       )
-      SELECT FORMAT_DATE('%Y-%m', d) AS bucket,
-        ROUND(ARRAY_AGG(aum ORDER BY d DESC LIMIT 1)[OFFSET(0)]) AS aum,
-        ROUND(SUM(revenue)) AS revenue,
-        MAX(funds) AS funds
-      FROM daily GROUP BY bucket ORDER BY bucket`,
-    params: r,
+      SELECT bucket, ROUND(aum) AS aum, ROUND(revenue) AS revenue, funds,
+        ROUND(subs) AS subscriptions, ROUND(reds) AS redemptions,
+        ROUND(subs - reds) AS net_flow,
+        ROUND(aum - LAG(aum) OVER (ORDER BY bucket) - (subs - reds)) AS market_effect
+      FROM buckets ORDER BY bucket`,
+    params: range(from, to),
   };
 };
+
+// Per-fund breakdown of one AUM history period: which funds moved, and how
+// much of each fund's move was money in/out vs market. start/end = the
+// period's first/last day (the caller clips end to the page's "to" date so
+// it matches the AUM history row). Diffs the last mi_fee day in the period
+// against the last one before it — same end-of-period rule as aumHistory.
+const aumHistoryDrill = (start, end) => ({
+  sql: `WITH bounds AS (
+      SELECT
+        (SELECT MAX(DATE(created_at)) FROM ${MIFEE} WHERE DATE(created_at) < @start) AS prev_end,
+        (SELECT MAX(DATE(created_at)) FROM ${MIFEE} WHERE DATE(created_at) BETWEEN @start AND @end) AS cur_end
+    ),
+    aum AS (
+      SELECT m.fund_id,
+        SUM(IF(DATE(m.created_at) = b.prev_end, m.AUM, 0)) AS aum_start,
+        SUM(IF(DATE(m.created_at) = b.cur_end, m.AUM, 0)) AS aum_end
+      FROM ${MIFEE} m CROSS JOIN bounds b
+      WHERE DATE(m.created_at) IN (b.prev_end, b.cur_end)
+      GROUP BY m.fund_id
+    ),
+    flows AS (
+      SELECT t.fund_id,
+        SUM(IF(t.type = 'buy', t.final_amount, 0)) AS subs,
+        SUM(IF(t.type = 'sell', t.final_amount, 0)) AS reds,
+        SUM(CASE t.type WHEN 'SWITCH_IN' THEN t.final_amount WHEN 'SWITCH_OUT' THEN -t.final_amount ELSE 0 END) AS switch_net
+      FROM ${TX} t CROSS JOIN bounds b
+      WHERE t.status = 'completed' AND t.type IN ('buy', 'sell', 'SWITCH_IN', 'SWITCH_OUT')
+        AND ${AUM_FLOW_DATE} > b.prev_end AND ${AUM_FLOW_DATE} <= b.cur_end
+      GROUP BY t.fund_id
+    ),
+    joined AS (
+      SELECT f.name AS fund, COALESCE(im.common_name, im.name) AS manager,
+        IFNULL(a.aum_start, 0) AS aum_start, IFNULL(a.aum_end, 0) AS aum_end,
+        IFNULL(fl.subs, 0) AS subs, IFNULL(fl.reds, 0) AS reds, IFNULL(fl.switch_net, 0) AS switch_net
+      FROM ${FUNDS} f
+      LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+      LEFT JOIN aum a ON a.fund_id = f.id
+      LEFT JOIN flows fl ON fl.fund_id = f.id
+      WHERE f.listing_status = 'ACTIVE' AND (a.fund_id IS NOT NULL OR fl.fund_id IS NOT NULL)
+    )
+    SELECT fund, manager,
+      ROUND(aum_start) AS aum_start, ROUND(aum_end) AS aum_end,
+      ROUND(aum_end - aum_start) AS aum_change,
+      ROUND(subs) AS subscriptions, ROUND(reds) AS redemptions, ROUND(switch_net) AS switch_net,
+      ROUND(aum_end - aum_start - (subs - reds + switch_net)) AS market_effect
+    FROM joined
+    WHERE aum_end != aum_start OR subs != 0 OR reds != 0 OR switch_net != 0
+    ORDER BY ABS(aum_end - aum_start) DESC`,
+  params: { start, end },
+});
 
 // ---- Product performance (NAV per fund, from native BigQuery tables) -------
 // snapshots.value is daily NAV per fund. % change per period = (latest NAV -
@@ -1178,6 +1241,7 @@ const largestFundsAum = (groupBy = 'fund', date, excludeFunds = []) => {
       )
       SELECT ${label} AS label,
         ROUND(SUM(l.amount)) AS aum,
+        ROUND(SAFE_DIVIDE(100 * SUM(l.amount), SUM(SUM(l.amount)) OVER ()), 2) AS pct_of_total,
         COUNT(DISTINCT l.sid_code) AS investors
       FROM latest l
       JOIN ${FUNDS} f ON f.id = l.fund_id
@@ -2969,6 +3033,44 @@ function usersTransactions({ q, type, status, fundId, from, to, limit = 100, off
   };
 }
 
+// ---- Top investors: biggest subscribers / redeemers / net depositors -----
+// Completed buy/sell only, bucketed by transaction date (created_at) like the
+// Overview buy/sell volume KPIs — not the +1 day completed_at shift the AUM
+// history root-cause columns need. Share % is of every investor's total in
+// the period, not just the rows returned.
+const TOP_INVESTOR_ORDER = { subscriptions: 'subscriptions', redemptions: 'redemptions', net: 'net_deposit' };
+const topInvestors = ({ from, to, metric, limit = 100 }) => {
+  const order = TOP_INVESTOR_ORDER[metric] || 'subscriptions';
+  return {
+    sql: `WITH per_user AS (
+        SELECT user_id,
+          SUM(IF(type = 'buy', final_amount, 0)) AS subscriptions,
+          SUM(IF(type = 'sell', final_amount, 0)) AS redemptions,
+          COUNTIF(type = 'buy') AS buys, COUNTIF(type = 'sell') AS sells
+        FROM ${TX}
+        WHERE status = 'completed' AND type IN ('buy', 'sell') AND DATE(created_at) BETWEEN @from AND @to
+        GROUP BY user_id
+      ),
+      ranked AS (
+        SELECT *, subscriptions - redemptions AS net_deposit,
+          SAFE_DIVIDE(100 * subscriptions, SUM(subscriptions) OVER ()) AS pct_of_subscriptions,
+          SAFE_DIVIDE(100 * redemptions, SUM(redemptions) OVER ()) AS pct_of_redemptions
+        FROM per_user
+      )
+      SELECT u.sid_code AS sid, up.name, u.email,
+        ROUND(r.subscriptions) AS subscriptions, r.buys, ROUND(r.pct_of_subscriptions, 2) AS pct_of_subscriptions,
+        ROUND(r.redemptions) AS redemptions, r.sells, ROUND(r.pct_of_redemptions, 2) AS pct_of_redemptions,
+        ROUND(r.net_deposit) AS net_deposit
+      FROM ranked r
+      JOIN ${USERS} u ON u.id = r.user_id
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      WHERE r.${order} > 0
+      ORDER BY r.${order} DESC
+      LIMIT @limit`,
+    params: { ...range(from, to), limit: Math.min(Math.max(parseInt(limit, 10) || 100, 1), 1000) },
+  };
+};
+
 // ---- Event code tracking (generic): an event that doesn't exist yet will
 // hand out its own referral/sales codes, but neither the codes nor even
 // which users column they'll land in are decided yet. So, like the Remisier
@@ -3098,7 +3200,7 @@ const eventCodeCohort = (field, codes, from, to, grain, periods, basis) => {
 
 module.exports = {
   overviewUsers, overviewTx, overviewFunds,
-  trends, breakdownBy, fundTypes, aumHistory,
+  trends, breakdownBy, fundTypes, aumHistory, aumHistoryDrill, topInvestors,
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail, fundNavTrend, fundList,

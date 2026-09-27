@@ -70,8 +70,9 @@ const I18N = {
     docs_li_language: `<b>Language</b> — top-right: switch between English and Bahasa Indonesia at any time; your choice is remembered.`,
 
     docs_panel_dashboards: `Dashboards`,
-    docs_overview_desc: `The single-page snapshot of the whole business: total assets under management, user counts, buy/sell volume, a transaction trend chart, fund breakdowns, and a map of where investors are located across Indonesia. The Platform AUM card has its own as-of date (separate from the buy/sell date range at the top of the page) and only counts funds still listed as active, since a liquidated fund's balance shouldn't keep counting after it stops being an active position. A fund filter above the KPIs narrows AUM, transactions, and the fund charts to one or more chosen funds. The "Largest funds by AUM" table lists every fund/MI as of a date you pick (not just the top 10), and you can select which funds to include — deselecting a fund also removes its AUM from its MI's total.`,
-    docs_aum_desc: `How total assets under management (and the platform's own revenue) have moved over time, counting only funds still listed as active. A fund's balance stops counting once it's liquidated or delisted.`,
+    docs_overview_desc: `The single-page snapshot of the whole business: total assets under management, user counts, buy/sell volume, a transaction trend chart, fund breakdowns, and a map of where investors are located across Indonesia. The Platform AUM card has its own as-of date (separate from the buy/sell date range at the top of the page) and only counts funds still listed as active, since a liquidated fund's balance shouldn't keep counting after it stops being an active position. A fund filter above the KPIs narrows AUM, transactions, and the fund charts to one or more chosen funds. The "Largest funds by AUM" table lists every fund/MI as of a date you pick (not just the top 10) with each one's share of the total, and you can select which funds to include. Deselecting a fund also removes its AUM from its MI's total. Every donut chart shows each slice's share of the total next to its name.`,
+    docs_aum_desc: `How total assets under management (and the platform's own revenue) have moved over time, counting only funds still listed as active. A fund's balance stops counting once it's liquidated or delisted. Each period's change is split into net flow (money investors put in minus what they took out) and market effect (price moves and everything else), so you can tell whether AUM rose because people invested or because prices went up. Click any period to see which funds drove it.`,
+    docs_top_investors_desc: `Ranks investors by how much they put in (Subscribers), took out (Redeemers), or put in net of what they took out (Net deposit) over a day, a week, a month, or any custom date range. Pick how many to show (top 10 to 500). Each row shows the investor's SID, name, email, amounts, number of transactions, and their share of everyone's total for that period. Exports to CSV or Excel.`,
     docs_performance_desc: `How each fund's price (NAV) has performed — pick a time window from 1 day up to 5 years and compare funds side by side.`,
     docs_growth_desc: `Marketing and growth numbers: how well promo campaigns performed, who's referring the most new investors, and which funds people switch between most.`,
 
@@ -259,6 +260,12 @@ const I18N = {
 
     aum_history_title: `AUM & revenue history`,
     aum_history_hint: `End-of-period AUM (point-in-time) and revenue (aperd_share, summed), active funds only. Uses the date range above. Source: mi_fee_logs.mi_fee.`,
+    aum_cause_title: `What moved AUM`,
+    aum_cause_hint: `Each period's AUM change split into net flow (completed subscriptions − redemptions) and market effect (everything else: NAV moves, reinvested dividends, bonus units). The two bars add up to the change. Click a row in the table below to see which funds drove it.`,
+    aum_drill_title: `What moved AUM in`,
+    aum_drill_row_title: `Show which funds drove this change`,
+    aum_drill_hint: `Per fund, sorted by the size of its AUM change. Switch = money moved in from (or out to) another fund; it nets to about zero across the platform, so it only shows up here. Market effect = AUM change − subscriptions + redemptions − switch.`,
+    aum_cause_empty: `Needs at least two periods to show a change. Widen the date range or switch to Day.`,
 
     perf_trend_title: `Fund performance trend`,
     perf_trend_hint: `Daily NAV (actual price). Pick funds to compare them directly, or leave none picked to show the top performers by % change. Source: sayakaya.main.snapshots.`,
@@ -332,6 +339,13 @@ const I18N = {
 
     utx_search_ph: `SID, email, or name`,
     utx_hint: `Search by SID code, email, or name (partial match, required). Type, status, fund, and the date range (on transaction date) are optional refinements.`,
+    ti_subscribers: `Subscribers`,
+    ti_redeemers: `Redeemers`,
+    ti_net_deposit: `Net deposit`,
+    ti_custom: `Custom`,
+    ti_date: `Date`,
+    ti_hint: `Completed buy (subscription) and sell (redemption) transactions, by transaction date. Day/Week/Month cover the day, Monday–Sunday week, or calendar month containing the date you pick; Custom takes any From/To range. Net deposit = subscriptions − redemptions, highest first. "% of all" is the investor's share of every investor's total in that period.`,
+    ti_empty: `No completed buys or sells in this period. Pick a wider period or use Custom.`,
 
     evc_filters_title: `Event code`,
     evc_codes_ph: `Event code(s), partial match, comma separated`,
@@ -507,8 +521,9 @@ const I18N = {
     docs_li_language: `<b>Bahasa</b> — kanan atas: beralih antara Bahasa Inggris dan Bahasa Indonesia kapan saja; pilihan Anda akan diingat.`,
 
     docs_panel_dashboards: `Dasbor`,
-    docs_overview_desc: `Ringkasan satu halaman untuk seluruh bisnis: total dana kelolaan (AUM), jumlah pengguna, volume beli/jual, grafik tren transaksi, rincian per produk, dan peta sebaran investor di seluruh Indonesia. Kartu AUM platform punya tanggal acuannya sendiri (terpisah dari rentang tanggal beli/jual di bagian atas halaman) dan hanya menghitung produk yang masih berstatus aktif, karena saldo produk yang sudah dilikuidasi seharusnya tidak lagi dihitung setelah produk itu tidak aktif. Filter produk di atas KPI membatasi AUM, transaksi, dan grafik produk ke satu atau beberapa produk pilihan. Tabel "Produk terbesar berdasarkan AUM" menampilkan semua produk/MI per tanggal pilihan (bukan hanya 10 teratas), dan Anda bisa memilih produk mana saja yang ikut dihitung — membatalkan pilihan sebuah produk juga mengurangi AUM-nya dari total MI-nya.`,
-    docs_aum_desc: `Bagaimana total dana kelolaan (AUM) dan pendapatan platform berubah dari waktu ke waktu, hanya menghitung produk yang masih berstatus aktif. Saldo sebuah produk berhenti dihitung begitu produk itu dilikuidasi atau dihapus dari pencatatan.`,
+    docs_overview_desc: `Ringkasan satu halaman untuk seluruh bisnis: total dana kelolaan (AUM), jumlah pengguna, volume beli/jual, grafik tren transaksi, rincian per produk, dan peta sebaran investor di seluruh Indonesia. Kartu AUM platform punya tanggal acuannya sendiri (terpisah dari rentang tanggal beli/jual di bagian atas halaman) dan hanya menghitung produk yang masih berstatus aktif, karena saldo produk yang sudah dilikuidasi seharusnya tidak lagi dihitung setelah produk itu tidak aktif. Filter produk di atas KPI membatasi AUM, transaksi, dan grafik produk ke satu atau beberapa produk pilihan. Tabel "Produk terbesar berdasarkan AUM" menampilkan semua produk/MI per tanggal pilihan (bukan hanya 10 teratas) beserta porsinya dari total, dan Anda bisa memilih produk mana saja yang ikut dihitung. Membatalkan pilihan sebuah produk juga mengurangi AUM-nya dari total MI-nya. Setiap grafik donat menampilkan porsi tiap bagian dari total di samping namanya.`,
+    docs_aum_desc: `Bagaimana total dana kelolaan (AUM) dan pendapatan platform berubah dari waktu ke waktu, hanya menghitung produk yang masih berstatus aktif. Saldo sebuah produk berhenti dihitung begitu produk itu dilikuidasi atau dihapus dari pencatatan. Perubahan tiap periode dipecah menjadi arus bersih (dana yang disetor investor dikurangi yang ditarik) dan efek pasar (pergerakan harga dan lainnya), sehingga terlihat apakah AUM naik karena investor menyetor dana atau karena harga naik. Klik periode mana pun untuk melihat produk yang menggerakkannya.`,
+    docs_top_investors_desc: `Mengurutkan investor berdasarkan jumlah yang disetor (Subscriber), ditarik (Redeemer), atau setoran bersih setelah dikurangi penarikan (Net deposit) dalam satu hari, satu minggu, satu bulan, atau rentang tanggal kustom. Pilih berapa banyak yang ditampilkan (10 sampai 500 teratas). Tiap baris menampilkan SID, nama, email, nominal, jumlah transaksi, dan porsinya dari total seluruh investor pada periode itu. Bisa diekspor ke CSV atau Excel.`,
     docs_performance_desc: `Bagaimana kinerja harga (NAV) tiap produk — pilih rentang waktu dari 1 hari hingga 5 tahun dan bandingkan beberapa produk sekaligus.`,
     docs_growth_desc: `Angka pemasaran dan pertumbuhan: seberapa efektif kampanye promo, siapa yang paling banyak mereferensikan investor baru, dan produk apa yang paling sering dipindahkan (switching) investor.`,
 
@@ -696,6 +711,12 @@ const I18N = {
 
     aum_history_title: `Riwayat AUM & pendapatan`,
     aum_history_hint: `AUM akhir periode (point-in-time) dan pendapatan (aperd_share, dijumlahkan), hanya produk aktif. Menggunakan rentang tanggal di atas. Sumber: mi_fee_logs.mi_fee.`,
+    aum_cause_title: `Penyebab perubahan AUM`,
+    aum_cause_hint: `Perubahan AUM tiap periode dipecah menjadi arus bersih (subscription − redemption yang selesai) dan efek pasar (sisanya: pergerakan NAV, dividen yang diinvestasikan ulang, unit bonus). Kedua batang dijumlahkan sama dengan perubahannya. Klik baris di tabel bawah untuk melihat produk mana yang menggerakkannya.`,
+    aum_drill_title: `Penyebab perubahan AUM pada`,
+    aum_drill_row_title: `Lihat produk yang menggerakkan perubahan ini`,
+    aum_drill_hint: `Per produk, diurutkan dari perubahan AUM terbesar. Switch = dana yang masuk dari (atau keluar ke) produk lain; totalnya hampir nol di tingkat platform, jadi hanya terlihat di sini. Efek pasar = perubahan AUM − subscription + redemption − switch.`,
+    aum_cause_empty: `Perlu minimal dua periode untuk menampilkan perubahan. Perlebar rentang tanggal atau pilih Hari.`,
 
     perf_trend_title: `Tren performa produk`,
     perf_trend_hint: `NAV harian (harga aktual). Pilih produk untuk membandingkannya secara langsung, atau jangan pilih apa pun untuk melihat performa terbaik berdasarkan % perubahan. Sumber: sayakaya.main.snapshots.`,
@@ -769,6 +790,13 @@ const I18N = {
 
     utx_search_ph: `SID, email, atau nama`,
     utx_hint: `Cari berdasarkan kode SID, email, atau nama (kecocokan sebagian, wajib diisi). Jenis, status, produk, dan rentang tanggal (berdasarkan tanggal transaksi) adalah filter tambahan opsional.`,
+    ti_subscribers: `Subscriber`,
+    ti_redeemers: `Redeemer`,
+    ti_net_deposit: `Net deposit`,
+    ti_custom: `Kustom`,
+    ti_date: `Tanggal`,
+    ti_hint: `Transaksi beli (subscription) dan jual (redemption) yang selesai, berdasarkan tanggal transaksi. Hari/Minggu/Bulan mencakup hari, minggu Senin–Minggu, atau bulan kalender yang memuat tanggal pilihan Anda; Kustom memakai rentang Dari/Sampai mana pun. Net deposit = subscription − redemption, terbesar lebih dulu. "% dari semua" adalah porsi investor itu dari total seluruh investor pada periode tersebut.`,
+    ti_empty: `Tidak ada transaksi beli atau jual yang selesai pada periode ini. Pilih periode yang lebih panjang atau gunakan Kustom.`,
 
     evc_filters_title: `Kode event`,
     evc_codes_ph: `Kode event, kecocokan sebagian, dipisah koma`,

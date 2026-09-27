@@ -51,7 +51,7 @@ const sandbox = {
   location: { href: 'http://localhost/', origin: 'http://localhost', hostname: 'localhost', search: '', pathname: '/' },
   navigator: { language: 'en', userAgent: 'node' },
   alert(){}, requestAnimationFrame: (f) => f(),
-  setTimeout, clearTimeout, encodeURIComponent, decodeURIComponent, JSON, Math, Date, Promise, Number, String, Array, Object, isNaN, parseInt, parseFloat, Intl,
+  setTimeout, clearTimeout, URLSearchParams, encodeURIComponent, decodeURIComponent, JSON, Math, Date, Promise, Number, String, Array, Object, isNaN, parseInt, parseFloat, Intl,
 };
 sandbox.globalThis = sandbox;
 sandbox.window.document = document;
@@ -105,7 +105,16 @@ const overviewFundList = [{ id: 'PlFsTEcPFZCWZNeBOQ7Qw', name: 'Sucorinvest Mone
 const overviewProvince = [{ province_name: 'DKI Jakarta', investor_count: 3000, total_aum: '6e12' }];
 const overviewTopCities = [{ city_name: 'Jakarta Selatan', province_name: 'DKI Jakarta', investor_count: 1500 }];
 const overviewTopCitiesAum = [{ city_name: 'Jakarta Selatan', province_name: 'DKI Jakarta', total_aum: '3e12' }];
-const overviewTopFunds = [{ label: 'Sucorinvest Money Market Fund', aum: '5e12', investors: 2000 }];
+const overviewTopFunds = [{ label: 'Sucorinvest Money Market Fund', aum: '5e12', pct_of_total: '66.81', investors: 2000 }];
+// AUM history: first row has no prior period, so market_effect is null there.
+const aumHistory = [
+  { bucket: '2026-07', aum: '2.6e11', revenue: '1e8', funds: 80, subscriptions: '8.5e10', redemptions: '9e10', net_flow: '-4.5e9', market_effect: null },
+  { bucket: '2026-08', aum: '2.61e11', revenue: '1e8', funds: 80, subscriptions: '6.9e10', redemptions: '7.1e10', net_flow: '-1.9e9', market_effect: '2.9e9' },
+];
+const aumDrill = [{ fund: 'Sucorinvest Money Market Fund', manager: 'Sucor Asset Management', aum_start: '1e11', aum_end: '9e10',
+  aum_change: '-1e10', subscriptions: '8.7e9', redemptions: '6.2e10', switch_net: '5.2e9', market_effect: '3.8e10' }];
+const topInvestors = [{ sid: 'IDD1', name: 'A', email: 'a@b.c', subscriptions: '2.1e9', buys: 3, pct_of_subscriptions: '37.58',
+  redemptions: '0', sells: 0, pct_of_redemptions: '0', net_deposit: '2.1e9' }];
 
 sandbox.api = async (path) => {
   if (path.startsWith('/api/user-lifetime/summary')) return summaryUL;
@@ -135,17 +144,21 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/users/by-province'))      return overviewProvince;
   if (path.startsWith('/api/users/top-cities-aum'))   return overviewTopCitiesAum;
   if (path.startsWith('/api/users/top-cities'))       return overviewTopCities;
+  if (path.startsWith('/api/aum-history/drill?start=2026-08-01&end=')) return aumDrill;
+  if (path.startsWith('/api/aum-history'))            return aumHistory;
+  if (path.startsWith('/api/top-investors?') && path.includes('from=') && path.includes('to=')) return topInvestors;
   throw new Error('unexpected path ' + path);
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadTopInvestors']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
+  try { await sandbox.loadAumDrill('2026-08'); } catch (e) { errors.push(`loadAumDrill: ${e.message}`); }
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#aumDrillTable', '#tiTable', '#topFunds']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -176,6 +189,12 @@ sandbox.api = async (path) => {
   } else {
     console.log(`FAIL  #ovFundFilterList -> ${fundListHtml.slice(0, 200) || '(never rendered)'}`);
     errors.push('#ovFundFilterList did not render the fund checklist');
+  }
+  // Root-cause columns and the % of total share actually reach the page.
+  for (const [sel, needle] of [['#aumTable', 'data-bucket="2026-08"'], ['#aumTable', '<button type="button" class="link-btn mono"'], ['#topFunds', '66.8%'], ['#tiTable', '37.6%']]) {
+    if (get(sel)._html.includes(needle)) { console.log(`ok    ${sel} has ${needle}`); continue; }
+    console.log(`FAIL  ${sel} missing ${needle}`);
+    errors.push(`${sel} is missing ${needle}`);
   }
   if (errors.length) { console.log(`\n${errors.length} failure(s):\n` + errors.join('\n')); process.exit(1); }
   console.log('\nAll section loaders rendered.');

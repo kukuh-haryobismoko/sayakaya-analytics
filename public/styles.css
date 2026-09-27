@@ -13,6 +13,11 @@
   --amber: #ffc531;      /* Yellow / Y300 */
   --teal: #14c687;       /* Green / G300 */
   --rose: #ff3165;       /* Red / R300 */
+  /* Text/mark variants that clear AA on --surface and --hover-bg; the base
+     teal/rose/amber are too light on white (2.22:1, 3.57:1, 1.58:1). */
+  --pos-text: #086b48;
+  --neg-text: #c8173f;
+  --amber-mark: #b07400;
   --teal-tint: #eefff9;  /* Green / G100 */
   --rose-tint: #ffe5ec;  /* Red / R100 */
   --amber-tint: #fff9e5; /* Yellow / Y100 */
@@ -49,6 +54,9 @@
   --amber: #ffd87e;      /* Yellow / Y200 */
   --teal: #33eaaa;       /* Green / G200 */
   --rose: #ff7e9f;       /* Red / R200 */
+  --pos-text: #33eaaa;
+  --neg-text: #ff7e9f;
+  --amber-mark: #ffd87e;
   --teal-tint: rgba(51,234,170,.16);
   --rose-tint: rgba(255,126,159,.16);
   --amber-tint: rgba(255,216,126,.18);
@@ -207,7 +215,7 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
   flex-wrap: wrap;
 }
 .page-title { font-family: "Space Grotesk"; font-weight: 600; font-size: 15px; color: var(--ink); white-space: nowrap; }
-.navbar-right { display: flex; align-items: center; gap: 14px; }
+.navbar-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .range { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .range label { color: var(--muted); font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
 .range input[type=date] {
@@ -247,8 +255,8 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 .panel-head h2 { font-size: 15px; font-weight: 600; }
 .hint { color: var(--muted); font-size: 12px; }
 .trend-finding { font-size: 14px; font-weight: 600; margin: 2px 0 8px; }
-.trend-finding.up { color: var(--teal); }
-.trend-finding.down { color: var(--rose); }
+.trend-finding.up { color: var(--pos-text); }
+.trend-finding.down { color: var(--neg-text); }
 
 /* ---------- Presentation page ---------- */
 /* One PDF page rendered onto the canvas at a time (app.js), letterboxed to
@@ -290,6 +298,8 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 .doc-intro li b { color: var(--ink); }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+/* Let grid items shrink below a chart canvas's last pixel width, or the canvas holds the column open on narrow screens. */
+.grid-2 > * { min-width: 0; }
 @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } .range { margin-left: 0; } }
 
 /* ---------- KPIs (AdminLTE "small-box" style: tinted background, a large
@@ -319,6 +329,7 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 
 /* ---------- Charts ---------- */
 .chart-wrap { height: 320px; position: relative; }
+.chart-wrap canvas { max-width: 100%; }
 .chart-wrap.sm { height: 240px; }
 /* Indonesia's real bbox is ~2.7:1 (wide, short) — sized so the full-width
    map panel fills horizontally with minimal top/bottom dead space instead
@@ -339,6 +350,9 @@ thead th {
 }
 tbody td { padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 tbody tr:hover { background: var(--hover-bg); }
+tbody tr.clickable { cursor: pointer; }
+td .link-btn { color: var(--ink); font-size: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+td .link-btn:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; border-radius: 2px; }
 td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-numeric: tabular-nums; }
 .tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .tag.buy { background: var(--teal-tint); color: var(--teal); }
@@ -640,19 +654,25 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   }
 
   main { padding: 14px; }
-  .topbar { padding: 10px 14px; gap: 10px; }
+  /* Not sticky on phones: with 44px controls the wrapped bar is ~300px tall
+     at 320px wide and would cover a third of the screen while scrolling. */
+  .topbar { padding: 10px 14px; gap: 10px; position: static; }
   .panel { padding: 14px; }
   .panel-head { margin: 0 -14px 16px; padding: 0 14px 14px; }
   .chart-wrap { height: 240px; }
   .chart-wrap.sm { height: 200px; }
   .chart-wrap.geo { height: 260px; }
   .kpi-value { font-size: 22px; }
+  /* 44px touch height for the controls every section's filter bars use. */
+  .seg button, .btn-primary, .btn-ghost, select, input[type="date"], td .link-btn { min-height: 44px; }
+  .nav-toggle { width: 44px; height: 44px; }
 
   /* A right-anchored absolute panel can overflow off the left edge of a
      narrow screen depending on where its button lands after the filter row
      wraps — pin it as a fixed sheet near the top of the viewport instead of
-     anchoring to the button. */
-  .dropdown-multi-panel {
+     anchoring to the button. .align-left is listed too, or its right: auto
+     wins and the panel sizes to its content past the screen edge. */
+  .dropdown-multi-panel, .dropdown-multi-panel.align-left {
     position: fixed; left: 14px; right: 14px; top: 80px; width: auto; max-width: none;
     max-height: 70vh; overflow-y: auto;
   }
@@ -663,4 +683,8 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   .panel { padding: 12px; }
   .panel-head { margin: 0 -12px 14px; padding: 0 12px 12px; }
   h2 { font-size: 14px; }
+  /* A 3-4 button segmented control can be wider than a 320px screen. No
+     shrink, so it moves to its own line first and only wraps inside itself
+     when it's wider than the whole row. */
+  .seg { flex-wrap: wrap; max-width: 100%; flex-shrink: 0; }
 }

@@ -61,6 +61,8 @@ const EXPORT_SOURCE_TAB = {
   remisier_transactions: 'remisier-tx',
   sinvest_transactions: 'sinvest-tx',
   users_transactions: 'users-tx',
+  top_investors: 'top-investors',
+  aum_history_drill: 'aum',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
   referral_program_detail: 'referral-program',
@@ -558,6 +560,18 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/aum-history', requireTab('aum'), handler(async (req, res) => {
     const { from, to, granularity } = req.query;
     const q = Q.aumHistory(from, to, granularity);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/aum-history/drill', requireTab('aum'), handler(async (req, res) => {
+    const { start, end } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'start and end are required.' });
+    const q = Q.aumHistoryDrill(start, end);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
+  // ---- Top investors (subscribers / redeemers / net deposit) ---------------
+  app.get('/api/top-investors', requireTab('top-investors'), handler(async (req, res) => {
+    const q = Q.topInvestors(req.query);
     res.json(await runQuery(q.sql, q.params));
   }));
 
@@ -1116,6 +1130,12 @@ function createApp({ serveStatic = true } = {}) {
       rows = r.top;
     } else if (source === 'aum_history') {
       const q = Q.aumHistory(req.body.from, req.body.to, req.body.granularity);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'aum_history_drill') {
+      const q = Q.aumHistoryDrill(req.body.start, req.body.end);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'top_investors') {
+      const q = Q.topInvestors(req.body);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'product_performance') {
       const q = Q.productPerformance();

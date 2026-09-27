@@ -47,13 +47,13 @@ async function api(path, opts = {}) {
 }
 
 const idr = (n) => {
-  if (n == null) return '—';
+  if (n == null) return 'n/a';
   return 'Rp ' + new Intl.NumberFormat('id-ID', { notation: 'compact', maximumFractionDigits: 2 }).format(Number(n));
 };
-const idrFull = (n) => (n == null ? '—' : 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n))));
-const idrExact = (n) => (n == null ? '—' : 'Rp ' + new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(Number(n)));
-const num = (n) => (n == null ? '—' : new Intl.NumberFormat('en-US').format(Number(n)));
-const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) + '%' : '—');
+const idrFull = (n) => (n == null ? 'n/a' : 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n))));
+const idrExact = (n) => (n == null ? 'n/a' : 'Rp ' + new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(Number(n)));
+const num = (n) => (n == null ? 'n/a' : new Intl.NumberFormat('en-US').format(Number(n)));
+const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) + '%' : 'n/a');
 
 function toast(msg) {
   const t = $('#toast');
@@ -109,7 +109,7 @@ function readThemeColors() {
   const v = (name) => cs.getPropertyValue(name).trim();
   return {
     indigo: v('--indigo'), soft: v('--indigo-soft'), amber: v('--amber'),
-    teal: v('--teal'), rose: v('--rose'), muted: v('--muted'),
+    teal: v('--teal'), rose: v('--rose'), muted: v('--muted'), ink: v('--ink'), amberMark: v('--amber-mark'),
     grid: v('--line'), surface: v('--surface'), heatRgb: v('--heat-rgb'),
   };
 }
@@ -140,7 +140,7 @@ async function searchPortfolioUsers() {
 function renderPfResults(rows) {
   if (!rows.length) { $('#pfResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="pf-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
     </tr>`).join('');
   $('#pfResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#pfResults .pf-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -216,8 +216,8 @@ function renderPfKpis(holdings, split) {
   // have a live split, not a historical one, so there's nothing real to show.
   $('#pfKpis').innerHTML = [
     kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : t('kpi_not_available_past_date')),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -229,12 +229,12 @@ function renderPfKpis(holdings, split) {
 // names currently unchecked.
 function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = {}) {
   const gl = (v) => {
-    if (v == null) return '<td class="num">—</td>';
+    if (v == null) return '<td class="num">n/a</td>';
     const n = Number(v);
     return `<td class="num"><span style="color:${n >= 0 ? 'var(--teal)' : 'var(--rose)'}">${idrFull(n)}</span></td>`;
   };
   const glPct = (v) => {
-    if (v == null) return '<td class="num">—</td>';
+    if (v == null) return '<td class="num">n/a</td>';
     const n = Number(v);
     return `<td class="num"><span style="color:${n >= 0 ? 'var(--teal)' : 'var(--rose)'}">${n >= 0 ? '+' : ''}${n.toFixed(2)}%</span></td>`;
   };
@@ -255,9 +255,9 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = 
       <td>${fund}</td>
       <td><span class="tag other">${val(h.fund_type)}</span></td>
       <td class="num">${Number(val(h.unit)).toFixed(4)}</td>
-      <td class="num">${avg == null ? '—' : num(avg)}</td>
+      <td class="num">${avg == null ? 'n/a' : num(avg)}</td>
       <td class="num">${num(val(h.nav))}</td>
-      <td class="num">${fundValue == null ? '—' : idrFull(fundValue)}</td>
+      <td class="num">${fundValue == null ? 'n/a' : idrFull(fundValue)}</td>
       <td class="num">${idrFull(market)}</td>
       ${gl(gain)}
       ${glPct(pct)}
@@ -279,7 +279,7 @@ function renderPfPerformance(rows) {
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
-    if (pct == null) return '<td class="num">—</td>';
+    if (pct == null) return '<td class="num">n/a</td>';
     return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
   }).join('');
   $('#pfPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
@@ -301,7 +301,7 @@ async function searchPfxUsers() {
 function renderPfxResults(rows) {
   if (!rows.length) { $('#pfxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="pfx-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
     </tr>`).join('');
   $('#pfxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#pfxResults .pfx-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -372,8 +372,8 @@ function renderPfxKpis(holdings, split) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   $('#pfxKpis').innerHTML = [
     kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : t('kpi_not_available_past_date')),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -396,7 +396,7 @@ function renderPfxPerformance(rows) {
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
-    if (pct == null) return '<td class="num">—</td>';
+    if (pct == null) return '<td class="num">n/a</td>';
     return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
   }).join('');
   $('#pfxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
@@ -421,7 +421,7 @@ async function searchPtxUsers() {
 function renderPtxResults(rows) {
   if (!rows.length) { $('#ptxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="ptx-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
     </tr>`).join('');
   $('#ptxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#ptxResults .ptx-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -494,8 +494,8 @@ function renderPtxKpis(holdings, split) {
   // has no history, so an as-of-date view can't show a real bonus figure.
   $('#ptxKpis').innerHTML = [
     kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : t('kpi_not_available_past_date')),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -518,7 +518,7 @@ function renderPtxPerformance(rows) {
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
-    if (pct == null) return '<td class="num">—</td>';
+    if (pct == null) return '<td class="num">n/a</td>';
     return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
   }).join('');
   $('#ptxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
@@ -541,7 +541,7 @@ async function searchPsiUsers() {
 function renderPsiResults(rows) {
   if (!rows.length) { $('#psiResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="psi-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
     </tr>`).join('');
   $('#psiResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#psiResults .psi-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -612,8 +612,8 @@ function renderPsiKpis(holdings, split) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   $('#psiKpis').innerHTML = [
     kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : '—', split ? 'portfolios' : t('kpi_not_available_past_date')),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : '—', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -634,7 +634,7 @@ function renderPsiPerformance(rows) {
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
-    if (pct == null) return '<td class="num">—</td>';
+    if (pct == null) return '<td class="num">n/a</td>';
     return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
   }).join('');
   $('#psiPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
@@ -655,7 +655,7 @@ async function searchExplorerUsers() {
 function renderPeResults(rows) {
   if (!rows.length) { $('#peResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="pe-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
     </tr>`).join('');
   $('#peResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#peResults .pe-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -1072,10 +1072,12 @@ async function loadTrends(gran) {
 
 function doughnut(id, rows, labelKey, valueKey, fmt) {
   if (!rows.length) { return; }
+  const values = rows.map((r) => Number(val(r[valueKey])) || 0);
+  const total = values.reduce((a, b) => a + b, 0);
   paint(id, {
     type: 'doughnut',
-    data: { labels: rows.map((r) => val(r[labelKey])),
-      datasets: [{ data: rows.map((r) => Number(val(r[valueKey]))), backgroundColor: pie(), borderWidth: 2, borderColor: C.surface }] },
+    data: { labels: rows.map((r, i) => `${val(r[labelKey])} (${pct(values[i], total)})`),
+      datasets: [{ data: values, backgroundColor: pie(), borderWidth: 2, borderColor: C.surface }] },
     options: { maintainAspectRatio: false, cutout: '58%',
       plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10 } },
         tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt ? fmt(c.raw) : num(c.raw)}` } } } },
@@ -1096,10 +1098,11 @@ function renderTopFunds(rows) {
   const body = rows.map((f) => `<tr>
       <td>${val(f.label)}</td>
       <td class="num">${idrFull(val(f.aum))}</td>
+      <td class="num">${val(f.pct_of_total) == null ? 'n/a' : `${Number(val(f.pct_of_total)).toFixed(1)}%`}</td>
       <td class="num">${num(val(f.investors))}</td>
     </tr>`).join('');
   $('#topFunds').innerHTML = `<table><thead><tr>
-      <th>${nameCol}</th><th class="num">AUM</th><th class="num">Investors</th>
+      <th>${nameCol}</th><th class="num">AUM</th><th class="num">% of total</th><th class="num">Investors</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 // Fund checklist for the "Select funds" dropdown — every fund starts
@@ -1256,7 +1259,7 @@ async function loadChurn() {
       kpi(t('kpi_high_risk'), num(val(summary.high_risk)), t('kpi_ge50_churn_prob'), 'warn'),
       kpi(t('kpi_medium_risk'), num(val(summary.medium_risk)), '20–50%'),
       kpi(t('kpi_low_risk'), num(val(summary.low_risk)), '< 20%', 'accent'),
-      kpi(t('kpi_avg_probability'), (val(summary.avg_prob) != null ? (val(summary.avg_prob) * 100).toFixed(1) + '%' : '—'), `${num(val(summary.scored))} ${t('kpi_holders_scored')}`),
+      kpi(t('kpi_avg_probability'), (val(summary.avg_prob) != null ? (val(summary.avg_prob) * 100).toFixed(1) + '%' : 'n/a'), `${num(val(summary.scored))} ${t('kpi_holders_scored')}`),
     ].join('');
     renderChurnTable(top);
   } catch (e) { $('#churnTable').innerHTML = `<div class="empty">${e.message}</div>`; }
@@ -1272,7 +1275,7 @@ function renderChurnTable(rows) {
   if (!rows.length) { $('#churnTable').innerHTML = '<div class="empty">No holders to score.</div>'; return; }
   const body = rows.map((r) => `<tr>
       <td>${val(r.name) || val(r.user_id)}</td>
-      <td>${val(r.email) || '—'}</td>
+      <td>${val(r.email) || 'n/a'}</td>
       <td class="num">${(Number(val(r.churn_prob)) * 100).toFixed(1)}%</td>
       <td>${riskTag(val(r.churn_prob))}</td>
       <td class="num">${num(val(r.buys))}</td>
@@ -1289,7 +1292,7 @@ function renderChurnTable(rows) {
 async function loadChurnOverview() {
   try {
     const { overall, byTenure } = await api('/api/churn/overview');
-    const churnRate = val(overall.total_investors) ? (val(overall.churned) / val(overall.total_investors) * 100).toFixed(1) : '—';
+    const churnRate = val(overall.total_investors) ? (val(overall.churned) / val(overall.total_investors) * 100).toFixed(1) : 'n/a';
     $('#churnOverviewCards').innerHTML = [
       kpi(t('kpi_overall_churn_rate'), churnRate + '%', t('kpi_investors_fully_redeemed').replace('{churned}', num(val(overall.churned))).replace('{total}', num(val(overall.total_investors))), 'warn'),
       kpi(t('kpi_active_holders'), num(val(overall.active_holders)), t('kpi_currently_hold_1fund'), 'accent'),
@@ -1389,10 +1392,15 @@ async function loadAumHistory() {
   try {
     const data = await api(`/api/aum-history?from=${r.from}&to=${r.to}&granularity=${aumGran}`);
     aumCache = data;
+    $('#aumDrillPanel').classList.add('hidden');
     renderAumChart(data);
+    renderAumCauseChart(data);
     renderAumTable(data);
     renderAumTrendFinding(data);
-  } catch (e) { $('#aumTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) {
+    $('#aumTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    showAumCauseMessage(e.message);
+  }
 }
 
 function renderAumChart(data) {
@@ -1440,31 +1448,113 @@ function renderSeriesTrendFinding(elId, rows, key, label) {
   const pct = (last - first) / first * 100;
   const dir = pct >= 0 ? 'up' : 'down';
   el.className = `trend-finding ${dir}`;
-  el.textContent = `${label} ${dir} ${Math.abs(pct).toFixed(1)}% over this range — ${idrFull(first)} → ${idrFull(last)}`;
+  el.textContent = `${label} ${dir} ${Math.abs(pct).toFixed(1)}% over this range: ${idrFull(first)} → ${idrFull(last)}`;
   el.hidden = false;
 }
 
 function renderAumTrendFinding(data) {
   renderSeriesTrendFinding('#aumTrendFinding', data, 'aum', 'AUM');
+  // First row has no prior period, so its flows aren't part of first → last.
+  const rest = data.slice(1);
+  if ($('#aumTrendFinding').hidden || !rest.length) return;
+  const sum = (k) => rest.reduce((a, d) => a + (Number(val(d[k])) || 0), 0);
+  $('#aumTrendFinding').textContent += ` · net flow ${idrFull(sum('net_flow'))}, market effect ${idrFull(sum('market_effect'))}`;
+}
+
+function showAumCauseMessage(msg) {
+  $('#aumCauseWrap').classList.toggle('hidden', !!msg);
+  $('#aumCauseEmpty').classList.toggle('hidden', !msg);
+  $('#aumCauseEmpty').textContent = msg || '';
+}
+
+function renderAumCauseChart(data) {
+  const rows = data.slice(1); // first row has no ΔAUM to explain
+  showAumCauseMessage(rows.length ? '' : t('aum_cause_empty'));
+  if (!rows.length) return;
+  // Blue vs ochre stays distinguishable with red-green color blindness; the
+  // surface-colored border separates stacked segments (1.83:1 against each other).
+  const bar = { borderRadius: 4, borderColor: C.surface, borderWidth: 2, stack: 'cause', order: 1 };
+  paint('aumCauseChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((d) => val(d.bucket)),
+      datasets: [
+        { type: 'line', label: 'Δ AUM', data: rows.map((d) => Number(val(d.net_flow)) + Number(val(d.market_effect))),
+          borderColor: C.ink, backgroundColor: C.ink, showLine: false, pointRadius: 4, stack: 'delta', order: 0 },
+        { label: 'Net flow', data: rows.map((d) => val(d.net_flow)), backgroundColor: C.indigo, ...bar },
+        { label: 'Market effect', data: rows.map((d) => val(d.market_effect)), backgroundColor: C.amberMark, ...bar },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+      },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${idrFull(c.raw)}` } },
+      },
+    },
+  });
+}
+
+// Bucket → the day range its AUM history row covers: the whole day/month,
+// with the end clipped to the page's "to" date so the drill diffs the same
+// end-of-period AUM the row shows.
+function aumBucketRange(bucket) {
+  if (aumGran === 'day') return { start: bucket, end: bucket };
+  const [y, m] = bucket.split('-').map(Number);
+  const last = isoDate(new Date(Date.UTC(y, m, 0)));
+  const { to } = currentRange();
+  return { start: `${bucket}-01`, end: to && to < last ? to : last };
+}
+
+let aumDrillRange = null;
+async function loadAumDrill(bucket) {
+  aumDrillRange = aumBucketRange(bucket);
+  $('#aumDrillPanel').classList.remove('hidden');
+  $('#aumDrillTitle').textContent = `${t('aum_drill_title')} ${bucket}`;
+  $('#aumDrillTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
+  $('#aumDrillPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  try {
+    const rows = await api(`/api/aum-history/drill?start=${aumDrillRange.start}&end=${aumDrillRange.end}`);
+    genTable('#aumDrillTable', rows, [
+      { key: 'fund', label: 'Fund' }, { key: 'manager', label: 'Investment manager' },
+      { key: 'aum_start', label: 'AUM start', type: 'idr' }, { key: 'aum_end', label: 'AUM end', type: 'idr' },
+      { key: 'aum_change', label: 'Δ AUM', type: 'idr' },
+      { key: 'subscriptions', label: 'Subscriptions', type: 'idr' }, { key: 'redemptions', label: 'Redemptions', type: 'idr' },
+      { key: 'switch_net', label: 'Switch (net)', type: 'idr' }, { key: 'market_effect', label: 'Market effect', type: 'idr' },
+    ], 'No fund moved in this period.');
+  } catch (e) { $('#aumDrillTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
 function renderAumTable(data) {
-  if (!data.length) { $('#aumTable').innerHTML = '<div class="empty">No AUM snapshots in this date range — widen the date filter.</div>'; return; }
+  if (!data.length) { $('#aumTable').innerHTML = '<div class="empty">No AUM snapshots in this date range. Widen the date filter.</div>'; return; }
+  const tone = (v) => `color:${v >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}`;
+  const signed = (v) => (v == null ? 'n/a' : `<span style="${tone(v)}">${v >= 0 ? '+' : '-'}${idrFull(Math.abs(v))}</span>`);
   const rows = data.map((d, i) => {
     const aum = Number(val(d.aum)) || 0;
     const prev = i > 0 ? Number(val(data[i - 1].aum)) || 0 : null;
     const chg = prev ? ((aum - prev) / prev * 100) : null;
-    return { bucket: val(d.bucket), aum, revenue: val(d.revenue), funds: val(d.funds), chg };
+    const mkt = val(d.market_effect);
+    return { bucket: val(d.bucket), aum, revenue: val(d.revenue), funds: val(d.funds), chg,
+      subs: val(d.subscriptions), reds: val(d.redemptions), net: Number(val(d.net_flow)), mkt: mkt == null ? null : Number(mkt) };
   });
-  const body = rows.map((r) => `<tr>
-      <td class="mono">${r.bucket}</td>
+  const body = rows.map((r, i) => `<tr${i > 0 ? ` class="clickable" data-bucket="${r.bucket}"` : ''}>
+      <td class="mono">${i > 0 ? `<button type="button" class="link-btn mono" title="${t('aum_drill_row_title')}">${r.bucket}</button>` : r.bucket}</td>
       <td class="num">${idrFull(r.aum)}</td>
-      <td class="num">${r.chg == null ? '—' : `<span style="color:${r.chg >= 0 ? 'var(--teal)' : 'var(--rose)'}">${r.chg >= 0 ? '+' : ''}${r.chg.toFixed(1)}%</span>`}</td>
+      <td class="num">${r.chg == null ? 'n/a' : `<span style="${tone(r.chg)}">${r.chg >= 0 ? '+' : ''}${r.chg.toFixed(1)}%</span>`}</td>
+      <td class="num">${signed(r.net)}</td>
+      <td class="num">${signed(r.mkt)}</td>
+      <td class="num">${idrFull(r.subs)}</td>
+      <td class="num">${idrFull(r.reds)}</td>
       <td class="num">${idrFull(r.revenue)}</td>
       <td class="num">${num(r.funds)}</td>
     </tr>`).join('');
   $('#aumTable').innerHTML = `<table><thead><tr>
-      <th>Period</th><th class="num">AUM</th><th class="num">Δ AUM</th><th class="num">Revenue</th><th class="num">Funds</th>
+      <th>Period</th><th class="num">AUM</th><th class="num">Δ AUM</th><th class="num">Net flow</th><th class="num">Market effect</th>
+      <th class="num">Subscriptions</th><th class="num">Redemptions</th><th class="num">Revenue</th><th class="num">Funds</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 
@@ -1548,7 +1638,7 @@ function renderPerfTrendChart(rows) {
       scales: { y: { grid: { color: C.grid }, title: { display: true, text: 'NAV' } },
         x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } } },
       plugins: { legend: { position: 'bottom' },
-        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw == null ? '—' : num(c.raw)}` } } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw == null ? 'n/a' : num(c.raw)}` } } },
     },
   });
 }
@@ -1572,7 +1662,7 @@ function renderPerformance(rows) {
   const body = Object.keys(byType).sort().map((type) => {
     const cells = PERF_PERIODS.map((p) => {
       const c = byType[type][p];
-      if (!c || c.pct == null) return '<td class="num">—</td>';
+      if (!c || c.pct == null) return '<td class="num">n/a</td>';
       const pct = Number(c.pct);
       return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</span></td>`;
     }).join('');
@@ -1656,10 +1746,10 @@ function renderPerformanceDetail() {
   const body = funds.map((f) => {
     const cells = PERF_PERIODS.map((p) => {
       const pct = f[p];
-      if (pct == null) return '<td class="num">—</td>';
+      if (pct == null) return '<td class="num">n/a</td>';
       return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
     }).join('');
-    const ipoDate = f.ipoDate ? String(f.ipoDate).slice(0, 10) : '—';
+    const ipoDate = f.ipoDate ? String(f.ipoDate).slice(0, 10) : 'n/a';
     return `<tr><td>${f.name}</td><td><span class="tag other">${f.type}</span></td><td>${ipoDate}</td><td class="num">${num(f.nav)}</td>${cells}</tr>`;
   }).join('');
   $('#perfDetailTable').innerHTML = `<table><thead><tr><th>Fund</th><th>Type</th><th>Tanggal Emisi</th><th class="num">NAV</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
@@ -1673,12 +1763,12 @@ function genTable(sel, rows, cols, emptyMsg) {
   const head = cols.map((c) => `<th class="${numTypes.includes(c.type) ? 'num' : ''}">${c.label}</th>`).join('');
   const body = rows.map((r) => '<tr>' + cols.map((c) => {
     const v = val(r[c.key]);
-    let out = v == null ? '—' : v;
+    let out = v == null ? 'n/a' : v;
     if (c.type === 'idr') out = idrFull(v);
     if (c.type === 'idrx') out = idrExact(v);
     if (c.type === 'num') out = num(v);
-    if (c.type === 'pct') out = v == null ? '—' : `${Number(v).toFixed(1)}%`;
-    if (c.type === 'date') out = v == null ? '—' : String(v).slice(0, 10);
+    if (c.type === 'pct') out = v == null ? 'n/a' : `${Number(v).toFixed(1)}%`;
+    if (c.type === 'date') out = v == null ? 'n/a' : String(v).slice(0, 10);
     return `<td class="${numTypes.includes(c.type) ? 'num' : ''}">${out}</td>`;
   }).join('') + '</tr>').join('');
   $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
@@ -1709,10 +1799,13 @@ async function loadGrowth() {
   api('/api/users/aum-by-risk').then((rows) => doughnut('riskChart', rows, 'label', 'aum', idrFull))
     .catch(() => {});
 
-  api('/api/users/aum-by-income').then((rows) => genTable('#incomeTable', rows, [
-    { key: 'label', label: 'Income bracket' }, { key: 'investors', label: 'Investors', type: 'num' },
-    { key: 'aum', label: 'AUM', type: 'idr' },
-  ], 'No data.')).catch((e) => $('#incomeTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  api('/api/users/aum-by-income').then((rows) => {
+    const total = rows.reduce((a, r) => a + (Number(val(r.aum)) || 0), 0);
+    genTable('#incomeTable', rows.map((r) => ({ ...r, share: total ? Number(val(r.aum)) / total * 100 : null })), [
+      { key: 'label', label: 'Income bracket' }, { key: 'investors', label: 'Investors', type: 'num' },
+      { key: 'aum', label: 'AUM', type: 'idr' }, { key: 'share', label: '% of AUM', type: 'pct' },
+    ], 'No data.');
+  }).catch((e) => $('#incomeTable').innerHTML = `<div class="empty">${e.message}</div>`);
 }
 
 // RECONCILIATION (app ledger vs custodian feed)
@@ -2512,6 +2605,65 @@ async function loadUtx() {
   } catch (e) { $('#utxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
+// TOP INVESTORS — Day/Week/Month resolve to the day, Mon–Sun week, or
+// calendar month containing #tiDate; Custom reads From/To directly.
+let tiMetric = 'subscriptions';
+let tiPeriod = 'month';
+let tiLoaded = false;
+
+function tiParams() {
+  const base = { metric: tiMetric, limit: $('#tiLimit').value };
+  if (tiPeriod === 'custom') return { ...base, from: $('#tiFrom').value, to: $('#tiTo').value };
+  const d = new Date(`${$('#tiDate').value || isoDate(new Date())}T00:00:00Z`);
+  if (tiPeriod === 'day') return { ...base, from: isoDate(d), to: isoDate(d) };
+  if (tiPeriod === 'week') {
+    const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+    const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+    return { ...base, from: isoDate(mon), to: isoDate(sun) };
+  }
+  return { ...base, from: isoDate(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))),
+    to: isoDate(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))) };
+}
+
+const TI_COLS = {
+  subscriptions: [
+    { key: 'subscriptions', label: 'Subscriptions', type: 'idr' }, { key: 'buys', label: '# buys', type: 'num' },
+    { key: 'pct_of_subscriptions', label: '% of all subscriptions', type: 'pct' },
+    { key: 'redemptions', label: 'Redemptions', type: 'idr' }, { key: 'net_deposit', label: 'Net deposit', type: 'idr' },
+  ],
+  redemptions: [
+    { key: 'redemptions', label: 'Redemptions', type: 'idr' }, { key: 'sells', label: '# sells', type: 'num' },
+    { key: 'pct_of_redemptions', label: '% of all redemptions', type: 'pct' },
+    { key: 'subscriptions', label: 'Subscriptions', type: 'idr' }, { key: 'net_deposit', label: 'Net deposit', type: 'idr' },
+  ],
+  net: [
+    { key: 'net_deposit', label: 'Net deposit', type: 'idr' },
+    { key: 'subscriptions', label: 'Subscriptions', type: 'idr' }, { key: 'redemptions', label: 'Redemptions', type: 'idr' },
+  ],
+};
+
+async function loadTopInvestors() {
+  const p = tiParams();
+  if (!p.from || !p.to) { toast('Pick a date range first.'); return; }
+  $('#tiSummary').hidden = true;
+  $('#tiTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
+  try {
+    const rows = await api(`/api/top-investors?${new URLSearchParams(p)}`);
+    genTable('#tiTable', rows.map((r, i) => ({ ...r, rank: i + 1 })), [
+      { key: 'rank', label: '#', type: 'num' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+      ...TI_COLS[p.metric],
+    ], t('ti_empty'));
+    if (!rows.length) return;
+    const sum = (k) => rows.reduce((a, r) => a + (Number(val(r[k])) || 0), 0);
+    const range = p.from === p.to ? p.from : `${p.from} → ${p.to}`;
+    $('#tiSummary').textContent = p.metric === 'net'
+      ? `${range}: top ${rows.length} net deposit ${idrFull(sum('net_deposit'))}`
+      : `${range}: top ${rows.length} = ${sum(`pct_of_${p.metric}`).toFixed(1)}% of all ${p.metric} (${idrFull(sum(p.metric))})`;
+    $('#tiSummary').hidden = false;
+  } catch (e) { $('#tiTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
 // EVENT CODE TRACKING (generic — no event/code table exists yet, see
 // queries.js:eventCodeWhere; field still picks referrer_code/sales_code like
 // Remisier does, since that's where a code would live today). No tab-switch
@@ -2674,7 +2826,7 @@ const ex = { meta: [], current: null, offset: 0, limit: 50, total: 0 };
 
 function fmtCell(v, type) {
   v = val(v);
-  if (v == null || v === '') return '—';
+  if (v == null || v === '') return 'n/a';
   switch (type) {
     case 'idr': return idrFull(v);
     case 'num': return num(v);
@@ -2826,7 +2978,7 @@ function renderGenericTable(sel, rows, emptyMsg = 'Query returned no rows.') {
   const body = rows.slice(0, 1000).map((r) => '<tr>' + cols.map((c) => {
     const v = val(r[c]);
     const isNum = typeof v === 'number';
-    return `<td class="${isNum ? 'num' : ''}">${v == null ? '—' : (isNum ? num(v) : String(v))}</td>`;
+    return `<td class="${isNum ? 'num' : ''}">${v == null ? 'n/a' : (isNum ? num(v) : String(v))}</td>`;
   }).join('') + '</tr>').join('');
   const note = rows.length > 1000 ? `<div class="hint" style="padding:8px 12px">Showing first 1,000 of ${num(rows.length)} rows. Export for the full set.</div>` : '';
   $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>${note}`;
@@ -2941,7 +3093,7 @@ async function searchSendStatementUsers() {
 function renderSsResults(rows) {
   if (!rows.length) { $('#ssResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="pf-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${val(r.email) || '—'}</td><td>${val(r.ifua) || '—'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
     </tr>`).join('');
   $('#ssResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#ssResults .pf-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -3110,7 +3262,7 @@ function renderFpeResults(rows) {
     const action = email
       ? `<button class="btn-ghost fpe-add-btn" data-email="${email}">+ Add</button>`
       : '<span class="hint">No email</span>';
-    return `<tr><td>${val(r.sid) || '—'}</td><td>${val(r.name) || '—'}</td><td>${email || '—'}</td><td>${action}</td></tr>`;
+    return `<tr><td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${email || 'n/a'}</td><td>${action}</td></tr>`;
   }).join('');
   $('#fpeResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#fpeResults .fpe-add-btn').forEach((btn) => btn.addEventListener('click', () => addFpeRecipient(btn.dataset.email)));
@@ -3232,11 +3384,11 @@ function renderSchedules(kind, rows) {
       <td>${escapeHtml(schedFrequencySummary(r))}</td>
       <td>${r.kind === 'statement' ? [r.send_portfolio && 'Portfolio', r.send_statement && 'E-statement'].filter(Boolean).join(' + ') : 'Fund performance'}</td>
       <td>${r.status === 'active' ? 'Active' : r.status === 'ended' ? 'Ended' : 'Paused'}</td>
-      <td>${r.end_date || '—'}</td>
-      <td>${r.next_run_at ? toJakartaTime(r.next_run_at) : '—'}</td>
-      <td>${r.last_run_at ? toJakartaTime(r.last_run_at) : '—'}</td>
+      <td>${r.end_date || 'n/a'}</td>
+      <td>${r.next_run_at ? toJakartaTime(r.next_run_at) : 'n/a'}</td>
+      <td>${r.last_run_at ? toJakartaTime(r.last_run_at) : 'n/a'}</td>
       <td class="num">${num(r.run_count)}</td>
-      <td>${escapeHtml(r.created_by_username || '—')}</td>
+      <td>${escapeHtml(r.created_by_username || 'n/a')}</td>
       <td>
         <button type="button" class="btn-ghost sched-detail-btn" data-id="${r.id}">Detail</button>
         <button type="button" class="btn-ghost sched-toggle-btn" data-id="${r.id}" data-status="${r.status}">${r.status === 'active' ? 'Pause' : 'Resume'}</button>
@@ -3262,10 +3414,10 @@ function renderSchedules(kind, rows) {
 }
 
 // Per-recipient breakdown: name/SID (resolved server-side), send status, and
-// whether they currently hold a portfolio / transacted last month — "—" for
+// whether they currently hold a portfolio / transacted last month — "n/a" for
 // recipients that never resolved to a known investor (a plain email on a
 // Send fund performance list), not a false "No".
-const SCHED_YN = (v) => (v == null ? '—' : v ? 'Yes' : 'No');
+const SCHED_YN = (v) => (v == null ? 'n/a' : v ? 'Yes' : 'No');
 async function openSchedDetail(kind, id) {
   const { prefix } = schedCfg(kind);
   schedEl(prefix, 'DetailBody').innerHTML = '<div class="loading">Loading…</div>';
@@ -3286,9 +3438,9 @@ async function openSchedDetail(kind, id) {
         ? `${escapeHtml(r.status)}${r.processed_at ? ` · ${toJakartaTime(r.processed_at)}` : ''}${r.error ? ` — ${escapeHtml(r.error)}` : ''}`
         : 'Not sent yet';
       return `<tr>
-        <td>${escapeHtml(r.name || '—')}</td>
-        <td>${escapeHtml(r.sid || '—')}</td>
-        <td>${escapeHtml(r.email || '—')}</td>
+        <td>${escapeHtml(r.name || 'n/a')}</td>
+        <td>${escapeHtml(r.sid || 'n/a')}</td>
+        <td>${escapeHtml(r.email || 'n/a')}</td>
         <td>${SCHED_YN(r.has_portfolio)}</td>
         <td>${SCHED_YN(r.had_transaction_last_month)}</td>
         <td>${sentLabel}</td>
@@ -3806,13 +3958,13 @@ function renderAdminUsers(users) {
   const accessCell = (u) => {
     if (u.isSuperuser) return '<span class="tag completed">Superuser</span>';
     const tabs = u.allowedTabs || [];
-    if (!tabs.length) return '—';
+    if (!tabs.length) return 'n/a';
     return `<div class="access-list">${tabs.map((id) => `<span class="tag other">${labelFor(id)}</span>`).join('')}</div>`;
   };
   const body = users.map((u) => `
     <tr>
-      <td>${u.username || '—'}</td>
-      <td>${u.email || '—'}</td>
+      <td>${u.username || 'n/a'}</td>
+      <td>${u.email || 'n/a'}</td>
       <td>${accessCell(u)}</td>
       <td class="mono">${String(u.createdAt || '').slice(0, 10)}</td>
       <td>
@@ -4089,6 +4241,7 @@ function switchTab(name) {
   if (name === 'growth' && !growthLoaded) loadGrowth();
   if (name === 'reconciliation') loadReconciliation();
   if (name === 'sinvest-tx' && !sitxLoaded) loadSitx();
+  if (name === 'top-investors' && !tiLoaded) { tiLoaded = true; loadTopInvestors(); }
   if (name === 'revenue') loadRevenue();
   if (name === 'revenue2') loadRevenue2();
   // Both are loaded once per session rather than on every visit: User lifetime
@@ -4618,6 +4771,9 @@ function wire() {
   });
   $('#aumCsv').addEventListener('click', () => { const r = currentRange(); download({ source: 'aum_history', format: 'csv', filename: 'aum_history', from: r.from, to: r.to, granularity: aumGran }, 'aum_history.csv'); });
   $('#aumXlsx').addEventListener('click', () => { const r = currentRange(); download({ source: 'aum_history', format: 'xlsx', filename: 'aum_history', from: r.from, to: r.to, granularity: aumGran }, 'aum_history.xlsx'); });
+  $('#aumTable').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-bucket]'); if (tr) loadAumDrill(tr.dataset.bucket); });
+  $('#aumDrillCsv').addEventListener('click', () => download({ source: 'aum_history_drill', format: 'csv', filename: 'aum_history_drill', ...aumDrillRange }, 'aum_history_drill.csv'));
+  $('#aumDrillXlsx').addEventListener('click', () => download({ source: 'aum_history_drill', format: 'xlsx', filename: 'aum_history_drill', ...aumDrillRange }, 'aum_history_drill.xlsx'));
 
   // product performance
   $('#perfCsv').addEventListener('click', () => download({ source: 'product_performance', format: 'csv', filename: 'product_performance' }, 'product_performance.csv'));
@@ -4778,6 +4934,23 @@ function wire() {
 
   // users transactions
   $('#utxRun').addEventListener('click', () => { utx.offset = 0; loadUtx(); });
+  $('#tiDate').value = isoDate(new Date());
+  $('#tiMetric').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#tiMetric button').forEach((x) => x.classList.toggle('on', x === b));
+    tiMetric = b.dataset.m; loadTopInvestors();
+  });
+  $('#tiPeriod').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#tiPeriod button').forEach((x) => x.classList.toggle('on', x === b));
+    tiPeriod = b.dataset.p;
+    $('#tiDateWrap').classList.toggle('hidden', tiPeriod === 'custom');
+    $$('.ti-custom').forEach((el) => el.classList.toggle('hidden', tiPeriod !== 'custom'));
+    if (tiPeriod !== 'custom') loadTopInvestors();
+  });
+  $('#tiRun').addEventListener('click', loadTopInvestors);
+  $('#tiCsv').addEventListener('click', () => download({ source: 'top_investors', format: 'csv', filename: 'top_investors', ...tiParams() }, 'top_investors.csv'));
+  $('#tiXlsx').addEventListener('click', () => download({ source: 'top_investors', format: 'xlsx', filename: 'top_investors', ...tiParams() }, 'top_investors.xlsx'));
   $('#utxPrev').addEventListener('click', () => { utx.offset = Math.max(0, utx.offset - utx.limit); loadUtx(); });
   $('#utxNext').addEventListener('click', () => { utx.offset += utx.limit; loadUtx(); });
   $('#utxCsv').addEventListener('click', () => download(

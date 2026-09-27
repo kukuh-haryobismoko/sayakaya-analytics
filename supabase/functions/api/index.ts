@@ -53,6 +53,8 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   remisier_transactions: 'remisier-tx',
   sinvest_transactions: 'sinvest-tx',
   users_transactions: 'users-tx',
+  top_investors: 'top-investors',
+  aum_history_drill: 'aum',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
   referral_program_detail: 'referral-program',
@@ -656,6 +658,18 @@ on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
   const q = Q.aumHistory(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
   return json(await runQuery(q.sql, q.params));
 }));
+on('GET', '/api/aum-history/drill', requireTab('aum', async (_req, _params, url) => {
+  const start = qp(url, 'start'), end = qp(url, 'end');
+  if (!start || !end) return json({ error: 'start and end are required.' }, 400);
+  const q = Q.aumHistoryDrill(start, end);
+  return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- Top investors (subscribers / redeemers / net deposit) ---------------
+on('GET', '/api/top-investors', requireTab('top-investors', async (_req, _params, url) => {
+  const q = Q.topInvestors({ from: qp(url, 'from'), to: qp(url, 'to'), metric: qp(url, 'metric'), limit: qp(url, 'limit') });
+  return json(await runQuery(q.sql, q.params));
+}));
 
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
 on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement', 'send-fund-performance'], async (_req, _params, url) => {
@@ -1177,6 +1191,12 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     rows = r.top;
   } else if (source === 'aum_history') {
     const q = Q.aumHistory(body.from as string, body.to as string, body.granularity as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'aum_history_drill') {
+    const q = Q.aumHistoryDrill(body.start as string, body.end as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'top_investors') {
+    const q = Q.topInvestors(body as { from?: string; to?: string; metric?: string; limit?: number });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'product_performance') {
     const q = Q.productPerformance();

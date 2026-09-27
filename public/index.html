@@ -190,6 +190,7 @@
           <button class="nav-link" data-tab="send-statement"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Send statement</button>
           <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Send fund performance</button>
           <button class="nav-link" data-tab="users-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Users transactions</button>
+          <button class="nav-link" data-tab="top-investors"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-coin"></use></svg></span>Top investors</button>
         </div>
         <div class="nav-group" data-group="operations">
           <div class="nav-label"><span data-i18n="nav_group_operations">Operations &amp; Finance</span><span class="nav-group-caret"></span></div>
@@ -805,6 +806,45 @@
       </div>
     </section>
 
+    <!-- TOP INVESTORS — biggest subscribers / redeemers / net depositors in a period -->
+    <section id="top-investors" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2>Top investors</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="tiCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="tiXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <div class="ask-bar" style="flex-wrap:wrap; align-items:center">
+          <div class="seg" id="tiMetric">
+            <button data-m="subscriptions" class="on" data-i18n="ti_subscribers">Subscribers</button>
+            <button data-m="redemptions" data-i18n="ti_redeemers">Redeemers</button>
+            <button data-m="net" data-i18n="ti_net_deposit">Net deposit</button>
+          </div>
+          <div class="seg" id="tiPeriod">
+            <button data-p="day" data-i18n="common_day">Day</button>
+            <button data-p="week" data-i18n="common_week">Week</button>
+            <button data-p="month" class="on" data-i18n="common_month">Month</button>
+            <button data-p="custom" data-i18n="ti_custom">Custom</button>
+          </div>
+          <label id="tiDateWrap"><span data-i18n="ti_date">Date</span> <input type="date" id="tiDate" /></label>
+          <label class="ti-custom hidden"><span data-i18n="range_from">From</span> <input type="date" id="tiFrom" /></label>
+          <label class="ti-custom hidden"><span data-i18n="range_to">To</span> <input type="date" id="tiTo" /></label>
+          <select id="tiLimit">
+            <option value="10">Top 10</option>
+            <option value="50">Top 50</option>
+            <option value="100" selected>Top 100</option>
+            <option value="500">Top 500</option>
+          </select>
+          <button id="tiRun" class="btn-primary" data-i18n="common_run">Run</button>
+        </div>
+        <span class="hint" data-i18n="ti_hint">Completed buy (subscription) and sell (redemption) transactions, by transaction date. Day/Week/Month cover the day, Monday–Sunday week, or calendar month containing the date you pick; Custom takes any From/To range. Net deposit = subscriptions − redemptions, highest first. "% of all" is the investor's share of every investor's total in that period.</span>
+        <div id="tiSummary" class="trend-finding" hidden></div>
+        <div id="tiTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
     <!-- PORTFOLIO (FIX) — same as PWC above, sourced from mi_fee_logs.portfolio_fix -->
     <section id="portfolio-fix" class="view">
       <div class="panel">
@@ -1210,8 +1250,25 @@
         <div class="chart-wrap" style="margin-top:14px"><canvas id="aumChart"></canvas></div>
       </div>
       <div class="panel">
+        <div class="panel-head"><h2 data-i18n="aum_cause_title">What moved AUM</h2></div>
+        <span class="hint" data-i18n="aum_cause_hint">Each period's AUM change split into net flow (completed subscriptions − redemptions) and market effect (everything else: NAV moves, reinvested dividends, bonus units). The two bars add up to the change. Click a row in the table below to see which funds drove it.</span>
+        <div class="chart-wrap" id="aumCauseWrap" style="margin-top:14px"><canvas id="aumCauseChart"></canvas></div>
+        <div id="aumCauseEmpty" class="empty hidden"></div>
+      </div>
+      <div class="panel">
         <div class="panel-head"><h2 data-i18n="common_detail">Detail</h2></div>
         <div id="aumTable" class="table-wrap tall"></div>
+      </div>
+      <div class="panel hidden" id="aumDrillPanel">
+        <div class="panel-head wrap">
+          <h2 id="aumDrillTitle"></h2>
+          <div class="exp">
+            <button class="btn-ghost" id="aumDrillCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="aumDrillXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="aum_drill_hint">Per fund, sorted by the size of its AUM change. Switch = money moved in from (or out to) another fund; it nets to about zero across the platform, so it only shows up here. Market effect = AUM change − subscriptions + redemptions − switch.</span>
+        <div id="aumDrillTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
 
@@ -2256,6 +2313,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Users transactions</h3>
           <p>Browse any investor's transactions by SID code, email, or name (partial match, required), with the buyer's contact info and fund name attached to every row: same join as Remisier transactions, but searched by investor identity instead of referrer/sales code. Refine further by transaction type, status, fund, or date range. Exports to CSV, Excel, or PDF.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-coin"></use></svg> Top investors</h3>
+          <p data-i18n="docs_top_investors_desc">Ranks investors by how much they put in (Subscribers), took out (Redeemers), or put in net of what they took out (Net deposit) over a day, a week, a month, or any custom date range. Pick how many to show (top 10 to 500). Each row shows the investor's SID, name, email, amounts, number of transactions, and their share of everyone's total for that period. Exports to CSV or Excel.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg> HNWI</h3>
