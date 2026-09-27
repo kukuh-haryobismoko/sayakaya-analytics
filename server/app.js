@@ -1121,7 +1121,7 @@ function createApp({ serveStatic = true } = {}) {
       rows = await runQuery(capRows(v.sql, limit || 100000), {});
     } else if (source === 'growth_top_funds') {
       const q = Q.largestFundsAum(req.body.groupBy, req.body.date, req.body.excludeFunds);
-      rows = await runQuery(q.sql, q.params);
+      rows = (await runQuery(q.sql, q.params)).map(({ is_total, ...r }) => r);
     } else if (source === 'transactions') {
       const q = Q.transactions({ ...req.body.filters, limit: limit || 100000, offset: 0 });
       rows = await runQuery(q.sql, q.params);

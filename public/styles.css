@@ -350,6 +350,11 @@ thead th {
 }
 tbody td { padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 tbody tr:hover { background: var(--hover-bg); }
+/* Total row: stays visible at the bottom of tall scrolling tables, like the sticky header at the top. */
+tfoot td {
+  position: sticky; bottom: 0; background: var(--surface-alt); font-weight: 600;
+  padding: 9px 12px; border-top: 2px solid var(--line); white-space: nowrap;
+}
 tbody tr.clickable { cursor: pointer; }
 td .link-btn { color: var(--ink); font-size: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
 td .link-btn:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; border-radius: 2px; }

@@ -231,13 +231,15 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = 
   const gl = (v) => {
     if (v == null) return '<td class="num">n/a</td>';
     const n = Number(v);
-    return `<td class="num"><span style="color:${n >= 0 ? 'var(--teal)' : 'var(--rose)'}">${idrFull(n)}</span></td>`;
+    return `<td class="num"><span style="color:${n >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}">${idrFull(n)}</span></td>`;
   };
   const glPct = (v) => {
     if (v == null) return '<td class="num">n/a</td>';
     const n = Number(v);
-    return `<td class="num"><span style="color:${n >= 0 ? 'var(--teal)' : 'var(--rose)'}">${n >= 0 ? '+' : ''}${n.toFixed(2)}%</span></td>`;
+    return `<td class="num"><span style="color:${n >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}">${n >= 0 ? '+' : ''}${n.toFixed(2)}%</span></td>`;
   };
+  // G/L % in the Total row only covers funds with a known average buy price.
+  const tot = { fund: 0, market: 0, gain: 0 };
   const body = rows.map((h) => {
     // Derived client-side so the table works regardless of API version:
     // fund value = units x avg buy NAV; gain = market - fund value.
@@ -246,6 +248,8 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = 
     const fundValue = avg == null ? null : Math.round(Number(val(h.unit)) * avg);
     const gain = fundValue == null ? null : market - fundValue;
     const pct = fundValue ? (gain / fundValue) * 100 : null;
+    tot.market += market;
+    if (fundValue != null) { tot.fund += fundValue; tot.gain += gain; }
     const fund = val(h.fund);
     const chkTd = selectable
       ? `<td><input type="checkbox" class="hld-export-chk" data-fund="${String(fund).replace(/"/g, '&quot;')}" ${excluded.has(fund) ? '' : 'checked'}></td>`
@@ -264,9 +268,16 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = 
     </tr>`;
   }).join('');
   const chkTh = selectable ? '<th>Export</th>' : '';
+  const foot = rows.length ? `<tfoot><tr>
+      ${selectable ? '<td></td>' : ''}<td>Total</td><td></td><td></td><td></td><td></td>
+      <td class="num">${idrFull(tot.fund)}</td>
+      <td class="num">${idrFull(tot.market)}</td>
+      ${gl(tot.gain)}
+      ${glPct(tot.fund ? (tot.gain / tot.fund) * 100 : null)}
+    </tr></tfoot>` : '';
   return `<table><thead><tr>
       ${chkTh}<th>Fund</th><th>Type</th><th class="num">Unit Balance</th><th class="num">Average NAV</th><th class="num">Close NAV</th><th class="num">Fund Value</th><th class="num">Market Value</th><th class="num">Unrealized G/L</th><th class="num">%</th>
-    </tr></thead><tbody>${body}</tbody></table>`;
+    </tr></thead><tbody>${body}</tbody>${foot}</table>`;
 }
 
 function renderPfHoldings(rows) {
@@ -794,7 +805,7 @@ async function loadHnwiTotal() {
     const totals = await api(`/api/hnwi/total?date=${p.date}&minAum=${p.minAum}&maxAum=${p.maxAum}`);
     genTable('#hnwiTotalTable', totals, [
       ...HNWI_CONTACT_COLS, ...HNWI_RISK_COLS,
-      { key: 'total_aum', label: 'Total AUM', type: 'idr' }, { key: 'aum_date', label: 'AUM date', type: 'date' },
+      { key: 'total_aum', label: 'Total AUM', type: 'idr', sum: true }, { key: 'aum_date', label: 'AUM date', type: 'date' },
     ], 'No investors at or above this AUM threshold.');
     renderHnwiFinding(totals);
   } catch (e) {
@@ -821,7 +832,7 @@ async function loadHnwiByFund(useOwnFilter = hnwiByFundOwnFilter) {
     const byFund = await api(`/api/hnwi/by-fund?date=${p.date}&minAum=${p.minAum}&maxAum=${p.maxAum}&minFundAum=${p.minFundAum}&maxFundAum=${p.maxFundAum}`);
     genTable('#hnwiByFundTable', byFund, [
       ...HNWI_CONTACT_COLS, ...HNWI_RISK_COLS,
-      { key: 'fund_name', label: 'Fund' }, { key: 'fund_aum', label: 'Fund AUM', type: 'idr' },
+      { key: 'fund_name', label: 'Fund' }, { key: 'fund_aum', label: 'Fund AUM', type: 'idr', sum: true },
       { key: 'aum_date', label: 'AUM date', type: 'date' }, { key: 'total_aum', label: 'Total AUM', type: 'idr' },
     ], 'No fund holdings at or above this AUM threshold.');
   } catch (e) {
@@ -1093,17 +1104,18 @@ let topFundsGroup = 'fund';
 let topFundsDateDefaulted = false;
 function renderTopFunds(rows) {
   topFundsCache = rows;
-  if (!rows.length) { $('#topFunds').innerHTML = '<div class="empty">No funds.</div>'; return; }
+  const funds = rows.filter((f) => !val(f.is_total));
+  const total = rows.find((f) => val(f.is_total));
+  if (!funds.length) { $('#topFunds').innerHTML = '<div class="empty">No funds.</div>'; return; }
   const nameCol = topFundsGroup === 'manager' ? 'Investment manager' : 'Fund';
-  const body = rows.map((f) => `<tr>
+  const cells = (f) => `
       <td>${val(f.label)}</td>
       <td class="num">${idrFull(val(f.aum))}</td>
       <td class="num">${val(f.pct_of_total) == null ? 'n/a' : `${Number(val(f.pct_of_total)).toFixed(1)}%`}</td>
-      <td class="num">${num(val(f.investors))}</td>
-    </tr>`).join('');
+      <td class="num">${num(val(f.investors))}</td>`;
   $('#topFunds').innerHTML = `<table><thead><tr>
       <th>${nameCol}</th><th class="num">AUM</th><th class="num">% of total</th><th class="num">Investors</th>
-    </tr></thead><tbody>${body}</tbody></table>`;
+    </tr></thead><tbody>${funds.map((f) => `<tr>${cells(f)}</tr>`).join('')}</tbody>${total ? `<tfoot><tr>${cells(total)}</tr></tfoot>` : ''}</table>`;
 }
 // Fund checklist for the "Select funds" dropdown — every fund starts
 // checked (included); unchecking one drops it from the numbers below.
@@ -1114,7 +1126,7 @@ async function loadTopFundsOptions(date) {
   const prevExcluded = new Set(topFundsExcluded());
   let rows = [];
   try { rows = await api(`/api/funds/top?groupBy=fund&date=${date}`); } catch { return; }
-  $('#topFundsExcludeList').innerHTML = rows.map((f) => {
+  $('#topFundsExcludeList').innerHTML = rows.filter((f) => !val(f.is_total)).map((f) => {
     const name = val(f.label);
     return `<label class="ask-table-chk"><input type="checkbox" value="${name}"${prevExcluded.has(name) ? '' : ' checked'}> ${name}</label>`;
   }).join('');
@@ -1521,10 +1533,10 @@ async function loadAumDrill(bucket) {
     const rows = await api(`/api/aum-history/drill?start=${aumDrillRange.start}&end=${aumDrillRange.end}`);
     genTable('#aumDrillTable', rows, [
       { key: 'fund', label: 'Fund' }, { key: 'manager', label: 'Investment manager' },
-      { key: 'aum_start', label: 'AUM start', type: 'idr' }, { key: 'aum_end', label: 'AUM end', type: 'idr' },
-      { key: 'aum_change', label: 'Δ AUM', type: 'idr' },
-      { key: 'subscriptions', label: 'Subscriptions', type: 'idr' }, { key: 'redemptions', label: 'Redemptions', type: 'idr' },
-      { key: 'switch_net', label: 'Switch (net)', type: 'idr' }, { key: 'market_effect', label: 'Market effect', type: 'idr' },
+      { key: 'aum_start', label: 'AUM start', type: 'idr', sum: true }, { key: 'aum_end', label: 'AUM end', type: 'idr', sum: true },
+      { key: 'aum_change', label: 'Δ AUM', type: 'idr', sum: true },
+      { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true },
+      { key: 'switch_net', label: 'Switch (net)', type: 'idr', sum: true }, { key: 'market_effect', label: 'Market effect', type: 'idr', sum: true },
     ], 'No fund moved in this period.');
   } catch (e) { $('#aumDrillTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
@@ -1552,10 +1564,20 @@ function renderAumTable(data) {
       <td class="num">${idrFull(r.revenue)}</td>
       <td class="num">${num(r.funds)}</td>
     </tr>`).join('');
+  const sum = (k) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  const foot = `<tfoot><tr>
+      <td>Total</td><td></td><td></td>
+      <td class="num">${signed(sum('net'))}</td>
+      <td class="num">${signed(sum('mkt'))}</td>
+      <td class="num">${idrFull(sum('subs'))}</td>
+      <td class="num">${idrFull(sum('reds'))}</td>
+      <td class="num">${idrFull(sum('revenue'))}</td>
+      <td></td>
+    </tr></tfoot>`;
   $('#aumTable').innerHTML = `<table><thead><tr>
       <th>Period</th><th class="num">AUM</th><th class="num">Δ AUM</th><th class="num">Net flow</th><th class="num">Market effect</th>
       <th class="num">Subscriptions</th><th class="num">Redemptions</th><th class="num">Revenue</th><th class="num">Funds</th>
-    </tr></thead><tbody>${body}</tbody></table>`;
+    </tr></thead><tbody>${body}</tbody>${foot}</table>`;
 }
 
 // PRODUCT PERFORMANCE (NAV % change per fund type, external Apollo DB)
@@ -1757,12 +1779,13 @@ function renderPerformanceDetail() {
 
 // GROWTH (campaigns, referrals, switching, manager/demographic AUM)
 let growthLoaded = false;
+// Columns flagged `sum: true` get a Total row at the bottom. Only flag
+// columns that add up across rows: money and counts per fund/period, not
+// averages, rates, dates, or investor counts that overlap between rows.
 function genTable(sel, rows, cols, emptyMsg) {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
   const numTypes = ['idr', 'idrx', 'num', 'pct'];
-  const head = cols.map((c) => `<th class="${numTypes.includes(c.type) ? 'num' : ''}">${c.label}</th>`).join('');
-  const body = rows.map((r) => '<tr>' + cols.map((c) => {
-    const v = val(r[c.key]);
+  const td = (c, v) => {
     let out = v == null ? 'n/a' : v;
     if (c.type === 'idr') out = idrFull(v);
     if (c.type === 'idrx') out = idrExact(v);
@@ -1770,8 +1793,15 @@ function genTable(sel, rows, cols, emptyMsg) {
     if (c.type === 'pct') out = v == null ? 'n/a' : `${Number(v).toFixed(1)}%`;
     if (c.type === 'date') out = v == null ? 'n/a' : String(v).slice(0, 10);
     return `<td class="${numTypes.includes(c.type) ? 'num' : ''}">${out}</td>`;
-  }).join('') + '</tr>').join('');
-  $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  };
+  const head = cols.map((c) => `<th class="${numTypes.includes(c.type) ? 'num' : ''}">${c.label}</th>`).join('');
+  const body = rows.map((r) => '<tr>' + cols.map((c) => td(c, val(r[c.key]))).join('') + '</tr>').join('');
+  const foot = cols.some((c) => c.sum)
+    ? '<tfoot><tr>' + cols.map((c, i) => (c.sum
+      ? td(c, rows.reduce((a, r) => a + (Number(val(r[c.key])) || 0), 0))
+      : `<td>${i === 0 ? 'Total' : ''}</td>`)).join('') + '</tr></tfoot>'
+    : '';
+  $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>`;
 }
 
 async function loadGrowth() {
@@ -1802,8 +1832,8 @@ async function loadGrowth() {
   api('/api/users/aum-by-income').then((rows) => {
     const total = rows.reduce((a, r) => a + (Number(val(r.aum)) || 0), 0);
     genTable('#incomeTable', rows.map((r) => ({ ...r, share: total ? Number(val(r.aum)) / total * 100 : null })), [
-      { key: 'label', label: 'Income bracket' }, { key: 'investors', label: 'Investors', type: 'num' },
-      { key: 'aum', label: 'AUM', type: 'idr' }, { key: 'share', label: '% of AUM', type: 'pct' },
+      { key: 'label', label: 'Income bracket' }, { key: 'investors', label: 'Investors', type: 'num', sum: true },
+      { key: 'aum', label: 'AUM', type: 'idr', sum: true }, { key: 'share', label: '% of AUM', type: 'pct', sum: true },
     ], 'No data.');
   }).catch((e) => $('#incomeTable').innerHTML = `<div class="empty">${e.message}</div>`);
 }
@@ -1895,15 +1925,15 @@ async function loadRevenue() {
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM EOM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
     genTable('#revSummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' }, { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
     $('#revDetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
@@ -1935,15 +1965,15 @@ async function loadRevenue2() {
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM EOM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
     genTable('#rev2SummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' }, { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
     $('#rev2DetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
@@ -2031,9 +2061,9 @@ async function loadUlDetail(sid, name) {
       { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
       { key: 'days_running', label: 'Days', type: 'num' },
       { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eop', label: 'AUM end of period', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
-      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No holdings for this investor in this range.');
   } catch (e) { $('#ulDetailTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
@@ -2060,9 +2090,9 @@ async function loadUserLifetime() {
       { key: 'days_running', label: 'Days', type: 'num' },
       { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
       { key: 'aperd_per_investor', label: 'AperD per investor', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
-      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
     $('#ulUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
@@ -2119,18 +2149,18 @@ async function loadCampaignRevenue() {
       { key: 'campaign_type', label: 'Type' },
       { key: 'start_date', label: 'Starts', type: 'date' }, { key: 'end_date', label: 'Ends', type: 'date' },
       { key: 'holding_date', label: 'Holding until', type: 'date' },
-      { key: 'participations', label: 'Participations', type: 'num' },
+      { key: 'participations', label: 'Participations', type: 'num', sum: true },
       { key: 'investors', label: 'Investors', type: 'num' },
-      { key: 'still_locked', label: 'Still locked', type: 'num' },
+      { key: 'still_locked', label: 'Still locked', type: 'num', sum: true },
       { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'first_lock', label: 'First lock', type: 'date' },
       { key: 'days_running', label: 'Days', type: 'num' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
-      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr' },
-      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
-      { key: 'est_cost', label: 'Est. cost', type: 'idr' },
-      { key: 'net_vs_cost', label: 'Net vs cost', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
+      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr', sum: true },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
+      { key: 'est_cost', label: 'Est. cost', type: 'idr', sum: true },
+      { key: 'net_vs_cost', label: 'Net vs cost', type: 'idr', sum: true },
     ], 'No campaign holdings in this range.');
     genTable('#crDetailTable', detail, [
       { key: 'period', label: 'Period', type: 'date' },
@@ -2142,10 +2172,10 @@ async function loadCampaignRevenue() {
       { key: 'days_running', label: 'Days', type: 'num' },
       { key: 'avg_units', label: 'Avg units', type: 'num' },
       { key: 'avg_aum', label: 'Avg locked AUM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
-      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr' },
-      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
+      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr', sum: true },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No campaign holdings in this range.');
     genTable('#crSummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' },
@@ -2154,10 +2184,10 @@ async function loadCampaignRevenue() {
       { key: 'investors', label: 'Investors', type: 'num' },
       { key: 'days_running', label: 'Days', type: 'num' },
       { key: 'avg_aum', label: 'Avg locked AUM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
-      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr' },
-      { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
+      { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr', sum: true },
+      { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No campaign holdings in this range.');
   } catch (e) {
     $('#crCampaignsTable').innerHTML = `<div class="empty">${e.message}</div>`;
@@ -2353,21 +2383,21 @@ async function loadRemisier() {
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM (EOP)', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
-      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idr' },
-      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr' }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idr' },
-      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
+      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idr', sum: true },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr', sum: true }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idr', sum: true },
+      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr', sum: true },
     ], 'No revenue in this range.');
     genTable('#remSummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'total_aum', label: 'Total AUM (EOP)', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' }, { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
-      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idr' },
-      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr' }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idr' },
-      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
+      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idr', sum: true },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr', sum: true }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idr', sum: true },
+      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
     $('#remUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
@@ -2420,21 +2450,21 @@ async function loadRemisierPwc() {
       { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'avg_aum', label: 'Avg AUM', type: 'idrx' }, { key: 'aum_eom', label: 'AUM (EOP)', type: 'idrx' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idrx' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idrx' }, { key: 'total_mi_share', label: 'Total MI', type: 'idrx' },
-      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idrx' },
-      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx' }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idrx' },
-      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idrx', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idrx', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idrx', sum: true },
+      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idrx', sum: true },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx', sum: true }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idrx', sum: true },
+      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx', sum: true },
     ], 'No revenue in this range.');
     genTable('#remPwcSummaryTable', summary, [
       { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
       { key: 'days_running', label: 'Days running', type: 'num' },
       { key: 'total_aum', label: 'Total AUM (EOP)', type: 'idrx' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idrx' },
-      { key: 'total_aperd_share', label: 'Total AperD', type: 'idrx' }, { key: 'total_mi_share', label: 'Total MI', type: 'idrx' },
-      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idrx' },
-      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx' }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idrx' },
-      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx' },
+      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idrx', sum: true },
+      { key: 'total_aperd_share', label: 'Total AperD', type: 'idrx', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idrx', sum: true },
+      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idrx', sum: true },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx', sum: true }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idrx', sum: true },
+      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
     $('#remPwcUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
@@ -2627,18 +2657,18 @@ function tiParams() {
 
 const TI_COLS = {
   subscriptions: [
-    { key: 'subscriptions', label: 'Subscriptions', type: 'idr' }, { key: 'buys', label: '# buys', type: 'num' },
-    { key: 'pct_of_subscriptions', label: '% of all subscriptions', type: 'pct' },
-    { key: 'redemptions', label: 'Redemptions', type: 'idr' }, { key: 'net_deposit', label: 'Net deposit', type: 'idr' },
+    { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'buys', label: '# buys', type: 'num', sum: true },
+    { key: 'pct_of_subscriptions', label: '% of all subscriptions', type: 'pct', sum: true },
+    { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true }, { key: 'net_deposit', label: 'Net deposit', type: 'idr', sum: true },
   ],
   redemptions: [
-    { key: 'redemptions', label: 'Redemptions', type: 'idr' }, { key: 'sells', label: '# sells', type: 'num' },
-    { key: 'pct_of_redemptions', label: '% of all redemptions', type: 'pct' },
-    { key: 'subscriptions', label: 'Subscriptions', type: 'idr' }, { key: 'net_deposit', label: 'Net deposit', type: 'idr' },
+    { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true }, { key: 'sells', label: '# sells', type: 'num', sum: true },
+    { key: 'pct_of_redemptions', label: '% of all redemptions', type: 'pct', sum: true },
+    { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'net_deposit', label: 'Net deposit', type: 'idr', sum: true },
   ],
   net: [
-    { key: 'net_deposit', label: 'Net deposit', type: 'idr' },
-    { key: 'subscriptions', label: 'Subscriptions', type: 'idr' }, { key: 'redemptions', label: 'Redemptions', type: 'idr' },
+    { key: 'net_deposit', label: 'Net deposit', type: 'idr', sum: true },
+    { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true },
   ],
 };
 

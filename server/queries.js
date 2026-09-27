@@ -1221,7 +1221,9 @@ const aumByManager = (limit = 15) => ({
 // represents). AUM = SUM(amount) of that batch; investors = COUNT(DISTINCT
 // sid_code). groupBy switches the rollup between fund and investment
 // manager; excludeFunds drops those funds before the rollup so an MI's total
-// reflects the exclusion too. Shows every fund/MI — no LIMIT.
+// reflects the exclusion too. Shows every fund/MI — no LIMIT. The last row
+// (is_total) is the grand total; its investors are counted once even when
+// they hold several funds, which a sum of the rows above would double count.
 const largestFundsLatestDate = () => ({
   sql: `SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS latest_date FROM ${PORT_WITH_CODE}`,
   params: {},
@@ -1238,17 +1240,26 @@ const largestFundsAum = (groupBy = 'fund', date, excludeFunds = []) => {
         SELECT sid_code, id AS fund_id, amount
         FROM ${PORT_WITH_CODE}
         WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND total_unit > 0
+      ),
+      joined AS (
+        SELECT ${label} AS label, l.amount, l.sid_code
+        FROM latest l
+        JOIN ${FUNDS} f ON f.id = l.fund_id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+        ${excludeFilter}
       )
-      SELECT ${label} AS label,
-        ROUND(SUM(l.amount)) AS aum,
-        ROUND(SAFE_DIVIDE(100 * SUM(l.amount), SUM(SUM(l.amount)) OVER ()), 2) AS pct_of_total,
-        COUNT(DISTINCT l.sid_code) AS investors
-      FROM latest l
-      JOIN ${FUNDS} f ON f.id = l.fund_id
-      LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
-      ${excludeFilter}
+      SELECT label,
+        ROUND(SUM(amount)) AS aum,
+        ROUND(SAFE_DIVIDE(100 * SUM(amount), (SELECT SUM(amount) FROM joined)), 2) AS pct_of_total,
+        COUNT(DISTINCT sid_code) AS investors,
+        FALSE AS is_total
+      FROM joined
       GROUP BY label
-      ORDER BY aum DESC`,
+      UNION ALL
+      SELECT 'Total', ROUND(SUM(amount)), 100.0, COUNT(DISTINCT sid_code), TRUE
+      FROM joined
+      HAVING COUNT(*) > 0
+      ORDER BY is_total, aum DESC`,
     params,
   };
 };

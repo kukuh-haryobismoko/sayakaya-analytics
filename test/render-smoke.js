@@ -105,7 +105,10 @@ const overviewFundList = [{ id: 'PlFsTEcPFZCWZNeBOQ7Qw', name: 'Sucorinvest Mone
 const overviewProvince = [{ province_name: 'DKI Jakarta', investor_count: 3000, total_aum: '6e12' }];
 const overviewTopCities = [{ city_name: 'Jakarta Selatan', province_name: 'DKI Jakarta', investor_count: 1500 }];
 const overviewTopCitiesAum = [{ city_name: 'Jakarta Selatan', province_name: 'DKI Jakarta', total_aum: '3e12' }];
-const overviewTopFunds = [{ label: 'Sucorinvest Money Market Fund', aum: '5e12', pct_of_total: '66.81', investors: 2000 }];
+const overviewTopFunds = [
+  { label: 'Sucorinvest Money Market Fund', aum: '5e12', pct_of_total: '66.81', investors: 2000, is_total: false },
+  { label: 'Total', aum: '7.48e12', pct_of_total: 100, investors: 3100, is_total: true },
+];
 // AUM history: first row has no prior period, so market_effect is null there.
 const aumHistory = [
   { bucket: '2026-07', aum: '2.6e11', revenue: '1e8', funds: 80, subscriptions: '8.5e10', redemptions: '9e10', net_flow: '-4.5e9', market_effect: null },
@@ -191,6 +194,14 @@ sandbox.api = async (path) => {
     errors.push('#ovFundFilterList did not render the fund checklist');
   }
   // Root-cause columns and the % of total share actually reach the page.
+  // Total rows: SQL-provided for Largest funds, summed for genTable/AUM history.
+  const foot = (sel) => (get(sel)._html.match(/<tfoot>([\s\S]*?)<\/tfoot>/) || [])[1] || '';
+  for (const [sel, needle] of [['#topFunds', '3,100'], ['#topFunds', '100.0%'], ['#aumTable', 'Rp 154.000.000.000'], ['#aumDrillTable', 'Rp 8.700.000.000'], ['#tiTable', '37.6%']]) {
+    if (foot(sel).includes(needle)) { console.log(`ok    ${sel} total row has ${needle}`); continue; }
+    console.log(`FAIL  ${sel} total row missing ${needle}: ${foot(sel).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 160)}`);
+    errors.push(`${sel} total row missing ${needle}`);
+  }
+  if (get('#ovFundFilterList')._html.includes('>Total<') || get('#topFundsExcludeList')._html.includes('value="Total"')) errors.push('Total row leaked into a fund picker');
   for (const [sel, needle] of [['#aumTable', 'data-bucket="2026-08"'], ['#aumTable', '<button type="button" class="link-btn mono"'], ['#topFunds', '66.8%'], ['#tiTable', '37.6%']]) {
     if (get(sel)._html.includes(needle)) { console.log(`ok    ${sel} has ${needle}`); continue; }
     console.log(`FAIL  ${sel} missing ${needle}`);

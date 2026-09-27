@@ -1181,7 +1181,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     rows = await runQuery(capRows(v.sql, limit || 100000), {});
   } else if (source === 'growth_top_funds') {
     const q = Q.largestFundsAum((body.groupBy as string) || 'fund', body.date as string, body.excludeFunds as string[]);
-    rows = await runQuery(q.sql, q.params);
+    rows = (await runQuery(q.sql, q.params)).map(({ is_total: _t, ...r }) => r);
   } else if (source === 'transactions') {
     const filters = (body.filters as Record<string, unknown>) || {};
     const q = Q.transactions({ ...filters, limit: limit || 100000, offset: 0 } as Q.TransactionsArgs);
