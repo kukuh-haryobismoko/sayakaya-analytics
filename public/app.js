@@ -3380,8 +3380,12 @@ function setupBulkExport({ prefix: p, source }) {
       ].join('');
       const fundsWithAvg = summary.funds.map((f) => ({ ...f, avg_buy_price: f.unit ? f.fund_value / f.unit : null }));
       $(`#${p}BulkSummaryHoldings`).innerHTML = holdingsTableHtml(fundsWithAvg);
+      // Contact detail (email/phone/referrer/sales code) is shown here only —
+      // the actual export files never include it, just SID/name.
       genTable(`#${p}BulkSummaryInvestors`, summary.investors, [
-        { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'aum', label: 'AUM', type: 'idr' },
+        { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Phone' }, { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+        { key: 'aum', label: 'AUM', type: 'idr' },
       ], 'No holdings found.');
     } catch (e) {
       $(`#${p}BulkSummaryKpis`).innerHTML = `<div class="empty">${e.message}</div>`;

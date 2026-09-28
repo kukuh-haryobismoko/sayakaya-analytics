@@ -496,6 +496,7 @@ const usersByIdentifiers = (identifiers) => ({
 // the report shows authoritative data, not whatever the client last selected.
 const userContact = (userId) => ({
   sql: `SELECT u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone, up.birthdate,
+      u.referrer_code, u.sales_code,
       COALESCE(up.correspondence_address, up.id_address) AS address
     FROM ${USERS} u
     LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id

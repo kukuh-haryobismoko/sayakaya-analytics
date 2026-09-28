@@ -104,7 +104,15 @@ function aggregateBulkHoldings(entries) {
       byFund.set(key, row);
     }
     totalAum += aum;
-    investors.push({ sid: PDF.val(e.contact.sid), name: PDF.val(e.contact.name) || PDF.val(e.contact.sid), aum });
+    // Contact detail (email/phone/referrer_code/sales_code) is only ever
+    // shown in this summary preview, never in the export files themselves —
+    // /api/export/batch's CSV/XLSX/PDF only ever reads contact.sid/.name.
+    investors.push({
+      sid: PDF.val(e.contact.sid), name: PDF.val(e.contact.name) || PDF.val(e.contact.sid),
+      email: PDF.val(e.contact.email), phone: PDF.val(e.contact.phone),
+      referrer_code: PDF.val(e.contact.referrer_code), sales_code: PDF.val(e.contact.sales_code),
+      aum,
+    });
   }
   const funds = [...byFund.values()]
     .map((r) => ({ ...r, gain_loss: r.value - r.fund_value, gain_pct: r.fund_value ? ((r.value - r.fund_value) / r.fund_value) * 100 : null }))

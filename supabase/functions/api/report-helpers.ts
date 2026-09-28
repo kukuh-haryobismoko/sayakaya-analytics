@@ -100,7 +100,7 @@ interface BulkEntry { contact: Record<string, unknown>; holdings: Record<string,
 // sizes would misrepresent the group's real cost basis).
 export function aggregateBulkHoldings(entries: BulkEntry[]) {
   const byFund = new Map<string, { fund: string; fund_type: unknown; unit: number; fund_value: number; value: number; nav: unknown }>();
-  const investors: { sid: unknown; name: unknown; aum: number }[] = [];
+  const investors: { sid: unknown; name: unknown; email: unknown; phone: unknown; referrer_code: unknown; sales_code: unknown; aum: number }[] = [];
   let totalAum = 0;
   for (const e of entries) {
     let aum = 0;
@@ -115,7 +115,15 @@ export function aggregateBulkHoldings(entries: BulkEntry[]) {
       byFund.set(key, row);
     }
     totalAum += aum;
-    investors.push({ sid: val(e.contact.sid), name: val(e.contact.name) || val(e.contact.sid), aum });
+    // Contact detail (email/phone/referrer_code/sales_code) is only ever
+    // shown in this summary preview, never in the export files themselves —
+    // /api/export/batch's CSV/XLSX/PDF only ever reads contact.sid/.name.
+    investors.push({
+      sid: val(e.contact.sid), name: val(e.contact.name) || val(e.contact.sid),
+      email: val(e.contact.email), phone: val(e.contact.phone),
+      referrer_code: val(e.contact.referrer_code), sales_code: val(e.contact.sales_code),
+      aum,
+    });
   }
   const funds = [...byFund.values()]
     .map((r) => ({ ...r, gain_loss: r.value - r.fund_value, gain_pct: r.fund_value ? ((r.value - r.fund_value) / r.fund_value) * 100 : null }))

@@ -10,7 +10,7 @@ const D = (v) => ({ value: v }); // mimics a BigQuery DATE/NUMERIC wrapper
 
 const entries = [
   {
-    contact: { sid: 'IDD1', name: 'Alice' },
+    contact: { sid: 'IDD1', name: 'Alice', email: 'alice@example.com', phone: '0811', referrer_code: 'REF1', sales_code: 'SAL1' },
     holdings: [
       { fund: 'Fund A', fund_type: 'EQUITY', unit: D('100'), fund_value: 100000, value: 120000, nav: 1200 },
       { fund: 'Fund B', fund_type: 'MIXED', unit: D('50'), fund_value: 100000, value: 90000, nav: 1800 },
@@ -51,6 +51,13 @@ assert.strictEqual(fundB.gain_pct, -10);
 assert.deepStrictEqual(summary.investors.map((i) => i.sid), ['IDD1', 'IDD2']);
 assert.strictEqual(summary.investors[0].aum, 210000);
 assert.strictEqual(summary.investors[1].aum, 24000);
+
+// Contact detail (preview-only — the export files never carry this) passes
+// through from userContact() untouched.
+assert.strictEqual(summary.investors[0].email, 'alice@example.com');
+assert.strictEqual(summary.investors[0].phone, '0811');
+assert.strictEqual(summary.investors[0].referrer_code, 'REF1');
+assert.strictEqual(summary.investors[0].sales_code, 'SAL1');
 
 // A fund with zero cost basis gets no gain % (avoids dividing by zero).
 const zeroCost = aggregateBulkHoldings([{ contact: { sid: 'IDD3' }, holdings: [{ fund: 'Fund C', fund_type: 'MONEY_MARKET', unit: 10, fund_value: 0, value: 0, nav: 1000 }] }]);
