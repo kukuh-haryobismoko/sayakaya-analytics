@@ -1487,21 +1487,21 @@ function createApp({ serveStatic = true } = {}) {
     return { tab };
   }
   app.post('/api/export/batch', handler(async (req, res) => {
-    const { source, format = 'xlsx', filename = 'portfolio_batch', users, columns, includePerformance = true } = req.body || {};
+    const { source, format = 'xlsx', filename = 'portfolio_batch', users, columns } = req.body || {};
     const v = validateBatchRequest(source, users);
     if (v.error) return res.status(v.status).json({ error: v.error });
     if (!Auth.userCan(req.user, v.tab)) return res.status(403).json({ error: 'You do not have access to this export.' });
     const username = req.user.username;
     await Auth.logEvent(req.user.id, username, 'export', `${source} batch (${format}) x${users.length} as "${filename}"`);
 
-    const pq = Q.productPerformanceDetail();
-    const perf = includePerformance ? pivotPerformanceByType(await runQuery(pq.sql, pq.params)) : [];
-
     const entries = await fetchBatchEntries(source, users);
     if (!entries.length) return res.status(400).json({ error: 'No exportable data found for the selected investors.' });
 
+    // Portfolio-only, no fund-performance pages — same call as bulk export
+    // makes for a single investor (see /api/export's portfolio_full etc.):
+    // a list of investors' holdings, not a full fund-performance report.
     if (format === 'pdf') {
-      const buf = await PDF.portfolioReportBatch(entries, perf, { columns, username });
+      const buf = await PDF.portfolioReportBatch(entries, [], { columns, username });
       return sendPdf(res, buf, filename, username);
     }
     if (format === 'xlsx') {
@@ -1512,7 +1512,7 @@ function createApp({ serveStatic = true } = {}) {
         seen.add(name);
         return { name, rows: portfolioSheetRows(e.holdings) };
       });
-      return sendXlsxMulti(res, [...sheets, ...perf], filename, username);
+      return sendXlsxMulti(res, sheets, filename, username);
     }
     const rows = entries.flatMap((e) => portfolioSheetRows(e.holdings).map((row) => ({ SID: e.contact.sid, Name: e.contact.name, ...row })));
     return sendCsv(res, rows, filename, username);

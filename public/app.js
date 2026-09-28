@@ -119,12 +119,150 @@ const charts = {};
 function paint(id, config) {
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart($('#' + id), config);
+  wireChartExportBar(id);
 }
 function applyChartDefaults() {
   Chart.defaults.font.family = 'Inter, sans-serif';
   Chart.defaults.color = C.muted;
 }
 applyChartDefaults();
+
+// ---------- CHART EXPORT (PNG download + copy to clipboard) ----------
+// Wired automatically by paint() above onto every chart in the app — no
+// per-chart code needed anywhere else.
+function wireChartExportBar(id) {
+  const canvas = $('#' + id);
+  const wrap = canvas && canvas.closest('.chart-wrap');
+  if (!wrap || wrap.querySelector('.chart-export-bar')) return;
+  const bar = document.createElement('div');
+  bar.className = 'chart-export-bar';
+  bar.innerHTML = `<button type="button" data-action="png" title="Download PNG">⤓</button>
+    <button type="button" data-action="copy" title="Copy image to clipboard">⧉</button>`;
+  bar.querySelector('[data-action="png"]').addEventListener('click', () => downloadChartPng(id));
+  bar.querySelector('[data-action="copy"]').addEventListener('click', () => copyChartPng(id));
+  wrap.appendChild(bar);
+}
+function downloadChartPng(id) {
+  const chart = charts[id];
+  if (!chart) return;
+  const a = document.createElement('a');
+  a.href = chart.toBase64Image('image/png', 1);
+  a.download = `${id}.png`;
+  a.click();
+}
+function copyChartPng(id) {
+  const chart = charts[id];
+  if (!chart) return;
+  chart.canvas.toBlob((blob) => {
+    if (!blob) return;
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      .then(() => toast('Chart copied to clipboard'))
+      .catch(() => toast('Copy failed. Try Download instead.'));
+  });
+}
+
+// ---------- TABLE EXPORT (CSV / Excel / PDF / PNG, on every table) ----------
+// A MutationObserver watches every .table-wrap in the app (there are dozens,
+// each rendered by its own function) and injects one small export bar the
+// first time it sees a real <table> inside — covers every table, present and
+// future, without touching each render call site individually.
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+// Every <tr> in document order (thead + tbody + tfoot), so a Total row in
+// tfoot comes out the same as any other row.
+function tableToAoa(table) {
+  return [...table.querySelectorAll('tr')].map((tr) => [...tr.children].map((c) => c.textContent.trim()));
+}
+function exportTableCsv(table, name) {
+  const esc = (v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const csv = '﻿' + tableToAoa(table).map((r) => r.map(esc).join(',')).join('\n');
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${name}.csv`);
+}
+function exportTableXlsx(table, name) {
+  XLSX.writeFile(XLSX.utils.table_to_book(table), `${name}.xlsx`);
+}
+function exportTablePdf(table, name) {
+  const rows = tableToAoa(table);
+  if (!rows.length) return;
+  const doc = new window.jspdf.jsPDF({ orientation: rows[0].length > 6 ? 'landscape' : 'portrait' });
+  doc.autoTable({ head: [rows[0]], body: rows.slice(1), styles: { fontSize: 8 } });
+  doc.save(`${name}.pdf`);
+}
+// Drawn on a plain <canvas> rather than pulled in via a screenshot library —
+// the rows are already parsed for CSV/PDF above, so laying them out as a
+// simple grid is a few dozen lines, not a new dependency.
+function exportTablePng(table, name) {
+  const rows = tableToAoa(table);
+  if (!rows.length) return;
+  const colCount = Math.max(...rows.map((r) => r.length));
+  const cvs = document.createElement('canvas');
+  const ctx = cvs.getContext('2d');
+  const font = '13px Inter, sans-serif';
+  const pad = 14, rowH = 30;
+  ctx.font = font;
+  const colW = new Array(colCount).fill(0);
+  rows.forEach((r) => r.forEach((cell, i) => { colW[i] = Math.max(colW[i], ctx.measureText(cell).width); }));
+  const width = colW.reduce((a, w) => a + w + pad * 2, 0);
+  const height = rowH * rows.length;
+  const dpr = window.devicePixelRatio || 1;
+  cvs.width = width * dpr; cvs.height = height * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.font = font;
+  ctx.textBaseline = 'middle';
+  const cs = getComputedStyle(document.body);
+  const bg = cs.getPropertyValue('--surface').trim() || '#fff';
+  const ink = cs.getPropertyValue('--ink').trim() || '#111';
+  const line = cs.getPropertyValue('--line').trim() || '#ddd';
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, width, height);
+  rows.forEach((r, ri) => {
+    const y = ri * rowH;
+    if (ri === 0) { ctx.fillStyle = '#1E2A4A'; ctx.fillRect(0, y, width, rowH); }
+    let x = 0;
+    r.forEach((cell, ci) => {
+      ctx.fillStyle = ri === 0 ? '#fff' : ink;
+      ctx.fillText(cell, x + pad, y + rowH / 2);
+      x += colW[ci] + pad * 2;
+    });
+    ctx.strokeStyle = line;
+    ctx.beginPath(); ctx.moveTo(0, y + rowH); ctx.lineTo(width, y + rowH); ctx.stroke();
+  });
+  cvs.toBlob((blob) => downloadBlob(blob, `${name}.png`));
+}
+function wireTableExportBar(wrap) {
+  if (wrap.dataset.exportWired) return;
+  wrap.dataset.exportWired = '1';
+  const bar = document.createElement('div');
+  bar.className = 'table-export-bar hidden';
+  bar.innerHTML = ['csv', 'xlsx', 'pdf', 'png'].map((fmt) =>
+    `<button type="button" data-fmt="${fmt}">${fmt.toUpperCase()}</button>`).join('');
+  bar.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-fmt]');
+    if (!btn) return;
+    const table = wrap.querySelector('table');
+    if (!table) return;
+    const name = wrap.id || 'table';
+    ({ csv: exportTableCsv, xlsx: exportTableXlsx, pdf: exportTablePdf, png: exportTablePng })[btn.dataset.fmt](table, name);
+  });
+  wrap.parentNode.insertBefore(bar, wrap);
+}
+function refreshTableToolbars(root) {
+  [...root.querySelectorAll('.table-wrap')].forEach((wrap) => {
+    wireTableExportBar(wrap);
+    const bar = wrap.previousElementSibling;
+    if (bar && bar.classList.contains('table-export-bar')) bar.classList.toggle('hidden', !wrap.querySelector('table'));
+  });
+}
+let tableToolbarQueued = false;
+function queueTableToolbarRefresh() {
+  if (tableToolbarQueued) return;
+  tableToolbarQueued = true;
+  requestAnimationFrame(() => { tableToolbarQueued = false; refreshTableToolbars(document); });
+}
+new MutationObserver(queueTableToolbarRefresh).observe(document.body, { childList: true, subtree: true });
 
 // USER PORTFOLIO (search by SID, print one investor's holdings)
 async function searchPortfolioUsers() {
@@ -3162,6 +3300,19 @@ function setupBulkExport({ prefix: p, source }) {
 
   const batchFilename = (format) => `${source.replace('_full', '')}_batch_${basket.size}_${new Date().toISOString().slice(0, 10)}.${format}`;
 
+  // Both export modes hit /api/export/batch (never /api/export) so both stay
+  // portfolio-only — that route never appends fund-performance sheets/pages,
+  // unlike the single-investor export, which is exactly what bulk export
+  // should never include (a list of holdings, not a full fund report).
+  async function fetchBatchBlob(body, filenameFallback) {
+    const res = await fetch(API_BASE + '/api/export/batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.error || 'Export failed'); return null; }
+    const blob = await res.blob();
+    return { blob, filename: filenameFromResponse(res, filenameFallback) };
+  }
+
   async function exportCombined(format) {
     const date = $(`#${p}BulkDate`).value;
     const filename = batchFilename(format);
@@ -3170,27 +3321,33 @@ function setupBulkExport({ prefix: p, source }) {
       users: [...basket.values()].map((u) => ({ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) })),
       ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}),
     };
-    const res = await fetch(API_BASE + '/api/export/batch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body),
-    });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.error || 'Export failed'); return; }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = filenameFromResponse(res, filename); a.click();
-    URL.revokeObjectURL(url);
+    const result = await fetchBatchBlob(body, filename);
+    if (!result) return;
+    downloadBlob(result.blob, result.filename);
     toast('Export ready');
   }
 
-  // Sequential, not Promise.all — an `await` per iteration keeps downloads
-  // one at a time so the browser never sees a burst of simultaneous clicks.
+  // One /api/export/batch call per investor (a 1-element users array each),
+  // zipped into a single download — a real .zip, not N separate browser
+  // downloads landing one after another.
   async function exportSeparate(format) {
     const date = $(`#${p}BulkDate`).value;
+    const zip = new JSZip();
+    let ok = 0;
     for (const u of basket.values()) {
       const filename = `${source.replace('_full', '')}_${u.sid || u.userId}${date ? '_' + date : ''}`;
-      await download(
-        { source, format, filename, userId: u.userId, sid: u.sid, ...(date ? { date } : {}), ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}) },
-        `${filename}.${format}`);
+      const body = {
+        source, format, filename,
+        users: [{ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) }],
+        ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}),
+      };
+      const result = await fetchBatchBlob(body, `${filename}.${format}`);
+      if (result) { zip.file(result.filename, result.blob); ok++; }
     }
+    if (!ok) return; // fetchBatchBlob already toasted whatever went wrong
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(zipBlob, `${source.replace('_full', '')}_batch_${ok}_${new Date().toISOString().slice(0, 10)}.zip`);
+    toast(`Export ready (${ok} file${ok === 1 ? '' : 's'} zipped)`);
   }
 
   function runExport(format) {

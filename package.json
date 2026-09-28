@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/render-smoke.js && node test/sheets-format-smoke.js && node test/portfolio-batch-smoke.js && node test/bulk-summary-smoke.js"
+    "test": "node test/render-smoke.js && node test/sheets-format-smoke.js && node test/portfolio-batch-smoke.js && node test/bulk-summary-smoke.js && node test/table-export-smoke.js"
   },
   "engines": {
     "node": ">=18"
@@ -22,5 +22,8 @@
     "nodemailer": "^9.0.6",
     "pdfkit": "^0.19.1",
     "serverless-http": "^3.2.0"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.1"
   }
 }

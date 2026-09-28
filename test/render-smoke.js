@@ -45,6 +45,9 @@ const sandbox = {
   window: { addEventListener(){}, matchMedia: () => ({ matches:false, addEventListener(){} }), location:{href:''} },
   localStorage: { getItem: () => null, setItem(){}, removeItem(){} },
   Chart: Object.assign(class { constructor(){} destroy(){} }, { defaults: { font: {}, plugins: { legend: { labels: {} } }, scale: { grid: {} } }, register(){} }),
+  // app.js wires a MutationObserver at load time (table export bars) — not
+  // exercised here, just needs to exist so the script finishes loading.
+  MutationObserver: class { observe(){} disconnect(){} },
   fetch: async () => ({ ok:true, json: async () => ({}), blob: async () => ({}), headers:{ get: () => null } }),
   getComputedStyle: () => ({ getPropertyValue: () => '#000' }),
   URL: { createObjectURL: () => '', revokeObjectURL(){} },

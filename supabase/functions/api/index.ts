@@ -1610,21 +1610,20 @@ on('POST', '/api/export/batch', async (req, _params, _url, user) => {
   const filename = (body.filename as string) || 'portfolio_batch';
   const users = (body.users as BatchUser[] | undefined) || [];
   const columns = body.columns as string[] | undefined;
-  const includePerformance = body.includePerformance !== false;
   const v = validateBatchRequest(source, users);
   if (v.error) return json({ error: v.error }, v.status);
   if (!A.userCan(user, v.tab!)) return json({ error: 'You do not have access to this export.' }, 403);
   const username = user!.username;
   await A.logEvent(user!.id, username, 'export', `${source} batch (${format}) x${users.length} as "${filename}"`);
 
-  const pq = Q.productPerformanceDetail();
-  const perf = includePerformance ? pivotPerformanceByType(await runQuery(pq.sql, pq.params)) : [];
-
   const entries = await fetchBatchEntries(source, users);
   if (!entries.length) return json({ error: 'No exportable data found for the selected investors.' }, 400);
 
+  // Portfolio-only, no fund-performance pages — same call as bulk export
+  // makes for a single investor (see /api/export's portfolio_full etc.): a
+  // list of investors' holdings, not a full fund-performance report.
   if (format === 'pdf') {
-    const buf = await portfolioReportBatch(entries, perf, { columns, username });
+    const buf = await portfolioReportBatch(entries, [], { columns, username });
     return new Response(new Uint8Array(buf), {
       headers: {
         'content-type': 'application/pdf',
@@ -1640,7 +1639,7 @@ on('POST', '/api/export/batch', async (req, _params, _url, user) => {
       seen.add(name);
       return { name, rows: portfolioSheetRows(e.holdings) };
     });
-    return xlsxMultiResponse([...sheets, ...perf], filename, username);
+    return xlsxMultiResponse(sheets, filename, username);
   }
   const rows = entries.flatMap((e) => portfolioSheetRows(e.holdings).map((row) => ({ SID: e.contact.sid, Name: e.contact.name, ...row })));
   return csvResponse(rows, filename, username);

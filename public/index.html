@@ -23,6 +23,19 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Choropleth controller/projection for the Overview investor-distribution map — same CDN-script pattern as Chart.js above, no bundler. -->
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-geo@4.3.6/build/index.umd.min.js"></script>
+  <!-- Universal table export (every table on the page, see app.js's table
+       export bar): SheetJS writes a real .xlsx straight from a DOM table
+       element, jsPDF + autotable lays the same rows out as a PDF. Writing
+       either format from scratch is not a "few lines", so these are loaded
+       the same CDN-script way as Chart.js above rather than reinvented. -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
+  <!-- Bulk export's "separate files" mode bundles one file per investor into
+       a single .zip download instead of triggering N browser downloads —
+       same reasoning as the export libraries above, writing a zip's central
+       directory by hand isn't a "few lines". -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <!-- Presentation tab renders deck PDF pages onto a canvas (one page per screen,
        no scrolling, exact page-jump control) — the browser's built-in PDF viewer
        can't be driven that precisely. pdf.js only ships as an ES module now, so
@@ -2494,7 +2507,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Bulk export</h3>
-          <p>Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box — add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM for the current list, before you spend an export on it. Once the list looks right, export it to CSV, Excel, or PDF: either as one combined file (Excel puts one sheet per investor, PDF one page per investor) or as separate files, one per investor, downloaded one after another. Capped at 50 investors per export.</p>
+          <p>Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box — add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM for the current list, before you spend an export on it. Once the list looks right, export it to CSV, Excel, or PDF: holdings only, same as Send statement's portfolio send — no fund-performance pages, since this is a list of investors' holdings, not a full fund report. Combined mode makes one file (Excel puts one sheet per investor, PDF one page per investor); separate mode makes one file per investor and bundles them into a single .zip download. Capped at 50 investors per export.</p>
         </div>
       </div>
 
