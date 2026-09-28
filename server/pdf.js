@@ -339,17 +339,17 @@ function printLetterhead(doc, { left, width, contact, title, dateLabel, dateValu
   doc.y = y + 24;
 }
 
+// Draws one investor's "CUSTOMER PORTFOLIO" page (letterhead, holdings table,
+// total row, disclaimer) onto whatever page doc's cursor is currently on —
+// shared by portfolioReport() below (one investor) and portfolioReportBatch()
+// (many investors, one page each, via doc.addPage() between calls).
 // contact: { name, sid, ifua, address, ... }
 // holdings: rows from queries.userHoldings()
-// performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }] — from pivotPerformanceByType()
 // options.columns: optional list of HOLDINGS_COLS keys to keep (plus 'fund', always kept)
-function portfolioReport({ contact, holdings }, performanceSheets, options = {}) {
-  const doc = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
-  if (options.username) doc.info.Author = options.username;
+function drawPortfolioHoldingsPage(doc, { contact, holdings }, options = {}) {
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-  // ---- Page 1: CUSTOMER PORTFOLIO statement ----
   printLetterhead(doc, { left, width, contact, title: 'CUSTOMER PORTFOLIO', dateLabel: 'CLOSE NAV', dateValue: statementDate(holdings) });
 
   const cols = filterCols(HOLDINGS_COLS(width), width, options.columns);
@@ -397,6 +397,13 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
   doc.font('Helvetica').fontSize(7).fillColor(MUTED)
     .text(DISCLAIMER, left, doc.y, { width })
     .text(OJK_LINE, { width });
+}
+
+// performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }] — from pivotPerformanceByType()
+function portfolioReport({ contact, holdings }, performanceSheets, options = {}) {
+  const doc = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
+  if (options.username) doc.info.Author = options.username;
+  drawPortfolioHoldingsPage(doc, { contact, holdings }, options);
 
   // ---- One page per fund type: NAV % change table, "Reksa Dana Update" style.
   // Landscape, same as the standalone Fund Performance PDF — needs the extra
@@ -408,6 +415,25 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
     perfSheetPage(doc, sheet, perfWidth);
   });
 
+  return bufferDoc(doc);
+}
+
+// Multi-investor combined export for the Portfolio tabs' bulk-export basket:
+// entries: [{ contact, holdings }], one page per investor, then the shared
+// fund-performance pages once at the end (same NAV data for everyone, so
+// there's no reason to repeat it per investor like portfolioReport() does).
+function portfolioReportBatch(entries, performanceSheets, options = {}) {
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  if (options.username) doc.info.Author = options.username;
+  entries.forEach((entry, i) => {
+    if (i > 0) doc.addPage({ size: 'A4', margin: 40 });
+    drawPortfolioHoldingsPage(doc, entry, options);
+  });
+  performanceSheets.forEach((sheet) => {
+    doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
+    const perfWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    perfSheetPage(doc, sheet, perfWidth);
+  });
   return bufferDoc(doc);
 }
 
@@ -475,6 +501,7 @@ function usersTransactionsReport(rows, options = {}) {
 
 module.exports = {
   portfolioReport,
+  portfolioReportBatch,
   transactionStatement,
   fundPerformanceReport,
   usersTransactionsReport,

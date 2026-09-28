@@ -365,21 +365,15 @@ export function fundPerformanceReport(sheets: PerfSheet[], options: { username?:
 // holdings: rows from queries.userHoldings()
 // performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }]
 // options.columns: optional list of HOLDINGS_COLS keys to keep (plus 'fund', always kept)
-export function portfolioReport(
-  { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] },
-  performanceSheets: PerfSheet[],
-  options: { columns?: string[]; username?: string; password?: string } = {},
-): Promise<Buffer> {
-  // pdfkit's bundled .d.ts doesn't fully describe PDFDocument's fluent
-  // instance API (font/text/moveDown etc. all really exist at runtime) —
-  // `any` here matches the same pragmatism already used in the helpers below.
-  // deno-lint-ignore no-explicit-any
-  const doc: any = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
-  if (options.username) doc.info.Author = options.username;
+// Draws one investor's "CUSTOMER PORTFOLIO" page (letterhead, holdings table,
+// total row, disclaimer) onto whatever page doc's cursor is currently on —
+// shared by portfolioReport() below (one investor) and portfolioReportBatch()
+// (many investors, one page each, via doc.addPage() between calls).
+// deno-lint-ignore no-explicit-any
+function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] }, options: { columns?: string[] } = {}): void {
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-  // ---- Page 1: CUSTOMER PORTFOLIO statement ----
   printLetterhead(doc, { left, width, contact, title: 'CUSTOMER PORTFOLIO', dateLabel: 'CLOSE NAV', dateValue: statementDate(holdings) });
 
   const cols = filterCols(HOLDINGS_COLS(width), width, options.columns);
@@ -427,6 +421,20 @@ export function portfolioReport(
   doc.font('Helvetica').fontSize(7).fillColor(MUTED)
     .text(DISCLAIMER, left, doc.y, { width })
     .text(OJK_LINE, { width });
+}
+
+export function portfolioReport(
+  { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] },
+  performanceSheets: PerfSheet[],
+  options: { columns?: string[]; username?: string; password?: string } = {},
+): Promise<Buffer> {
+  // pdfkit's bundled .d.ts doesn't fully describe PDFDocument's fluent
+  // instance API (font/text/moveDown etc. all really exist at runtime) —
+  // `any` here matches the same pragmatism already used in the helpers below.
+  // deno-lint-ignore no-explicit-any
+  const doc: any = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
+  if (options.username) doc.info.Author = options.username;
+  drawPortfolioHoldingsPage(doc, { contact, holdings }, options);
 
   // ---- One page per fund type: NAV % change table, "Reksa Dana Update" style.
   // Landscape, same as the standalone Fund Performance PDF — needs the extra
@@ -438,6 +446,30 @@ export function portfolioReport(
     perfSheetPage(doc, sheet, perfWidth);
   });
 
+  return bufferDoc(doc);
+}
+
+// Multi-investor combined export for the Portfolio tabs' bulk-export basket:
+// entries: [{ contact, holdings }], one page per investor, then the shared
+// fund-performance pages once at the end (same NAV data for everyone, so
+// there's no reason to repeat it per investor like portfolioReport() does).
+export function portfolioReportBatch(
+  entries: { contact?: Contact; holdings: Record<string, unknown>[] }[],
+  performanceSheets: PerfSheet[],
+  options: { columns?: string[]; username?: string } = {},
+): Promise<Buffer> {
+  // deno-lint-ignore no-explicit-any
+  const doc: any = new PDFDocument({ size: 'A4', margin: 40 });
+  if (options.username) doc.info.Author = options.username;
+  entries.forEach((entry, i) => {
+    if (i > 0) doc.addPage({ size: 'A4', margin: 40 });
+    drawPortfolioHoldingsPage(doc, entry, options);
+  });
+  performanceSheets.forEach((sheet) => {
+    doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
+    const perfWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    perfSheetPage(doc, sheet, perfWidth);
+  });
   return bufferDoc(doc);
 }
 

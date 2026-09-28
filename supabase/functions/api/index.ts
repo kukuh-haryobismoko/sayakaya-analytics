@@ -9,12 +9,12 @@ import { ask, askEnabled, TABLES, suggestChart } from './ask.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
 import * as MLTrain from './ml-train.ts';
-import { portfolioReport, fundPerformanceReport, usersTransactionsReport, val } from './pdf.ts';
+import { portfolioReport, portfolioReportBatch, fundPerformanceReport, usersTransactionsReport, val } from './pdf.ts';
 import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 import * as Mail from './mail.ts';
 import * as Sched from './schedules.ts';
-import { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } from './report-helpers.ts';
+import { pivotPerformanceByType, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM } from './report-helpers.ts';
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -674,6 +674,15 @@ on('GET', '/api/top-investors', requireTab('top-investors', async (_req, _params
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
 on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement', 'send-fund-performance'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
+  return json(await runQuery(q.sql, q.params));
+}));
+// Find-all-by-code for the Portfolio tabs' bulk-export basket — same lookup
+// Remisier sharing uses (remisierUsers), just reachable by anyone with
+// portfolio access instead of gated on the remisier tabs.
+on('GET', '/api/users/by-code', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement', 'send-fund-performance'], async (_req, _params, url) => {
+  const code = qp(url, 'code');
+  if (!code) return json({ error: 'code is required.' }, 400);
+  const q = Q.remisierUsers(qp(url, 'field') || '', code);
   return json(await runQuery(q.sql, q.params));
 }));
 on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url, user) => {
@@ -1539,6 +1548,118 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
   if (format === 'xlsx') return xlsxResponse(rows, filename, username, pctCols);
   if (format === 'txt') return txtResponse(rows, filename, username);
   return csvResponse(rows, filename, username);
+});
+
+// ---- Bulk export (Portfolio tabs): same 5 portfolio sources as /api/export
+// above, combined across a list of investors instead of just one — CSV rows
+// tagged with SID/name, XLSX one sheet per investor, PDF one document with
+// one page per investor. "Separate files" mode needs no server support: the
+// frontend just calls /api/export once per investor, like clicking Export
+// N times, so it isn't handled here. Mirrors server/app.js's /api/export/batch.
+type BatchUser = { userId: string; sid?: string; date?: string };
+const BATCH_HOLDINGS_QUERY: Record<string, (u: BatchUser) => Q.Query> = {
+  portfolio_full: (u) => (u.date ? Q.userHoldingsAsOf(u.sid!, u.date) : Q.userHoldings(u.userId)),
+  portfolio_fix_full: (u) => (u.date ? Q.userHoldingsAsOfFix(u.sid!, u.date) : Q.userHoldings(u.userId)),
+  portfolio_tx_full: (u) => (u.date ? Q.userHoldingsFromTxAsOf(u.userId, u.date) : Q.userHoldingsFromTx(u.userId)),
+  portfolio_sinvest_full: (u) => (u.date ? Q.sinvestHoldingsAsOf(u.sid!, u.date) : Q.sinvestHoldings(u.sid!)),
+};
+const BATCH_MAX_USERS = 50;
+type BatchEntry = { contact: Record<string, unknown>; holdings: Record<string, unknown>[] };
+// Shared by /api/export/batch and /api/portfolio/bulk-summary below — both
+// need the same {contact, holdings} per investor, just rendered differently
+// (a file vs. an aggregated JSON preview).
+async function fetchBatchEntries(source: string, users: BatchUser[]): Promise<BatchEntry[]> {
+  const entries: BatchEntry[] = [];
+  for (const u of users) {
+    if (!u.userId) continue;
+    let holdings: Record<string, unknown>[];
+    if (source === 'portfolio_explorer_full') {
+      let asOfDate = u.date;
+      if (!asOfDate) {
+        const d = Q.goalLatestSnapshotDate(u.userId);
+        const [row] = await runQuery(d.sql, d.params);
+        asOfDate = row?.latest_date as string | undefined;
+      }
+      if (!asOfDate) continue; // no goal_snapshots for this investor — skip rather than fail the whole batch
+      const h = Q.goalUserHoldings(u.userId, asOfDate);
+      holdings = await runQuery(h.sql, h.params);
+    } else {
+      const h = BATCH_HOLDINGS_QUERY[source](u);
+      holdings = await runQuery(h.sql, h.params);
+    }
+    const c = Q.userContact(u.userId);
+    const [contact] = await runQuery(c.sql, c.params, { redact: false });
+    entries.push({ contact: contact || { sid: u.sid, name: u.sid }, holdings });
+  }
+  return entries;
+}
+// Common validation for both batch routes: unknown/unauthorized source,
+// empty or oversized user list, or a source batch export doesn't support.
+function validateBatchRequest(source: string, users: BatchUser[]): { tab?: string; error?: string; status?: number } {
+  const tab = EXPORT_SOURCE_TAB[source];
+  if (!tab) return { error: 'Unknown export source.', status: 400 };
+  if (!users.length) return { error: 'users is required.', status: 400 };
+  if (users.length > BATCH_MAX_USERS) return { error: `Pick ${BATCH_MAX_USERS} investors or fewer.`, status: 400 };
+  if (source !== 'portfolio_explorer_full' && !BATCH_HOLDINGS_QUERY[source]) return { error: 'Not supported for this source.', status: 400 };
+  return { tab };
+}
+on('POST', '/api/export/batch', async (req, _params, _url, user) => {
+  const body = await bodyOf(req);
+  const source = body.source as string;
+  const format = (body.format as string) || 'xlsx';
+  const filename = (body.filename as string) || 'portfolio_batch';
+  const users = (body.users as BatchUser[] | undefined) || [];
+  const columns = body.columns as string[] | undefined;
+  const includePerformance = body.includePerformance !== false;
+  const v = validateBatchRequest(source, users);
+  if (v.error) return json({ error: v.error }, v.status);
+  if (!A.userCan(user, v.tab!)) return json({ error: 'You do not have access to this export.' }, 403);
+  const username = user!.username;
+  await A.logEvent(user!.id, username, 'export', `${source} batch (${format}) x${users.length} as "${filename}"`);
+
+  const pq = Q.productPerformanceDetail();
+  const perf = includePerformance ? pivotPerformanceByType(await runQuery(pq.sql, pq.params)) : [];
+
+  const entries = await fetchBatchEntries(source, users);
+  if (!entries.length) return json({ error: 'No exportable data found for the selected investors.' }, 400);
+
+  if (format === 'pdf') {
+    const buf = await portfolioReportBatch(entries, perf, { columns, username });
+    return new Response(new Uint8Array(buf), {
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': `attachment; filename="${filenameWithUser(filename, username)}.pdf"`,
+      },
+    });
+  }
+  if (format === 'xlsx') {
+    const seen = new Set<string>();
+    const sheets = entries.map((e, i) => {
+      let name = String(e.contact.sid || e.contact.name || `Investor ${i + 1}`).slice(0, 31);
+      if (seen.has(name)) name = `${name.slice(0, 27)}(${i + 1})`;
+      seen.add(name);
+      return { name, rows: portfolioSheetRows(e.holdings) };
+    });
+    return xlsxMultiResponse([...sheets, ...perf], filename, username);
+  }
+  const rows = entries.flatMap((e) => portfolioSheetRows(e.holdings).map((row) => ({ SID: e.contact.sid, Name: e.contact.name, ...row })));
+  return csvResponse(rows, filename, username);
+});
+
+// ---- Bulk export "Preview summary": same investor list as the batch export
+// above, aggregated instead of written to a file — total AUM, holdings summed
+// by fund, and each investor's own AUM — so an admin can sanity-check a
+// selection before spending an export on it.
+on('POST', '/api/portfolio/bulk-summary', async (req, _params, _url, user) => {
+  const body = await bodyOf(req);
+  const source = body.source as string;
+  const users = (body.users as BatchUser[] | undefined) || [];
+  const v = validateBatchRequest(source, users);
+  if (v.error) return json({ error: v.error }, v.status);
+  if (!A.userCan(user, v.tab!)) return json({ error: 'You do not have access to this section.' }, 403);
+  const entries = await fetchBatchEntries(source, users);
+  if (!entries.length) return json({ error: 'No holdings data found for the selected investors.' }, 400);
+  return json(aggregateBulkHoldings(entries));
 });
 
 // ---- Send statement preview: same holdings/transactions the PDFs would

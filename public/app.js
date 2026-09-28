@@ -140,11 +140,12 @@ async function searchPortfolioUsers() {
 function renderPfResults(rows) {
   if (!rows.length) { $('#pfResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="pf-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
     </tr>`).join('');
-  $('#pfResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $('#pfResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#pfResults .pf-row').forEach((tr) => tr.addEventListener('click', () =>
     selectPortfolioUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+  wireBulkAddButtons('#pfResults', pfBulk);
 }
 
 let pfSelected = null; // { userId, sid, name, date } — used by the export buttons
@@ -312,11 +313,12 @@ async function searchPfxUsers() {
 function renderPfxResults(rows) {
   if (!rows.length) { $('#pfxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="pfx-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
     </tr>`).join('');
-  $('#pfxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $('#pfxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#pfxResults .pfx-row').forEach((tr) => tr.addEventListener('click', () =>
     selectPfxUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+  wireBulkAddButtons('#pfxResults', pfxBulk);
 }
 
 let pfxSelected = null; // { userId, sid, name, date } — used by the export buttons
@@ -432,11 +434,12 @@ async function searchPtxUsers() {
 function renderPtxResults(rows) {
   if (!rows.length) { $('#ptxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="ptx-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
     </tr>`).join('');
-  $('#ptxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $('#ptxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#ptxResults .ptx-row').forEach((tr) => tr.addEventListener('click', () =>
     selectPtxUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+  wireBulkAddButtons('#ptxResults', ptxBulk);
 }
 
 let ptxSelected = null; // { userId, sid, name, excludedFunds } — used by the export buttons
@@ -552,11 +555,12 @@ async function searchPsiUsers() {
 function renderPsiResults(rows) {
   if (!rows.length) { $('#psiResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="psi-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
     </tr>`).join('');
-  $('#psiResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $('#psiResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#psiResults .psi-row').forEach((tr) => tr.addEventListener('click', () =>
     selectPsiUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+  wireBulkAddButtons('#psiResults', psiBulk);
 }
 
 let psiSelected = null; // { userId, sid, name, date, excludedFunds } — used by the export buttons
@@ -666,11 +670,12 @@ async function searchExplorerUsers() {
 function renderPeResults(rows) {
   if (!rows.length) { $('#peResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
   const body = rows.map((r) => `<tr class="pe-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
+      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
     </tr>`).join('');
-  $('#peResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
+  $('#peResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#peResults .pe-row').forEach((tr) => tr.addEventListener('click', () =>
     selectExplorerUser(tr.dataset.id, tr.dataset.sid, tr.dataset.name, tr.dataset.email)));
+  wireBulkAddButtons('#peResults', peBulk);
 }
 
 let peSelected = null; // { userId, sid, name, date } — used by the export buttons
@@ -3106,6 +3111,153 @@ async function pushToSheet(body) {
   toast('Google Sheet ready');
 }
 
+// BULK EXPORT — shared by the 5 Portfolio tabs (PWC, Fix, TX, SInvest,
+// Explorer). Builds a list of investors — one at a time via that tab's own
+// search results ("+" on a row, see bulkAddCell/wireBulkAddButtons below), or
+// in bulk by referrer_code/sales_code — then exports them together:
+// "combined" hits /api/export/batch for one file (CSV rows tagged with
+// SID/name, XLSX one sheet per investor, PDF one page per investor);
+// "separate" just calls the normal single-investor download() once per
+// investor in the list, same as clicking each one's own Export button in turn.
+function setupBulkExport({ prefix: p, source }) {
+  const basket = new Map(); // userId -> { userId, sid, name, email }
+
+  function render() {
+    const entries = [...basket.values()];
+    $(`#${p}BulkBar`).classList.toggle('hidden', !entries.length);
+    $(`#${p}BulkCount`).textContent = entries.length;
+    $(`#${p}BulkList`).innerHTML = entries.map((u) =>
+      `<button type="button" class="chip" data-id="${u.userId}">${u.sid || u.name} ✕</button>`).join('');
+    $$(`#${p}BulkList .chip`).forEach((c) => c.addEventListener('click', () => { basket.delete(c.dataset.id); render(); }));
+    // The selection changed, so any summary already on screen is stale —
+    // hide it rather than leave numbers up that no longer match the basket.
+    $(`#${p}BulkSummary`).classList.add('hidden');
+  }
+
+  function addOne(u) {
+    if (!u || !u.userId || basket.has(u.userId)) return false;
+    basket.set(u.userId, u);
+    return true;
+  }
+
+  function addMany(rows, label) {
+    let added = 0;
+    (rows || []).forEach((r) => {
+      if (addOne({ userId: val(r.user_id), sid: val(r.sid) || '', name: val(r.name) || val(r.sid) || '', email: val(r.email) || '' })) added++;
+    });
+    render();
+    const skipped = (rows || []).length - added;
+    toast((rows || []).length
+      ? `${added} investor${added === 1 ? '' : 's'} added${label ? ` from ${label}` : ''}${skipped ? `, ${skipped} already in the list` : ''}.`
+      : 'No matching investor.');
+  }
+
+  async function searchByCode() {
+    const field = $(`#${p}BulkField`).value;
+    const code = $(`#${p}BulkCode`).value.trim();
+    if (!code) return;
+    try { addMany(await api(`/api/users/by-code?field=${field}&code=${encodeURIComponent(code)}`), code); }
+    catch (e) { toast(e.message); }
+  }
+
+  const batchFilename = (format) => `${source.replace('_full', '')}_batch_${basket.size}_${new Date().toISOString().slice(0, 10)}.${format}`;
+
+  async function exportCombined(format) {
+    const date = $(`#${p}BulkDate`).value;
+    const filename = batchFilename(format);
+    const body = {
+      source, format, filename,
+      users: [...basket.values()].map((u) => ({ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) })),
+      ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}),
+    };
+    const res = await fetch(API_BASE + '/api/export/batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.error || 'Export failed'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filenameFromResponse(res, filename); a.click();
+    URL.revokeObjectURL(url);
+    toast('Export ready');
+  }
+
+  // Sequential, not Promise.all — an `await` per iteration keeps downloads
+  // one at a time so the browser never sees a burst of simultaneous clicks.
+  async function exportSeparate(format) {
+    const date = $(`#${p}BulkDate`).value;
+    for (const u of basket.values()) {
+      const filename = `${source.replace('_full', '')}_${u.sid || u.userId}${date ? '_' + date : ''}`;
+      await download(
+        { source, format, filename, userId: u.userId, sid: u.sid, ...(date ? { date } : {}), ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}) },
+        `${filename}.${format}`);
+    }
+  }
+
+  function runExport(format) {
+    if (!basket.size) { toast('Add at least one investor first.'); return; }
+    ($(`#${p}BulkMode`).value === 'separate' ? exportSeparate : exportCombined)(format);
+  }
+
+  // Combined AUM and holdings-by-fund across every investor currently in the
+  // basket, so an admin can sanity-check a selection before spending an
+  // export on it. avg_buy_price is derived (fund_value / unit) purely so the
+  // existing holdingsTableHtml() renderer — built for one investor's rows —
+  // can be reused as-is for the aggregated ones, instead of a second table
+  // renderer that would just recompute the same fundValue/gain/pct math.
+  async function loadSummary() {
+    const users = [...basket.values()];
+    if (!users.length) return;
+    const date = $(`#${p}BulkDate`).value;
+    $(`#${p}BulkSummary`).classList.remove('hidden');
+    $(`#${p}BulkSummaryKpis`).innerHTML = '<div class="loading">Loading…</div>';
+    $(`#${p}BulkSummaryHoldings`).innerHTML = '';
+    $(`#${p}BulkSummaryInvestors`).innerHTML = '';
+    try {
+      const summary = await api('/api/portfolio/bulk-summary', {
+        method: 'POST',
+        body: JSON.stringify({ source, users: users.map((u) => ({ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) })) }),
+      });
+      $(`#${p}BulkSummaryKpis`).innerHTML = [
+        kpi(t('bulk_kpi_total_aum'), idrFull(summary.totalAum), t('bulk_kpi_investor_count').replace('{n}', summary.count).replace('{s}', summary.count === 1 ? '' : 's'), 'accent'),
+        kpi(t('bulk_kpi_funds_held'), num(summary.funds.length), t('bulk_kpi_funds_held_sub')),
+      ].join('');
+      const fundsWithAvg = summary.funds.map((f) => ({ ...f, avg_buy_price: f.unit ? f.fund_value / f.unit : null }));
+      $(`#${p}BulkSummaryHoldings`).innerHTML = holdingsTableHtml(fundsWithAvg);
+      genTable(`#${p}BulkSummaryInvestors`, summary.investors, [
+        { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'aum', label: 'AUM', type: 'idr' },
+      ], 'No holdings found.');
+    } catch (e) {
+      $(`#${p}BulkSummaryKpis`).innerHTML = `<div class="empty">${e.message}</div>`;
+    }
+  }
+
+  $(`#${p}BulkSearchBtn`).addEventListener('click', searchByCode);
+  $(`#${p}BulkCode`).addEventListener('keydown', (e) => { if (e.key === 'Enter') searchByCode(); });
+  $(`#${p}BulkClear`).addEventListener('click', () => { basket.clear(); render(); });
+  $(`#${p}BulkSummaryBtn`).addEventListener('click', loadSummary);
+  $(`#${p}BulkCsv`).addEventListener('click', () => runExport('csv'));
+  $(`#${p}BulkXlsx`).addEventListener('click', () => runExport('xlsx'));
+  $(`#${p}BulkPdf`).addEventListener('click', () => runExport('pdf'));
+
+  return { addOne: (u) => { const ok = addOne(u); render(); if (!ok) toast('Already in the list.'); return ok; } };
+}
+
+// "+" button appended to a Portfolio-tab search-results row — adds that
+// investor straight to the tab's bulk-export basket without opening their
+// full detail view (which fires several extra queries the basket doesn't need).
+function bulkAddCell(r) {
+  const name = String(val(r.name) || val(r.sid) || '').replace(/"/g, '&quot;');
+  return `<td><button type="button" class="btn-ghost bulk-add-btn" data-id="${val(r.user_id)}" data-sid="${val(r.sid) || ''}" data-name="${name}" data-email="${val(r.email) || ''}" title="Add to export list">+ Add</button></td>`;
+}
+function wireBulkAddButtons(containerSel, bulk) {
+  $$(`${containerSel} .bulk-add-btn`).forEach((btn) => btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    bulk.addOne({ userId: btn.dataset.id, sid: btn.dataset.sid, name: btn.dataset.name, email: btn.dataset.email });
+  }));
+}
+
+let pfBulk, pfxBulk, ptxBulk, psiBulk, peBulk;
+
 // SEND STATEMENT (email an investor their portfolio — holdings only, no
 // fund performance — and/or their monthly transaction e-statement).
 // Separate tab from Portfolio (PWC) on purpose: this is a sending tool,
@@ -4506,6 +4658,7 @@ function wire() {
   });
 
   // portfolio
+  pfBulk = setupBulkExport({ prefix: 'pf', source: 'portfolio_full' });
   $('#pfSearchBtn').addEventListener('click', searchPortfolioUsers);
   $('#pfSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPortfolioUsers(); });
   // filename/body carry the currently viewed date (if any) so an export
@@ -4605,6 +4758,7 @@ function wire() {
   wireSchedModal('fund_performance');
 
   // portfolio (fix) — same wiring as portfolio (pwc) above, different source table
+  pfxBulk = setupBulkExport({ prefix: 'pfx', source: 'portfolio_fix_full' });
   $('#pfxSearchBtn').addEventListener('click', searchPfxUsers);
   $('#pfxSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPfxUsers(); });
   const pfxFilename = () => `portfolio_fix_${pfxSelected.sid}${pfxSelected.date ? '_' + pfxSelected.date : ''}`;
@@ -4639,6 +4793,7 @@ function wire() {
   $('#pfxDateApply').addEventListener('click', loadPfxUser);
 
   // portfolio (tx) — export carries the as-of date (if any) plus the fund checklist
+  ptxBulk = setupBulkExport({ prefix: 'ptx', source: 'portfolio_tx_full' });
   $('#ptxSearchBtn').addEventListener('click', searchPtxUsers);
   $('#ptxSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPtxUsers(); });
   const ptxFilename = () => `portfolio_tx_${ptxSelected.sid}${ptxSelected.date ? '_' + ptxSelected.date : ''}`;
@@ -4673,6 +4828,7 @@ function wire() {
   $('#ptxDateApply').addEventListener('click', loadPtxUser);
 
   // portfolio (sinvest) — same wiring as portfolio (tx), sourced from the custodian feed
+  psiBulk = setupBulkExport({ prefix: 'psi', source: 'portfolio_sinvest_full' });
   $('#psiSearchBtn').addEventListener('click', searchPsiUsers);
   $('#psiSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchPsiUsers(); });
   const psiFilename = () => `portfolio_sinvest_${psiSelected.sid}${psiSelected.date ? '_' + psiSelected.date : ''}`;
@@ -4707,6 +4863,7 @@ function wire() {
   $('#psiDateApply').addEventListener('click', loadPsiUser);
 
   // portfolio explorer (goal_snapshots)
+  peBulk = setupBulkExport({ prefix: 'pe', source: 'portfolio_explorer_full' });
   $('#peSearchBtn').addEventListener('click', searchExplorerUsers);
   $('#peSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchExplorerUsers(); });
   // Explicit "Go" rather than firing on every `change` — a native date input

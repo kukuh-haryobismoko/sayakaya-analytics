@@ -89,6 +89,41 @@ export async function buildStatementAttachments(
   return attachments;
 }
 
+interface BulkEntry { contact: Record<string, unknown>; holdings: Record<string, unknown>[] }
+
+// Aggregates holdings across many investors for the Portfolio tabs' bulk-export
+// basket "Preview summary" — entries: [{ contact, holdings }], the same shape
+// /api/export/batch already fetches per investor (see fetchBatchEntries in
+// index.ts), just summed by fund instead of written out per investor. gain_pct
+// is derived from the summed fund_value/value, not an average of each
+// investor's own gain_pct (averaging percentages across different position
+// sizes would misrepresent the group's real cost basis).
+export function aggregateBulkHoldings(entries: BulkEntry[]) {
+  const byFund = new Map<string, { fund: string; fund_type: unknown; unit: number; fund_value: number; value: number; nav: unknown }>();
+  const investors: { sid: unknown; name: unknown; aum: number }[] = [];
+  let totalAum = 0;
+  for (const e of entries) {
+    let aum = 0;
+    for (const h of e.holdings) {
+      const value = Number(val(h.value)) || 0;
+      aum += value;
+      const key = String(val(h.fund));
+      const row = byFund.get(key) || { fund: key, fund_type: val(h.fund_type), unit: 0, fund_value: 0, value: 0, nav: val(h.nav) };
+      row.unit += Number(val(h.unit)) || 0;
+      row.fund_value += Number(val(h.fund_value)) || 0;
+      row.value += value;
+      byFund.set(key, row);
+    }
+    totalAum += aum;
+    investors.push({ sid: val(e.contact.sid), name: val(e.contact.name) || val(e.contact.sid), aum });
+  }
+  const funds = [...byFund.values()]
+    .map((r) => ({ ...r, gain_loss: r.value - r.fund_value, gain_pct: r.fund_value ? ((r.value - r.fund_value) / r.fund_value) * 100 : null }))
+    .sort((a, b) => b.value - a.value);
+  investors.sort((a, b) => b.aum - a.aum);
+  return { count: entries.length, totalAum, funds, investors };
+}
+
 // The previous calendar month as 'YYYY-MM' — the sensible default e-statement
 // period for a recurring/automated send (there's no "chosen month" input the
 // way the manual tool has one).

@@ -80,6 +80,39 @@ async function buildStatementAttachments({ userId, sid, contact, sendPortfolio, 
   return attachments;
 }
 
+// Aggregates holdings across many investors for the Portfolio tabs' bulk-export
+// basket "Preview summary" — entries: [{ contact, holdings }], the same shape
+// /api/export/batch already fetches per investor (see fetchBatchEntries in
+// app.js), just summed by fund instead of written out per investor. gain_pct
+// is derived from the summed fund_value/value, not an average of each
+// investor's own gain_pct (averaging percentages across different position
+// sizes would misrepresent the group's real cost basis).
+function aggregateBulkHoldings(entries) {
+  const byFund = new Map();
+  const investors = [];
+  let totalAum = 0;
+  for (const e of entries) {
+    let aum = 0;
+    for (const h of e.holdings) {
+      const value = Number(PDF.val(h.value)) || 0;
+      aum += value;
+      const key = PDF.val(h.fund);
+      const row = byFund.get(key) || { fund: key, fund_type: PDF.val(h.fund_type), unit: 0, fund_value: 0, value: 0, nav: PDF.val(h.nav) };
+      row.unit += Number(PDF.val(h.unit)) || 0;
+      row.fund_value += Number(PDF.val(h.fund_value)) || 0;
+      row.value += value;
+      byFund.set(key, row);
+    }
+    totalAum += aum;
+    investors.push({ sid: PDF.val(e.contact.sid), name: PDF.val(e.contact.name) || PDF.val(e.contact.sid), aum });
+  }
+  const funds = [...byFund.values()]
+    .map((r) => ({ ...r, gain_loss: r.value - r.fund_value, gain_pct: r.fund_value ? ((r.value - r.fund_value) / r.fund_value) * 100 : null }))
+    .sort((a, b) => b.value - a.value);
+  investors.sort((a, b) => b.aum - a.aum);
+  return { count: entries.length, totalAum, funds, investors };
+}
+
 // The previous calendar month as 'YYYY-MM' — the sensible default e-statement
 // period for a recurring/automated send (there's no "chosen month" input the
 // way the manual tool has one).
@@ -94,5 +127,6 @@ module.exports = {
   pivotPerformanceByType,
   birthdatePassword,
   buildStatementAttachments,
+  aggregateBulkHoldings,
   previousMonthYYYYMM,
 };

@@ -277,6 +277,39 @@
         <div id="pfResults" class="table-wrap"></div>
       </div>
 
+      <div class="panel">
+        <div class="panel-head wrap"><h2 data-i18n="bulk_title">Bulk export</h2><span class="hint" data-i18n="bulk_hint">Search investors above and tap + to add them, or find everyone under a referrer/sales code below. Then export them all together.</span></div>
+        <div class="ask-bar">
+          <select id="pfBulkField">
+            <option value="referrer_code" data-i18n="bulk_field_referrer">Referrer code</option>
+            <option value="sales_code" data-i18n="bulk_field_sales">Sales code</option>
+          </select>
+          <input id="pfBulkCode" type="text" autocomplete="off" data-i18n-placeholder="bulk_code_ph" placeholder="e.g. REM123" />
+          <button id="pfBulkSearchBtn" class="btn-primary" data-i18n="bulk_add_all">Find &amp; add all</button>
+        </div>
+        <div id="pfBulkBar" class="hidden" style="margin-top:12px">
+          <div id="pfBulkList" class="chip-row"></div>
+          <div class="exp" style="margin-top:10px">
+            <span class="hint"><span id="pfBulkCount">0</span> <span data-i18n="bulk_selected">investors selected</span></span>
+            <label><span data-i18n="common_as_of">As of</span> <input type="date" id="pfBulkDate" /></label>
+            <select id="pfBulkMode">
+              <option value="combined" data-i18n="bulk_mode_combined">1 combined file</option>
+              <option value="separate" data-i18n="bulk_mode_separate">Separate file per investor</option>
+            </select>
+            <button class="btn-ghost" id="pfBulkSummaryBtn" data-i18n="bulk_summary_btn">Preview summary</button>
+            <button class="btn-ghost" id="pfBulkCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="pfBulkXlsx" data-i18n="bulk_xlsx">Excel</button>
+            <button class="btn-ghost" id="pfBulkPdf" data-i18n="common_pdf">PDF</button>
+            <button class="btn-ghost" id="pfBulkClear" data-i18n="bulk_clear">Clear</button>
+          </div>
+          <div id="pfBulkSummary" class="hidden" style="margin-top:14px">
+            <div id="pfBulkSummaryKpis" class="kpi-grid"></div>
+            <div id="pfBulkSummaryHoldings" class="table-wrap" style="margin-top:10px"></div>
+            <div id="pfBulkSummaryInvestors" class="table-wrap" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+
       <div id="pfDetail" class="hidden">
         <div class="panel">
           <div class="panel-head wrap">
@@ -856,6 +889,39 @@
         <div id="pfxResults" class="table-wrap"></div>
       </div>
 
+      <div class="panel">
+        <div class="panel-head wrap"><h2 data-i18n="bulk_title">Bulk export</h2><span class="hint" data-i18n="bulk_hint">Search investors above and tap + to add them, or find everyone under a referrer/sales code below. Then export them all together.</span></div>
+        <div class="ask-bar">
+          <select id="pfxBulkField">
+            <option value="referrer_code" data-i18n="bulk_field_referrer">Referrer code</option>
+            <option value="sales_code" data-i18n="bulk_field_sales">Sales code</option>
+          </select>
+          <input id="pfxBulkCode" type="text" autocomplete="off" data-i18n-placeholder="bulk_code_ph" placeholder="e.g. REM123" />
+          <button id="pfxBulkSearchBtn" class="btn-primary" data-i18n="bulk_add_all">Find &amp; add all</button>
+        </div>
+        <div id="pfxBulkBar" class="hidden" style="margin-top:12px">
+          <div id="pfxBulkList" class="chip-row"></div>
+          <div class="exp" style="margin-top:10px">
+            <span class="hint"><span id="pfxBulkCount">0</span> <span data-i18n="bulk_selected">investors selected</span></span>
+            <label><span data-i18n="common_as_of">As of</span> <input type="date" id="pfxBulkDate" /></label>
+            <select id="pfxBulkMode">
+              <option value="combined" data-i18n="bulk_mode_combined">1 combined file</option>
+              <option value="separate" data-i18n="bulk_mode_separate">Separate file per investor</option>
+            </select>
+            <button class="btn-ghost" id="pfxBulkSummaryBtn" data-i18n="bulk_summary_btn">Preview summary</button>
+            <button class="btn-ghost" id="pfxBulkCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="pfxBulkXlsx" data-i18n="bulk_xlsx">Excel</button>
+            <button class="btn-ghost" id="pfxBulkPdf" data-i18n="common_pdf">PDF</button>
+            <button class="btn-ghost" id="pfxBulkClear" data-i18n="bulk_clear">Clear</button>
+          </div>
+          <div id="pfxBulkSummary" class="hidden" style="margin-top:14px">
+            <div id="pfxBulkSummaryKpis" class="kpi-grid"></div>
+            <div id="pfxBulkSummaryHoldings" class="table-wrap" style="margin-top:10px"></div>
+            <div id="pfxBulkSummaryInvestors" class="table-wrap" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+
       <div id="pfxDetail" class="hidden">
         <div class="panel">
           <div class="panel-head wrap">
@@ -916,6 +982,39 @@
           <button id="ptxSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
         </div>
         <div id="ptxResults" class="table-wrap"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap"><h2 data-i18n="bulk_title">Bulk export</h2><span class="hint" data-i18n="bulk_hint">Search investors above and tap + to add them, or find everyone under a referrer/sales code below. Then export them all together.</span></div>
+        <div class="ask-bar">
+          <select id="ptxBulkField">
+            <option value="referrer_code" data-i18n="bulk_field_referrer">Referrer code</option>
+            <option value="sales_code" data-i18n="bulk_field_sales">Sales code</option>
+          </select>
+          <input id="ptxBulkCode" type="text" autocomplete="off" data-i18n-placeholder="bulk_code_ph" placeholder="e.g. REM123" />
+          <button id="ptxBulkSearchBtn" class="btn-primary" data-i18n="bulk_add_all">Find &amp; add all</button>
+        </div>
+        <div id="ptxBulkBar" class="hidden" style="margin-top:12px">
+          <div id="ptxBulkList" class="chip-row"></div>
+          <div class="exp" style="margin-top:10px">
+            <span class="hint"><span id="ptxBulkCount">0</span> <span data-i18n="bulk_selected">investors selected</span></span>
+            <label><span data-i18n="common_as_of">As of</span> <input type="date" id="ptxBulkDate" /></label>
+            <select id="ptxBulkMode">
+              <option value="combined" data-i18n="bulk_mode_combined">1 combined file</option>
+              <option value="separate" data-i18n="bulk_mode_separate">Separate file per investor</option>
+            </select>
+            <button class="btn-ghost" id="ptxBulkSummaryBtn" data-i18n="bulk_summary_btn">Preview summary</button>
+            <button class="btn-ghost" id="ptxBulkCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="ptxBulkXlsx" data-i18n="bulk_xlsx">Excel</button>
+            <button class="btn-ghost" id="ptxBulkPdf" data-i18n="common_pdf">PDF</button>
+            <button class="btn-ghost" id="ptxBulkClear" data-i18n="bulk_clear">Clear</button>
+          </div>
+          <div id="ptxBulkSummary" class="hidden" style="margin-top:14px">
+            <div id="ptxBulkSummaryKpis" class="kpi-grid"></div>
+            <div id="ptxBulkSummaryHoldings" class="table-wrap" style="margin-top:10px"></div>
+            <div id="ptxBulkSummaryInvestors" class="table-wrap" style="margin-top:10px"></div>
+          </div>
+        </div>
       </div>
 
       <div id="ptxDetail" class="hidden">
@@ -980,6 +1079,39 @@
         <div id="psiResults" class="table-wrap"></div>
       </div>
 
+      <div class="panel">
+        <div class="panel-head wrap"><h2 data-i18n="bulk_title">Bulk export</h2><span class="hint" data-i18n="bulk_hint">Search investors above and tap + to add them, or find everyone under a referrer/sales code below. Then export them all together.</span></div>
+        <div class="ask-bar">
+          <select id="psiBulkField">
+            <option value="referrer_code" data-i18n="bulk_field_referrer">Referrer code</option>
+            <option value="sales_code" data-i18n="bulk_field_sales">Sales code</option>
+          </select>
+          <input id="psiBulkCode" type="text" autocomplete="off" data-i18n-placeholder="bulk_code_ph" placeholder="e.g. REM123" />
+          <button id="psiBulkSearchBtn" class="btn-primary" data-i18n="bulk_add_all">Find &amp; add all</button>
+        </div>
+        <div id="psiBulkBar" class="hidden" style="margin-top:12px">
+          <div id="psiBulkList" class="chip-row"></div>
+          <div class="exp" style="margin-top:10px">
+            <span class="hint"><span id="psiBulkCount">0</span> <span data-i18n="bulk_selected">investors selected</span></span>
+            <label><span data-i18n="common_as_of">As of</span> <input type="date" id="psiBulkDate" /></label>
+            <select id="psiBulkMode">
+              <option value="combined" data-i18n="bulk_mode_combined">1 combined file</option>
+              <option value="separate" data-i18n="bulk_mode_separate">Separate file per investor</option>
+            </select>
+            <button class="btn-ghost" id="psiBulkSummaryBtn" data-i18n="bulk_summary_btn">Preview summary</button>
+            <button class="btn-ghost" id="psiBulkCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="psiBulkXlsx" data-i18n="bulk_xlsx">Excel</button>
+            <button class="btn-ghost" id="psiBulkPdf" data-i18n="common_pdf">PDF</button>
+            <button class="btn-ghost" id="psiBulkClear" data-i18n="bulk_clear">Clear</button>
+          </div>
+          <div id="psiBulkSummary" class="hidden" style="margin-top:14px">
+            <div id="psiBulkSummaryKpis" class="kpi-grid"></div>
+            <div id="psiBulkSummaryHoldings" class="table-wrap" style="margin-top:10px"></div>
+            <div id="psiBulkSummaryInvestors" class="table-wrap" style="margin-top:10px"></div>
+          </div>
+        </div>
+      </div>
+
       <div id="psiDetail" class="hidden">
         <div class="panel">
           <div class="panel-head wrap">
@@ -1040,6 +1172,39 @@
           <button id="peSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
         </div>
         <div id="peResults" class="table-wrap"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap"><h2 data-i18n="bulk_title">Bulk export</h2><span class="hint" data-i18n="bulk_hint">Search investors above and tap + to add them, or find everyone under a referrer/sales code below. Then export them all together.</span></div>
+        <div class="ask-bar">
+          <select id="peBulkField">
+            <option value="referrer_code" data-i18n="bulk_field_referrer">Referrer code</option>
+            <option value="sales_code" data-i18n="bulk_field_sales">Sales code</option>
+          </select>
+          <input id="peBulkCode" type="text" autocomplete="off" data-i18n-placeholder="bulk_code_ph" placeholder="e.g. REM123" />
+          <button id="peBulkSearchBtn" class="btn-primary" data-i18n="bulk_add_all">Find &amp; add all</button>
+        </div>
+        <div id="peBulkBar" class="hidden" style="margin-top:12px">
+          <div id="peBulkList" class="chip-row"></div>
+          <div class="exp" style="margin-top:10px">
+            <span class="hint"><span id="peBulkCount">0</span> <span data-i18n="bulk_selected">investors selected</span></span>
+            <label><span data-i18n="common_as_of">As of</span> <input type="date" id="peBulkDate" /></label>
+            <select id="peBulkMode">
+              <option value="combined" data-i18n="bulk_mode_combined">1 combined file</option>
+              <option value="separate" data-i18n="bulk_mode_separate">Separate file per investor</option>
+            </select>
+            <button class="btn-ghost" id="peBulkSummaryBtn" data-i18n="bulk_summary_btn">Preview summary</button>
+            <button class="btn-ghost" id="peBulkCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="peBulkXlsx" data-i18n="bulk_xlsx">Excel</button>
+            <button class="btn-ghost" id="peBulkPdf" data-i18n="common_pdf">PDF</button>
+            <button class="btn-ghost" id="peBulkClear" data-i18n="bulk_clear">Clear</button>
+          </div>
+          <div id="peBulkSummary" class="hidden" style="margin-top:14px">
+            <div id="peBulkSummaryKpis" class="kpi-grid"></div>
+            <div id="peBulkSummaryHoldings" class="table-wrap" style="margin-top:10px"></div>
+            <div id="peBulkSummaryInvestors" class="table-wrap" style="margin-top:10px"></div>
+          </div>
+        </div>
       </div>
 
       <div id="peDetail" class="hidden">
@@ -2326,6 +2491,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-export"></use></svg> Google Sheet export</h3>
           <p>Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) has a <b>Google Sheet</b> button next to its PDF buttons — one click adds a new tab, named with the investor and a timestamp, to one shared tracker spreadsheet, with the same investor info and holdings table as the "PDF (portfolio only)" export (no fund-performance breakdown), then opens straight to the new tab. Ask a superuser for the tracker sheet's link if you don't have it yet.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Bulk export</h3>
+          <p>Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box — add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM for the current list, before you spend an export on it. Once the list looks right, export it to CSV, Excel, or PDF: either as one combined file (Excel puts one sheet per investor, PDF one page per investor) or as separate files, one per investor, downloaded one after another. Capped at 50 investors per export.</p>
         </div>
       </div>
 
