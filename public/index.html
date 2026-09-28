@@ -804,7 +804,7 @@
          instead of referrer/sales code. -->
     <section id="users-tx" class="view">
       <div class="panel">
-        <div class="panel-head wrap"><h2>Users transactions</h2></div>
+        <div class="panel-head wrap"><h2 data-i18n="utx_title">Users transactions</h2></div>
         <div class="ask-bar" style="flex-wrap:wrap">
           <input id="utxSearch" type="text" autocomplete="off" data-i18n-placeholder="utx_search_ph" placeholder="SID, email, or name" />
           <select id="utxType">
@@ -856,7 +856,7 @@
     <section id="top-investors" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2>Top investors</h2>
+          <h2 data-i18n="ti_title">Top investors</h2>
           <div class="exp">
             <button class="btn-ghost" id="tiCsv" data-i18n="common_csv">CSV</button>
             <button class="btn-ghost" id="tiXlsx" data-i18n="common_excel">Excel</button>
@@ -1593,10 +1593,10 @@
     <!-- SINVEST TRANSACTIONS (raw KSEI/SInvest custodian feed) -->
     <section id="sinvest-tx" class="view">
       <div class="panel">
-        <div class="panel-head wrap"><h2>SInvest transactions</h2></div>
+        <div class="panel-head wrap"><h2 data-i18n="sitx_title">SInvest transactions</h2></div>
         <div class="ask-bar" style="flex-wrap:wrap">
-          <input id="sitxSid" type="text" autocomplete="off" placeholder="SID (exact match)" />
-          <input id="sitxSearch" type="text" autocomplete="off" placeholder="Search: SID, reference no, or investor name" />
+          <input id="sitxSid" type="text" autocomplete="off" data-i18n-placeholder="sitx_sid_ph" placeholder="SID (exact match)" />
+          <input id="sitxSearch" type="text" autocomplete="off" data-i18n-placeholder="sitx_search_ph" placeholder="Search: SID, reference no, or investor name" />
           <select id="sitxType">
             <option value="" data-i18n="common_all_types">All types</option>
             <option value="BUY">BUY</option>
@@ -1614,7 +1614,7 @@
           <label><span data-i18n="range_to">To</span> <input type="date" id="sitxTo" /></label>
           <button id="sitxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint">Raw KSEI/SInvest custodian feed (sinvest.trx_history), filtered by Transaction_Date. The source table stores every column as a string, including Transaction_Date/Input_Date (YYYYMMDD) — both are reformatted to YYYY-MM-DD here.</span>
+        <span class="hint" data-i18n="sitx_hint">Raw KSEI/SInvest custodian feed (sinvest.trx_history), filtered by Transaction_Date. The source table stores every column as a string, including Transaction_Date/Input_Date (YYYYMMDD) — both are reformatted to YYYY-MM-DD here.</span>
       </div>
 
       <div class="panel">
@@ -2098,7 +2098,7 @@
     <!-- REMISIER SHARING (goal_snapshots) -->
     <section id="remisier" class="view">
       <div class="panel">
-        <div class="panel-head wrap"><h2>Remisier (GS)</h2></div>
+        <div class="panel-head wrap"><h2 data-i18n="rem_gs_title">Remisier (GS)</h2></div>
         <div class="ask-bar" style="flex-wrap:wrap">
           <select id="remField">
             <option value="sales_code">users.sales_code</option>
@@ -2151,7 +2151,7 @@
     <!-- REMISIER SHARING (portfolio_with_code) -->
     <section id="remisier-pwc" class="view">
       <div class="panel">
-        <div class="panel-head wrap"><h2>Remisier (PWC)</h2></div>
+        <div class="panel-head wrap"><h2 data-i18n="rem_pwc_title">Remisier (PWC)</h2></div>
         <div class="ask-bar" style="flex-wrap:wrap">
           <select id="remPwcField">
             <option value="sales_code">users.sales_code</option>
@@ -2204,7 +2204,7 @@
     <!-- REMISIER TRANSACTIONS -->
     <section id="remisier-tx" class="view">
       <div class="panel">
-        <div class="panel-head wrap"><h2>Remisier transactions</h2></div>
+        <div class="panel-head wrap"><h2 data-i18n="remtx_title">Remisier transactions</h2></div>
         <div class="ask-bar" style="flex-wrap:wrap">
           <input id="remTxReferrerCodes" type="text" autocomplete="off" data-i18n-placeholder="remtx_referrer_ph" placeholder="referrer_code(s), partial match, comma separated" />
           <input id="remTxSalesCodes" type="text" autocomplete="off" data-i18n-placeholder="remtx_sales_ph" placeholder="sales_code(s), partial match, comma separated" />
@@ -2306,7 +2306,7 @@
 
     <section id="ask" class="view">
       <div class="panel">
-        <div class="panel-head"><h2>Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data — no technical skills needed.</span></div>
+        <div class="panel-head"><h2 data-i18n="ask_title">Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data — no technical skills needed.</span></div>
 
         <div id="askDisabled" class="empty hidden" data-i18n-html="ask_disabled">
           The Ask feature is off because no Anthropic API key is set on the server.
@@ -2456,42 +2456,39 @@ ORDER BY n DESC"></textarea>
         </div>
       </div>
 
-      <!-- Portfolio (PWC) / Portfolio Explorer (GS) doc-items are intentionally
-           left untranslated (English only), same product decision as the Tools
-           panel below. -->
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="docs_panel_investor">Investor</h2></div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user"></use></svg> Portfolio (PWC)</h3>
-          <p>Look up one investor by their SID code, name, or email, then see exactly what funds they currently hold, how their money has grown over different periods, and their AUM history over time.</p>
+          <p data-i18n="docs_portfolio_pwc_desc">Look up one investor by their SID code, name, or email, then see exactly what funds they currently hold, how their money has grown over different periods, and their AUM history over time.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg> Portfolio Explorer (GS)</h3>
-          <p>Same idea as Portfolio (PWC) — search for an investor and see their holdings — but from a second data source, organized by the investor's savings goals, and viewable as of any past date.</p>
+          <p data-i18n="docs_portfolio_explorer_gs_desc">Same idea as Portfolio (PWC) — search for an investor and see their holdings — but from a second data source, organized by the investor's savings goals, and viewable as of any past date.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg> Portfolio Explorer (Main)</h3>
-          <p>Same as Portfolio (PWC) — same as-of-date snapshot feature — but sourced from a corrected daily table (mi_fee_logs.portfolio_fix) whose average buy price is weighted by unit instead of averaged per lot, fixing a cost-basis bug in the original portfolio_with_code pipeline.</p>
+          <p data-i18n="docs_portfolio_explorer_main_desc">Same as Portfolio (PWC) — same as-of-date snapshot feature — but sourced from a corrected daily table (mi_fee_logs.portfolio_fix) whose average buy price is weighted by unit instead of averaged per lot, fixing a cost-basis bug in the original portfolio_with_code pipeline.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Portfolio (TX)</h3>
-          <p>Investor lookup whose average buy price is computed directly from the transaction ledger, not from portfolios.initial_price — only completed buy/SWITCH_IN/reinvestment/transfer_in transactions affect the average; sells never change it. Supports an as-of date (reconstructed purely from transactions up to that date; bonus holdings only show live, since bonus_portfolios has no history). Lets you uncheck individual fund rows (e.g. dust balances) before exporting.</p>
+          <p data-i18n="docs_portfolio_tx_desc">Investor lookup whose average buy price is computed directly from the transaction ledger, not from portfolios.initial_price — only completed buy/SWITCH_IN/reinvestment/transfer_in transactions affect the average; sells never change it. Supports an as-of date (reconstructed purely from transactions up to that date; bonus holdings only show live, since bonus_portfolios has no history). Lets you uncheck individual fund rows (e.g. dust balances) before exporting.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> Portfolio (SInvest)</h3>
-          <p>Same as Portfolio (TX), but every number is built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table — a second, independent source for cross-checking one investor's holdings and average buy price.</p>
+          <p data-i18n="docs_portfolio_sinvest_desc">Same as Portfolio (TX), but every number is built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table — a second, independent source for cross-checking one investor's holdings and average buy price.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Send statement</h3>
-          <p>Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's own date of birth on file (DDMMYYYY) as its open password — left unlocked if we have no birthdate for them — and the default letter tells them the password format. The Batch send box below sends the same documents (same portfolio date/e-statement month) to many investors at once — paste a list of emails and/or SIDs (one per line, or comma-separated), and it looks each one up and emails whichever ones it finds; anything not matched to an investor is reported back, not silently skipped. The "+ New schedule" button turns this into a recurring send (daily/weekly/monthly, at a chosen WIB time) instead of a one-off — creating one requires a one-time code emailed to whoever sets it up, and by default it runs indefinitely, but an optional end date can be set so it stops itself after its last scheduled send. Every scheduled send is logged in the same history as manual sends.</p>
+          <p data-i18n="docs_send_statement_desc">Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's own date of birth on file (DDMMYYYY) as its open password — left unlocked if we have no birthdate for them — and the default letter tells them the password format. The Batch send box below sends the same documents (same portfolio date/e-statement month) to many investors at once — paste a list of emails and/or SIDs (one per line, or comma-separated), and it looks each one up and emails whichever ones it finds; anything not matched to an investor is reported back, not silently skipped. The "+ New schedule" button turns this into a recurring send (daily/weekly/monthly, at a chosen WIB time) instead of a one-off — creating one requires a one-time code emailed to whoever sets it up, and by default it runs indefinitely, but an optional end date can be set so it stops itself after its last scheduled send. Every scheduled send is logged in the same history as manual sends.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Send fund performance</h3>
-          <p>Broadcasts the "Reksa Dana Update" PDF (all fund types, NAV as of a chosen date) to a list of email addresses — search registered users to add their email, and/or paste a list of emails directly (one per line, or comma-separated). Sends one email per recipient, so one bad address doesn't block the rest. Separate tool from Send statement, which is scoped to one investor's own documents; this one can go to any list of emails, investor or not. Has its own send-history log, same as Send statement, and the same "+ New schedule" recurring/end-date option.</p>
+          <p data-i18n="docs_send_fund_performance_desc">Broadcasts the "Reksa Dana Update" PDF (all fund types, NAV as of a chosen date) to a list of email addresses — search registered users to add their email, and/or paste a list of emails directly (one per line, or comma-separated). Sends one email per recipient, so one bad address doesn't block the rest. Separate tool from Send statement, which is scoped to one investor's own documents; this one can go to any list of emails, investor or not. Has its own send-history log, same as Send statement, and the same "+ New schedule" recurring/end-date option.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Users transactions</h3>
-          <p>Browse any investor's transactions by SID code, email, or name (partial match, required), with the buyer's contact info and fund name attached to every row: same join as Remisier transactions, but searched by investor identity instead of referrer/sales code. Refine further by transaction type, status, fund, or date range. Exports to CSV, Excel, or PDF.</p>
+          <p data-i18n="docs_users_transactions_desc">Browse any investor's transactions by SID code, email, or name (partial match, required), with the buyer's contact info and fund name attached to every row: same join as Remisier transactions, but searched by investor identity instead of referrer/sales code. Refine further by transaction type, status, fund, or date range. Exports to CSV, Excel, or PDF.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-coin"></use></svg> Top investors</h3>
@@ -2503,16 +2500,14 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-export"></use></svg> Google Sheet export</h3>
-          <p>Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) has a <b>Google Sheet</b> button next to its PDF buttons — one click adds a new tab, named with the investor and a timestamp, to one shared tracker spreadsheet, with the same investor info and holdings table as the "PDF (portfolio only)" export (no fund-performance breakdown), then opens straight to the new tab. Ask a superuser for the tracker sheet's link if you don't have it yet.</p>
+          <p data-i18n-html="docs_gsheet_export_desc">Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) has a <b>Google Sheet</b> button next to its PDF buttons — one click adds a new tab, named with the investor and a timestamp, to one shared tracker spreadsheet, with the same investor info and holdings table as the "PDF (portfolio only)" export (no fund-performance breakdown), then opens straight to the new tab. Ask a superuser for the tracker sheet's link if you don't have it yet.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Bulk export</h3>
-          <p>Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box — add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM, SID, name, email, phone, referrer_code, and sales_code for the current list, before you spend an export on it — that contact detail is shown here only, never written into the export files themselves. Once the list looks right, export it to CSV, Excel, or PDF: holdings only, same as Send statement's portfolio send — no fund-performance pages, since this is a list of investors' holdings, not a full fund report. Combined mode makes one file (Excel puts one sheet per investor, PDF one page per investor); separate mode makes one file per investor and bundles them into a single .zip download. Capped at 50 investors per export.</p>
+          <p data-i18n="docs_bulk_export_desc">Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box — add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM, SID, name, email, phone, referrer_code, and sales_code for the current list, before you spend an export on it — that contact detail is shown here only, never written into the export files themselves. Once the list looks right, export it to CSV, Excel, or PDF: holdings only, same as Send statement's portfolio send — no fund-performance pages, since this is a list of investors' holdings, not a full fund report. Combined mode makes one file (Excel puts one sheet per investor, PDF one page per investor); separate mode makes one file per investor and bundles them into a single .zip download. Capped at 50 investors per export.</p>
         </div>
       </div>
 
-      <!-- Remisier sharing / Remisier transactions doc-items are intentionally
-           left untranslated (English only), same product decision as above. -->
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="docs_panel_operations">Operations &amp; Finance</h2></div>
         <div class="doc-item">
@@ -2521,7 +2516,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> SInvest transactions</h3>
-          <p>Browse the raw KSEI/SInvest custodian feed (sinvest.trx_history) directly — the same source Reconciliation compares against, but row-by-row and filterable/exportable, for tracing a specific transaction or investor.</p>
+          <p data-i18n="docs_sinvest_transactions_desc">Browse the raw KSEI/SInvest custodian feed (sinvest.trx_history) directly — the same source Reconciliation compares against, but row-by-row and filterable/exportable, for tracing a specific transaction or investor.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-coin"></use></svg> Revenue (PWC) / <svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-line-chart"></use></svg> Revenue (GS)</h3>
@@ -2545,15 +2540,15 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Event code tracking</h3>
-          <p>A generic, ready-to-use tab for tracking an event's own referral/sales code, built ahead of any actual event — no code or campaign has been set up yet, so pick whichever of users.sales_code or users.referrer_code the event ends up using, then type in its code(s). Shows a funnel (tagged with the code → KYC verified → transacted → transacted again), the list of tagged users, their transaction detail (own date range, exportable), and a cohort retention table with the grain — Day/Week/Month — picked at run time. Update this write-up once the real event's rules replace the generic funnel/cohort steps.</p>
+          <p data-i18n="docs_event_code_tracking_desc">A generic, ready-to-use tab for tracking an event's own referral/sales code, built ahead of any actual event — no code or campaign has been set up yet, so pick whichever of users.sales_code or users.referrer_code the event ends up using, then type in its code(s). Shows a funnel (tagged with the code → KYC verified → transacted → transacted again), the list of tagged users, their transaction detail (own date range, exportable), and a cohort retention table with the grain — Day/Week/Month — picked at run time. Update this write-up once the real event's rules replace the generic funnel/cohort steps.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg> Remisier sharing (GS) / (PWC)</h3>
-          <p>Calculates how much revenue-share is owed to remisiers (referral partners) based on the AUM they've brought in, from each data source.</p>
+          <p data-i18n="docs_remisier_sharing_desc">Calculates how much revenue-share is owed to remisiers (referral partners) based on the AUM they've brought in, from each data source.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Remisier transactions</h3>
-          <p>The underlying transaction-level detail behind the remisier sharing numbers, searchable and filterable.</p>
+          <p data-i18n="docs_remisier_transactions_desc">The underlying transaction-level detail behind the remisier sharing numbers, searchable and filterable.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-forecast"></use></svg> Predict</h3>
