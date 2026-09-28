@@ -639,7 +639,7 @@ const I18N = {
     port_recent_activity: `Aktivitas terbaru`,
     port_aum_performance: `Performa AUM`,
     port_aum_performance_hint: `Perubahan % nilai total portofolio, dari mi_fee_logs.portfolio_with_code.`,
-    bulk_title: `Ekspor bareng`,
+    bulk_title: `Ekspor massal`,
     bulk_hint: `Cari investor di atas dan tekan + untuk menambahkan, atau temukan semua investor di bawah satu referrer/sales code. Lalu ekspor semuanya sekaligus.`,
     bulk_field_referrer: `Referrer code`,
     bulk_field_sales: `Sales code`,
