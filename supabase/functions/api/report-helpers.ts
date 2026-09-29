@@ -134,10 +134,14 @@ export function aggregateBulkHoldings(entries: BulkEntry[]) {
 
 // The previous calendar month as 'YYYY-MM' — the sensible default e-statement
 // period for a recurring/automated send (there's no "chosen month" input the
-// way the manual tool has one).
+// way the manual tool has one). Shifted to Asia/Jakarta (WIB, UTC+7, no DST)
+// before reading the month — same convention as schedules.ts's jktDateStr/
+// toJkt — so a job firing near the WIB day/month boundary reads the month
+// Jakarta is actually in, not whatever the server's UTC clock is still on.
 export function previousMonthYYYYMM(from: Date = new Date()): string {
-  const y = from.getUTCFullYear();
-  const m = from.getUTCMonth();
+  const jkt = new Date(from.getTime() + 7 * 60 * 60000); // WIB, UTC+7, no DST
+  const y = jkt.getUTCFullYear();
+  const m = jkt.getUTCMonth();
   const d = new Date(Date.UTC(y, m - 1, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }

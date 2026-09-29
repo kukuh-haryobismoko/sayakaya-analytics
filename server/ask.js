@@ -303,10 +303,16 @@ async function resolveEntityContext(question) {
   }
   if (!mentions.length) return '';
 
-  const lines = [];
-  for (const m of mentions) {
+  // Independent lookups (each mention resolves against its own column/table,
+  // nothing shared between them) — run them concurrently instead of awaiting
+  // one at a time, since a multi-entity question would otherwise pay for N
+  // round-trips back-to-back before the SQL-generation call even starts.
+  // Promise.all preserves mentions' order in `resolved` regardless of which
+  // lookup finishes first, so the resolved lines stay in the same order the
+  // sequential loop would have produced.
+  const resolved = await Promise.all(mentions.map(async (m) => {
     const col = ENTITY_COLUMNS.find((c) => c.label === m.column);
-    if (!col) continue;
+    if (!col) return null;
     try {
       const idSelect = col.idColumn ? `${col.idColumn} AS id, ` : '';
       const MAX_MATCHES = 50;
@@ -322,13 +328,12 @@ async function resolveEntityContext(question) {
         );
         const candidates = rows.filter((r) => r.v);
         if (!candidates.length) {
-          lines.push(`"${m.raw_text}" -> no matching ${m.column} value found for that wildcard pattern.`);
+          return `"${m.raw_text}" -> no matching ${m.column} value found for that wildcard pattern.`;
         } else if (col.idColumn) {
-          lines.push(resolvedIdLine(m, col, candidates, MAX_MATCHES));
+          return resolvedIdLine(m, col, candidates, MAX_MATCHES);
         } else {
-          lines.push(`"${m.raw_text}" -> ${m.column} value(s) matching that wildcard: ${candidates.map((c) => `"${c.v}"`).join(', ')}.`);
+          return `"${m.raw_text}" -> ${m.column} value(s) matching that wildcard: ${candidates.map((c) => `"${c.v}"`).join(', ')}.`;
         }
-        continue;
       }
       const asOnePhrase = `%${String(m.raw_text).toLowerCase()}%`;
       rows = await runQuery(
@@ -353,29 +358,40 @@ async function resolveEntityContext(question) {
       // rather than get silently mapped to the wrong fund.
       if (!rows.length) {
         const term = String(m.raw_text).toLowerCase();
+        const maxD = Math.max(1, Math.round(term.length * 0.2));
+        // Edit distance is never smaller than the length difference between
+        // the two strings, so any row whose length differs from the term's
+        // by more than maxD+1 can't be the best match (needs d <= maxD) and
+        // can't affect the runner-up check either (only matters up to
+        // best.d+1 <= maxD+1) — bounding on that filters out the vast
+        // majority of an unrelated table before computing EDIT_DISTANCE at
+        // all, instead of scanning every row on this latency-sensitive path.
         const fuzzy = await runQuery(
           `SELECT DISTINCT ${idSelect}${col.column} AS v, EDIT_DISTANCE(LOWER(${col.column}), @term) AS d
-           FROM \`${col.table}\` ORDER BY d ASC LIMIT 2`,
-          { term },
+           FROM \`${col.table}\`
+           WHERE ABS(LENGTH(${col.column}) - LENGTH(@term)) <= @maxDPlus1
+           ORDER BY d ASC LIMIT 2`,
+          { term, maxDPlus1: maxD + 1 },
         );
         const [best, runnerUp] = fuzzy;
-        const maxD = Math.max(1, Math.round(term.length * 0.2));
         const isClearWinner = best && Number(best.d) <= maxD
           && (!runnerUp || Number(runnerUp.d) > Number(best.d) + 1);
         rows = isClearWinner ? [best] : [];
       }
       const candidates = rows.filter((r) => r.v);
       if (!candidates.length) {
-        lines.push(`"${m.raw_text}" -> no matching ${m.column} value found in the database (check for a typo before falling back to a fuzzy match).`);
+        return `"${m.raw_text}" -> no matching ${m.column} value found in the database (check for a typo before falling back to a fuzzy match).`;
       } else if (col.idColumn) {
-        lines.push(resolvedIdLine(m, col, candidates, MAX_MATCHES));
+        return resolvedIdLine(m, col, candidates, MAX_MATCHES);
       } else {
-        lines.push(`"${m.raw_text}" -> exact ${m.column} value(s) found: ${candidates.map((c) => `"${c.v}"`).join(', ')}.`);
+        return `"${m.raw_text}" -> exact ${m.column} value(s) found: ${candidates.map((c) => `"${c.v}"`).join(', ')}.`;
       }
     } catch {
       // Skip this one mention; don't let a single lookup failure block the request.
+      return null;
     }
-  }
+  }));
+  const lines = resolved.filter(Boolean);
   return lines.length ? `Resolved entity lookups (ground truth from the database):\n${lines.join('\n')}` : '';
 }
 

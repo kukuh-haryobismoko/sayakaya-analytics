@@ -157,8 +157,11 @@ async function deleteSessionByToken(token) {
 
 // Forces re-login everywhere for this user — called after a password reset,
 // in case the old password (and any session opened with it) was compromised.
-function deleteSessionsByUser(userId) {
-  return rest(`/dashboard_sessions?user_id=eq.${userId}`, { method: 'DELETE' });
+// exceptToken keeps one session alive (the caller's own, for self-service
+// password changes) while still killing every other outstanding session.
+function deleteSessionsByUser(userId, exceptToken) {
+  const exceptClause = exceptToken ? `&token_hash=neq.${sha256Hex(exceptToken)}` : '';
+  return rest(`/dashboard_sessions?user_id=eq.${userId}${exceptClause}`, { method: 'DELETE' });
 }
 
 // ---- Password reset (forgot password) ------------------------------------

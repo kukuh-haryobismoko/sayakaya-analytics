@@ -59,36 +59,37 @@ async function txForecast(horizon) {
 }
 
 // ---- Churn predictions: score current holders -----------------------------
+// One CTE runs ML.PREDICT once over current holders (churned=0 in features);
+// the summary buckets and the top-N list are both selected from it in the
+// same query, instead of two separate runQuery calls each re-running
+// inference over the same rows.
 async function churnPredictions(limit = 100) {
   const lim = Math.min(parseInt(limit, 10) || 100, 5000);
-  // probability distribution buckets across current holders (churned=0 in features)
-  const summary = await runQuery(`
+  const [row] = await runQuery(`
     WITH p AS (
-      SELECT (SELECT prob FROM UNNEST(predicted_churned_probs) WHERE label = 1) AS churn_prob
+      SELECT cf.user_id, up.name, u.email,
+        (SELECT prob FROM UNNEST(pred.predicted_churned_probs) WHERE label = 1) AS churn_prob,
+        cf.buys, cf.sells, cf.n_funds, cf.recency_days, cf.tenure_days, cf.total_buy_amount
       FROM ML.PREDICT(MODEL \`sayakaya.ml.churn_model\`,
-        (SELECT * FROM \`sayakaya.ml.churn_features\` WHERE churned = 0))
+        (SELECT * FROM \`sayakaya.ml.churn_features\` WHERE churned = 0)) AS pred
+      JOIN \`sayakaya.ml.churn_features\` cf USING(user_id)
+      LEFT JOIN ${USERS} u ON u.id = cf.user_id
+      LEFT JOIN \`sayakaya.main.user_profiles\` up ON up.user_id = cf.user_id
     )
     SELECT
-      COUNT(*) AS scored,
-      COUNTIF(churn_prob >= 0.5) AS high_risk,
-      COUNTIF(churn_prob >= 0.2 AND churn_prob < 0.5) AS medium_risk,
-      COUNTIF(churn_prob < 0.2) AS low_risk,
-      ROUND(AVG(churn_prob), 4) AS avg_prob
-    FROM p`, {});
-  // top at-risk holders with their key features + contact
-  const top = await runQuery(`
-    SELECT cf.user_id, up.name, u.email,
-      ROUND((SELECT prob FROM UNNEST(pred.predicted_churned_probs) WHERE label = 1), 4) AS churn_prob,
-      cf.buys, cf.sells, cf.n_funds, cf.recency_days, cf.tenure_days,
-      ROUND(cf.total_buy_amount) AS total_buy_amount
-    FROM ML.PREDICT(MODEL \`sayakaya.ml.churn_model\`,
-      (SELECT * FROM \`sayakaya.ml.churn_features\` WHERE churned = 0)) AS pred
-    JOIN \`sayakaya.ml.churn_features\` cf USING(user_id)
-    LEFT JOIN ${USERS} u ON u.id = cf.user_id
-    LEFT JOIN \`sayakaya.main.user_profiles\` up ON up.user_id = cf.user_id
-    QUALIFY ROW_NUMBER() OVER (ORDER BY churn_prob DESC) <= ${lim}
-    ORDER BY churn_prob DESC`, {});
-  return { summary: summary[0] || {}, top };
+      (SELECT AS STRUCT
+        COUNT(*) AS scored,
+        COUNTIF(churn_prob >= 0.5) AS high_risk,
+        COUNTIF(churn_prob >= 0.2 AND churn_prob < 0.5) AS medium_risk,
+        COUNTIF(churn_prob < 0.2) AS low_risk,
+        ROUND(AVG(churn_prob), 4) AS avg_prob
+       FROM p) AS summary,
+      ARRAY(
+        SELECT AS STRUCT user_id, name, email, ROUND(churn_prob, 4) AS churn_prob,
+          buys, sells, n_funds, recency_days, tenure_days, ROUND(total_buy_amount) AS total_buy_amount
+        FROM p ORDER BY churn_prob DESC LIMIT ${lim}
+      ) AS top`, {});
+  return { summary: row?.summary || {}, top: row?.top || [] };
 }
 
 // ---- Churn exploration (no model needed) ----------------------------------

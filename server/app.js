@@ -263,6 +263,7 @@ function createApp({ serveStatic = true } = {}) {
       if (existingUsername && existingUsername.id !== target.id) return res.status(409).json({ error: 'That username is already taken.' });
     }
     const updated = await Auth.updateUser(req.params.id, req.body || {});
+    if (req.body.password) await Auth.deleteSessionsByUser(target.id);
     const changes = [];
     if (req.body.password) changes.push('password reset');
     if (req.body.isSuperuser !== undefined) changes.push(`superuser=${req.body.isSuperuser}`);
@@ -322,6 +323,9 @@ function createApp({ serveStatic = true } = {}) {
       return res.status(400).json({ error: 'Current password is incorrect.' });
     }
     await Auth.updateUser(req.user.id, { password: newPassword });
+    const authHeader = req.get('authorization') || '';
+    const currentToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    await Auth.deleteSessionsByUser(req.user.id, currentToken);
     await Auth.logEvent(req.user.id, req.user.username, 'password_change');
     res.json({ ok: true });
   }));
@@ -1452,28 +1456,33 @@ function createApp({ serveStatic = true } = {}) {
   // need the same {contact, holdings} per investor, just rendered differently
   // (a file vs. an aggregated JSON preview).
   async function fetchBatchEntries(source, users) {
-    const entries = [];
-    for (const u of users) {
-      if (!u.userId) continue;
-      let holdings;
-      if (source === 'portfolio_explorer_full') {
-        let asOfDate = u.date;
-        if (!asOfDate) {
-          const d = Q.goalLatestSnapshotDate(u.userId);
-          const [row] = await runQuery(d.sql, d.params);
-          asOfDate = row?.latest_date;
+    const validUsers = users.filter((u) => u.userId);
+    const c = Q.userContactBatch(validUsers.map((u) => u.userId));
+    const [contactRows, holdingsResults] = await Promise.all([
+      runQuery(c.sql, c.params, { redact: false }),
+      Promise.all(validUsers.map(async (u) => {
+        if (source === 'portfolio_explorer_full') {
+          let asOfDate = u.date;
+          if (!asOfDate) {
+            const d = Q.goalLatestSnapshotDate(u.userId);
+            const [row] = await runQuery(d.sql, d.params);
+            asOfDate = row?.latest_date;
+          }
+          if (!asOfDate) return null; // no goal_snapshots for this investor — skip rather than fail the whole batch
+          const h = Q.goalUserHoldings(u.userId, asOfDate);
+          return runQuery(h.sql, h.params);
         }
-        if (!asOfDate) continue; // no goal_snapshots for this investor — skip rather than fail the whole batch
-        const h = Q.goalUserHoldings(u.userId, asOfDate);
-        holdings = await runQuery(h.sql, h.params);
-      } else {
         const h = BATCH_HOLDINGS_QUERY[source](u);
-        holdings = await runQuery(h.sql, h.params);
-      }
-      const c = Q.userContact(u.userId);
-      const [contact] = await runQuery(c.sql, c.params, { redact: false });
-      entries.push({ contact: contact || { sid: u.sid, name: u.name }, holdings });
-    }
+        return runQuery(h.sql, h.params);
+      })),
+    ]);
+    const contactByUserId = new Map(contactRows.map((row) => [row.user_id, row]));
+    const entries = [];
+    validUsers.forEach((u, i) => {
+      const holdings = holdingsResults[i];
+      if (holdings === null) return;
+      entries.push({ contact: contactByUserId.get(u.userId) || { sid: u.sid, name: u.sid }, holdings });
+    });
     return entries;
   }
   // Common validation for both batch routes: unknown/unauthorized source,

@@ -857,8 +857,9 @@ function renderPeFinding(holdings) {
   if (withPct.length < 2) { el.hidden = true; return; }
   const best = withPct.reduce((a, b) => (Number(val(b.gain_pct)) > Number(val(a.gain_pct)) ? b : a));
   const worst = withPct.reduce((a, b) => (Number(val(b.gain_pct)) < Number(val(a.gain_pct)) ? b : a));
+  const bestPct = Number(val(best.gain_pct));
   el.className = 'trend-finding';
-  el.innerHTML = `Best holding: <span style="color:var(--teal)">${val(best.fund)} +${Number(val(best.gain_pct)).toFixed(2)}%</span>` +
+  el.innerHTML = `Best holding: <span style="color:var(--teal)">${val(best.fund)} ${bestPct >= 0 ? '+' : ''}${bestPct.toFixed(2)}%</span>` +
     ` &nbsp;·&nbsp; Worst holding: <span style="color:var(--rose)">${val(worst.fund)} ${Number(val(worst.gain_pct)).toFixed(2)}%</span>`;
   el.hidden = false;
 }
@@ -986,6 +987,19 @@ function loadHnwi() {
   return Promise.all([loadHnwiTotal(), loadHnwiByFund(false)]);
 }
 
+// Marks a tab's "loaded" gate true right away (so a fast repeat tab-switch
+// doesn't double-fire its fetches) but un-latches it if any of its fetches
+// end up failing, so switchTab retries the whole tab on the next visit
+// instead of leaving it stuck on a stale/error view for the rest of the
+// session (see e774f55, which fixed this for 3 date-defaulting flags —
+// this generalizes the same fix to every tab's own loaded flag).
+function gateTabLoad(setLoaded, promises) {
+  setLoaded(true);
+  Promise.allSettled(promises).then((results) => {
+    if (results.some((r) => r.status === 'rejected')) setLoaded(false);
+  });
+}
+
 // OVERVIEW
 let overviewLoaded = false;
 
@@ -1036,7 +1050,6 @@ function overviewFundFilterClear() {
 let ovAumDateDefaulted = false;
 
 async function loadOverview() {
-  overviewLoaded = true;
   if (!overviewFundOptionsLoaded) { overviewFundOptionsLoaded = true; loadOverviewFundOptions(); }
   if (!ovAumDateDefaulted) {
     try {
@@ -1053,8 +1066,10 @@ async function loadOverview() {
   const aumQs = `?aumDate=${$('#ovAumDate').value}${fundQs ? '&' + fundQs : ''}&from=${r.from}&to=${r.to}`;
   $('#kpis').innerHTML = '<div class="loading">Loading metrics…</div>';
 
+  const overviewFetch = api('/api/overview' + aumQs);
+  gateTabLoad((v) => { overviewLoaded = v; }, [overviewFetch]);
   try {
-    const o = await api('/api/overview' + aumQs);
+    const o = await overviewFetch;
     renderKpis(o);
   } catch (e) { $('#kpis').innerHTML = `<div class="empty">${e.message}</div>`; }
 
@@ -1948,37 +1963,42 @@ function genTable(sel, rows, cols, emptyMsg) {
 }
 
 async function loadGrowth() {
-  growthLoaded = true;
-  api('/api/campaigns/performance').then((rows) => genTable('#campTable', rows, [
+  const pCamp = api('/api/campaigns/performance');
+  pCamp.then((rows) => genTable('#campTable', rows, [
     { key: 'name', label: 'Campaign' }, { key: 'campaign_type', label: 'Type' },
     { key: 'promo_code', label: 'Promo' }, { key: 'quota', label: 'Quota', type: 'num' },
     { key: 'used_quota', label: 'Used', type: 'num' }, { key: 'redemption_pct', label: 'Redemption', type: 'pct' },
     { key: 'bonus_amount', label: 'Bonus/redemption', type: 'idr' }, { key: 'est_cost', label: 'Est. cost', type: 'idr' },
   ], 'No campaigns in this range — widen the date filter.')).catch((e) => $('#campTable').innerHTML = `<div class="empty">${e.message}</div>`);
 
-  api('/api/referrals/top').then((rows) => genTable('#refTable', rows, [
+  const pRef = api('/api/referrals/top');
+  pRef.then((rows) => genTable('#refTable', rows, [
     { key: 'referral_code', label: 'Code' }, { key: 'referrer', label: 'Referrer' },
     { key: 'referred_count', label: 'Referred', type: 'num' }, { key: 'referred_volume', label: 'Volume brought', type: 'idr' },
   ], 'No referrals yet.')).catch((e) => $('#refTable').innerHTML = `<div class="empty">${e.message}</div>`);
 
-  api('/api/switching/top-pairs').then((rows) => genTable('#switchTable', rows, [
+  const pSwitch = api('/api/switching/top-pairs');
+  pSwitch.then((rows) => genTable('#switchTable', rows, [
     { key: 'from_fund', label: 'From fund' }, { key: 'to_fund', label: 'To fund' },
     { key: 'switches', label: 'Switches', type: 'num' }, { key: 'amount', label: 'Amount', type: 'idr' },
   ], 'No switching transactions.')).catch((e) => $('#switchTable').innerHTML = `<div class="empty">${e.message}</div>`);
 
-  api('/api/funds/by-manager').then((rows) => doughnut('managerChart', rows, 'label', 'aum', idrFull))
-    .catch(() => {});
+  const pManager = api('/api/funds/by-manager');
+  pManager.then((rows) => doughnut('managerChart', rows, 'label', 'aum', idrFull)).catch(() => {});
 
-  api('/api/users/aum-by-risk').then((rows) => doughnut('riskChart', rows, 'label', 'aum', idrFull))
-    .catch(() => {});
+  const pRisk = api('/api/users/aum-by-risk');
+  pRisk.then((rows) => doughnut('riskChart', rows, 'label', 'aum', idrFull)).catch(() => {});
 
-  api('/api/users/aum-by-income').then((rows) => {
+  const pIncome = api('/api/users/aum-by-income');
+  pIncome.then((rows) => {
     const total = rows.reduce((a, r) => a + (Number(val(r.aum)) || 0), 0);
     genTable('#incomeTable', rows.map((r) => ({ ...r, share: total ? Number(val(r.aum)) / total * 100 : null })), [
       { key: 'label', label: 'Income bracket' }, { key: 'investors', label: 'Investors', type: 'num', sum: true },
       { key: 'aum', label: 'AUM', type: 'idr', sum: true }, { key: 'share', label: '% of AUM', type: 'pct', sum: true },
     ], 'No data.');
   }).catch((e) => $('#incomeTable').innerHTML = `<div class="empty">${e.message}</div>`);
+
+  gateTabLoad((v) => { growthLoaded = v; }, [pCamp, pRef, pSwitch, pManager, pRisk, pIncome]);
 }
 
 // RECONCILIATION (app ledger vs custodian feed)
@@ -2219,11 +2239,13 @@ async function loadUserLifetime() {
   $('#ulSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#ulTrendFinding').hidden = true;
   const qs = `from=${r.from}&to=${r.to}&fund=${encodeURIComponent(r.fund)}&mi=${encodeURIComponent(r.mi)}`;
+  const ulFetch = Promise.all([
+    api(`/api/user-lifetime?${qs}&sid=${encodeURIComponent(r.sid)}&limit=${r.limit}`),
+    api(`/api/user-lifetime/summary?${qs}&granularity=${ulGran}`),
+  ]);
+  gateTabLoad((v) => { ulLoaded = v; }, [ulFetch]);
   try {
-    const [users, summary] = await Promise.all([
-      api(`/api/user-lifetime?${qs}&sid=${encodeURIComponent(r.sid)}&limit=${r.limit}`),
-      api(`/api/user-lifetime/summary?${qs}&granularity=${ulGran}`),
-    ]);
+    const [users, summary] = await ulFetch;
     renderUlTrend(summary);
     renderSeriesTrendFinding('#ulTrendFinding', summary, 'total_aperd_share', 'AperD revenue');
     renderUlUsers(users);
@@ -2279,12 +2301,14 @@ async function loadCampaignRevenue() {
     $(s).innerHTML = '<div class="loading">Computing campaign revenue…</div>');
   $('#crTrendFinding').hidden = true;
   const qs = `from=${r.from}&to=${r.to}&promo=${encodeURIComponent(r.promo)}`;
+  const crFetch = Promise.all([
+    api(`/api/campaign-revenue/campaigns?${qs}`),
+    api(`/api/campaign-revenue?${qs}&granularity=${crGran}`),
+    api(`/api/campaign-revenue/summary?${qs}&granularity=${crGran}`),
+  ]);
+  gateTabLoad((v) => { crLoaded = v; }, [crFetch]);
   try {
-    const [campaigns, detail, summary] = await Promise.all([
-      api(`/api/campaign-revenue/campaigns?${qs}`),
-      api(`/api/campaign-revenue?${qs}&granularity=${crGran}`),
-      api(`/api/campaign-revenue/summary?${qs}&granularity=${crGran}`),
-    ]);
+    const [campaigns, detail, summary] = await crFetch;
     renderCrTrend(summary);
     renderSeriesTrendFinding('#crTrendFinding', summary, 'total_aperd_share', 'AperD revenue');
     genTable('#crCampaignsTable', campaigns, [
@@ -2351,12 +2375,14 @@ async function loadReferralProgram() {
   $('#refProgLeaderboardTable').innerHTML = '<div class="loading">Loading…</div>';
   $('#refProgInvitedTable').innerHTML = '<div class="loading">Loading…</div>';
   const r = refProgRange();
+  const refProgFetch = Promise.all([
+    api(`/api/referral-program/detail?from=${r.from}&to=${r.to}`),
+    api(`/api/referral-program/inviter-stats?from=${r.from}&to=${r.to}`),
+    api(`/api/referral-program/invited?from=${r.from}&to=${r.to}`),
+  ]);
+  gateTabLoad((v) => { refProgLoaded = v; }, [refProgFetch]);
   try {
-    const [rows, stats, invited] = await Promise.all([
-      api(`/api/referral-program/detail?from=${r.from}&to=${r.to}`),
-      api(`/api/referral-program/inviter-stats?from=${r.from}&to=${r.to}`),
-      api(`/api/referral-program/invited?from=${r.from}&to=${r.to}`),
-    ]);
+    const [rows, stats, invited] = await refProgFetch;
     renderReferralProgram(rows, stats, invited);
   } catch (e) {
     $('#refProgKpis').innerHTML = '';
@@ -2465,12 +2491,14 @@ async function loadReferralProgramAlt() {
   $('#refProgAltLeaderboardTable').innerHTML = '<div class="loading">Loading…</div>';
   $('#refProgAltInvitedTable').innerHTML = '<div class="loading">Loading…</div>';
   const r = refProgAltRange();
+  const refProgAltFetch = Promise.all([
+    api(`/api/referral-program-alt/detail?from=${r.from}&to=${r.to}`),
+    api(`/api/referral-program-alt/inviter-stats?from=${r.from}&to=${r.to}`),
+    api(`/api/referral-program-alt/invited?from=${r.from}&to=${r.to}`),
+  ]);
+  gateTabLoad((v) => { refProgAltLoaded = v; }, [refProgAltFetch]);
   try {
-    const [rows, stats, invited] = await Promise.all([
-      api(`/api/referral-program-alt/detail?from=${r.from}&to=${r.to}`),
-      api(`/api/referral-program-alt/inviter-stats?from=${r.from}&to=${r.to}`),
-      api(`/api/referral-program-alt/invited?from=${r.from}&to=${r.to}`),
-    ]);
+    const [rows, stats, invited] = await refProgAltFetch;
     renderReferralProgram(rows, stats, invited, { kpis: '#refProgAltKpis', table: '#refProgAltTable', leaderboard: '#refProgAltLeaderboardTable', invited: '#refProgAltInvitedTable' });
   } catch (e) {
     $('#refProgAltKpis').innerHTML = '';
@@ -2691,7 +2719,6 @@ function sitxParams() {
 }
 
 async function loadSitx() {
-  sitxLoaded = true;
   const p = sitxParams();
   $('#sitxTable').innerHTML = '<div class="loading">Loading…</div>';
   const qs = new URLSearchParams();
@@ -2701,8 +2728,10 @@ async function loadSitx() {
   if (p.from) qs.set('from', p.from);
   if (p.to) qs.set('to', p.to);
   qs.set('limit', sitx.limit); qs.set('offset', sitx.offset);
+  const sitxFetch = api(`/api/sinvest-transactions?${qs}`);
+  gateTabLoad((v) => { sitxLoaded = v; }, [sitxFetch]);
   try {
-    const { rows, total } = await api(`/api/sinvest-transactions?${qs}`);
+    const { rows, total } = await sitxFetch;
     sitx.total = total;
     genTable('#sitxTable', rows, [
       { key: 'transaction_date', label: 'Date', type: 'date' },
@@ -2820,8 +2849,10 @@ async function loadTopInvestors() {
   if (!p.from || !p.to) { toast('Pick a date range first.'); return; }
   $('#tiSummary').hidden = true;
   $('#tiTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
+  const tiFetch = api(`/api/top-investors?${new URLSearchParams(p)}`);
+  gateTabLoad((v) => { tiLoaded = v; }, [tiFetch]);
   try {
-    const rows = await api(`/api/top-investors?${new URLSearchParams(p)}`);
+    const rows = await tiFetch;
     genTable('#tiTable', rows.map((r, i) => ({ ...r, rank: i + 1 })), [
       { key: 'rank', label: '#', type: 'num' },
       { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
@@ -3249,6 +3280,23 @@ async function pushToSheet(body) {
   toast('Google Sheet ready');
 }
 
+// Runs up to `limit` of these async calls at once instead of one after
+// another — used where each item is an independent request (no ordering or
+// shared-state dependency between them) so serializing them would only add
+// latency without adding safety.
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let i = 0;
+  async function worker() {
+    while (i < items.length) {
+      const idx = i++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 // BULK EXPORT — shared by the 5 Portfolio tabs (PWC, Fix, TX, SInvest,
 // Explorer). Builds a list of investors — one at a time via that tab's own
 // search results ("+" on a row, see bulkAddCell/wireBulkAddButtons below), or
@@ -3329,21 +3377,24 @@ function setupBulkExport({ prefix: p, source }) {
 
   // One /api/export/batch call per investor (a 1-element users array each),
   // zipped into a single download — a real .zip, not N separate browser
-  // downloads landing one after another.
+  // downloads landing one after another. Up to 5 investors in flight at once
+  // — each request is independent, so running them one at a time only added
+  // wait time (50 investors serially could take 50-150+s); unbounded
+  // parallelism would just trade that for a 50-request burst on one call.
   async function exportSeparate(format) {
     const date = $(`#${p}BulkDate`).value;
     const zip = new JSZip();
-    let ok = 0;
-    for (const u of basket.values()) {
+    const results = await mapLimit([...basket.values()], 5, (u) => {
       const filename = `${source.replace('_full', '')}_${u.sid || u.userId}${date ? '_' + date : ''}`;
       const body = {
         source, format, filename,
         users: [{ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) }],
         ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}),
       };
-      const result = await fetchBatchBlob(body, `${filename}.${format}`);
-      if (result) { zip.file(result.filename, result.blob); ok++; }
-    }
+      return fetchBatchBlob(body, `${filename}.${format}`);
+    });
+    let ok = 0;
+    results.forEach((result) => { if (result) { zip.file(result.filename, result.blob); ok++; } });
     if (!ok) return; // fetchBatchBlob already toasted whatever went wrong
     const zipBlob = await zip.generateAsync({ type: 'blob' });
     downloadBlob(zipBlob, `${source.replace('_full', '')}_batch_${ok}_${new Date().toISOString().slice(0, 10)}.zip`);
@@ -4584,16 +4635,16 @@ function switchTab(name) {
   if (name === 'growth' && !growthLoaded) loadGrowth();
   if (name === 'reconciliation') loadReconciliation();
   if (name === 'sinvest-tx' && !sitxLoaded) loadSitx();
-  if (name === 'top-investors' && !tiLoaded) { tiLoaded = true; loadTopInvestors(); }
+  if (name === 'top-investors' && !tiLoaded) loadTopInvestors();
   if (name === 'revenue') loadRevenue();
   if (name === 'revenue2') loadRevenue2();
   // Both are loaded once per session rather than on every visit: User lifetime
   // scans ~3.7 GB of portfolio_with_code per run (the table is unpartitioned,
   // so the date filter prunes nothing). Apply re-runs them on demand.
-  if (name === 'user-lifetime' && !ulLoaded) { ulLoaded = true; loadUserLifetime(); }
-  if (name === 'campaign-revenue' && !crLoaded) { crLoaded = true; loadCampaignRevenue(); }
-  if (name === 'referral-program' && !refProgLoaded) { refProgLoaded = true; loadReferralProgram(); }
-  if (name === 'referral-program-alt' && !refProgAltLoaded) { refProgAltLoaded = true; loadReferralProgramAlt(); }
+  if (name === 'user-lifetime' && !ulLoaded) loadUserLifetime();
+  if (name === 'campaign-revenue' && !crLoaded) loadCampaignRevenue();
+  if (name === 'referral-program' && !refProgLoaded) loadReferralProgram();
+  if (name === 'referral-program-alt' && !refProgAltLoaded) loadReferralProgramAlt();
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
   if (name === 'hnwi') loadHnwi();

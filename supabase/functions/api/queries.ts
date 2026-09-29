@@ -522,6 +522,18 @@ export const userContact = (userId: string): Query => ({
   params: { userId },
 });
 
+// Same as userContact but for a whole batch of investors in one round-trip —
+// used by bulk export/preview instead of one userContact call per investor.
+export const userContactBatch = (userIds: string[]): Query => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone, up.birthdate,
+      u.referrer_code, u.sales_code,
+      COALESCE(up.correspondence_address, up.id_address) AS address
+    FROM ${USERS} u
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+    WHERE u.id IN UNNEST(@userIds)`,
+  params: { userIds },
+});
+
 // One investor's transactions within a date range, for the monthly e-statement
 // PDF (pdf.ts transactionStatement) — fund name resolved here since
 // main.transactions only carries fund_id.
@@ -1663,6 +1675,15 @@ export const referralInviterStats = (periodFrom?: string, periodTo?: string): Qu
 // identical — this is the invitee's verification date, not their signup
 // date, and an invitee who never got verified (verified_at IS NULL) never
 // counts as invited here regardless of how old the referral is.
+// Known caveat (deliberately left as-is): a small number of legacy users
+// have verification_status='verified' with a NULL verified_at (rows predating
+// that timestamp column — see e688ddd for the same gap in eventCodeFunnel/
+// eventCodeUsers, fixed there by switching to verification_status since that
+// query only needed a boolean, not a date). This leaderboard needs an actual
+// date to bucket invitees into a period, and there's no real verification
+// date to fall back to for those legacy rows, so they're excluded here rather
+// than guessed at. Confirmed decision: do not change this without checking
+// with the team first, since it feeds a live compliance/eligibility program.
 export const referralInviterStatsAlt = (periodFrom?: string, periodTo?: string): Query => ({
   sql: `WITH ${RESOLVED_INVITER_CTE},
     invited_all AS (
@@ -1760,26 +1781,33 @@ const RECON_TYPE_CASE = `CASE Transaction_Type
 export const reconciliationDaily = (from?: string, to?: string): Query => {
   const r = range(from, to);
   return {
-    sql: `WITH sinvest AS (
-        SELECT PARSE_DATE('%Y%m%d', Transaction_Date) AS d,
-          SUM(SAFE_CAST(Net_Transaction_Amount AS NUMERIC)) AS amount,
-          COUNT(*) AS cnt
+    sql: `WITH sinvest_raw AS (
+        SELECT PARSE_DATE('%Y%m%d', Input_Date) AS d,
+          ${RECON_TYPE_CASE} AS type_label,
+          SAFE_CAST(Net_Transaction_Amount AS NUMERIC) AS amount
         FROM ${SINVEST}
-        WHERE Transaction_Date IS NOT NULL
-        GROUP BY d
+        WHERE Input_Date IS NOT NULL
+      ),
+      sinvest AS (
+        SELECT d, IFNULL(type_label, 'ALL') AS type, SUM(amount) AS amount, COUNT(*) AS cnt
+        FROM sinvest_raw GROUP BY ROLLUP(d, type_label)
+      ),
+      app_raw AS (
+        SELECT DATE(completed_at) AS d, UPPER(type) AS type_label, final_amount
+        FROM ${TX} WHERE status = 'completed'
       ),
       app AS (
-        SELECT DATE(created_at) AS d, SUM(final_amount) AS amount, COUNT(*) AS cnt
-        FROM ${TX} WHERE status = 'completed'
-        GROUP BY d
+        SELECT d, IFNULL(type_label, 'ALL') AS type, SUM(final_amount) AS amount, COUNT(*) AS cnt
+        FROM app_raw GROUP BY ROLLUP(d, type_label)
       )
       SELECT FORMAT_DATE('%Y-%m-%d', COALESCE(s.d, a.d)) AS bucket,
+        COALESCE(s.type, a.type) AS type,
         IFNULL(s.amount, 0) AS sinvest_amount, IFNULL(s.cnt, 0) AS sinvest_count,
         IFNULL(a.amount, 0) AS app_amount, IFNULL(a.cnt, 0) AS app_count,
         ROUND(IFNULL(a.amount, 0) - IFNULL(s.amount, 0)) AS amount_diff
-      FROM sinvest s FULL OUTER JOIN app a ON s.d = a.d
+      FROM sinvest s FULL OUTER JOIN app a ON s.d = a.d AND s.type = a.type
       WHERE COALESCE(s.d, a.d) BETWEEN @from AND @to
-      ORDER BY bucket DESC`,
+      ORDER BY bucket DESC, type = 'ALL' DESC, type`,
     params: r,
   };
 };

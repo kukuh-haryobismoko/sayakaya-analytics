@@ -347,6 +347,7 @@ on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params, _url, u
     isSuperuser: body.isSuperuser as boolean | undefined,
     allowedTabs: body.allowedTabs as string[] | undefined,
   });
+  if (body.password) await A.deleteSessionsByUser(target.id);
   const changes: string[] = [];
   if (body.password) changes.push('password reset');
   if (body.isSuperuser !== undefined) changes.push(`superuser=${body.isSuperuser}`);
@@ -426,6 +427,9 @@ on('POST', '/api/auth/change-password', async (req, _params, _url, user) => {
     return json({ error: 'Current password is incorrect.' }, 400);
   }
   await A.updateUser(user!.id, { password: newPassword });
+  const authHeader = req.headers.get('authorization') || '';
+  const currentToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  await A.deleteSessionsByUser(user!.id, currentToken);
   await A.logEvent(user!.id, user!.username, 'password_change');
   return json({ ok: true });
 });
@@ -527,7 +531,8 @@ on('GET', '/api/funds/top', requireTab('overview', async (_req, _params, url) =>
   const q = Q.largestFundsAum(qp(url, 'groupBy') || 'fund', date, exclude);
   return json(await runQuery(q.sql, q.params));
 }));
-on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance'], async (_req, _params, url) => {
+// Shared by Overview, Performance, and Users transactions (fund filter) — allow any.
+on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance', 'users-tx'], async (_req, _params, url) => {
   const q = Q.fundTypes(parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -1569,28 +1574,33 @@ type BatchEntry = { contact: Record<string, unknown>; holdings: Record<string, u
 // need the same {contact, holdings} per investor, just rendered differently
 // (a file vs. an aggregated JSON preview).
 async function fetchBatchEntries(source: string, users: BatchUser[]): Promise<BatchEntry[]> {
-  const entries: BatchEntry[] = [];
-  for (const u of users) {
-    if (!u.userId) continue;
-    let holdings: Record<string, unknown>[];
-    if (source === 'portfolio_explorer_full') {
-      let asOfDate = u.date;
-      if (!asOfDate) {
-        const d = Q.goalLatestSnapshotDate(u.userId);
-        const [row] = await runQuery(d.sql, d.params);
-        asOfDate = row?.latest_date as string | undefined;
+  const validUsers = users.filter((u) => u.userId);
+  const c = Q.userContactBatch(validUsers.map((u) => u.userId));
+  const [contactRows, holdingsResults] = await Promise.all([
+    runQuery(c.sql, c.params, { redact: false }),
+    Promise.all(validUsers.map(async (u): Promise<Record<string, unknown>[] | null> => {
+      if (source === 'portfolio_explorer_full') {
+        let asOfDate = u.date;
+        if (!asOfDate) {
+          const d = Q.goalLatestSnapshotDate(u.userId);
+          const [row] = await runQuery(d.sql, d.params);
+          asOfDate = row?.latest_date as string | undefined;
+        }
+        if (!asOfDate) return null; // no goal_snapshots for this investor — skip rather than fail the whole batch
+        const h = Q.goalUserHoldings(u.userId, asOfDate);
+        return runQuery(h.sql, h.params);
       }
-      if (!asOfDate) continue; // no goal_snapshots for this investor — skip rather than fail the whole batch
-      const h = Q.goalUserHoldings(u.userId, asOfDate);
-      holdings = await runQuery(h.sql, h.params);
-    } else {
       const h = BATCH_HOLDINGS_QUERY[source](u);
-      holdings = await runQuery(h.sql, h.params);
-    }
-    const c = Q.userContact(u.userId);
-    const [contact] = await runQuery(c.sql, c.params, { redact: false });
-    entries.push({ contact: contact || { sid: u.sid, name: u.sid }, holdings });
-  }
+      return runQuery(h.sql, h.params);
+    })),
+  ]);
+  const contactByUserId = new Map(contactRows.map((row: Record<string, unknown>) => [row.user_id, row]));
+  const entries: BatchEntry[] = [];
+  validUsers.forEach((u, i) => {
+    const holdings = holdingsResults[i];
+    if (holdings === null) return;
+    entries.push({ contact: contactByUserId.get(u.userId) || { sid: u.sid, name: u.sid }, holdings });
+  });
   return entries;
 }
 // Common validation for both batch routes: unknown/unauthorized source,

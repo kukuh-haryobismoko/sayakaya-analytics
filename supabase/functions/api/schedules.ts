@@ -314,7 +314,7 @@ async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sen
           `scheduled fund-performance to ${row.recipient_email}`);
       } else {
         const c = Q.userContact(row.recipient_user_id);
-        const [contact] = await runQuery(c.sql, c.params);
+        const [contact] = await runQuery(c.sql, c.params, { redact: false });
         if (!contact?.email) throw new Error('no email on file');
         const attachments = await buildStatementAttachments({
           userId: row.recipient_user_id, sid: row.recipient_sid, contact,

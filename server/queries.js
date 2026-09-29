@@ -505,6 +505,18 @@ const userContact = (userId) => ({
   params: { userId },
 });
 
+// Same as userContact but for a whole batch of investors in one round-trip —
+// used by bulk export/preview instead of one userContact call per investor.
+const userContactBatch = (userIds) => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone, up.birthdate,
+      u.referrer_code, u.sales_code,
+      COALESCE(up.correspondence_address, up.id_address) AS address
+    FROM ${USERS} u
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+    WHERE u.id IN UNNEST(@userIds)`,
+  params: { userIds },
+});
+
 // One investor's transactions within a date range, for the monthly e-statement
 // PDF (server/pdf.js transactionStatement) — fund name resolved here since
 // main.transactions only carries fund_id. Restricted to settled/successful
@@ -1641,6 +1653,15 @@ const referralInviterStats = (periodFrom, periodTo) => ({
 // identical — this is the invitee's verification date, not their signup
 // date, and an invitee who never got verified (verified_at IS NULL) never
 // counts as invited here regardless of how old the referral is.
+// Known caveat (deliberately left as-is): a small number of legacy users
+// have verification_status='verified' with a NULL verified_at (rows predating
+// that timestamp column — see e688ddd for the same gap in eventCodeFunnel/
+// eventCodeUsers, fixed there by switching to verification_status since that
+// query only needed a boolean, not a date). This leaderboard needs an actual
+// date to bucket invitees into a period, and there's no real verification
+// date to fall back to for those legacy rows, so they're excluded here rather
+// than guessed at. Confirmed decision: do not change this without checking
+// with the team first, since it feeds a live compliance/eligibility program.
 const referralInviterStatsAlt = (periodFrom, periodTo) => ({
   sql: `WITH ${RESOLVED_INVITER_CTE},
     invited_all AS (
@@ -3216,7 +3237,7 @@ module.exports = {
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail, fundNavTrend, fundList,
-  userSearch, usersByIdentifiers, userContact, userTransactions, userRecentTransactions, userHoldings, scheduleRecipientRecap, userPortfolioSplit, userPerformance, userAumHistory,
+  userSearch, usersByIdentifiers, userContact, userContactBatch, userTransactions, userRecentTransactions, userHoldings, scheduleRecipientRecap, userPortfolioSplit, userPerformance, userAumHistory,
   userHoldingsLatestDate, userHoldingsAsOf,
   userPerformanceFix, userAumHistoryFix, userHoldingsLatestDateFix, userHoldingsAsOfFix,
   allInvestorsWithAum, allRegisteredUsersWithEmail,
