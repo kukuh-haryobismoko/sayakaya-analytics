@@ -57,6 +57,17 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   aum_history_drill: 'aum',
   hnwi_total: 'hnwi',
   hnwi_by_fund: 'hnwi',
+  dormant_conversion_summary: 'dormant',
+  dormant_repeat_buyers: 'dormant',
+  dormant_time_to_convert: 'dormant',
+  kalcer_ambassador_summary: 'kalcer',
+  kalcer_referral_detail: 'kalcer',
+  push_by_campaign: 'push',
+  push_by_platform: 'push',
+  marketing_funnel: 'marketing',
+  app_crash_issues: 'app-health',
+  app_perf_traces: 'app-health',
+  product_funnel: 'product-funnel',
   referral_program_detail: 'referral-program',
   referral_program_alt_detail: 'referral-program-alt',
   referral_program_invited: 'referral-program',
@@ -840,6 +851,78 @@ on('GET', '/api/hnwi/by-fund', requireTab('hnwi', async (_req, _params, url) => 
   return json(await runQuery(q.sql, q.params));
 }));
 
+// ---- Dormant win-back: computed live from main.transactions, see
+// queries.js (DORMANT_EPISODES_CTE) for the gap/conversion methodology ----
+on('GET', '/api/dormant/conversion-summary', requireTab('dormant', async () => {
+  const q = Q.dormantConversionSummary();
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/dormant/repeat-buyers', requireTab('dormant', async () => {
+  const q = Q.dormantRepeatBuyers();
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/dormant/time-to-convert', requireTab('dormant', async () => {
+  const q = Q.dormantTimeToConvert();
+  return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- Kalcer (ambassadors): raw referral links + dated AUM, no bonus math
+// (see queries.ts) ------------------------------------------------------
+on('GET', '/api/kalcer/latest-date', requireTab('kalcer', async () => {
+  const q = Q.kalcerLatestDate();
+  const [row] = await runQuery(q.sql, q.params);
+  return json({ latestDate: (row?.latest_date as string) || null });
+}));
+on('GET', '/api/kalcer/summary', requireTab('kalcer', async (_req, _params, url) => {
+  const date = qp(url, 'date');
+  if (!date) return json({ error: 'date is required.' }, 400);
+  const q = Q.kalcerAmbassadorSummary(date, qp(url, 'q'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/kalcer/detail', requireTab('kalcer', async (_req, _params, url) => {
+  const date = qp(url, 'date');
+  if (!date) return json({ error: 'date is required.' }, 400);
+  const q = Q.kalcerReferralDetail(date, qp(url, 'q'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- Push delivery: FCM's own send-pipeline health log (own dataset) ----
+on('GET', '/api/push/trend', requireTab('push', async (_req, _params, url) => {
+  const q = Q.pushTrend(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/push/by-campaign', requireTab('push', async (_req, _params, url) => {
+  const q = Q.pushByCampaign(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/push/by-platform', requireTab('push', async (_req, _params, url) => {
+  const q = Q.pushByPlatform(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- Marketing attribution: Adjust's mobile attribution events (own dataset) --
+on('GET', '/api/marketing/funnel', requireTab('marketing', async (_req, _params, url) => {
+  const q = Q.marketingFunnelByChannel(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- App health: Crashlytics + Performance Monitoring (own datasets) ----
+on('GET', '/api/app-health/crashes', requireTab('app-health', async (_req, _params, url) => {
+  const q = Q.appCrashIssues(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/app-health/performance', requireTab('app-health', async (_req, _params, url) => {
+  const q = Q.appPerfTraces(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- Product funnel: GA4 export (own dataset), see queries.ts for why
+// this is a cohort join rather than a same-window count per step --------
+on('GET', '/api/product-funnel', requireTab('product-funnel', async (_req, _params, url) => {
+  const q = Q.productFunnelByPlatform(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+
 // ---- Product performance (NAV % change per fund type) ----------------------
 on('GET', '/api/product-performance', requireTab('performance', async () => {
   const q = Q.productPerformance();
@@ -1539,6 +1622,41 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
   } else if (source === 'hnwi_by_fund') {
     if (!body.date) return json({ error: 'date is required.' }, 400);
     const q = Q.hnwiByFund(body.date as string, body.minAum as string, body.maxAum as string, body.minFundAum as string, body.maxFundAum as string, (limit as number) || 20000);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'dormant_conversion_summary') {
+    const q = Q.dormantConversionSummary();
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'dormant_repeat_buyers') {
+    const q = Q.dormantRepeatBuyers();
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'dormant_time_to_convert') {
+    const q = Q.dormantTimeToConvert();
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'kalcer_ambassador_summary') {
+    if (!body.date) return json({ error: 'date is required.' }, 400);
+    const q = Q.kalcerAmbassadorSummary(body.date as string, body.q as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'kalcer_referral_detail') {
+    if (!body.date) return json({ error: 'date is required.' }, 400);
+    const q = Q.kalcerReferralDetail(body.date as string, body.q as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'push_by_campaign') {
+    const q = Q.pushByCampaign(body.from as string, body.to as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'push_by_platform') {
+    const q = Q.pushByPlatform(body.from as string, body.to as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'marketing_funnel') {
+    const q = Q.marketingFunnelByChannel(body.from as string, body.to as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'app_crash_issues') {
+    const q = Q.appCrashIssues(body.from as string, body.to as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'app_perf_traces') {
+    const q = Q.appPerfTraces(body.from as string, body.to as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'product_funnel') {
+    const q = Q.productFunnelByPlatform(body.from as string, body.to as string);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
     const q = Q.referralProgramDetail(body.from as string, body.to as string, source === 'referral_program_alt_detail' ? 'verified_at' : 'created_at');
