@@ -988,7 +988,7 @@ function loadHnwi() {
 }
 
 // DORMANT WIN-BACK: computed live from main.transactions (see queries.js),
-// so this just loads once per session, same as e.g. loadReconciliation —
+// so this just loads once per session, same as e.g. loadReconciliation:
 // there's no date filter to re-apply, just a fresh server round-trip.
 let dormantLoaded = false;
 function renderDormantKpis(summaryRows) {
@@ -1036,7 +1036,7 @@ function loadDormant() {
     { key: 'first_txn_date', label: 'Comeback buy', type: 'date' }, { key: 'days_to_convert', label: 'Days to convert', type: 'num' },
   ], 'No time-to-convert data.')).catch((e) => $('#dwTtcTable').innerHTML = `<div class="empty">${e.message}</div>`);
   // Each fetch above already renders its own error into its table on failure,
-  // so the combined promise never needs to reject — callers (and the smoke
+  // so the combined promise never needs to reject: callers (and the smoke
   // test) just await "every panel has settled, one way or another."
   return Promise.allSettled([pSummary, pRepeat, pTtc]);
 }
@@ -1054,7 +1054,7 @@ async function kalcerEnsureDate() {
         kalcerDateDefaulted = true;
         if (!$('#kalcerDate').value) $('#kalcerDate').value = val(latestDate);
       }
-    } catch { /* leave blank and retry on next load — user can still pick a date manually */ }
+    } catch { /* leave blank and retry on next load: user can still pick a date manually */ }
   }
   return !!$('#kalcerDate').value;
 }
@@ -1128,7 +1128,7 @@ function renderPushKpis(platformRows) {
 }
 // Single-axis bar chart: send volume over time only. Delivery rate (0-100%)
 // and send volume (raw counts) are different scales, so it stays off this
-// chart rather than becoming a second y-axis — it's already in the KPIs and
+// chart rather than becoming a second y-axis: it's already in the KPIs and
 // the platform/campaign tables below.
 function renderPushTrendChart(rows) {
   paint('pushTrendChart', {
@@ -1184,7 +1184,7 @@ function loadPush() {
   return Promise.allSettled([pTrend, pPlatform, pCampaign]);
 }
 
-// MARKETING ATTRIBUTION — Adjust's mobile attribution events (own dataset),
+// MARKETING ATTRIBUTION: Adjust's mobile attribution events (own dataset),
 // one row per channel: clicks through to a completed payment.
 let marketingLoaded = false;
 function mktRange() {
@@ -1227,7 +1227,7 @@ function loadMarketing() {
   });
 }
 
-// APP HEALTH — Crashlytics + Performance Monitoring (own datasets, Android +
+// APP HEALTH: Crashlytics + Performance Monitoring (own datasets, Android +
 // iOS unioned server-side).
 let appHealthLoaded = false;
 function ahRange() {
@@ -1277,7 +1277,7 @@ function loadAppHealth() {
   return Promise.allSettled([pCrash, pPerf]);
 }
 
-// PRODUCT FUNNEL — GA4 cohort funnel (own dataset). See queries.js for why
+// PRODUCT FUNNEL: GA4 cohort funnel (own dataset). See queries.js for why
 // this is cohort-based rather than a same-period count per step.
 let productFunnelLoaded = false;
 function pfnRange() {

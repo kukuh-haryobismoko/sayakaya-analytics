@@ -1186,15 +1186,15 @@ const hnwiByFund = (date, minAum, maxAum, minFundAum, maxFundAum, limit = 5000) 
 
 // ---- Dormant win-back: computed live from main.transactions, not a
 // precomputed table. For every user, look at the gap between each pair of
-// consecutive completed buys (LEAD/LAG over their own buy history) — a gap of
+// consecutive completed buys (LEAD/LAG over their own buy history): a gap of
 // 14+ days is a "dormancy episode." If a buy eventually follows, the episode
 // "converted" (gap_days = how long it took); if not, the gap just keeps
 // growing, measured against CURRENT_DATE(). Episodes are capped at 179 days:
-// past 6 months of silence is effectively churned, not "about to come back,"
-// and belongs to the Predict tab's churn model instead — letting an
-// unbounded gap sit in "3 Month Dormant" forever would swamp that bucket
+// past 6 months of silence is effectively churned, not "about to come back."
+// That population belongs to the Predict tab's churn model instead: letting
+// an unbounded gap sit in "3 Month Dormant" forever would swamp that bucket
 // with permanently-gone users and crater its conversion rate.
-// One user can appear in multiple episodes/buckets over their lifetime —
+// One user can appear in multiple episodes/buckets over their lifetime:
 // that's real (someone can go quiet, come back, then go quiet again years
 // later), not double-counting.
 const DORMANT_EPISODES_CTE = `WITH buys AS (
@@ -1269,7 +1269,7 @@ const dormantTimeToConvert = () => ({
 });
 
 // Lifetime buy activity of everyone who ever recovered from a dormancy
-// episode — tagged with the longest one they recovered from, not every
+// episode, tagged with the longest one they recovered from, not every
 // episode they ever had (one row per user, not per episode).
 const dormantRepeatBuyers = () => ({
   sql: `${DORMANT_EPISODES_CTE},
@@ -1301,7 +1301,7 @@ const dormantRepeatBuyers = () => ({
 // ---- Kalcer (ambassadors): who referred whom, and when, with the referred
 // investor's AUM as of a picked date. Originally read kalcer.kalcer_fix, a
 // precomputed bonus table with no date columns at all (not even on the
-// table itself — each refresh just overwrites the same dateless aggregate),
+// table itself: each refresh just overwrites the same dateless aggregate),
 // so there was no way to say when a referral happened or what date an AUM
 // figure was as of. Rebuilt on raw, dated sources instead:
 //   - main.user_referrals for the link itself: immutable (by user id, set
@@ -1311,7 +1311,7 @@ const dormantRepeatBuyers = () => ({
 //     "as of" picker as the HNWI tab (its created_at is a day ahead of the
 //     AUM date it represents).
 // Deliberately excludes bonus amounts, tier qualification, and eligibility
-// status — that math isn't documented anywhere in this codebase, and
+// status: that math isn't documented anywhere in this codebase, and
 // guessing at it risks misstating who's owed money. This only reports
 // referral activity and AUM, nothing about what anyone is paid for it.
 const kalcerLatestDate = () => ({
@@ -1383,14 +1383,15 @@ const kalcerReferralDetail = (date, q = '') => {
 };
 
 // ---- Push delivery: Firebase Cloud Messaging's own delivery log (own
-// dataset, day-partitioned on event_timestamp). This is send-pipeline health
-// only — "did FCM accept and hand off the message" — not open/click/read
-// data: Firebase's standard export has no such events for messaging, and
-// there's no user_id on this table (only an FCM instance_id) to join against
-// opens or revenue. `event` has exactly 6 values; everything but
-// MESSAGE_ACCEPTED is some flavor of failure (a stale/invalid device token,
-// a malformed send, etc.) — MISSING_REGISTRATIONS broken out on its own since
-// it's the dominant failure and the most actionable (stale token list).
+// dataset, day-partitioned on event_timestamp). This is send-pipeline
+// health only ("did FCM accept and hand off the message"), not an
+// open/click/read event: Firebase's standard export has no such events for
+// messaging, and there's no user_id on this table (only an FCM
+// instance_id) to join against opens or revenue. `event` has exactly 6
+// values; everything but MESSAGE_ACCEPTED is some flavor of failure (a
+// stale/invalid device token, a malformed send, etc.). MISSING_REGISTRATIONS
+// is broken out on its own since it's the dominant failure and the most
+// actionable (stale token list).
 const FIREBASE_MESSAGING = '`sayakaya.firebase_messaging.data`';
 
 const pushTrend = (from, to, granularity) => {
@@ -1443,12 +1444,12 @@ const pushByPlatform = (from, to) => {
 };
 
 // ---- Marketing attribution: Adjust's mobile attribution events (own
-// dataset, tiny — 80K rows, no partitioning). One row per channel
+// dataset, tiny, 80K rows, no partitioning). One row per channel
 // (_tracker_name_): clicks, installs, and funnel milestones through to a
 // completed payment, with revenue. _event_name_ has duplicate-fire variants
-// for the same transaction (payment_completed_1M_plus etc. — ad-network
-// value-threshold markers, same _transaction_id_ as the plain
-// payment_completed row) — only the plain event names below are counted, or
+// for the same transaction (payment_completed_1M_plus etc., an ad-network
+// value-threshold marker, same _transaction_id_ as the plain
+// payment_completed row); only the plain event names below are counted, or
 // every payment would be counted 2-3x over.
 const ADJUST_EVENTS = '`sayakaya.adjust_analytics.events`';
 
@@ -1511,7 +1512,7 @@ const appCrashIssues = (from, to) => {
 // trace's "duration" is how long the screen stayed in the foreground, a
 // dwell time, not a load latency, so mixing it in would misrepresent slow
 // dwell as slow performance. _app_in_background/_app_in_foreground are
-// excluded for the same reason — their duration is how long the app sat
+// excluded for the same reason: their duration is how long the app sat
 // backgrounded, sometimes hours, which also swamps the average (not the
 // median) with noise unrelated to any real operation. Median is the
 // headline number here for the same reason the Dormant/Kalcer tabs lead
@@ -1551,10 +1552,10 @@ const appPerfTraces = (from, to) => {
 // count per step: registering and paying can land in different calendar
 // periods (someone registers in July, pays in September), so naively
 // counting "registrants in range" vs "payers in range" separately produces a
-// funnel that goes UP between steps, not down — e.g. shows more OTP
+// funnel that goes UP between steps, not down: it would show more OTP
 // submissions than registrations, because otp_on_submit also fires on every
 // login, not just signup. Instead: find everyone whose register_click fell
-// in the range, then check — with no date bound — whether that SAME device
+// in the range, then check, with no date bound, whether that SAME device
 // ever reached each later milestone. That join scans the full GA4 history
 // regardless of the chosen range (a few hundred MB), not just the window.
 const GA4_EVENTS = '`sayakaya.analytics_266759216.events_*`';
