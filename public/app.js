@@ -987,6 +987,349 @@ function loadHnwi() {
   return Promise.all([loadHnwiTotal(), loadHnwiByFund(false)]);
 }
 
+// DORMANT WIN-BACK: computed live from main.transactions (see queries.js),
+// so this just loads once per session, same as e.g. loadReconciliation —
+// there's no date filter to re-apply, just a fresh server round-trip.
+let dormantLoaded = false;
+function renderDormantKpis(summaryRows) {
+  const totalPeriods = summaryRows.reduce((s, r) => s + (Number(val(r.total_dormancy_periods)) || 0), 0);
+  const converted = summaryRows.reduce((s, r) => s + (Number(val(r.converted_periods)) || 0), 0);
+  const revenue = summaryRows.reduce((s, r) => s + (Number(val(r.total_revenue)) || 0), 0);
+  $('#dwKpis').innerHTML = [
+    kpi(t('dw_kpi_population'), num(totalPeriods), t('dw_kpi_population_sub'), '', ICONS.users),
+    kpi(t('dw_kpi_converted'), num(converted), t('dw_kpi_converted_sub'), 'accent', ICONS.userPlus),
+    kpi(t('dw_kpi_rate'), pct(converted, totalPeriods), t('dw_kpi_rate_sub'), '', ICONS.trendUp),
+    kpi(t('dw_kpi_revenue'), idr(revenue), t('dw_kpi_revenue_sub'), 'accent', ICONS.coin),
+  ].join('');
+}
+function loadDormant() {
+  ['#dwConversionTable', '#dwRepeatTable', '#dwTtcTable'].forEach((s) =>
+    $(s).innerHTML = '<div class="loading">Loading…</div>');
+  const pSummary = api('/api/dormant/conversion-summary');
+  const pRepeat = api('/api/dormant/repeat-buyers');
+  const pTtc = api('/api/dormant/time-to-convert');
+  gateTabLoad((v) => { dormantLoaded = v; }, [pSummary, pRepeat, pTtc]);
+
+  pSummary.then((summary) => {
+    renderDormantKpis(summary);
+    genTable('#dwConversionTable', summary, [
+      { key: 'dormant_category', label: 'Dormancy length' },
+      { key: 'total_dormancy_periods', label: 'Episodes', type: 'num', sum: true },
+      { key: 'converted_periods', label: 'Converted', type: 'num', sum: true },
+      { key: 'conversion_rate_pct', label: 'Conversion', type: 'pct' },
+      { key: 'total_revenue', label: 'Revenue', type: 'idr', sum: true },
+      { key: 'avg_revenue_per_conversion', label: 'Avg per conversion', type: 'idr' },
+      { key: 'median_revenue_per_conversion', label: 'Median per conversion', type: 'idr' },
+      { key: 'max_revenue_per_conversion', label: 'Max per conversion', type: 'idr' },
+    ], 'No dormancy episodes found.');
+  }).catch((e) => {
+    $('#dwKpis').innerHTML = '';
+    $('#dwConversionTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  });
+  pRepeat.then((rows) => genTable('#dwRepeatTable', rows, [
+    { key: 'user_id', label: 'User ID' }, { key: 'dormant_category', label: 'Longest dormancy recovered' },
+    { key: 'buyer_type', label: 'Buyer type' },
+    { key: 'txn_count', label: 'Lifetime buys', type: 'num' }, { key: 'total_spent', label: 'Lifetime spend', type: 'idr' },
+  ], 'No repeat-buyer data.')).catch((e) => $('#dwRepeatTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  pTtc.then((rows) => genTable('#dwTtcTable', rows, [
+    { key: 'user_id', label: 'User ID' }, { key: 'dormant_category', label: 'Dormancy length' },
+    { key: 'first_txn_date', label: 'Comeback buy', type: 'date' }, { key: 'days_to_convert', label: 'Days to convert', type: 'num' },
+  ], 'No time-to-convert data.')).catch((e) => $('#dwTtcTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  // Each fetch above already renders its own error into its table on failure,
+  // so the combined promise never needs to reject — callers (and the smoke
+  // test) just await "every panel has settled, one way or another."
+  return Promise.allSettled([pSummary, pRepeat, pTtc]);
+}
+
+// KALCER AMBASSADORS: raw main.user_referrals links + dated AUM, no bonus
+// math (see queries.js). An "as of" date picker, same pattern as HNWI, plus
+// a free-text search shared by both tables below.
+let kalcerLoaded = false;
+let kalcerDateDefaulted = false;
+async function kalcerEnsureDate() {
+  if (!kalcerDateDefaulted) {
+    try {
+      const { latestDate } = await api('/api/kalcer/latest-date');
+      if (latestDate) {
+        kalcerDateDefaulted = true;
+        if (!$('#kalcerDate').value) $('#kalcerDate').value = val(latestDate);
+      }
+    } catch { /* leave blank and retry on next load — user can still pick a date manually */ }
+  }
+  return !!$('#kalcerDate').value;
+}
+function renderKalcerKpis(rows) {
+  const ambassadors = rows.length;
+  const referred = rows.reduce((s, r) => s + (Number(val(r.referred_count)) || 0), 0);
+  const aum = rows.reduce((s, r) => s + (Number(val(r.total_aum_referred)) || 0), 0);
+  const mostRecent = rows.reduce((max, r) => {
+    const d = val(r.last_referral_date);
+    return !max || (d && d > max) ? d : max;
+  }, null);
+  $('#kalcerKpis').innerHTML = [
+    kpi(t('kalcer_kpi_ambassadors'), num(ambassadors), t('kalcer_kpi_ambassadors_sub'), '', ICONS.users),
+    kpi(t('kalcer_kpi_referred'), num(referred), t('kalcer_kpi_referred_sub'), '', ICONS.userPlus),
+    kpi(t('kalcer_kpi_aum'), idr(aum), t('kalcer_kpi_aum_sub'), 'accent', ICONS.coin),
+    kpi(t('kalcer_kpi_recent'), mostRecent ? String(mostRecent).slice(0, 10) : 'n/a', t('kalcer_kpi_recent_sub'), '', ICONS.hourglass),
+  ].join('');
+}
+function kalcerParams() {
+  return { date: $('#kalcerDate').value, q: $('#kalcerSearchInput').value.trim() };
+}
+async function loadKalcer() {
+  if (!(await kalcerEnsureDate())) { $('#kalcerSummaryTable').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  ['#kalcerSummaryTable', '#kalcerDetailTable'].forEach((s) => $(s).innerHTML = '<div class="loading">Loading…</div>');
+  const p = kalcerParams();
+  const qs = `date=${p.date}&q=${encodeURIComponent(p.q)}`;
+  const pSummary = api(`/api/kalcer/summary?${qs}`);
+  const pDetail = api(`/api/kalcer/detail?${qs}`);
+  gateTabLoad((v) => { kalcerLoaded = v; }, [pSummary, pDetail]);
+
+  pSummary.then((rows) => {
+    renderKalcerKpis(rows);
+    genTable('#kalcerSummaryTable', rows, [
+      { key: 'referrer_name', label: 'Name' }, { key: 'referrer_sid', label: 'SID' }, { key: 'referrer_email', label: 'Email' },
+      { key: 'referred_count', label: 'Referred', type: 'num', sum: true },
+      { key: 'first_referral_date', label: 'First referral', type: 'date' },
+      { key: 'last_referral_date', label: 'Last referral', type: 'date' },
+      { key: 'total_aum_referred', label: 'AUM referred', type: 'idr', sum: true },
+    ], 'No ambassadors match.');
+  }).catch((e) => {
+    $('#kalcerKpis').innerHTML = '';
+    $('#kalcerSummaryTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  });
+  pDetail.then((rows) => genTable('#kalcerDetailTable', rows, [
+    { key: 'referrer_name', label: 'Referrer' }, { key: 'referrer_sid', label: 'Referrer SID' },
+    { key: 'invitee_name', label: 'Referred investor' }, { key: 'invitee_sid', label: 'Investor SID' },
+    { key: 'referral_date', label: 'Referral date', type: 'date' },
+    { key: 'invitee_aum', label: 'Investor AUM', type: 'idr', sum: true },
+  ], 'No referrals match.')).catch((e) => $('#kalcerDetailTable').innerHTML = `<div class="empty">${e.message}</div>`);
+
+  return Promise.allSettled([pSummary, pDetail]);
+}
+
+// PUSH DELIVERY: Firebase Cloud Messaging's own send-pipeline health log
+// (own dataset). Send/delivery only, no open/click/revenue data exists here.
+let pushLoaded = false;
+function pushRange() {
+  return { from: $('#pushFrom').value, to: $('#pushTo').value };
+}
+function renderPushKpis(platformRows) {
+  const totalSends = platformRows.reduce((s, r) => s + (Number(val(r.total_sends)) || 0), 0);
+  const accepted = platformRows.reduce((s, r) => s + (Number(val(r.accepted)) || 0), 0);
+  const android = platformRows.find((r) => val(r.sdk_platform) === 'ANDROID');
+  const ios = platformRows.find((r) => val(r.sdk_platform) === 'IOS');
+  $('#pushKpis').innerHTML = [
+    kpi(t('push_kpi_sends'), num(totalSends), t('push_kpi_sends_sub'), '', ICONS.activity),
+    kpi(t('push_kpi_rate'), pct(accepted, totalSends), t('push_kpi_rate_sub'), 'accent', ICONS.check),
+    kpi(t('push_kpi_android_rate'), android ? pct(Number(val(android.accepted)), Number(val(android.total_sends))) : 'n/a', t('push_kpi_android_rate_sub'), '', ICONS.trendUp),
+    kpi(t('push_kpi_ios_rate'), ios ? pct(Number(val(ios.accepted)), Number(val(ios.total_sends))) : 'n/a', t('push_kpi_ios_rate_sub'), '', ICONS.trendUp),
+  ].join('');
+}
+// Single-axis bar chart: send volume over time only. Delivery rate (0-100%)
+// and send volume (raw counts) are different scales, so it stays off this
+// chart rather than becoming a second y-axis — it's already in the KPIs and
+// the platform/campaign tables below.
+function renderPushTrendChart(rows) {
+  paint('pushTrendChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((d) => val(d.bucket)),
+      datasets: [{ label: 'Sends', data: rows.map((d) => Number(val(d.total_sends))), backgroundColor: C.indigo, borderRadius: 4 }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        y: { grid: { color: C.grid }, ticks: { callback: (v) => num(v) } },
+        x: { grid: { display: false } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (c) => `${num(c.raw)} sends` } },
+      },
+    },
+  });
+}
+function loadPush() {
+  ['#pushPlatformTable', '#pushCampaignTable'].forEach((s) => $(s).innerHTML = '<div class="loading">Loading…</div>');
+  const r = pushRange();
+  const qs = `from=${r.from}&to=${r.to}`;
+  const pTrend = api(`/api/push/trend?${qs}&granularity=week`);
+  const pPlatform = api(`/api/push/by-platform?${qs}`);
+  const pCampaign = api(`/api/push/by-campaign?${qs}`);
+  gateTabLoad((v) => { pushLoaded = v; }, [pTrend, pPlatform, pCampaign]);
+
+  pTrend.then(renderPushTrendChart).catch(() => {});
+  pPlatform.then((rows) => {
+    renderPushKpis(rows);
+    genTable('#pushPlatformTable', rows, [
+      { key: 'sdk_platform', label: 'Platform' },
+      { key: 'total_sends', label: 'Sends', type: 'num', sum: true },
+      { key: 'accepted', label: 'Accepted', type: 'num', sum: true },
+      { key: 'delivery_rate_pct', label: 'Delivery rate', type: 'pct' },
+    ], 'No data in this period.');
+  }).catch((e) => {
+    $('#pushKpis').innerHTML = '';
+    $('#pushPlatformTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  });
+  pCampaign.then((rows) => genTable('#pushCampaignTable', rows, [
+    { key: 'analytics_label', label: 'Campaign' },
+    { key: 'total_sends', label: 'Sends', type: 'num', sum: true },
+    { key: 'accepted', label: 'Accepted', type: 'num', sum: true },
+    { key: 'missing_registrations', label: 'Missing registrations', type: 'num', sum: true },
+    { key: 'other_errors', label: 'Other errors', type: 'num', sum: true },
+    { key: 'delivery_rate_pct', label: 'Delivery rate', type: 'pct' },
+  ], 'No campaigns in this period.')).catch((e) => $('#pushCampaignTable').innerHTML = `<div class="empty">${e.message}</div>`);
+
+  return Promise.allSettled([pTrend, pPlatform, pCampaign]);
+}
+
+// MARKETING ATTRIBUTION — Adjust's mobile attribution events (own dataset),
+// one row per channel: clicks through to a completed payment.
+let marketingLoaded = false;
+function mktRange() {
+  return { from: $('#mktFrom').value, to: $('#mktTo').value };
+}
+function renderMarketingKpis(rows) {
+  const installs = rows.reduce((s, r) => s + (Number(val(r.installs)) || 0), 0);
+  const registered = rows.reduce((s, r) => s + (Number(val(r.registrations)) || 0), 0);
+  const kyc = rows.reduce((s, r) => s + (Number(val(r.kyc_verified)) || 0), 0);
+  const revenue = rows.reduce((s, r) => s + (Number(val(r.total_revenue)) || 0), 0);
+  const payments = rows.reduce((s, r) => s + (Number(val(r.payments_completed)) || 0), 0);
+  $('#mktKpis').innerHTML = [
+    kpi(t('mkt_kpi_installs'), num(installs), t('mkt_kpi_installs_sub'), '', ICONS.userPlus),
+    kpi(t('mkt_kpi_registered'), pct(registered, installs), t('mkt_kpi_registered_sub'), '', ICONS.check),
+    kpi(t('mkt_kpi_kyc'), pct(kyc, installs), t('mkt_kpi_kyc_sub'), '', ICONS.check),
+    kpi(t('mkt_kpi_revenue'), idr(revenue), `${num(payments)} ${t('mkt_kpi_revenue_sub')}`, 'accent', ICONS.coin),
+  ].join('');
+}
+function loadMarketing() {
+  $('#mktTable').innerHTML = '<div class="loading">Loading…</div>';
+  const r = mktRange();
+  const p = api(`/api/marketing/funnel?from=${r.from}&to=${r.to}`);
+  gateTabLoad((v) => { marketingLoaded = v; }, [p]);
+  return p.then((rows) => {
+    renderMarketingKpis(rows);
+    genTable('#mktTable', rows, [
+      { key: 'channel', label: 'Channel' },
+      { key: 'clicks', label: 'Clicks', type: 'num', sum: true },
+      { key: 'installs', label: 'Installs', type: 'num', sum: true },
+      { key: 'otp_verified', label: 'OTP verified', type: 'num', sum: true },
+      { key: 'registrations', label: 'Registered', type: 'num', sum: true },
+      { key: 'kyc_verified', label: 'KYC verified', type: 'num', sum: true },
+      { key: 'orders_created', label: 'Orders created', type: 'num', sum: true },
+      { key: 'payments_completed', label: 'Payments', type: 'num', sum: true },
+      { key: 'total_revenue', label: 'Revenue', type: 'idr', sum: true },
+    ], 'No channel activity in this period.');
+  }).catch((e) => {
+    $('#mktKpis').innerHTML = '';
+    $('#mktTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  });
+}
+
+// APP HEALTH — Crashlytics + Performance Monitoring (own datasets, Android +
+// iOS unioned server-side).
+let appHealthLoaded = false;
+function ahRange() {
+  return { from: $('#ahFrom').value, to: $('#ahTo').value };
+}
+function renderAppHealthKpis(crashRows, perfRows) {
+  const totalErrors = crashRows.reduce((s, r) => s + (Number(val(r.event_count)) || 0), 0);
+  const fatalRows = crashRows.filter((r) => val(r.is_fatal) === true);
+  const fatalEvents = fatalRows.reduce((s, r) => s + (Number(val(r.event_count)) || 0), 0);
+  const fatalDevices = fatalRows.reduce((s, r) => s + (Number(val(r.affected_devices)) || 0), 0);
+  const samples = perfRows.reduce((s, r) => s + (Number(val(r.sample_count)) || 0), 0);
+  const slowest = perfRows[0]; // perfRows already sorted by median_duration_ms DESC
+  $('#ahKpis').innerHTML = [
+    kpi(t('ah_kpi_errors'), num(totalErrors), t('ah_kpi_errors_sub'), '', ICONS.xCircle),
+    kpi(t('ah_kpi_fatal'), num(fatalEvents), `${num(fatalDevices)} ${t('ah_kpi_fatal_sub')}`, 'warn', ICONS.xCircle),
+    kpi(t('ah_kpi_slowest'), slowest ? `${(Number(val(slowest.median_duration_ms)) / 1000).toFixed(1)}s` : 'n/a',
+      slowest ? `${val(slowest.event_name)} (${val(slowest.platform)})` : t('ah_kpi_slowest_sub'), '', ICONS.hourglass),
+    kpi(t('ah_kpi_samples'), num(samples), t('ah_kpi_samples_sub'), '', ICONS.activity),
+  ].join('');
+}
+function loadAppHealth() {
+  ['#ahCrashTable', '#ahPerfTable'].forEach((s) => $(s).innerHTML = '<div class="loading">Loading…</div>');
+  const r = ahRange();
+  const qs = `from=${r.from}&to=${r.to}`;
+  const pCrash = api(`/api/app-health/crashes?${qs}`);
+  const pPerf = api(`/api/app-health/performance?${qs}`);
+  gateTabLoad((v) => { appHealthLoaded = v; }, [pCrash, pPerf]);
+
+  Promise.all([pCrash, pPerf]).then(([crashRows, perfRows]) => renderAppHealthKpis(crashRows, perfRows))
+    .catch(() => { $('#ahKpis').innerHTML = ''; });
+  pCrash.then((rows) => genTable('#ahCrashTable', rows, [
+    { key: 'platform', label: 'Platform' },
+    { key: 'issue_title', label: 'Issue' },
+    { key: 'is_fatal', label: 'Fatal' },
+    { key: 'event_count', label: 'Events', type: 'num', sum: true },
+    { key: 'affected_devices', label: 'Affected devices', type: 'num', sum: true },
+    { key: 'latest_app_version', label: 'Latest version' },
+  ], 'No crash/error issues in this period.')).catch((e) => $('#ahCrashTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  pPerf.then((rows) => genTable('#ahPerfTable', rows, [
+    { key: 'platform', label: 'Platform' },
+    { key: 'event_name', label: 'Operation' },
+    { key: 'sample_count', label: 'Samples', type: 'num', sum: true },
+    { key: 'median_duration_ms', label: 'Median (ms)', type: 'num' },
+    { key: 'avg_duration_ms', label: 'Avg (ms)', type: 'num' },
+  ], 'No performance data in this period.')).catch((e) => $('#ahPerfTable').innerHTML = `<div class="empty">${e.message}</div>`);
+
+  return Promise.allSettled([pCrash, pPerf]);
+}
+
+// PRODUCT FUNNEL — GA4 cohort funnel (own dataset). See queries.js for why
+// this is cohort-based rather than a same-period count per step.
+let productFunnelLoaded = false;
+function pfnRange() {
+  return { from: $('#pfnFrom').value, to: $('#pfnTo').value };
+}
+function renderProductFunnelKpis(rows) {
+  const steps = [
+    { key: 'registered', label: 'Registered' },
+    { key: 'otp_submitted', label: 'OTP submitted' },
+    { key: 'kyc_started', label: 'KYC started' },
+    { key: 'kyc_verified', label: 'KYC verified' },
+    { key: 'ordered', label: 'Ordered' },
+    { key: 'paid', label: 'Paid' },
+  ];
+  const totals = {};
+  steps.forEach((s) => { totals[s.key] = rows.reduce((sum, r) => sum + (Number(val(r[s.key])) || 0), 0); });
+  let biggestDrop = null;
+  for (let i = 1; i < steps.length; i++) {
+    const prev = totals[steps[i - 1].key], cur = totals[steps[i].key];
+    const dropPct = prev ? ((prev - cur) / prev) * 100 : 0;
+    if (!biggestDrop || dropPct > biggestDrop.dropPct) biggestDrop = { label: steps[i].label, dropPct };
+  }
+  $('#pfnKpis').innerHTML = [
+    kpi(t('pfn_kpi_registered'), num(totals.registered), t('pfn_kpi_registered_sub'), '', ICONS.userPlus),
+    kpi(t('pfn_kpi_kyc'), pct(totals.kyc_verified, totals.registered), t('pfn_kpi_kyc_sub'), '', ICONS.check),
+    kpi(t('pfn_kpi_paid'), pct(totals.paid, totals.registered), t('pfn_kpi_paid_sub'), 'accent', ICONS.coin),
+    kpi(t('pfn_kpi_dropoff'), biggestDrop ? `${biggestDrop.dropPct.toFixed(0)}%` : 'n/a',
+      biggestDrop ? `${biggestDrop.label} ${t('pfn_kpi_dropoff_sub')}` : '', 'warn', ICONS.trendDown),
+  ].join('');
+}
+function loadProductFunnel() {
+  $('#pfnTable').innerHTML = '<div class="loading">Loading…</div>';
+  const r = pfnRange();
+  const p = api(`/api/product-funnel?from=${r.from}&to=${r.to}`);
+  gateTabLoad((v) => { productFunnelLoaded = v; }, [p]);
+  return p.then((rows) => {
+    renderProductFunnelKpis(rows);
+    genTable('#pfnTable', rows, [
+      { key: 'platform', label: 'Platform' },
+      { key: 'registered', label: 'Registered', type: 'num', sum: true },
+      { key: 'otp_submitted', label: 'OTP submitted', type: 'num', sum: true },
+      { key: 'kyc_started', label: 'KYC started', type: 'num', sum: true },
+      { key: 'kyc_verified', label: 'KYC verified', type: 'num', sum: true },
+      { key: 'ordered', label: 'Ordered', type: 'num', sum: true },
+      { key: 'paid', label: 'Paid', type: 'num', sum: true },
+    ], 'No registrations in this period.');
+  }).catch((e) => {
+    $('#pfnKpis').innerHTML = '';
+    $('#pfnTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  });
+}
+
 // Marks a tab's "loaded" gate true right away (so a fast repeat tab-switch
 // doesn't double-fire its fetches) but un-latches it if any of its fetches
 // end up failing, so switchTab retries the whole tab on the next visit
@@ -4648,6 +4991,12 @@ function switchTab(name) {
   if (name === 'predict' && !predictLoaded) loadPredict();
   if (name === 'overview' && !overviewLoaded) loadOverview();
   if (name === 'hnwi') loadHnwi();
+  if (name === 'dormant' && !dormantLoaded) loadDormant();
+  if (name === 'kalcer' && !kalcerLoaded) loadKalcer();
+  if (name === 'push' && !pushLoaded) loadPush();
+  if (name === 'marketing' && !marketingLoaded) loadMarketing();
+  if (name === 'app-health' && !appHealthLoaded) loadAppHealth();
+  if (name === 'product-funnel' && !productFunnelLoaded) loadProductFunnel();
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
   if (name === 'presentation' || name === 'monthly-review') {
@@ -4759,6 +5108,7 @@ function repaintActiveTab() {
     case 'aum': aumCache = []; loadAumHistory(); break;
     case 'growth': growthLoaded = false; loadGrowth(); break;
     case 'predict': predictLoaded = false; loadPredict(); break;
+    case 'push': pushLoaded = false; loadPush(); break;
     case 'performance': renderPerfTrendChart(perfTrendCache); break;
     case 'portfolio': if (pfSelected) loadPortfolioUser(); break;
     case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
@@ -5112,6 +5462,35 @@ function wire() {
   $('#hnwiTotalXlsx').addEventListener('click', () => { const p = hnwiTotalParams(); download({ source: 'hnwi_total', format: 'xlsx', filename: 'hnwi_total', ...p }, 'hnwi_total.xlsx'); });
   $('#hnwiByFundCsv').addEventListener('click', () => { const p = hnwiByFundParams(hnwiByFundOwnFilter); download({ source: 'hnwi_by_fund', format: 'csv', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.csv'); });
   $('#hnwiByFundXlsx').addEventListener('click', () => { const p = hnwiByFundParams(hnwiByFundOwnFilter); download({ source: 'hnwi_by_fund', format: 'xlsx', filename: 'hnwi_by_fund', ...p }, 'hnwi_by_fund.xlsx'); });
+  $('#dwConversionCsv').addEventListener('click', () => download({ source: 'dormant_conversion_summary', format: 'csv', filename: 'dormant_conversion_summary' }, 'dormant_conversion_summary.csv'));
+  $('#dwConversionXlsx').addEventListener('click', () => download({ source: 'dormant_conversion_summary', format: 'xlsx', filename: 'dormant_conversion_summary' }, 'dormant_conversion_summary.xlsx'));
+  $('#dwRepeatCsv').addEventListener('click', () => download({ source: 'dormant_repeat_buyers', format: 'csv', filename: 'dormant_repeat_buyers' }, 'dormant_repeat_buyers.csv'));
+  $('#dwRepeatXlsx').addEventListener('click', () => download({ source: 'dormant_repeat_buyers', format: 'xlsx', filename: 'dormant_repeat_buyers' }, 'dormant_repeat_buyers.xlsx'));
+  $('#dwTtcCsv').addEventListener('click', () => download({ source: 'dormant_time_to_convert', format: 'csv', filename: 'dormant_time_to_convert' }, 'dormant_time_to_convert.csv'));
+  $('#dwTtcXlsx').addEventListener('click', () => download({ source: 'dormant_time_to_convert', format: 'xlsx', filename: 'dormant_time_to_convert' }, 'dormant_time_to_convert.xlsx'));
+  $('#kalcerDateApply').addEventListener('click', loadKalcer);
+  $('#kalcerSearchBtn').addEventListener('click', loadKalcer);
+  $('#kalcerSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadKalcer(); });
+  $('#kalcerSummaryCsv').addEventListener('click', () => download({ source: 'kalcer_ambassador_summary', format: 'csv', filename: 'kalcer_ambassadors', ...kalcerParams() }, 'kalcer_ambassadors.csv'));
+  $('#kalcerSummaryXlsx').addEventListener('click', () => download({ source: 'kalcer_ambassador_summary', format: 'xlsx', filename: 'kalcer_ambassadors', ...kalcerParams() }, 'kalcer_ambassadors.xlsx'));
+  $('#kalcerDetailCsv').addEventListener('click', () => download({ source: 'kalcer_referral_detail', format: 'csv', filename: 'kalcer_referrals', ...kalcerParams() }, 'kalcer_referrals.csv'));
+  $('#kalcerDetailXlsx').addEventListener('click', () => download({ source: 'kalcer_referral_detail', format: 'xlsx', filename: 'kalcer_referrals', ...kalcerParams() }, 'kalcer_referrals.xlsx'));
+  $('#pushApply').addEventListener('click', loadPush);
+  $('#pushPlatformCsv').addEventListener('click', () => download({ source: 'push_by_platform', format: 'csv', filename: 'push_by_platform', ...pushRange() }, 'push_by_platform.csv'));
+  $('#pushPlatformXlsx').addEventListener('click', () => download({ source: 'push_by_platform', format: 'xlsx', filename: 'push_by_platform', ...pushRange() }, 'push_by_platform.xlsx'));
+  $('#pushCampaignCsv').addEventListener('click', () => download({ source: 'push_by_campaign', format: 'csv', filename: 'push_by_campaign', ...pushRange() }, 'push_by_campaign.csv'));
+  $('#pushCampaignXlsx').addEventListener('click', () => download({ source: 'push_by_campaign', format: 'xlsx', filename: 'push_by_campaign', ...pushRange() }, 'push_by_campaign.xlsx'));
+  $('#mktApply').addEventListener('click', loadMarketing);
+  $('#mktCsv').addEventListener('click', () => download({ source: 'marketing_funnel', format: 'csv', filename: 'marketing_funnel', ...mktRange() }, 'marketing_funnel.csv'));
+  $('#mktXlsx').addEventListener('click', () => download({ source: 'marketing_funnel', format: 'xlsx', filename: 'marketing_funnel', ...mktRange() }, 'marketing_funnel.xlsx'));
+  $('#ahApply').addEventListener('click', loadAppHealth);
+  $('#ahCrashCsv').addEventListener('click', () => download({ source: 'app_crash_issues', format: 'csv', filename: 'app_crash_issues', ...ahRange() }, 'app_crash_issues.csv'));
+  $('#ahCrashXlsx').addEventListener('click', () => download({ source: 'app_crash_issues', format: 'xlsx', filename: 'app_crash_issues', ...ahRange() }, 'app_crash_issues.xlsx'));
+  $('#ahPerfCsv').addEventListener('click', () => download({ source: 'app_perf_traces', format: 'csv', filename: 'app_perf_traces', ...ahRange() }, 'app_perf_traces.csv'));
+  $('#ahPerfXlsx').addEventListener('click', () => download({ source: 'app_perf_traces', format: 'xlsx', filename: 'app_perf_traces', ...ahRange() }, 'app_perf_traces.xlsx'));
+  $('#pfnApply').addEventListener('click', loadProductFunnel);
+  $('#pfnCsv').addEventListener('click', () => download({ source: 'product_funnel', format: 'csv', filename: 'product_funnel', ...pfnRange() }, 'product_funnel.csv'));
+  $('#pfnXlsx').addEventListener('click', () => download({ source: 'product_funnel', format: 'xlsx', filename: 'product_funnel', ...pfnRange() }, 'product_funnel.xlsx'));
 
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
   $('#revApply').addEventListener('click', loadRevenue);
@@ -5573,6 +5952,10 @@ async function init() {
   $('#rev2From').value = r.from; $('#rev2To').value = r.to;
   $('#ulFrom').value = r.from; $('#ulTo').value = r.to;
   $('#crFrom').value = r.from; $('#crTo').value = r.to;
+  $('#pushFrom').value = r.from; $('#pushTo').value = r.to;
+  $('#mktFrom').value = r.from; $('#mktTo').value = r.to;
+  $('#ahFrom').value = r.from; $('#ahTo').value = r.to;
+  $('#pfnFrom').value = r.from; $('#pfnTo').value = r.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   $('#sitxFrom').value = r.from; $('#sitxTo').value = r.to;

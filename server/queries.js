@@ -1184,6 +1184,420 @@ const hnwiByFund = (date, minAum, maxAum, minFundAum, maxFundAum, limit = 5000) 
   };
 };
 
+// ---- Dormant win-back: computed live from main.transactions, not a
+// precomputed table. For every user, look at the gap between each pair of
+// consecutive completed buys (LEAD/LAG over their own buy history) — a gap of
+// 14+ days is a "dormancy episode." If a buy eventually follows, the episode
+// "converted" (gap_days = how long it took); if not, the gap just keeps
+// growing, measured against CURRENT_DATE(). Episodes are capped at 179 days:
+// past 6 months of silence is effectively churned, not "about to come back,"
+// and belongs to the Predict tab's churn model instead — letting an
+// unbounded gap sit in "3 Month Dormant" forever would swamp that bucket
+// with permanently-gone users and crater its conversion rate.
+// One user can appear in multiple episodes/buckets over their lifetime —
+// that's real (someone can go quiet, come back, then go quiet again years
+// later), not double-counting.
+const DORMANT_EPISODES_CTE = `WITH buys AS (
+    SELECT user_id, DATE(created_at) AS txn_date, final_amount
+    FROM ${TX}
+    WHERE status = 'completed' AND type = 'buy'
+  ),
+  gaps AS (
+    SELECT user_id, txn_date, final_amount,
+      LEAD(txn_date) OVER (PARTITION BY user_id ORDER BY txn_date) AS next_txn_date,
+      LEAD(final_amount) OVER (PARTITION BY user_id ORDER BY txn_date) AS next_amount
+    FROM buys
+  ),
+  episodes AS (
+    SELECT *,
+      DATE_DIFF(COALESCE(next_txn_date, CURRENT_DATE()), txn_date, DAY) AS gap_days,
+      next_txn_date IS NOT NULL AS converted
+    FROM gaps
+  ),
+  categorized AS (
+    SELECT *,
+      CASE
+        WHEN gap_days >= 180 THEN NULL
+        WHEN gap_days >= 90 THEN '3 Month Dormant'
+        WHEN gap_days >= 60 THEN '2 Month Dormant'
+        WHEN gap_days >= 30 THEN '1 Month Dormant'
+        WHEN gap_days >= 14 THEN '2 Weeks Dormant'
+      END AS dormant_category
+    FROM episodes
+    WHERE gap_days >= 14
+  )`;
+const DORMANT_CATEGORY_ORDER = `CASE dormant_category
+    WHEN '2 Weeks Dormant' THEN 1
+    WHEN '1 Month Dormant' THEN 2
+    WHEN '2 Month Dormant' THEN 3
+    WHEN '3 Month Dormant' THEN 4
+    ELSE 5 END`;
+
+const dormantConversionSummary = () => ({
+  sql: `${DORMANT_EPISODES_CTE},
+    counts AS (
+      SELECT dormant_category, COUNT(*) AS total_dormancy_periods, COUNTIF(converted) AS converted_periods
+      FROM categorized WHERE dormant_category IS NOT NULL
+      GROUP BY dormant_category
+    ),
+    revenue AS (
+      SELECT dormant_category, SUM(next_amount) AS total_revenue,
+        ROUND(AVG(next_amount)) AS avg_revenue_per_conversion,
+        APPROX_QUANTILES(next_amount, 2)[OFFSET(1)] AS median_revenue_per_conversion,
+        MAX(next_amount) AS max_revenue_per_conversion
+      FROM categorized WHERE dormant_category IS NOT NULL AND converted
+      GROUP BY dormant_category
+    )
+    SELECT c.dormant_category, c.total_dormancy_periods, c.converted_periods,
+      ROUND(SAFE_DIVIDE(c.converted_periods, c.total_dormancy_periods) * 100, 2) AS conversion_rate_pct,
+      COALESCE(r.total_revenue, 0) AS total_revenue,
+      r.avg_revenue_per_conversion, r.median_revenue_per_conversion, r.max_revenue_per_conversion
+    FROM counts c
+    LEFT JOIN revenue r USING (dormant_category)
+    ORDER BY ${DORMANT_CATEGORY_ORDER}`,
+  params: {},
+});
+
+const dormantTimeToConvert = () => ({
+  sql: `${DORMANT_EPISODES_CTE}
+    SELECT user_id, dormant_category, next_txn_date AS first_txn_date, gap_days AS days_to_convert
+    FROM categorized
+    WHERE dormant_category IS NOT NULL AND converted
+    ORDER BY gap_days DESC
+    LIMIT 1000`,
+  params: {},
+});
+
+// Lifetime buy activity of everyone who ever recovered from a dormancy
+// episode — tagged with the longest one they recovered from, not every
+// episode they ever had (one row per user, not per episode).
+const dormantRepeatBuyers = () => ({
+  sql: `${DORMANT_EPISODES_CTE},
+    converted_ranked AS (
+      SELECT user_id, dormant_category, gap_days,
+        ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY gap_days DESC) AS rn
+      FROM categorized
+      WHERE dormant_category IS NOT NULL AND converted
+    ),
+    longest_recovery AS (
+      SELECT user_id, dormant_category FROM converted_ranked WHERE rn = 1
+    ),
+    lifetime AS (
+      SELECT user_id, COUNT(*) AS txn_count, SUM(final_amount) AS total_spent
+      FROM buys
+      GROUP BY user_id
+    )
+    SELECT lr.user_id, lr.dormant_category, l.txn_count, l.total_spent,
+      CASE WHEN l.txn_count = 1 THEN 'One-time'
+           WHEN l.txn_count BETWEEN 2 AND 3 THEN 'Light (2-3)'
+           ELSE 'Power (4+)' END AS buyer_type
+    FROM longest_recovery lr
+    JOIN lifetime l USING (user_id)
+    ORDER BY l.total_spent DESC
+    LIMIT 1000`,
+  params: {},
+});
+
+// ---- Kalcer (ambassadors): who referred whom, and when, with the referred
+// investor's AUM as of a picked date. Originally read kalcer.kalcer_fix, a
+// precomputed bonus table with no date columns at all (not even on the
+// table itself — each refresh just overwrites the same dateless aggregate),
+// so there was no way to say when a referral happened or what date an AUM
+// figure was as of. Rebuilt on raw, dated sources instead:
+//   - main.user_referrals for the link itself: immutable (by user id, set
+//     once at referral time), unlike referrer_code/sales_code string
+//     matching, which breaks once a code is reused or reassigned.
+//   - mi_fee_logs.portfolio_with_code for AUM, same -1-day correction and
+//     "as of" picker as the HNWI tab (its created_at is a day ahead of the
+//     AUM date it represents).
+// Deliberately excludes bonus amounts, tier qualification, and eligibility
+// status — that math isn't documented anywhere in this codebase, and
+// guessing at it risks misstating who's owed money. This only reports
+// referral activity and AUM, nothing about what anyone is paid for it.
+const kalcerLatestDate = () => ({
+  sql: `SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS latest_date FROM ${PORT_WITH_CODE}`,
+  params: {},
+});
+
+// Shared base: every referral link plus the invitee's AUM as of @date.
+function kalcerBase(date) {
+  return {
+    cte: `WITH referrals AS (
+        SELECT referrer_id, user_id AS invitee_id, DATE(created_at) AS referral_date
+        FROM ${USER_REFERRALS}
+      ),
+      invitee_aum AS (
+        SELECT sid_code, SUM(amount) AS aum
+        FROM ${PORT_WITH_CODE}
+        WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND amount > 0
+        GROUP BY sid_code
+      )`,
+    params: { date },
+  };
+}
+
+const kalcerAmbassadorSummary = (date, q = '') => {
+  const { cte, params } = kalcerBase(date);
+  const search = String(q || '').trim().toLowerCase();
+  return {
+    sql: `${cte}
+      SELECT referrer.sid_code AS referrer_sid, referrer_up.name AS referrer_name, referrer.email AS referrer_email,
+        COUNT(DISTINCT r.invitee_id) AS referred_count,
+        MIN(r.referral_date) AS first_referral_date,
+        MAX(r.referral_date) AS last_referral_date,
+        COALESCE(SUM(ia.aum), 0) AS total_aum_referred
+      FROM referrals r
+      JOIN ${USERS} referrer ON referrer.id = r.referrer_id
+      LEFT JOIN ${USER_PROFILES} referrer_up ON referrer_up.user_id = referrer.id
+      JOIN ${USERS} invitee ON invitee.id = r.invitee_id
+      LEFT JOIN invitee_aum ia ON ia.sid_code = invitee.sid_code
+      WHERE @search = '' OR LOWER(referrer.sid_code) LIKE @searchLike
+        OR LOWER(referrer_up.name) LIKE @searchLike OR LOWER(referrer.email) LIKE @searchLike
+      GROUP BY referrer_sid, referrer_name, referrer_email
+      ORDER BY referred_count DESC
+      LIMIT 2000`,
+    params: { ...params, search, searchLike: `%${search}%` },
+  };
+};
+
+const kalcerReferralDetail = (date, q = '') => {
+  const { cte, params } = kalcerBase(date);
+  const search = String(q || '').trim().toLowerCase();
+  return {
+    sql: `${cte}
+      SELECT referrer.sid_code AS referrer_sid, referrer_up.name AS referrer_name,
+        invitee.sid_code AS invitee_sid, invitee_up.name AS invitee_name,
+        r.referral_date, COALESCE(ia.aum, 0) AS invitee_aum
+      FROM referrals r
+      JOIN ${USERS} referrer ON referrer.id = r.referrer_id
+      LEFT JOIN ${USER_PROFILES} referrer_up ON referrer_up.user_id = referrer.id
+      JOIN ${USERS} invitee ON invitee.id = r.invitee_id
+      LEFT JOIN ${USER_PROFILES} invitee_up ON invitee_up.user_id = invitee.id
+      LEFT JOIN invitee_aum ia ON ia.sid_code = invitee.sid_code
+      WHERE @search = '' OR LOWER(referrer.sid_code) LIKE @searchLike
+        OR LOWER(referrer_up.name) LIKE @searchLike OR LOWER(referrer.email) LIKE @searchLike
+      ORDER BY r.referral_date DESC
+      LIMIT 5000`,
+    params: { ...params, search, searchLike: `%${search}%` },
+  };
+};
+
+// ---- Push delivery: Firebase Cloud Messaging's own delivery log (own
+// dataset, day-partitioned on event_timestamp). This is send-pipeline health
+// only — "did FCM accept and hand off the message" — not open/click/read
+// data: Firebase's standard export has no such events for messaging, and
+// there's no user_id on this table (only an FCM instance_id) to join against
+// opens or revenue. `event` has exactly 6 values; everything but
+// MESSAGE_ACCEPTED is some flavor of failure (a stale/invalid device token,
+// a malformed send, etc.) — MISSING_REGISTRATIONS broken out on its own since
+// it's the dominant failure and the most actionable (stale token list).
+const FIREBASE_MESSAGING = '`sayakaya.firebase_messaging.data`';
+
+const pushTrend = (from, to, granularity) => {
+  const r = range(from, to);
+  const part = granularityPart(granularity, 'WEEK');
+  return {
+    sql: `SELECT DATE_TRUNC(DATE(event_timestamp), ${part}) AS bucket,
+        COUNT(*) AS total_sends,
+        COUNTIF(event = 'MESSAGE_ACCEPTED') AS accepted,
+        ROUND(SAFE_DIVIDE(COUNTIF(event = 'MESSAGE_ACCEPTED'), COUNT(*)) * 100, 2) AS delivery_rate_pct
+      FROM ${FIREBASE_MESSAGING}
+      WHERE DATE(event_timestamp) BETWEEN @from AND @to
+      GROUP BY bucket
+      ORDER BY bucket`,
+    params: r,
+  };
+};
+
+const pushByCampaign = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `SELECT analytics_label,
+        COUNT(*) AS total_sends,
+        COUNTIF(event = 'MESSAGE_ACCEPTED') AS accepted,
+        COUNTIF(event = 'MISSING_REGISTRATIONS') AS missing_registrations,
+        COUNTIF(event NOT IN ('MESSAGE_ACCEPTED', 'MISSING_REGISTRATIONS')) AS other_errors,
+        ROUND(SAFE_DIVIDE(COUNTIF(event = 'MESSAGE_ACCEPTED'), COUNT(*)) * 100, 2) AS delivery_rate_pct
+      FROM ${FIREBASE_MESSAGING}
+      WHERE DATE(event_timestamp) BETWEEN @from AND @to AND analytics_label != ''
+      GROUP BY analytics_label
+      ORDER BY total_sends DESC
+      LIMIT 500`,
+    params: r,
+  };
+};
+
+const pushByPlatform = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `SELECT sdk_platform,
+        COUNT(*) AS total_sends,
+        COUNTIF(event = 'MESSAGE_ACCEPTED') AS accepted,
+        ROUND(SAFE_DIVIDE(COUNTIF(event = 'MESSAGE_ACCEPTED'), COUNT(*)) * 100, 2) AS delivery_rate_pct
+      FROM ${FIREBASE_MESSAGING}
+      WHERE DATE(event_timestamp) BETWEEN @from AND @to
+      GROUP BY sdk_platform
+      ORDER BY total_sends DESC`,
+    params: r,
+  };
+};
+
+// ---- Marketing attribution: Adjust's mobile attribution events (own
+// dataset, tiny — 80K rows, no partitioning). One row per channel
+// (_tracker_name_): clicks, installs, and funnel milestones through to a
+// completed payment, with revenue. _event_name_ has duplicate-fire variants
+// for the same transaction (payment_completed_1M_plus etc. — ad-network
+// value-threshold markers, same _transaction_id_ as the plain
+// payment_completed row) — only the plain event names below are counted, or
+// every payment would be counted 2-3x over.
+const ADJUST_EVENTS = '`sayakaya.adjust_analytics.events`';
+
+const marketingFunnelByChannel = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `SELECT
+        COALESCE(_tracker_name_, '(no tracker)') AS channel,
+        COUNTIF(_activity_kind_ = 'click') AS clicks,
+        COUNTIF(_activity_kind_ = 'install') AS installs,
+        COUNTIF(_event_name_ = 'otp_register_verified') AS otp_verified,
+        COUNTIF(_event_name_ = 'registration_completed') AS registrations,
+        COUNTIF(_event_name_ = 'kyc_verified') AS kyc_verified,
+        COUNTIF(_event_name_ = 'order_created') AS orders_created,
+        COUNTIF(_event_name_ = 'payment_completed') AS payments_completed,
+        SUM(IF(_event_name_ = 'payment_completed', SAFE_CAST(_amount_ AS NUMERIC), 0)) AS total_revenue
+      FROM ${ADJUST_EVENTS}
+      WHERE DATE(TIMESTAMP_SECONDS(_created_at_)) BETWEEN @from AND @to
+      GROUP BY channel
+      HAVING clicks > 0 OR installs > 0 OR otp_verified > 0 OR registrations > 0
+        OR kyc_verified > 0 OR orders_created > 0 OR payments_completed > 0
+      ORDER BY installs DESC, clicks DESC, payments_completed DESC`,
+    params: r,
+  };
+};
+
+// ---- App health: Firebase Crashlytics + Performance Monitoring, each split
+// across two own-dataset tables (one per platform, identical schema) that
+// have to be UNIONed since there's no combined table.
+const CRASH_ANDROID = '`sayakaya.firebase_crashlytics.com_sayakaya_android_ANDROID`';
+const CRASH_IOS = '`sayakaya.firebase_crashlytics.com_sayakaya_ios_IOS`';
+const PERF_ANDROID = '`sayakaya.firebase_performance.com_sayakaya_android_ANDROID`';
+const PERF_IOS = '`sayakaya.firebase_performance.com_sayakaya_ios_IOS`';
+
+const appCrashIssues = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH crashes AS (
+        SELECT platform, issue_title, is_fatal, installation_uuid, application.display_version AS app_version
+        FROM ${CRASH_ANDROID}
+        WHERE DATE(event_timestamp) BETWEEN @from AND @to
+        UNION ALL
+        SELECT platform, issue_title, is_fatal, installation_uuid, application.display_version AS app_version
+        FROM ${CRASH_IOS}
+        WHERE DATE(event_timestamp) BETWEEN @from AND @to
+      )
+      SELECT platform, issue_title, is_fatal,
+        COUNT(*) AS event_count,
+        COUNT(DISTINCT installation_uuid) AS affected_devices,
+        MAX(app_version) AS latest_app_version
+      FROM crashes
+      GROUP BY platform, issue_title, is_fatal
+      ORDER BY event_count DESC
+      LIMIT 200`,
+    params: r,
+  };
+};
+
+// DURATION_TRACE only (not SCREEN_TRACE or NETWORK_REQUEST): a screen
+// trace's "duration" is how long the screen stayed in the foreground, a
+// dwell time, not a load latency, so mixing it in would misrepresent slow
+// dwell as slow performance. _app_in_background/_app_in_foreground are
+// excluded for the same reason — their duration is how long the app sat
+// backgrounded, sometimes hours, which also swamps the average (not the
+// median) with noise unrelated to any real operation. Median is the
+// headline number here for the same reason the Dormant/Kalcer tabs lead
+// with it: a handful of multi-hour sessions blow out the average by 10-100x.
+const appPerfTraces = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH traces AS (
+        SELECT 'ANDROID' AS platform, event_name, trace_info.duration_us AS duration_us
+        FROM ${PERF_ANDROID}
+        WHERE DATE(event_timestamp) BETWEEN @from AND @to
+          AND event_type = 'DURATION_TRACE' AND trace_info.duration_us IS NOT NULL
+          AND event_name NOT IN ('_app_in_background', '_app_in_foreground')
+        UNION ALL
+        SELECT 'IOS' AS platform, event_name, trace_info.duration_us AS duration_us
+        FROM ${PERF_IOS}
+        WHERE DATE(event_timestamp) BETWEEN @from AND @to
+          AND event_type = 'DURATION_TRACE' AND trace_info.duration_us IS NOT NULL
+          AND event_name NOT IN ('_app_in_background', '_app_in_foreground')
+      )
+      SELECT platform, event_name,
+        COUNT(*) AS sample_count,
+        ROUND(APPROX_QUANTILES(duration_us, 2)[OFFSET(1)] / 1000, 1) AS median_duration_ms,
+        ROUND(AVG(duration_us) / 1000, 1) AS avg_duration_ms
+      FROM traces
+      GROUP BY platform, event_name
+      HAVING sample_count >= 20
+      ORDER BY median_duration_ms DESC
+      LIMIT 100`,
+    params: r,
+  };
+};
+
+// ---- Product funnel: GA4 export (own dataset, one physical table per day,
+// `events_*` + `_TABLE_SUFFIX` is BigQuery's standard way to query a date
+// range across them without naming all 239). Cohort-based, not a same-window
+// count per step: registering and paying can land in different calendar
+// periods (someone registers in July, pays in September), so naively
+// counting "registrants in range" vs "payers in range" separately produces a
+// funnel that goes UP between steps, not down — e.g. shows more OTP
+// submissions than registrations, because otp_on_submit also fires on every
+// login, not just signup. Instead: find everyone whose register_click fell
+// in the range, then check — with no date bound — whether that SAME device
+// ever reached each later milestone. That join scans the full GA4 history
+// regardless of the chosen range (a few hundred MB), not just the window.
+const GA4_EVENTS = '`sayakaya.analytics_266759216.events_*`';
+
+const productFunnelByPlatform = (from, to) => {
+  const r = range(from, to);
+  const fromSuffix = String(r.from).replace(/-/g, '');
+  const toSuffix = String(r.to).replace(/-/g, '');
+  return {
+    sql: `WITH cohort AS (
+        SELECT user_pseudo_id, platform,
+          ROW_NUMBER() OVER (PARTITION BY user_pseudo_id ORDER BY event_timestamp) AS rn
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND event_name = 'register_click'
+        QUALIFY rn = 1
+      ),
+      milestones AS (
+        SELECT c.user_pseudo_id,
+          MAX(e.event_name = 'otp_on_submit') AS did_otp,
+          MAX(e.event_name = 'kyc_start') AS did_kyc_start,
+          MAX(e.event_name = 'kyc_success') AS did_kyc_success,
+          MAX(e.event_name = 'order_created') AS did_order,
+          MAX(e.event_name = 'payment_complete') AS did_payment
+        FROM ${GA4_EVENTS} e
+        JOIN cohort c USING (user_pseudo_id)
+        WHERE e.event_name IN ('otp_on_submit', 'kyc_start', 'kyc_success', 'order_created', 'payment_complete')
+        GROUP BY c.user_pseudo_id
+      )
+      SELECT COALESCE(c.platform, '(unknown)') AS platform,
+        COUNT(DISTINCT c.user_pseudo_id) AS registered,
+        COUNTIF(m.did_otp) AS otp_submitted,
+        COUNTIF(m.did_kyc_start) AS kyc_started,
+        COUNTIF(m.did_kyc_success) AS kyc_verified,
+        COUNTIF(m.did_order) AS ordered,
+        COUNTIF(m.did_payment) AS paid
+      FROM cohort c
+      LEFT JOIN milestones m USING (user_pseudo_id)
+      GROUP BY platform
+      ORDER BY registered DESC`,
+    params: { fromSuffix, toSuffix },
+  };
+};
+
 // ---- Growth: campaigns, referrals, switching, manager/demographic AUM splits --
 const CAMPAIGNS = '`sayakaya.main.campaigns`';
 const SWITCHING = '`sayakaya.main.switching_transactions`';
@@ -3243,6 +3657,12 @@ module.exports = {
   allInvestorsWithAum, allRegisteredUsersWithEmail,
   userHoldingsFromTx, userHoldingsFromTxAsOf,
   hnwiLatestDate, hnwiTotal, hnwiByFund,
+  dormantConversionSummary, dormantRepeatBuyers, dormantTimeToConvert,
+  kalcerLatestDate, kalcerAmbassadorSummary, kalcerReferralDetail,
+  pushTrend, pushByCampaign, pushByPlatform,
+  marketingFunnelByChannel,
+  appCrashIssues, appPerfTraces,
+  productFunnelByPlatform,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
   campaignPerformance, switchingTopPairs, aumByManager, largestFundsAum, largestFundsLatestDate, platformAumAsOf,
   aumByRisk, aumByIncome, usersByProvince, topCitiesByInvestors, topCitiesByAum, topReferrers,

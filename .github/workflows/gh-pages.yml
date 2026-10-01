@@ -23,7 +23,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    if: github.repository == 'kukuh-haryobismoko/sayakaya-analytics'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+      - run: npm ci
+      - run: npm test
+
   deploy:
+    needs: test
     if: github.repository == 'kukuh-haryobismoko/sayakaya-analytics'
     runs-on: ubuntu-latest
     environment:

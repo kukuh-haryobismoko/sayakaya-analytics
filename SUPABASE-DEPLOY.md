@@ -72,11 +72,15 @@ There's no CI wired up for the Supabase side — deploying it is a manual CLI
 step, every time. If you forget, GitHub Pages will happily serve a frontend
 that's talking to a backend running older code.
 
+`npm run deploy:supabase` runs `npm test` first (via the `predeploy:supabase`
+hook) and only deploys if it passes — use it instead of the bare CLI command
+below so a broken smoke test can't ship.
+
 ### Deploying a backend-only change (routine, after initial setup)
 
 ```bash
 cd sayakaya-analytics
-supabase functions deploy api
+npm run deploy:supabase
 ```
 
 That's it — secrets don't need to be re-set unless they changed, and the
@@ -124,7 +128,7 @@ supabase secrets set --env-file supabase/.env.secrets
 
 ```bash
 supabase db push          # applies supabase/migrations/*.sql, incl. the presentation-decks bucket
-supabase functions deploy api
+npm run deploy:supabase   # npm test, then supabase functions deploy api
 ```
 
 `supabase db push` creates the `presentation-decks` Storage bucket (private —

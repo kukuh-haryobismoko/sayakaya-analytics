@@ -215,11 +215,17 @@
           <button class="nav-link" data-tab="campaign-revenue"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Campaign revenue</button>
           <button class="nav-link" data-tab="referral-program"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gift"></use></svg></span>Referral program</button>
           <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Referral Program (kyc based)</button>
+          <button class="nav-link" data-tab="kalcer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>Kalcer ambassadors</button>
+          <button class="nav-link" data-tab="push"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Push delivery</button>
+          <button class="nav-link" data-tab="marketing"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Marketing attribution</button>
+          <button class="nav-link" data-tab="app-health"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg></span>App health</button>
+          <button class="nav-link" data-tab="product-funnel"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg></span>Product funnel</button>
           <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
           <button class="nav-link" data-tab="remisier"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg></span>Remisier sharing (GS)</button>
           <button class="nav-link" data-tab="remisier-pwc"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg></span>Remisier sharing (PWC)</button>
           <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Remisier transactions</button>
           <button class="nav-link" data-tab="predict"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-forecast"></use></svg></span>Predict</button>
+          <button class="nav-link" data-tab="dormant"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg></span>Dormant win-back</button>
         </div>
         <div class="nav-group" data-group="tools">
           <div class="nav-label"><span>Tools</span><span class="nav-group-caret"></span></div>
@@ -2304,6 +2310,264 @@
       </div>
     </section>
 
+    <!-- DORMANT WIN-BACK: computed live from main.transactions on every
+         load, not a precomputed table. See queries.js (DORMANT_EPISODES_CTE)
+         for the gap/conversion methodology. -->
+    <section id="dormant" class="view">
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="dw_title">Dormant win-back</h2></div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="dw_snapshot_info">Computed live from main.transactions, not a precomputed table. For every investor, each 14+ day gap between two buys is a "dormancy episode"; it "converts" if a later buy closes the gap. Episodes past 180 days of silence are excluded (effectively churned, not about to come back, see the Predict tab's churn model for that).</span>
+        </div>
+        <div id="dwKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="dw_conversion_title">Conversion by dormancy length</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="dwConversionCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="dwConversionXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="dw_conversion_hint">One row per dormancy length. A user can appear in more than one length over their history: going quiet, coming back, then going quiet again later is real, not double-counting. Median revenue is the steadier number: one very large transaction skews the average.</span>
+        <div id="dwConversionTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="dw_repeat_title">Repeat buyers</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="dwRepeatCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="dwRepeatXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="dw_repeat_hint">Everyone who ever recovered from a dormancy episode, by their lifetime buy count (tagged with the longest dormancy they recovered from). One row per user.</span>
+        <div id="dwRepeatTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="dw_ttc_title">Time to convert</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="dwTtcCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="dwTtcXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="dw_ttc_hint">Every converted dormancy episode: how many days passed between the last buy before the gap and the buy that closed it.</span>
+        <div id="dwTtcTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- KALCER AMBASSADORS: a separate ambassador/referral bonus program,
+         its own dataset (kalcer.kalcer_fix), independent of the Referral
+         program tabs above (those run on main.user_referrals). -->
+    <section id="kalcer" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="kalcer_title">Kalcer ambassadors</h2>
+          <div class="range">
+            <label><span data-i18n="common_as_of">As of</span> <input type="date" id="kalcerDate" /></label>
+            <button id="kalcerDateApply" class="btn-primary" data-i18n="common_go">Go</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="kalcer_info">Who referred whom, built from main.user_referrals (the immutable referral link, unlike referrer_code which can be reassigned) plus each referred investor's AUM as of the date above (mi_fee_logs.portfolio_with_code, same source and one-day correction as the HNWI tab). No bonus amounts or eligibility status: that program's exact rules aren't documented anywhere in this codebase, and this only reports referral activity and AUM, not what anyone is paid.</span>
+        </div>
+        <div id="kalcerKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="kalcer_summary_title">Ambassadors</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="kalcerSummaryCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="kalcerSummaryXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <div class="ask-bar">
+          <input id="kalcerSearchInput" type="text" autocomplete="off" data-i18n-placeholder="kalcer_search_ph" placeholder="Search by SID, name, or email" />
+          <button id="kalcerSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
+        </div>
+        <span class="hint" data-i18n="kalcer_summary_hint">One row per referrer. Sorted by how many people they referred.</span>
+        <div id="kalcerSummaryTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="kalcer_detail_title">Referrals</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="kalcerDetailCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="kalcerDetailXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="kalcer_detail_hint">One row per referral: who referred whom, on what date, and that investor's AUM as of the date above. Filtered by the same search as the table above.</span>
+        <div id="kalcerDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- PUSH DELIVERY: FCM's own send-pipeline health log (own dataset,
+         firebase_messaging.data). Delivery/send health only, there is no
+         open/click or revenue data in this table, see the callout below. -->
+    <section id="push" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="pushFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="pushTo" /></label>
+            <button id="pushApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="push_info">Firebase Cloud Messaging's own delivery log: did FCM accept and hand off each push, not whether it was opened or read (Firebase doesn't export that for messaging, and there's no user ID on this table to join to revenue). Most failures are MISSING_REGISTRATIONS, a stale or invalid device token.</span>
+        </div>
+        <div id="pushKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="push_trend_title">Send volume</h2></div>
+        <div class="chart-wrap"><canvas id="pushTrendChart"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="push_platform_title">By platform</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="pushPlatformCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="pushPlatformXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <div id="pushPlatformTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="push_campaign_title">By campaign</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="pushCampaignCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="pushCampaignXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="push_campaign_hint">One row per analytics_label (how each push campaign is tagged). Sends with no label are excluded. Sorted by volume.</span>
+        <div id="pushCampaignTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- MARKETING ATTRIBUTION: Adjust's mobile attribution events (own
+         dataset, adjust_analytics.events). Funnel from click through paid,
+         by acquisition channel. -->
+    <section id="marketing" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="mktFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="mktTo" /></label>
+            <button id="mktApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="mkt_info">From Adjust, the app's mobile attribution tool: one row per acquisition channel (how a link or ad was tagged), from click through install, registration, KYC, and a completed payment. Each threshold-tagged duplicate (e.g. payment_completed_1M_plus) is excluded, only the plain event is counted, or payments would be counted more than once.</span>
+        </div>
+        <div id="mktKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="mkt_table_title">Funnel by channel</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="mktCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="mktXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="mkt_table_hint">Sorted by installs, then clicks. A channel with clicks but no installs never converted a single visit into an app install in this period.</span>
+        <div id="mktTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- APP HEALTH: Firebase Crashlytics + Performance Monitoring, each its
+         own pair of per-platform tables (own datasets), UNIONed server-side. -->
+    <section id="app-health" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="ahFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="ahTo" /></label>
+            <button id="ahApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="ah_info">From Crashlytics and Performance Monitoring (Android + iOS). Crashlytics has no "total active users" figure to compute a crash-free rate against, so this shows event and affected-device counts, not a percentage. Performance leads with the median, not the average: a handful of multi-minute outliers (e.g. a slow network, a backgrounded app) can blow the average up 10 to 100x over what a typical user actually experiences.</span>
+        </div>
+        <div id="ahKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="ah_crash_title">Crash &amp; error issues</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="ahCrashCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="ahCrashXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="ah_crash_hint">One row per distinct issue, platform, and fatal/non-fatal split. Sorted by event count.</span>
+        <div id="ahCrashTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="ah_perf_title">Slowest operations</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="ahPerfCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="ahPerfXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="ah_perf_hint">GraphQL queries/mutations and custom screen-load traces only (at least 20 samples). Screen dwell time and app-backgrounded time are excluded, they measure something else, not load latency. Sorted by median duration.</span>
+        <div id="ahPerfTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- PRODUCT FUNNEL: GA4 export (own dataset, analytics_266759216). A
+         cohort funnel (who registered in this window, then did they ever
+         reach each later milestone), not a same-window count per step, see
+         the callout below for why. -->
+    <section id="product-funnel" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="pfnFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="pfnTo" /></label>
+            <button id="pfnApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="pfn_info">From Google Analytics. Finds everyone who clicked Register in the chosen period, then checks, with no date limit, whether that same device ever reached each later step (OTP, KYC start, KYC verified, order created, payment). Counting each step only within the chosen period instead would make the funnel look like it goes up partway through, since people can register in one period and pay in a later one.</span>
+        </div>
+        <div id="pfnKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="pfn_table_title">Funnel by platform</h2>
+          <div class="exp">
+            <button class="btn-ghost" id="pfnCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="pfnXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="pfn_table_hint">Each column counts devices that reached that step at any point, not just within the period above. Always decreasing left to right, within a platform.</span>
+        <div id="pfnTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
     <section id="ask" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="ask_title">Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data — no technical skills needed.</span></div>
@@ -2553,6 +2817,30 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-forecast"></use></svg> Predict</h3>
           <p data-i18n="docs_predict_desc">Machine-learning forecasts: projected AUM and transaction volume, which investors are at risk of leaving (churn), and retention trends over time.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg> Dormant win-back</h3>
+          <p data-i18n="docs_dormant_desc">Computed live from main.transactions, not a precomputed table. For every investor, each 14+ day gap between two completed buys is a "dormancy episode," grouped into 2 Weeks / 1 Month / 2 Month / 3 Month buckets; it "converts" if a later buy eventually closes the gap. Episodes past 180 days of silence are excluded, that's effectively churned rather than about to come back (the Predict tab's churn model covers that population instead). Shows conversion rate and revenue (median alongside average, since a handful of large transactions skew the average) per dormancy length, plus two exportable user-level lists: repeat buyers (lifetime buy activity of everyone who ever recovered) and time-to-convert (days between the last buy before each gap and the buy that closed it).</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Kalcer ambassadors</h3>
+          <p data-i18n="docs_kalcer_desc">Built from main.user_referrals (the immutable referral link, set once at referral time, unlike referrer_code which can be reassigned later) plus each referred investor's AUM as of a picked date, from mi_fee_logs.portfolio_with_code, same source and one-day correction as the HNWI tab. Ambassadors: one row per referrer, with how many people they referred, their first and most recent referral date, and the combined AUM of everyone they referred. Referrals: one row per referral, with the referral date and that investor's own AUM. No bonus amounts, tiers, or eligibility status, that program's exact rules aren't documented anywhere in this codebase, so this only reports referral activity and AUM, not what anyone is paid. Search by the referrer's SID, name, or email.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Push delivery</h3>
+          <p data-i18n="docs_push_desc">Firebase Cloud Messaging's own delivery log (own dataset, firebase_messaging.data): did FCM accept and hand off each push. This is send-pipeline health only, not an open or click rate. Firebase's standard export has no such engagement events for messaging, and the table carries only an FCM instance ID, not a Sayakaya user ID, so it can't be joined to revenue either. Shows send volume over a date range, a breakdown by platform (Android/iOS/unknown), and a breakdown by campaign (analytics_label), each with total sends, accepted, MISSING_REGISTRATIONS (a stale or invalid device token, the dominant failure reason), other errors, and the resulting delivery rate.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Marketing attribution</h3>
+          <p data-i18n="docs_mkt_desc">From Adjust, the app's mobile attribution tool (own dataset, adjust_analytics.events). One row per acquisition channel: clicks, installs, and funnel milestones through to a completed payment (OTP verified, registration completed, KYC verified, order created, payment completed), plus the resulting revenue. Adjust fires threshold-tagged duplicate events for the same transaction (e.g. payment_completed_1M_plus alongside the plain payment_completed, same transaction ID) purely for ad-network bidding, so only the plain event names are counted, or payments would be counted 2 to 3 times over. Nearly all traffic in this data is "Organic"; most of the small named channels (social posts, blog links, search terms) show clicks with zero resulting installs.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg> App health</h3>
+          <p data-i18n="docs_ah_desc">Firebase Crashlytics + Performance Monitoring, Android and iOS combined (own datasets, one table per platform per product, unioned here since there's no combined table). Crashes: one row per distinct issue, platform, and fatal/non-fatal split, with event count, affected device count, and the latest app version seen. There's no "total active users" in Crashlytics' own export, so this can't compute a crash-free percentage, only raw counts. Performance: median duration (not average) per GraphQL query/mutation and custom screen-load trace, at least 20 samples. Screen-foreground dwell time and app-backgrounded time are excluded from this table entirely, Firebase logs those under the same "duration" field but they measure something unrelated to load latency, and backgrounded sessions especially can run for hours, which would otherwise wreck the average.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg> Product funnel</h3>
+          <p data-i18n="docs_pfn_desc">From Google Analytics (own dataset, analytics_266759216, one physical table per day, Feb 2026 onward). A cohort funnel, not a same-period count per step: it finds every device whose first Register click fell in the chosen date range, then checks, with no date limit on this half, whether that same device ever reached OTP submitted, KYC started, KYC verified, order created, and payment completed. Counting each milestone only within the chosen range independently would make the funnel look like it climbs partway through (otp_on_submit alone fires on every login, not just signup, so it would outnumber registrations), since a real person can register in one period and pay in a much later one. Split by platform (Android/iOS); each column only decreases moving right, within a platform. The milestone join scans GA4's full history regardless of the date range chosen, typically well under 1GB.</p>
         </div>
       </div>
 

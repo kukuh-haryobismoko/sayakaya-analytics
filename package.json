@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/render-smoke.js && node test/sheets-format-smoke.js && node test/portfolio-batch-smoke.js && node test/bulk-summary-smoke.js && node test/table-export-smoke.js"
+    "test": "node test/render-smoke.js && node test/sheets-format-smoke.js && node test/portfolio-batch-smoke.js && node test/bulk-summary-smoke.js && node test/table-export-smoke.js",
+    "predeploy:supabase": "npm test",
+    "deploy:supabase": "supabase functions deploy api"
   },
   "engines": {
     "node": ">=18"

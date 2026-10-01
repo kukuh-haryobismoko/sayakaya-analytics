@@ -122,6 +122,50 @@ const aumDrill = [{ fund: 'Sucorinvest Money Market Fund', manager: 'Sucor Asset
 const topInvestors = [{ sid: 'IDD1', name: 'A', email: 'a@b.c', subscriptions: '2.1e9', buys: 3, pct_of_subscriptions: '37.58',
   redemptions: '0', sells: 0, pct_of_redemptions: '0', net_deposit: '2.1e9' }];
 
+const dormantConversionSummary = [
+  { dormant_category: '2 Weeks Dormant', total_dormancy_periods: 1000, converted_periods: 980, conversion_rate_pct: 98.0, total_revenue: '7e8', avg_revenue_per_conversion: '7.1e5', median_revenue_per_conversion: '1e6', max_revenue_per_conversion: '5e7' },
+  { dormant_category: '3 Month Dormant', total_dormancy_periods: 300, converted_periods: 250, conversion_rate_pct: 83.3, total_revenue: '2e8', avg_revenue_per_conversion: '8e5', median_revenue_per_conversion: '1e6', max_revenue_per_conversion: '2e7' },
+];
+const dormantRepeatBuyers = [{ user_id: 'u1', dormant_category: '2 Weeks Dormant', txn_count: 3, total_spent: '9e7', buyer_type: 'Power (4+)' }];
+const dormantTimeToConvert = [{ user_id: 'u1', dormant_category: '2 Weeks Dormant', first_txn_date: D('2026-06-01'), days_to_convert: 16 }];
+
+const pushTrend = [{ bucket: D('2026-09-01'), total_sends: 1000, accepted: 980, delivery_rate_pct: 98.0 }];
+const pushByPlatform = [
+  { sdk_platform: 'ANDROID', total_sends: 700, accepted: 650, delivery_rate_pct: 92.86 },
+  { sdk_platform: 'IOS', total_sends: 300, accepted: 299, delivery_rate_pct: 99.67 },
+];
+const pushByCampaign = [{ analytics_label: 'Promo_Test', total_sends: 500, accepted: 480, missing_registrations: 15, other_errors: 5, delivery_rate_pct: 96.0 }];
+
+const marketingFunnel = [
+  { channel: 'Organic', clicks: 0, installs: 4984, otp_verified: 6823, registrations: 1643, kyc_verified: 376, orders_created: 3976, payments_completed: 2816, total_revenue: '4.78e10' },
+  { channel: 'x::download apk', clicks: 122, installs: 0, otp_verified: 0, registrations: 0, kyc_verified: 0, orders_created: 0, payments_completed: 0, total_revenue: '0' },
+];
+
+const appCrashIssues = [
+  { platform: 'ANDROID', issue_title: 'package:aegis/src/utils/measurement_util.dart', is_fatal: false, event_count: 815, affected_devices: 83, latest_app_version: '2.28.2' },
+  { platform: 'ANDROID', issue_title: 'Null check crash', is_fatal: true, event_count: 3, affected_devices: 3, latest_app_version: '2.28.1' },
+];
+const appPerfTraces = [
+  { platform: 'IOS', event_name: 'screen_GoalDetailRoute', sample_count: 39, median_duration_ms: 12506.5, avg_duration_ms: 270297.6 },
+  { platform: 'ANDROID', event_name: 'gql_query_promotions', sample_count: 16675, median_duration_ms: 1851, avg_duration_ms: 3098.7 },
+];
+
+const productFunnel = [
+  { platform: 'ANDROID', registered: 258, otp_submitted: 242, kyc_started: 142, kyc_verified: 90, ordered: 50, paid: 40 },
+  { platform: 'IOS', registered: 71, otp_submitted: 69, kyc_started: 45, kyc_verified: 37, ordered: 28, paid: 23 },
+];
+
+const kalcerSummary = [
+  { referrer_sid: 'IDD1', referrer_name: 'Jessica Wijaya', referrer_email: 'jessica@sayakaya.id',
+    referred_count: 435, first_referral_date: D('2022-01-27'), last_referral_date: D('2026-05-18'), total_aum_referred: '2.05e10' },
+  { referrer_sid: 'IDD2', referrer_name: 'Michael Gorby', referrer_email: 'michael@example.com',
+    referred_count: 2, first_referral_date: D('2023-01-01'), last_referral_date: D('2023-02-01'), total_aum_referred: '1e8' },
+];
+const kalcerDetail = [
+  { referrer_sid: 'IDD1', referrer_name: 'Jessica Wijaya', invitee_sid: 'IDD9', invitee_name: 'Merissa',
+    referral_date: D('2026-05-18'), invitee_aum: '2.07e8' },
+];
+
 sandbox.api = async (path) => {
   if (path.startsWith('/api/user-lifetime/summary')) return summaryUL;
   if (path.startsWith('/api/user-lifetime/detail'))  return [];
@@ -131,8 +175,10 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/campaign-revenue'))           return detailCR;
   if (path.startsWith('/api/referral-program-alt/detail')) return referralProgram;
   if (path.startsWith('/api/referral-program-alt/inviter-stats')) return referralInviterStats;
+  if (path.startsWith('/api/referral-program-alt/invited')) return [];
   if (path.startsWith('/api/referral-program/detail'))    return referralProgram;
   if (path.startsWith('/api/referral-program/inviter-stats')) return referralInviterStats;
+  if (path.startsWith('/api/referral-program/invited')) return [];
   if (path.startsWith('/api/overview')) {
     // The route 400s without aumDate in the real server (queries.js'
     // platformAumAsOf needs it) — assert the client always sends it, same
@@ -153,18 +199,31 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/aum-history/drill?start=2026-08-01&end=')) return aumDrill;
   if (path.startsWith('/api/aum-history'))            return aumHistory;
   if (path.startsWith('/api/top-investors?') && path.includes('from=') && path.includes('to=')) return topInvestors;
+  if (path.startsWith('/api/dormant/conversion-summary')) return dormantConversionSummary;
+  if (path.startsWith('/api/dormant/repeat-buyers'))      return dormantRepeatBuyers;
+  if (path.startsWith('/api/dormant/time-to-convert'))    return dormantTimeToConvert;
+  if (path.startsWith('/api/kalcer/latest-date'))          return { latestDate: '2026-09-30' };
+  if (path.startsWith('/api/kalcer/summary'))              return kalcerSummary;
+  if (path.startsWith('/api/kalcer/detail'))               return kalcerDetail;
+  if (path.startsWith('/api/push/trend'))                 return pushTrend;
+  if (path.startsWith('/api/push/by-platform'))            return pushByPlatform;
+  if (path.startsWith('/api/push/by-campaign'))            return pushByCampaign;
+  if (path.startsWith('/api/marketing/funnel'))            return marketingFunnel;
+  if (path.startsWith('/api/app-health/crashes'))          return appCrashIssues;
+  if (path.startsWith('/api/app-health/performance'))      return appPerfTraces;
+  if (path.startsWith('/api/product-funnel'))              return productFunnel;
   throw new Error('unexpected path ' + path);
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadTopInvestors']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   try { await sandbox.loadAumDrill('2026-08'); } catch (e) { errors.push(`loadAumDrill: ${e.message}`); }
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#aumDrillTable', '#tiTable', '#topFunds']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -178,6 +237,48 @@ sandbox.api = async (path) => {
   } else {
     console.log(`FAIL  #kpis -> ${kpisHtml.slice(0, 200) || '(never rendered)'}`);
     errors.push('#kpis did not render KPI cards');
+  }
+  const dwKpisHtml = get('#dwKpis')._html;
+  if (dwKpisHtml.includes('kpi-value')) {
+    console.log('ok    #dwKpis');
+  } else {
+    console.log(`FAIL  #dwKpis -> ${dwKpisHtml.slice(0, 200) || '(never rendered)'}`);
+    errors.push('#dwKpis did not render KPI cards');
+  }
+  const kalcerKpisHtml = get('#kalcerKpis')._html;
+  if (kalcerKpisHtml.includes('kpi-value')) {
+    console.log('ok    #kalcerKpis');
+  } else {
+    console.log(`FAIL  #kalcerKpis -> ${kalcerKpisHtml.slice(0, 200) || '(never rendered)'}`);
+    errors.push('#kalcerKpis did not render KPI cards');
+  }
+  const pushKpisHtml = get('#pushKpis')._html;
+  if (pushKpisHtml.includes('kpi-value')) {
+    console.log('ok    #pushKpis');
+  } else {
+    console.log(`FAIL  #pushKpis -> ${pushKpisHtml.slice(0, 200) || '(never rendered)'}`);
+    errors.push('#pushKpis did not render KPI cards');
+  }
+  const mktKpisHtml = get('#mktKpis')._html;
+  if (mktKpisHtml.includes('kpi-value')) {
+    console.log('ok    #mktKpis');
+  } else {
+    console.log(`FAIL  #mktKpis -> ${mktKpisHtml.slice(0, 200) || '(never rendered)'}`);
+    errors.push('#mktKpis did not render KPI cards');
+  }
+  const ahKpisHtml = get('#ahKpis')._html;
+  if (ahKpisHtml.includes('kpi-value')) {
+    console.log('ok    #ahKpis');
+  } else {
+    console.log(`FAIL  #ahKpis -> ${ahKpisHtml.slice(0, 200) || '(never rendered)'}`);
+    errors.push('#ahKpis did not render KPI cards');
+  }
+  const pfnKpisHtml = get('#pfnKpis')._html;
+  if (pfnKpisHtml.includes('kpi-value')) {
+    console.log('ok    #pfnKpis');
+  } else {
+    console.log(`FAIL  #pfnKpis -> ${pfnKpisHtml.slice(0, 200) || '(never rendered)'}`);
+    errors.push('#pfnKpis did not render KPI cards');
   }
   // Platform AUM's own "as of" date input should default to the latest
   // available date from /api/funds/top/latest-date, same as #topFundsDate.
