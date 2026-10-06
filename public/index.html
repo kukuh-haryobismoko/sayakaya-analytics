@@ -189,6 +189,7 @@
           <div class="nav-label"><span data-i18n="nav_group_dashboards">Dashboards</span><span class="nav-group-caret"></span></div>
           <button class="nav-link active" data-tab="overview"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Overview</button>
           <button class="nav-link" data-tab="aum"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-up"></use></svg></span>AUM history</button>
+          <button class="nav-link" data-tab="revenue-trend"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Revenue trend</button>
           <button class="nav-link" data-tab="performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Performance</button>
           <button class="nav-link" data-tab="growth"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-sprout"></use></svg></span>Growth</button>
         </div>
@@ -1456,6 +1457,49 @@
       </div>
     </section>
 
+    <!-- REVENUE TREND -->
+    <section id="revenue-trend" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="rev_trend_title">Revenue trend</h2>
+          <div class="filters">
+            <div class="seg" id="revTrendGran">
+              <button data-g="day" data-i18n="common_day">Day</button>
+              <button data-g="week" data-i18n="common_week">Week</button>
+              <button class="on" data-g="month" data-i18n="common_month">Month</button>
+            </div>
+            <span class="divider"></span>
+            <button class="btn-ghost" id="revTrendCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="revTrendXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <div id="rvtFinding" class="trend-finding" hidden></div>
+        <span class="hint" data-i18n="rev_trend_hint">AperD revenue per day, week or month, calculated the same way as Revenue (PWC) so the totals match. Uses the date range above, so the first and last period can be partial: the Days column shows how many days each one holds. Source: portfolio_with_code and management_fee_logs.</span>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="rvtChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="rev_cause_title">What moved revenue</h2></div>
+        <span class="hint" data-i18n="rev_cause_hint">Revenue = days × average AUM × daily fee rate. Each period's change is split into days effect (more or fewer days in the period), AUM effect (average AUM moved, at the old rate) and rate and mix effect (fee rate and which funds hold the AUM). The three bars add up to the change. Click a row in the table below to see which funds drove it.</span>
+        <div class="chart-wrap" id="revCauseWrap" style="margin-top:14px"><canvas id="revCauseChart"></canvas></div>
+        <div id="revCauseEmpty" class="empty hidden"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="common_detail">Detail</h2></div>
+        <div id="revTrendTable" class="table-wrap tall"></div>
+      </div>
+      <div class="panel hidden" id="revDrillPanel">
+        <div class="panel-head wrap">
+          <h2 id="revDrillTitle"></h2>
+          <div class="exp">
+            <button class="btn-ghost" id="revDrillCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="revDrillXlsx" data-i18n="common_excel">Excel</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="rev_drill_hint">Per fund, sorted by the size of its revenue change against the previous period. A fund that is new or gone in one of the two periods has no rate to compare, so its three effects show n/a.</span>
+        <div id="revDrillTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+    </section>
+
     <!-- PRODUCT PERFORMANCE -->
     <section id="performance" class="view">
       <div class="panel">
@@ -2709,6 +2753,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-up"></use></svg> AUM history</h3>
           <p data-i18n="docs_aum_desc">How total assets under management (and the platform's own revenue) have moved over time.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Revenue trend</h3>
+          <p data-i18n="docs_rev_trend_desc">Platform revenue over time, switchable between daily, weekly and monthly totals, with the change against the previous period split into days, AUM and fee-rate effects, and a per-fund breakdown on click. Same calculation as Revenue (PWC).</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Performance</h3>

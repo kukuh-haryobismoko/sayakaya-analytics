@@ -32,6 +32,8 @@ const EXPORT_SOURCE_TAB = {
   transactions: 'remisier-tx',
   churn_risk: 'predict',
   aum_history: 'aum',
+  revenue_trend: 'revenue-trend',
+  revenue_trend_drill: 'revenue-trend',
   product_performance: 'performance',
   product_performance_detail: 'performance',
   portfolio_full: 'portfolio',
@@ -575,6 +577,17 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/aum-history', requireTab('aum'), handler(async (req, res) => {
     const { from, to, granularity } = req.query;
     const q = Q.aumHistory(from, to, granularity);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/revenue-trend', requireTab('revenue-trend'), handler(async (req, res) => {
+    const { from, to, granularity } = req.query;
+    const q = Q.revenueTrend(from, to, granularity);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  app.get('/api/revenue-trend/drill', requireTab('revenue-trend'), handler(async (req, res) => {
+    const { from, to, granularity, period } = req.query;
+    if (!period) return res.status(400).json({ error: 'period is required.' });
+    const q = Q.revenueTrendDrill(from, to, granularity, period);
     res.json(await runQuery(q.sql, q.params));
   }));
   app.get('/api/aum-history/drill', requireTab('aum'), handler(async (req, res) => {
@@ -1233,6 +1246,12 @@ function createApp({ serveStatic = true } = {}) {
       rows = r.top;
     } else if (source === 'aum_history') {
       const q = Q.aumHistory(req.body.from, req.body.to, req.body.granularity);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'revenue_trend') {
+      const q = Q.revenueTrend(req.body.from, req.body.to, req.body.granularity);
+      rows = await runQuery(q.sql, q.params);
+    } else if (source === 'revenue_trend_drill') {
+      const q = Q.revenueTrendDrill(req.body.from, req.body.to, req.body.granularity, req.body.period);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'aum_history_drill') {
       const q = Q.aumHistoryDrill(req.body.start, req.body.end);

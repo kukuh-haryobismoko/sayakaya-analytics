@@ -24,6 +24,8 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   transactions: 'remisier-tx',
   churn_risk: 'predict',
   aum_history: 'aum',
+  revenue_trend: 'revenue-trend',
+  revenue_trend_drill: 'revenue-trend',
   product_performance: 'performance',
   product_performance_detail: 'performance',
   portfolio_full: 'portfolio',
@@ -674,6 +676,16 @@ on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
   const q = Q.aumHistory(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
   return json(await runQuery(q.sql, q.params));
 }));
+on('GET', '/api/revenue-trend', requireTab('revenue-trend', async (_req, _params, url) => {
+  const q = Q.revenueTrend(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/revenue-trend/drill', requireTab('revenue-trend', async (_req, _params, url) => {
+  const period = qp(url, 'period');
+  if (!period) return json({ error: 'period is required.' }, 400);
+  const q = Q.revenueTrendDrill(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), period);
+  return json(await runQuery(q.sql, q.params));
+}));
 on('GET', '/api/aum-history/drill', requireTab('aum', async (_req, _params, url) => {
   const start = qp(url, 'start'), end = qp(url, 'end');
   if (!start || !end) return json({ error: 'start and end are required.' }, 400);
@@ -1288,6 +1300,12 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     rows = r.top;
   } else if (source === 'aum_history') {
     const q = Q.aumHistory(body.from as string, body.to as string, body.granularity as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'revenue_trend') {
+    const q = Q.revenueTrend(body.from as string, body.to as string, body.granularity as string);
+    rows = await runQuery(q.sql, q.params);
+  } else if (source === 'revenue_trend_drill') {
+    const q = Q.revenueTrendDrill(body.from as string, body.to as string, body.granularity as string, body.period as string);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'aum_history_drill') {
     const q = Q.aumHistoryDrill(body.start as string, body.end as string);

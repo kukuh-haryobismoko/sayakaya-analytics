@@ -254,6 +254,76 @@ const aumHistory = (from, to, granularity = 'month') => {
   };
 };
 
+// Revenue trend: same calculation as Revenue (PWC), so the numbers match that
+// tab. revenueCTEs rebuilds daily fees from portfolio_with_code AUM x latest
+// management fee, with the same day/week/month buckets (granularityPart).
+// revenue = AperD share. The first and last bucket can be partial when the
+// date range cuts through them; the days effect below picks that up.
+//
+// Root cause columns: revenue = days x avg AUM x daily rate, where
+// rate = revenue / (days x avg AUM). Change vs the previous bucket splits
+// exactly into days effect (more/fewer days), AUM effect (avg AUM moved, at
+// the old rate) and rate effect (fee rate and fund mix, the remainder).
+// All three are NULL on the first row (no prior bucket to diff against).
+const revenueTrend = (from, to, granularity = 'month') => {
+  const { cte, params } = revenueCTEs(from, to, granularity);
+  const part = granularityPart(granularity);
+  const fmt = granularity === 'month' ? '%Y-%m' : '%Y-%m-%d';
+  return {
+    sql: `${cte},
+      b AS (SELECT period, SUM(total_aperd_share) AS revenue FROM period_fund GROUP BY period),
+      p AS (
+        SELECT DATE_TRUNC(created_date, ${part}) AS period, COUNT(*) AS days, AVG(platform_aum) AS avg_aum
+        FROM (SELECT created_date, SUM(aum) AS platform_aum FROM daily_detail GROUP BY created_date)
+        GROUP BY period
+      ),
+      j AS (
+        SELECT period, revenue, days, avg_aum, SAFE_DIVIDE(revenue, days * avg_aum) AS r
+        FROM b JOIN p USING (period)
+      ),
+      l AS (
+        SELECT *, LAG(revenue) OVER w AS rev0, LAG(days) OVER w AS d0, LAG(avg_aum) OVER w AS a0, LAG(r) OVER w AS r0
+        FROM j WINDOW w AS (ORDER BY period)
+      )
+      SELECT FORMAT_DATE('${fmt}', period) AS bucket, ROUND(revenue) AS revenue, days, ROUND(avg_aum) AS avg_aum,
+        ROUND(SAFE_DIVIDE(revenue - rev0, rev0) * 100, 1) AS change_pct,
+        ROUND((days - d0) * a0 * r0) AS days_effect,
+        ROUND(days * (avg_aum - a0) * r0) AS aum_effect,
+        ROUND(revenue - rev0 - (days - d0) * a0 * r0 - days * (avg_aum - a0) * r0) AS rate_effect
+      FROM l ORDER BY period`,
+    params,
+  };
+};
+
+// Per-fund version of the same split for one bucket (period = the bucket's
+// first day) against the bucket before it. A fund missing from either bucket
+// (new or gone) has no rate to compare, so its effects are NULL and only the
+// revenue change is shown.
+const revenueTrendDrill = (from, to, granularity = 'month', period = '') => {
+  const { cte, params } = revenueCTEs(from, to, granularity);
+  return {
+    sql: `${cte},
+      periods AS (SELECT period, LAG(period) OVER (ORDER BY period) AS prev FROM (SELECT DISTINCT period FROM period_fund)),
+      tgt AS (SELECT period, prev FROM periods WHERE period = DATE(@period)),
+      c AS (SELECT pf.* FROM period_fund pf JOIN tgt ON pf.period = tgt.period),
+      o AS (SELECT pf.* FROM period_fund pf JOIN tgt ON pf.period = tgt.prev),
+      j AS (
+        SELECT COALESCE(c.fund_name, o.fund_name) AS fund, COALESCE(c.mi_name, o.mi_name) AS manager,
+          IFNULL(o.total_aperd_share, 0) AS rev0, IFNULL(c.total_aperd_share, 0) AS rev1,
+          c.days_running AS d1, o.days_running AS d0, c.avg_aum AS a1, o.avg_aum AS a0,
+          SAFE_DIVIDE(c.total_aperd_share, c.days_running * c.avg_aum) AS r1,
+          SAFE_DIVIDE(o.total_aperd_share, o.days_running * o.avg_aum) AS r0
+        FROM c FULL JOIN o USING (fund_id)
+      )
+      SELECT fund, manager, ROUND(rev0) AS revenue_prev, ROUND(rev1) AS revenue_cur, ROUND(rev1 - rev0) AS change,
+        ROUND((d1 - d0) * a0 * r0) AS days_effect,
+        ROUND(d1 * (a1 - a0) * r0) AS aum_effect,
+        ROUND(rev1 - rev0 - (d1 - d0) * a0 * r0 - d1 * (a1 - a0) * r0) AS rate_effect
+      FROM j ORDER BY ABS(rev1 - rev0) DESC`,
+    params: { ...params, period },
+  };
+};
+
 // Per-fund breakdown of one AUM history period: which funds moved, and how
 // much of each fund's move was money in/out vs market. start/end = the
 // period's first/last day (the caller clips end to the page's "to" date so
@@ -3648,7 +3718,7 @@ const eventCodeCohort = (field, codes, from, to, grain, periods, basis) => {
 
 module.exports = {
   overviewUsers, overviewTx, overviewFunds,
-  trends, breakdownBy, fundTypes, aumHistory, aumHistoryDrill, topInvestors,
+  trends, breakdownBy, fundTypes, aumHistory, revenueTrend, revenueTrendDrill, aumHistoryDrill, topInvestors,
   userGrowth, verificationBreakdown,
   transactions, txFilterValues, txColumns,
   productPerformance, productPerformanceDetail, fundNavTrend, fundList,

@@ -117,6 +117,12 @@ const aumHistory = [
   { bucket: '2026-07', aum: '2.6e11', revenue: '1e8', funds: 80, subscriptions: '8.5e10', redemptions: '9e10', net_flow: '-4.5e9', market_effect: null },
   { bucket: '2026-08', aum: '2.61e11', revenue: '1e8', funds: 80, subscriptions: '6.9e10', redemptions: '7.1e10', net_flow: '-1.9e9', market_effect: '2.9e9' },
 ];
+const revenueTrend = [
+  { bucket: '2026-08-31', revenue: '31075533', days: 6, avg_aum: '2.6e11', change_pct: null, days_effect: null, aum_effect: null, rate_effect: null },
+  { bucket: '2026-09-07', revenue: '33630815', days: 7, avg_aum: '2.61e11', change_pct: '8.2', days_effect: '5179000', aum_effect: '120000', rate_effect: '-3000' },
+];
+const revenueTrendDrill = [{ fund: 'Sucorinvest Money Market Fund', manager: 'Sucor Asset Management', revenue_prev: '1e7', revenue_cur: '1.2e7',
+  change: '2e6', days_effect: '1.6e6', aum_effect: '3e5', rate_effect: '1e5' }];
 const aumDrill = [{ fund: 'Sucorinvest Money Market Fund', manager: 'Sucor Asset Management', aum_start: '1e11', aum_end: '9e10',
   aum_change: '-1e10', subscriptions: '8.7e9', redemptions: '6.2e10', switch_net: '5.2e9', market_effect: '3.8e10' }];
 const topInvestors = [{ sid: 'IDD1', name: 'A', email: 'a@b.c', subscriptions: '2.1e9', buys: 3, pct_of_subscriptions: '37.58',
@@ -198,6 +204,8 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/users/top-cities'))       return overviewTopCities;
   if (path.startsWith('/api/aum-history/drill?start=2026-08-01&end=')) return aumDrill;
   if (path.startsWith('/api/aum-history'))            return aumHistory;
+  if (path.startsWith('/api/revenue-trend/drill'))    return revenueTrendDrill;
+  if (path.startsWith('/api/revenue-trend'))          return revenueTrend;
   if (path.startsWith('/api/top-investors?') && path.includes('from=') && path.includes('to=')) return topInvestors;
   if (path.startsWith('/api/dormant/conversion-summary')) return dormantConversionSummary;
   if (path.startsWith('/api/dormant/repeat-buyers'))      return dormantRepeatBuyers;
@@ -216,14 +224,14 @@ sandbox.api = async (path) => {
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   try { await sandbox.loadAumDrill('2026-08'); } catch (e) { errors.push(`loadAumDrill: ${e.message}`); }
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -300,17 +308,23 @@ sandbox.api = async (path) => {
   // Root-cause columns and the % of total share actually reach the page.
   // Total rows: SQL-provided for Largest funds, summed for genTable/AUM history.
   const foot = (sel) => (get(sel)._html.match(/<tfoot>([\s\S]*?)<\/tfoot>/) || [])[1] || '';
-  for (const [sel, needle] of [['#topFunds', '3,100'], ['#topFunds', '100.0%'], ['#aumTable', 'Rp 154.000.000.000'], ['#aumDrillTable', 'Rp 8.700.000.000'], ['#tiTable', '37.6%']]) {
+  for (const [sel, needle] of [['#topFunds', '3,100'], ['#topFunds', '100.0%'], ['#aumTable', 'Rp 154.000.000.000'], ['#revTrendTable', 'Rp 64.706.348'], ['#aumDrillTable', 'Rp 8.700.000.000'], ['#tiTable', '37.6%']]) {
     if (foot(sel).includes(needle)) { console.log(`ok    ${sel} total row has ${needle}`); continue; }
     console.log(`FAIL  ${sel} total row missing ${needle}: ${foot(sel).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 160)}`);
     errors.push(`${sel} total row missing ${needle}`);
   }
   if (get('#ovFundFilterList')._html.includes('>Total<') || get('#topFundsExcludeList')._html.includes('value="Total"')) errors.push('Total row leaked into a fund picker');
-  for (const [sel, needle] of [['#aumTable', 'data-bucket="2026-08"'], ['#aumTable', '<button type="button" class="link-btn mono"'], ['#topFunds', '66.8%'], ['#tiTable', '37.6%']]) {
+  for (const [sel, needle] of [['#revTrendTable', '+8.2%'], ['#aumTable', 'data-bucket="2026-08"'], ['#aumTable', '<button type="button" class="link-btn mono"'], ['#topFunds', '66.8%'], ['#tiTable', '37.6%']]) {
     if (get(sel)._html.includes(needle)) { console.log(`ok    ${sel} has ${needle}`); continue; }
     console.log(`FAIL  ${sel} missing ${needle}`);
     errors.push(`${sel} is missing ${needle}`);
   }
+  // Two sections once shared #revTrendFinding/#revTrendChart; $() hit the first, so one tab painted into the other.
+  const ids = (fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8').match(/ id="[^"]+"/g) || []);
+  const dups = [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))];
+  if (dups.length) errors.push(`duplicate element ids in index.html:${dups.join('')}`);
+  else console.log('ok    index.html has no duplicate ids');
+
   if (errors.length) { console.log(`\n${errors.length} failure(s):\n` + errors.join('\n')); process.exit(1); }
   console.log('\nAll section loaders rendered.');
 })();

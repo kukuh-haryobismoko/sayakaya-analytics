@@ -2081,6 +2081,122 @@ function renderAumTable(data) {
     </tr></thead><tbody>${body}</tbody>${foot}</table>`;
 }
 
+// REVENUE TREND
+let revTrendGran = 'month';
+let revTrendLoaded = false;
+
+async function loadRevenueTrend() {
+  const r = currentRange();
+  $('#revTrendTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
+  try {
+    const data = await api(`/api/revenue-trend?from=${r.from}&to=${r.to}&granularity=${revTrendGran}`);
+    revTrendLoaded = true;
+    $('#revDrillPanel').classList.add('hidden');
+    renderRevTrendChart(data);
+    renderRevCauseChart(data);
+    renderRevTrendTable(data);
+    renderSeriesTrendFinding('#rvtFinding', data, 'revenue', 'Revenue');
+  } catch (e) {
+    $('#revTrendTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    showRevCauseMessage(e.message);
+  }
+}
+
+function renderRevTrendChart(data) {
+  paint('rvtChart', {
+    type: 'bar',
+    data: {
+      labels: data.map((d) => val(d.bucket)),
+      datasets: [{ label: 'Revenue', data: data.map((d) => val(d.revenue)), backgroundColor: C.amber, borderRadius: 4 }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: { y: { grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } }, x: { grid: { display: false } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `Revenue: ${idrFull(c.raw)}` } } },
+    },
+  });
+}
+
+const revSigned = (v) => (v == null ? 'n/a' : `<span style="color:${v >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}">${v >= 0 ? '+' : '-'}${idrFull(Math.abs(v))}</span>`);
+
+function renderRevTrendTable(data) {
+  if (!data.length) { $('#revTrendTable').innerHTML = `<div class="empty">${t('rev_trend_empty')}</div>`; return; }
+  const n = (v) => (v == null ? null : Number(v));
+  const rows = data.map((d) => ({ bucket: val(d.bucket), revenue: n(val(d.revenue)) || 0, chg: n(val(d.change_pct)), days: val(d.days),
+    avgAum: val(d.avg_aum), de: n(val(d.days_effect)), ae: n(val(d.aum_effect)), re: n(val(d.rate_effect)) }));
+  const body = rows.map((r, i) => `<tr${i > 0 ? ` class="clickable" data-bucket="${r.bucket}"` : ''}>
+      <td class="mono">${i > 0 ? `<button type="button" class="link-btn mono" title="${t('rev_drill_row_title')}">${r.bucket}</button>` : r.bucket}</td>
+      <td class="num">${idrFull(r.revenue)}</td>
+      <td class="num">${r.chg == null ? 'n/a' : `<span style="color:${r.chg >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}">${r.chg >= 0 ? '+' : ''}${r.chg.toFixed(1)}%</span>`}</td>
+      <td class="num">${revSigned(r.de)}</td><td class="num">${revSigned(r.ae)}</td><td class="num">${revSigned(r.re)}</td>
+      <td class="num">${idrFull(r.avgAum)}</td><td class="num">${num(r.days)}</td></tr>`).join('');
+  const sum = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  $('#revTrendTable').innerHTML = `<table><thead><tr><th>Period</th><th class="num">Revenue</th><th class="num">vs previous</th>
+      <th class="num">Days effect</th><th class="num">AUM effect</th><th class="num">Rate &amp; mix effect</th><th class="num">Avg AUM</th><th class="num">Days</th></tr></thead>
+    <tbody>${body}</tbody><tfoot><tr><td>Total</td><td class="num">${idrFull(sum('revenue'))}</td><td></td>
+      <td class="num">${revSigned(sum('de'))}</td><td class="num">${revSigned(sum('ae'))}</td><td class="num">${revSigned(sum('re'))}</td><td></td><td></td></tr></tfoot></table>`;
+}
+
+function showRevCauseMessage(msg) {
+  $('#revCauseWrap').classList.toggle('hidden', !!msg);
+  $('#revCauseEmpty').classList.toggle('hidden', !msg);
+  $('#revCauseEmpty').textContent = msg || '';
+}
+
+function renderRevCauseChart(data) {
+  const rows = data.slice(1); // first row has no prior period to explain
+  showRevCauseMessage(rows.length ? '' : t('rev_cause_empty'));
+  if (!rows.length) return;
+  const bar = { borderRadius: 4, borderColor: C.surface, borderWidth: 2, stack: 'cause', order: 1 };
+  const g = (k) => rows.map((d) => val(d[k]));
+  paint('revCauseChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((d) => val(d.bucket)),
+      datasets: [
+        { type: 'line', label: 'Δ Revenue', data: rows.map((d) => Number(val(d.days_effect)) + Number(val(d.aum_effect)) + Number(val(d.rate_effect))),
+          borderColor: C.ink, backgroundColor: C.ink, showLine: false, pointRadius: 4, stack: 'delta', order: 0 },
+        { label: 'Days effect', data: g('days_effect'), backgroundColor: C.muted, ...bar },
+        { label: 'AUM effect', data: g('aum_effect'), backgroundColor: C.indigo, ...bar },
+        { label: 'Rate & mix effect', data: g('rate_effect'), backgroundColor: C.amberMark, ...bar },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, grid: { color: C.grid }, ticks: { callback: (v) => idr(v) } },
+      },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${idrFull(c.raw)}` } },
+      },
+    },
+  });
+}
+
+// Bucket label -> the period's first day (month labels are YYYY-MM).
+let revDrillParams = null;
+async function loadRevDrill(bucket) {
+  const r = currentRange();
+  revDrillParams = { from: r.from, to: r.to, granularity: revTrendGran, period: revTrendGran === 'month' ? `${bucket}-01` : bucket };
+  $('#revDrillPanel').classList.remove('hidden');
+  $('#revDrillTitle').textContent = `${t('rev_drill_title')} ${bucket}`;
+  $('#revDrillTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
+  $('#revDrillPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  try {
+    const q = new URLSearchParams(revDrillParams).toString();
+    const rows = await api(`/api/revenue-trend/drill?${q}`);
+    genTable('#revDrillTable', rows, [
+      { key: 'fund', label: 'Fund' }, { key: 'manager', label: 'Investment manager' },
+      { key: 'revenue_prev', label: 'Revenue previous', type: 'idr', sum: true }, { key: 'revenue_cur', label: 'Revenue', type: 'idr', sum: true },
+      { key: 'change', label: 'Δ Revenue', type: 'idr', sum: true },
+      { key: 'days_effect', label: 'Days effect', type: 'idr', sum: true }, { key: 'aum_effect', label: 'AUM effect', type: 'idr', sum: true },
+      { key: 'rate_effect', label: 'Rate & mix effect', type: 'idr', sum: true },
+    ], 'No fund moved in this period.');
+  } catch (e) { $('#revDrillTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
 // PRODUCT PERFORMANCE (NAV % change per fund type, external Apollo DB)
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
 let perfCache = [];
@@ -4972,6 +5088,7 @@ function switchTab(name) {
   }
   if (name === 'explorer' && !ex.meta.length) loadExplorerMeta();
   if (name === 'aum' && !aumCache.length) loadAumHistory();
+  if (name === 'revenue-trend' && !revTrendLoaded) loadRevenueTrend();
   if (name === 'performance' && !perfCache.length) loadPerformance();
   if (name === 'performance' && !perfDetailCache.length) loadPerformanceDetail();
   if (name === 'performance' && !perfTrendLoaded) { loadPerfTrendTypes(); loadPerfTrendFunds(); loadPerfTrend(); }
@@ -5106,6 +5223,7 @@ function repaintActiveTab() {
   switch (active.id) {
     case 'overview': overviewLoaded = false; loadOverview(); break;
     case 'aum': aumCache = []; loadAumHistory(); break;
+    case 'revenue-trend': loadRevenueTrend(); break;
     case 'growth': growthLoaded = false; loadGrowth(); break;
     case 'predict': predictLoaded = false; loadPredict(); break;
     case 'push': pushLoaded = false; loadPush(); break;
@@ -5492,7 +5610,7 @@ function wire() {
   $('#pfnCsv').addEventListener('click', () => download({ source: 'product_funnel', format: 'csv', filename: 'product_funnel', ...pfnRange() }, 'product_funnel.csv'));
   $('#pfnXlsx').addEventListener('click', () => download({ source: 'product_funnel', format: 'xlsx', filename: 'product_funnel', ...pfnRange() }, 'product_funnel.xlsx'));
 
-  $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
+  $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#revenue-trend').classList.contains('active')) loadRevenueTrend(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
   $('#revApply').addEventListener('click', loadRevenue);
   $('#rev2Apply').addEventListener('click', loadRevenue2);
 
@@ -5547,6 +5665,18 @@ function wire() {
     $$('#aumGran button').forEach((x) => x.classList.toggle('on', x === b));
     aumGran = b.dataset.g; loadAumHistory();
   });
+  $('#revTrendGran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#revTrendGran button').forEach((x) => x.classList.toggle('on', x === b));
+    revTrendGran = b.dataset.g; loadRevenueTrend();
+  });
+  const revTrendDl = (format) => { const r = currentRange(); download({ source: 'revenue_trend', format, filename: 'revenue_trend', from: r.from, to: r.to, granularity: revTrendGran }, `revenue_trend.${format}`); };
+  $('#revTrendTable').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-bucket]'); if (tr) loadRevDrill(tr.dataset.bucket); });
+  const revDrillDl = (format) => download({ source: 'revenue_trend_drill', format, filename: 'revenue_trend_drill', ...revDrillParams }, `revenue_trend_drill.${format}`);
+  $('#revDrillCsv').addEventListener('click', () => revDrillDl('csv'));
+  $('#revDrillXlsx').addEventListener('click', () => revDrillDl('xlsx'));
+  $('#revTrendCsv').addEventListener('click', () => revTrendDl('csv'));
+  $('#revTrendXlsx').addEventListener('click', () => revTrendDl('xlsx'));
   $('#aumCsv').addEventListener('click', () => { const r = currentRange(); download({ source: 'aum_history', format: 'csv', filename: 'aum_history', from: r.from, to: r.to, granularity: aumGran }, 'aum_history.csv'); });
   $('#aumXlsx').addEventListener('click', () => { const r = currentRange(); download({ source: 'aum_history', format: 'xlsx', filename: 'aum_history', from: r.from, to: r.to, granularity: aumGran }, 'aum_history.xlsx'); });
   $('#aumTable').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-bucket]'); if (tr) loadAumDrill(tr.dataset.bucket); });
