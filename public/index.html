@@ -199,19 +199,21 @@
           <button class="nav-link" data-tab="portfolio"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user"></use></svg></span>Portfolio (PWC)</button>
           <button class="nav-link" data-tab="portfolio-explorer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg></span>Portfolio Explorer (GS)</button>
           <button class="nav-link" data-tab="portfolio-fix"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg></span>Portfolio Explorer (Main)</button>
+          <button class="nav-link" data-tab="portfolio-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Portfolio (TX)</button>
+          <button class="nav-link" data-tab="portfolio-sinvest"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg></span>Portfolio (SInvest)</button>
           <button class="nav-link" data-tab="hnwi"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg></span>HNWI</button>
           <button class="nav-link" data-tab="top-investors"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-coin"></use></svg></span>Top investors</button>
           <button class="nav-link" data-tab="user-lifetime"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-hourglass"></use></svg></span>User lifetime</button>
           <button class="nav-link" data-tab="dormant"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg></span>Dormant win-back</button>
         </div>
         <div class="nav-group" data-group="transactions">
-          <div class="nav-label"><span data-i18n="nav_group_transactions">Transactions</span><span class="nav-group-caret"></span></div>
+          <div class="nav-label"><span data-i18n="nav_group_transactions">Operations &amp; Transactions</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="users-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Users transactions</button>
-          <button class="nav-link" data-tab="portfolio-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Portfolio (TX)</button>
-          <button class="nav-link" data-tab="portfolio-sinvest"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg></span>Portfolio (SInvest)</button>
           <button class="nav-link" data-tab="sinvest-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg></span>SInvest transactions</button>
           <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Remisier transactions</button>
           <button class="nav-link" data-tab="reconciliation"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calculator"></use></svg></span>Reconciliation</button>
+          <button class="nav-link" data-tab="send-statement"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Send statement</button>
+          <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Send fund performance</button>
         </div>
         <div class="nav-group" data-group="revenue">
           <div class="nav-label"><span data-i18n="nav_group_revenue">Revenue &amp; Partners</span><span class="nav-group-caret"></span></div>
@@ -228,8 +230,6 @@
           <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Referral program (KYC based)</button>
           <button class="nav-link" data-tab="kalcer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>Kalcer ambassadors</button>
           <button class="nav-link" data-tab="push"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Push delivery</button>
-          <button class="nav-link" data-tab="send-statement"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Send statement</button>
-          <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Send fund performance</button>
         </div>
         <div class="nav-group" data-group="product">
           <div class="nav-label"><span data-i18n="nav_group_product">Product</span><span class="nav-group-caret"></span></div>
@@ -2793,6 +2793,14 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_portfolio_explorer_main_desc">Same as Portfolio (PWC) — same as-of-date snapshot feature — but sourced from a corrected daily table (mi_fee_logs.portfolio_fix) whose average buy price is weighted by unit instead of averaged per lot, fixing a cost-basis bug in the original portfolio_with_code pipeline.</p>
         </div>
         <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Portfolio (TX)</h3>
+          <p data-i18n="docs_portfolio_tx_desc">Investor lookup whose average buy price is computed directly from the transaction ledger, not from portfolios.initial_price — only completed buy/SWITCH_IN/reinvestment/transfer_in transactions affect the average; sells never change it. Supports an as-of date (reconstructed purely from transactions up to that date; bonus holdings only show live, since bonus_portfolios has no history). Lets you uncheck individual fund rows (e.g. dust balances) before exporting.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> Portfolio (SInvest)</h3>
+          <p data-i18n="docs_portfolio_sinvest_desc">Same as Portfolio (TX), but every number is built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table — a second, independent source for cross-checking one investor's holdings and average buy price.</p>
+        </div>
+        <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg> HNWI</h3>
           <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below defaults to that same investor list; applying its own Min/Max fund AUM filter switches it to generate its own list by fund holding amount instead, independent of the filter above.</p>
         </div>
@@ -2819,18 +2827,10 @@ ORDER BY n DESC"></textarea>
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="docs_panel_transactions">Transactions</h2></div>
+        <div class="panel-head"><h2 data-i18n="docs_panel_transactions">Operations &amp; Transactions</h2></div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Users transactions</h3>
           <p data-i18n="docs_users_transactions_desc">Browse any investor's transactions by SID code, email, or name (partial match, required), with the buyer's contact info and fund name attached to every row: same join as Remisier transactions, but searched by investor identity instead of referrer/sales code. Refine further by transaction type, status, fund, or date range. Exports to CSV, Excel, or PDF.</p>
-        </div>
-        <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Portfolio (TX)</h3>
-          <p data-i18n="docs_portfolio_tx_desc">Investor lookup whose average buy price is computed directly from the transaction ledger, not from portfolios.initial_price — only completed buy/SWITCH_IN/reinvestment/transfer_in transactions affect the average; sells never change it. Supports an as-of date (reconstructed purely from transactions up to that date; bonus holdings only show live, since bonus_portfolios has no history). Lets you uncheck individual fund rows (e.g. dust balances) before exporting.</p>
-        </div>
-        <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> Portfolio (SInvest)</h3>
-          <p data-i18n="docs_portfolio_sinvest_desc">Same as Portfolio (TX), but every number is built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table — a second, independent source for cross-checking one investor's holdings and average buy price.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> SInvest transactions</h3>
@@ -2843,6 +2843,14 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calculator"></use></svg> Reconciliation</h3>
           <p data-i18n="docs_reconciliation_desc">A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Send statement</h3>
+          <p data-i18n="docs_send_statement_desc">Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's own date of birth on file (DDMMYYYY) as its open password — left unlocked if we have no birthdate for them — and the default letter tells them the password format. The Batch send box below sends the same documents (same portfolio date/e-statement month) to many investors at once — paste a list of emails and/or SIDs (one per line, or comma-separated), and it looks each one up and emails whichever ones it finds; anything not matched to an investor is reported back, not silently skipped. The "+ New schedule" button turns this into a recurring send (daily/weekly/monthly, at a chosen WIB time) instead of a one-off — creating one requires a one-time code emailed to whoever sets it up, and by default it runs indefinitely, but an optional end date can be set so it stops itself after its last scheduled send. Every scheduled send is logged in the same history as manual sends.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Send fund performance</h3>
+          <p data-i18n="docs_send_fund_performance_desc">Broadcasts the "Reksa Dana Update" PDF (all fund types, NAV as of a chosen date) to a list of email addresses — search registered users to add their email, and/or paste a list of emails directly (one per line, or comma-separated). Sends one email per recipient, so one bad address doesn't block the rest. Separate tool from Send statement, which is scoped to one investor's own documents; this one can go to any list of emails, investor or not. Has its own send-history log, same as Send statement, and the same "+ New schedule" recurring/end-date option.</p>
         </div>
       </div>
 
@@ -2883,14 +2891,6 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Push delivery</h3>
           <p data-i18n="docs_push_desc">Firebase Cloud Messaging's own delivery log (own dataset, firebase_messaging.data): did FCM accept and hand off each push. This is send-pipeline health only, not an open or click rate. Firebase's standard export has no such engagement events for messaging, and the table carries only an FCM instance ID, not a Sayakaya user ID, so it can't be joined to revenue either. Shows send volume over a date range, a breakdown by platform (Android/iOS/unknown), and a breakdown by campaign (analytics_label), each with total sends, accepted, MISSING_REGISTRATIONS (a stale or invalid device token, the dominant failure reason), other errors, and the resulting delivery rate.</p>
-        </div>
-        <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Send statement</h3>
-          <p data-i18n="docs_send_statement_desc">Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's own date of birth on file (DDMMYYYY) as its open password — left unlocked if we have no birthdate for them — and the default letter tells them the password format. The Batch send box below sends the same documents (same portfolio date/e-statement month) to many investors at once — paste a list of emails and/or SIDs (one per line, or comma-separated), and it looks each one up and emails whichever ones it finds; anything not matched to an investor is reported back, not silently skipped. The "+ New schedule" button turns this into a recurring send (daily/weekly/monthly, at a chosen WIB time) instead of a one-off — creating one requires a one-time code emailed to whoever sets it up, and by default it runs indefinitely, but an optional end date can be set so it stops itself after its last scheduled send. Every scheduled send is logged in the same history as manual sends.</p>
-        </div>
-        <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Send fund performance</h3>
-          <p data-i18n="docs_send_fund_performance_desc">Broadcasts the "Reksa Dana Update" PDF (all fund types, NAV as of a chosen date) to a list of email addresses — search registered users to add their email, and/or paste a list of emails directly (one per line, or comma-separated). Sends one email per recipient, so one bad address doesn't block the rest. Separate tool from Send statement, which is scoped to one investor's own documents; this one can go to any list of emails, investor or not. Has its own send-history log, same as Send statement, and the same "+ New schedule" recurring/end-date option.</p>
         </div>
       </div>
 

@@ -46,7 +46,7 @@ const I18N = {
 
     nav_group_dashboards: `Dashboards`,
     nav_group_investor: `Investor`,
-    nav_group_transactions: `Transactions`,
+    nav_group_transactions: `Operations & Transactions`,
     nav_group_revenue: `Revenue & Partners`,
     nav_group_marketing: `Marketing`,
     nav_group_product: `Product`,
@@ -84,7 +84,7 @@ const I18N = {
     docs_panel_investor: `Investor`,
     docs_hnwi_desc: `"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below defaults to that same investor list; applying its own Min/Max fund AUM filter switches it to generate its own list by fund holding amount instead, independent of the filter above.`,
 
-    docs_panel_transactions: `Transactions`,
+    docs_panel_transactions: `Operations & Transactions`,
     docs_panel_revenue: `Revenue & Partners`,
     docs_panel_marketing: `Marketing`,
     docs_panel_product: `Product`,
@@ -648,7 +648,7 @@ const I18N = {
 
     nav_group_dashboards: `Dasbor`,
     nav_group_investor: `Investor`,
-    nav_group_transactions: `Transaksi`,
+    nav_group_transactions: `Operasional & Transaksi`,
     nav_group_revenue: `Pendapatan & Mitra`,
     nav_group_marketing: `Pemasaran`,
     nav_group_product: `Produk`,
@@ -686,7 +686,7 @@ const I18N = {
     docs_panel_investor: `Investor`,
     docs_hnwi_desc: `"High-Net-Worth Individuals" — daftar investor dengan kepemilikan dalam rentang AUM tertentu (Anda tentukan ambang batas min/max) per tanggal yang dipilih, termasuk profil risiko tiap investor (tingkat risiko, prioritas investasi, toleransi risiko), lengkap dengan ringkasan total dan fitur ekspor. Rincian per produk di bawah secara default mengikuti daftar investor yang sama; menerapkan filter Min/Max AUM produknya sendiri akan beralih menghasilkan daftarnya sendiri berdasarkan nilai tiap kepemilikan produk, independen dari filter di atas.`,
 
-    docs_panel_transactions: `Transaksi`,
+    docs_panel_transactions: `Operasional & Transaksi`,
     docs_panel_revenue: `Pendapatan & Mitra`,
     docs_panel_marketing: `Pemasaran`,
     docs_panel_product: `Produk`,
