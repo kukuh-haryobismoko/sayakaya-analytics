@@ -695,7 +695,7 @@ on('GET', '/api/aum-history/drill', requireTab('aum', async (_req, _params, url)
 
 // ---- Top investors (subscribers / redeemers / net deposit) ---------------
 on('GET', '/api/top-investors', requireTab('top-investors', async (_req, _params, url) => {
-  const q = Q.topInvestors({ from: qp(url, 'from'), to: qp(url, 'to'), metric: qp(url, 'metric'), limit: qp(url, 'limit') });
+  const q = Q.topInvestors({ from: qp(url, 'from'), to: qp(url, 'to'), metric: qp(url, 'metric'), limit: qp(url, 'limit'), direction: qp(url, 'direction') });
   return json(await runQuery(q.sql, q.params));
 }));
 
@@ -1311,7 +1311,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const q = Q.aumHistoryDrill(body.start as string, body.end as string);
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'top_investors') {
-    const q = Q.topInvestors(body as { from?: string; to?: string; metric?: string; limit?: number });
+    const q = Q.topInvestors(body as { from?: string; to?: string; metric?: string; limit?: number; direction?: string });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'product_performance') {
     const q = Q.productPerformance();

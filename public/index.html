@@ -890,17 +890,21 @@
           <label id="tiDateWrap"><span data-i18n="ti_date">Date</span> <input type="date" id="tiDate" /></label>
           <label class="ti-custom hidden"><span data-i18n="range_from">From</span> <input type="date" id="tiFrom" /></label>
           <label class="ti-custom hidden"><span data-i18n="range_to">To</span> <input type="date" id="tiTo" /></label>
-          <select id="tiLimit">
-            <option value="10">Top 10</option>
-            <option value="50">Top 50</option>
-            <option value="100" selected>Top 100</option>
-            <option value="500">Top 500</option>
-          </select>
+          <div class="seg" id="tiOrder">
+            <button data-d="desc" class="on" data-i18n="ti_desc">Descending</button>
+            <button data-d="asc" data-i18n="ti_asc">Ascending</button>
+          </div>
+          <label><span data-i18n="ti_top">Top</span> <input type="number" id="tiLimit" min="1" max="1000" value="100" style="width:90px" /></label>
           <button id="tiRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
         <span class="hint" data-i18n="ti_hint">Completed buy (subscription) and sell (redemption) transactions, by transaction date. Day/Week/Month cover the day, Monday–Sunday week, or calendar month containing the date you pick; Custom takes any From/To range. Net deposit = subscriptions − redemptions, highest first. "% of all" is the investor's share of every investor's total in that period.</span>
         <div id="tiSummary" class="trend-finding" hidden></div>
         <div id="tiTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="ti_compact_title">Short version</h2></div>
+        <span class="hint" data-i18n="ti_compact_hint">Same investors as above, name and amounts only. Click a column header to sort these rows. Copy puts the table on your clipboard to paste into a sheet or chat.</span>
+        <div id="tiCompactTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
 

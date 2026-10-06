@@ -314,7 +314,7 @@ sandbox.api = async (path) => {
     errors.push(`${sel} total row missing ${needle}`);
   }
   if (get('#ovFundFilterList')._html.includes('>Total<') || get('#topFundsExcludeList')._html.includes('value="Total"')) errors.push('Total row leaked into a fund picker');
-  for (const [sel, needle] of [['#revTrendTable', '+8.2%'], ['#aumTable', 'data-bucket="2026-08"'], ['#aumTable', '<button type="button" class="link-btn mono"'], ['#topFunds', '66.8%'], ['#tiTable', '37.6%']]) {
+  for (const [sel, needle] of [['#revTrendTable', '+8.2%'], ['#tiCompactTable', 'Net increase'], ['#tiCompactTable', 'data-sort="buys"'], ['#aumTable', 'data-bucket="2026-08"'], ['#aumTable', '<button type="button" class="link-btn mono"'], ['#topFunds', '66.8%'], ['#tiTable', '37.6%']]) {
     if (get(sel)._html.includes(needle)) { console.log(`ok    ${sel} has ${needle}`); continue; }
     console.log(`FAIL  ${sel} missing ${needle}`);
     errors.push(`${sel} is missing ${needle}`);

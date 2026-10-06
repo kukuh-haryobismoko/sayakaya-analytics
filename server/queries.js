@@ -3557,8 +3557,13 @@ function usersTransactions({ q, type, status, fundId, from, to, limit = 100, off
 // history root-cause columns need. Share % is of every investor's total in
 // the period, not just the rows returned.
 const TOP_INVESTOR_ORDER = { subscriptions: 'subscriptions', redemptions: 'redemptions', net: 'net_deposit' };
-const topInvestors = ({ from, to, metric, limit = 100 }) => {
+const topInvestors = ({ from, to, metric, limit = 100, direction }) => {
   const order = TOP_INVESTOR_ORDER[metric] || 'subscriptions';
+  const dir = direction === 'asc' ? 'ASC' : 'DESC';
+  // Net can be negative: descending keeps net > 0 (biggest net depositors, as
+  // before), ascending keeps net < 0 (biggest net redeemers). Subscriptions and
+  // redemptions are never negative, so both directions keep > 0.
+  const keep = order === 'net_deposit' && dir === 'ASC' ? '< 0' : '> 0';
   return {
     sql: `WITH per_user AS (
         SELECT user_id,
@@ -3582,8 +3587,8 @@ const topInvestors = ({ from, to, metric, limit = 100 }) => {
       FROM ranked r
       JOIN ${USERS} u ON u.id = r.user_id
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-      WHERE r.${order} > 0
-      ORDER BY r.${order} DESC
+      WHERE r.${order} ${keep}
+      ORDER BY r.${order} ${dir}, u.sid_code
       LIMIT @limit`,
     params: { ...range(from, to), limit: Math.min(Math.max(parseInt(limit, 10) || 100, 1), 1000) },
   };

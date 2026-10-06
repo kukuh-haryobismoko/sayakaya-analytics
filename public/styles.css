@@ -363,6 +363,10 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
   font-weight: 600; padding: 3px 8px;
 }
 .table-export-bar button:hover { border-color: var(--indigo); color: var(--indigo); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:focus-visible { outline: 2px solid var(--indigo); outline-offset: -2px; }
+th[aria-sort="ascending"]::after { content: " \25B2"; font-size: 9px; }
+th[aria-sort="descending"]::after { content: " \25BC"; font-size: 9px; }
 .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
 .table-wrap.tall { max-height: 540px; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }

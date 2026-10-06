@@ -232,12 +232,26 @@ function exportTablePng(table, name) {
   });
   cvs.toBlob((blob) => downloadBlob(blob, `${name}.png`));
 }
+// Same text the CSV gets, as tab-separated plain text (pastes cell-per-cell
+// into Sheets/Excel) plus an HTML table (pastes as a table into docs/email).
+function copyTable(table) {
+  const rows = tableToAoa(table).map((r) => r.map((c) => c.replace(/[\t\r\n]+/g, ' ')));
+  const tsv = rows.map((r) => r.join('\t')).join('\n');
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const html = '<table>' + rows.map((r, i) => '<tr>' + r.map((c) => `<${i ? 'td' : 'th'}>${esc(c)}</${i ? 'td' : 'th'}>`).join('') + '</tr>').join('') + '</table>';
+  const ok = () => toast('Table copied to clipboard');
+  const fail = () => toast('Copy failed. Try CSV instead.');
+  if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+    navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([tsv], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })]).then(ok).catch(fail);
+  } else if (navigator.clipboard) navigator.clipboard.writeText(tsv).then(ok).catch(fail);
+  else fail();
+}
 function wireTableExportBar(wrap) {
   if (wrap.dataset.exportWired) return;
   wrap.dataset.exportWired = '1';
   const bar = document.createElement('div');
   bar.className = 'table-export-bar hidden';
-  bar.innerHTML = ['csv', 'xlsx', 'pdf', 'png'].map((fmt) =>
+  bar.innerHTML = ['copy', 'csv', 'xlsx', 'pdf', 'png'].map((fmt) =>
     `<button type="button" data-fmt="${fmt}">${fmt.toUpperCase()}</button>`).join('');
   bar.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-fmt]');
@@ -245,7 +259,7 @@ function wireTableExportBar(wrap) {
     const table = wrap.querySelector('table');
     if (!table) return;
     const name = wrap.id || 'table';
-    ({ csv: exportTableCsv, xlsx: exportTableXlsx, pdf: exportTablePdf, png: exportTablePng })[btn.dataset.fmt](table, name);
+    ({ copy: copyTable, csv: exportTableCsv, xlsx: exportTableXlsx, pdf: exportTablePdf, png: exportTablePng })[btn.dataset.fmt](table, name);
   });
   wrap.parentNode.insertBefore(bar, wrap);
 }
@@ -2399,7 +2413,7 @@ let growthLoaded = false;
 // Columns flagged `sum: true` get a Total row at the bottom. Only flag
 // columns that add up across rows: money and counts per fund/period, not
 // averages, rates, dates, or investor counts that overlap between rows.
-function genTable(sel, rows, cols, emptyMsg) {
+function genTable(sel, rows, cols, emptyMsg, sortState) {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
   const numTypes = ['idr', 'idrx', 'num', 'pct'];
   const td = (c, v) => {
@@ -2411,7 +2425,14 @@ function genTable(sel, rows, cols, emptyMsg) {
     if (c.type === 'date') out = v == null ? 'n/a' : String(v).slice(0, 10);
     return `<td class="${numTypes.includes(c.type) ? 'num' : ''}">${out}</td>`;
   };
-  const head = cols.map((c) => `<th class="${numTypes.includes(c.type) ? 'num' : ''}">${c.label}</th>`).join('');
+  // c.sort makes the header a keyboard-focusable sort control; the arrow is
+  // drawn by CSS from aria-sort so it never lands in copied or exported text.
+  const head = cols.map((c) => {
+    const cls = numTypes.includes(c.type) ? 'num' : '';
+    if (!c.sort) return `<th class="${cls}">${c.label}</th>`;
+    const on = sortState && sortState.key === c.key;
+    return `<th class="${cls} sortable" data-sort="${c.key}" tabindex="0" aria-sort="${on ? (sortState.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${c.label}</th>`;
+  }).join('');
   const body = rows.map((r) => '<tr>' + cols.map((c) => td(c, val(r[c.key]))).join('') + '</tr>').join('');
   const foot = cols.some((c) => c.sum)
     ? '<tfoot><tr>' + cols.map((c, i) => (c.sum
@@ -3269,11 +3290,16 @@ async function loadUtx() {
 // TOP INVESTORS — Day/Week/Month resolve to the day, Mon–Sun week, or
 // calendar month containing #tiDate; Custom reads From/To directly.
 let tiMetric = 'subscriptions';
+let tiDir = 'desc';
+let tiRows = [];
+let tiCompactSort = null;
 let tiPeriod = 'month';
 let tiLoaded = false;
 
 function tiParams() {
-  const base = { metric: tiMetric, limit: $('#tiLimit').value };
+  const limit = Math.min(Math.max(parseInt($('#tiLimit').value, 10) || 100, 1), 1000);
+  $('#tiLimit').value = limit;
+  const base = { metric: tiMetric, limit, direction: tiDir };
   if (tiPeriod === 'custom') return { ...base, from: $('#tiFrom').value, to: $('#tiTo').value };
   const d = new Date(`${$('#tiDate').value || isoDate(new Date())}T00:00:00Z`);
   if (tiPeriod === 'day') return { ...base, from: isoDate(d), to: isoDate(d) };
@@ -3312,6 +3338,9 @@ async function loadTopInvestors() {
   gateTabLoad((v) => { tiLoaded = v; }, [tiFetch]);
   try {
     const rows = await tiFetch;
+    tiRows = rows;
+    tiCompactSort = null;
+    renderTiCompact();
     genTable('#tiTable', rows.map((r, i) => ({ ...r, rank: i + 1 })), [
       { key: 'rank', label: '#', type: 'num' },
       { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
@@ -3320,11 +3349,34 @@ async function loadTopInvestors() {
     if (!rows.length) return;
     const sum = (k) => rows.reduce((a, r) => a + (Number(val(r[k])) || 0), 0);
     const range = p.from === p.to ? p.from : `${p.from} → ${p.to}`;
+    const which = p.direction === 'asc' ? 'lowest' : 'top';
     $('#tiSummary').textContent = p.metric === 'net'
-      ? `${range}: top ${rows.length} net deposit ${idrFull(sum('net_deposit'))}`
-      : `${range}: top ${rows.length} = ${sum(`pct_of_${p.metric}`).toFixed(1)}% of all ${p.metric} (${idrFull(sum(p.metric))})`;
+      ? `${range}: ${which} ${rows.length} net deposit ${idrFull(sum('net_deposit'))}`
+      : `${range}: ${which} ${rows.length} = ${sum(`pct_of_${p.metric}`).toFixed(1)}% of all ${p.metric} (${idrFull(sum(p.metric))})`;
     $('#tiSummary').hidden = false;
-  } catch (e) { $('#tiTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) {
+    tiRows = [];
+    renderTiCompact();
+    $('#tiTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
+}
+
+// Short version of the same rows: Buys/Sell are the rupiah amounts (same as
+// Subscriptions/Redemptions above), Net increase = Buys - Sell. Header clicks
+// re-sort the rows already fetched; they don't hit BigQuery again.
+function renderTiCompact() {
+  const rows = tiRows.map((r) => ({ name: val(r.name) || val(r.sid), buys: Number(val(r.subscriptions)) || 0,
+    sell: Number(val(r.redemptions)) || 0, net: Number(val(r.net_deposit)) || 0 }));
+  if (tiCompactSort) {
+    const { key, dir } = tiCompactSort, m = dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => m * (key === 'name' ? String(a.name).localeCompare(String(b.name)) : a[key] - b[key]));
+  }
+  genTable('#tiCompactTable', rows, [
+    { key: 'name', label: 'Name', sort: true },
+    { key: 'buys', label: 'Buys', type: 'idr', sum: true, sort: true },
+    { key: 'sell', label: 'Sell', type: 'idr', sum: true, sort: true },
+    { key: 'net', label: 'Net increase', type: 'idr', sum: true, sort: true },
+  ], t('ti_empty'), tiCompactSort);
 }
 
 // EVENT CODE TRACKING (generic — no event/code table exists yet, see
@@ -5857,6 +5909,23 @@ function wire() {
     if (tiPeriod !== 'custom') loadTopInvestors();
   });
   $('#tiRun').addEventListener('click', loadTopInvestors);
+  $('#tiLimit').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadTopInvestors(); });
+  $('#tiOrder').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#tiOrder button').forEach((x) => x.classList.toggle('on', x === b));
+    tiDir = b.dataset.d; loadTopInvestors();
+  });
+  const tiSortBy = (th) => {
+    if (!th) return;
+    const key = th.dataset.sort;
+    const same = tiCompactSort && tiCompactSort.key === key;
+    tiCompactSort = { key, dir: same ? (tiCompactSort.dir === 'asc' ? 'desc' : 'asc') : (key === 'name' ? 'asc' : 'desc') };
+    renderTiCompact();
+  };
+  $('#tiCompactTable').addEventListener('click', (e) => tiSortBy(e.target.closest('th[data-sort]')));
+  $('#tiCompactTable').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { const th = e.target.closest('th[data-sort]'); if (th) { e.preventDefault(); tiSortBy(th); } }
+  });
   $('#tiCsv').addEventListener('click', () => download({ source: 'top_investors', format: 'csv', filename: 'top_investors', ...tiParams() }, 'top_investors.csv'));
   $('#tiXlsx').addEventListener('click', () => download({ source: 'top_investors', format: 'xlsx', filename: 'top_investors', ...tiParams() }, 'top_investors.xlsx'));
   $('#utxPrev').addEventListener('click', () => { utx.offset = Math.max(0, utx.offset - utx.limit); loadUtx(); });

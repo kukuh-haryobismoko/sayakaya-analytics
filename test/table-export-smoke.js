@@ -53,7 +53,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'
   assert.ok(bar && bar.classList.contains('table-export-bar'), 'export bar should be auto-injected right before the table-wrap');
   assert.ok(!bar.classList.contains('hidden'), 'export bar should be visible once a real <table> exists');
   const formats = [...bar.querySelectorAll('button')].map((b) => b.dataset.fmt);
-  assert.deepStrictEqual(formats, ['csv', 'xlsx', 'pdf', 'png'], 'all four export formats should be offered');
+  assert.deepStrictEqual(formats, ['copy', 'csv', 'xlsx', 'pdf', 'png'], 'copy plus all four export formats should be offered');
 
   // Table clears back to an empty state (e.g. a new search with no
   // results) — the bar should hide, not disappear, so it's instantly ready
@@ -84,6 +84,14 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'
   assert.ok(csvText.includes('SID,Name'), 'CSV should include the table header row');
   assert.ok(csvText.includes('"Alice, A"'), 'CSV should quote a cell containing a comma');
   assert.ok(csvText.includes('Total'), 'CSV should include the tfoot Total row');
+
+  // Copy puts the table on the clipboard as tab-separated text, no download.
+  let copied = null;
+  Object.defineProperty(window.navigator, 'clipboard', { value: { writeText: (t) => { copied = t; return Promise.resolve(); } }, configurable: true });
+  delete window.ClipboardItem;
+  bar.querySelector('button[data-fmt="copy"]').click();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.strictEqual(copied, 'SID\tName\nIDD1\tAlice, A\nTotal\t1', 'Copy should put header, body and total rows on the clipboard as TSV');
 
   // paint() (a real app.js function) auto-injects a chart export bar (PNG +
   // copy) into the chart's .chart-wrap, and must not duplicate it on repaint
