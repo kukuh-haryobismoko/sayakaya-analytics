@@ -10,7 +10,7 @@ import { Buffer } from 'node:buffer';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours, fixed — no refresh-on-activity.
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, fixed — no refresh-on-activity.
 const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
 export const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days — an invite email sits unread longer than a reset request
 
