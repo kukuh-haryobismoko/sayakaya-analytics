@@ -130,7 +130,7 @@ export async function sendInviteEmail({ to, activateUrl }: {
 // Confirms whoever is setting up an automated send actually controls the
 // confirmation email address before the schedule is created — dashboard-staff
 // email, so (like the password reset above) no APERD/regulatory footer.
-const KIND_LABEL: Record<string, string> = { statement: 'Send statement', fund_performance: 'Send fund performance' };
+const KIND_LABEL: Record<string, string> = { statement: 'Send e-statement & portfolio', fund_performance: 'Send fund performance' };
 export async function sendScheduleOtpEmail({ to, code, kind }: { to: string; code: string; kind: string }): Promise<void> {
   const label = KIND_LABEL[kind] || 'a scheduled send';
   const text = `A ${label} schedule is being set up on Sayakaya Analytics.\n\nConfirmation code: ${code}\n\nThis code expires in 10 minutes. If you didn't request this, you can ignore this email — no schedule will be created without it.`;

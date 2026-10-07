@@ -14,7 +14,9 @@ import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 import * as Mail from './mail.ts';
 import * as Sched from './schedules.ts';
-import { pivotPerformanceByType, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM } from './report-helpers.ts';
+import {
+  pivotPerformanceByType, normalizeFundFilter, fundScopeLabel, buildFundPerformancePdf, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM,
+} from './report-helpers.ts';
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -544,13 +546,13 @@ on('GET', '/api/funds/top', requireTab('overview', async (_req, _params, url) =>
   const q = Q.largestFundsAum(qp(url, 'groupBy') || 'fund', date, exclude);
   return json(await runQuery(q.sql, q.params));
 }));
-// Shared by Overview, Performance, and Users transactions (fund filter) — allow any.
-on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance', 'users-tx'], async (_req, _params, url) => {
+// Shared by Overview, Performance, Users transactions (fund filter), and Send fund performance (fund picker) — allow any.
+on('GET', '/api/funds/types', requireAnyTab(['overview', 'performance', 'users-tx', 'send-fund-performance'], async (_req, _params, url) => {
   const q = Q.fundTypes(parseFundIds(url));
   return json(await runQuery(q.sql, q.params));
 }));
-// Shared by Overview (fund-filter dropdown), Performance (trend picker), and Users transactions (fund filter).
-on('GET', '/api/funds/list', requireAnyTab(['overview', 'performance', 'users-tx'], async (_req, _params, url) => {
+// Shared by Overview (fund-filter dropdown), Performance (trend picker), Users transactions (fund filter), and Send fund performance (fund picker).
+on('GET', '/api/funds/list', requireAnyTab(['overview', 'performance', 'users-tx', 'send-fund-performance'], async (_req, _params, url) => {
   const q = Q.fundList(qp(url, 'type'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -1955,11 +1957,14 @@ on('POST', '/api/fund-performance/email', requireTab('send-fund-performance', as
 
   const username = user!.username;
   const asOf = body.asOf as string | undefined;
-  const q = Q.productPerformanceDetail(asOf);
-  const detail = await runQuery(q.sql, q.params);
-  const sheets = pivotPerformanceByType(detail);
-  const buf = await fundPerformanceReport(sheets, { username });
-  const attachments = [{ filename: `Reksa_Dana_Update${asOf ? `_${asOf}` : ''}.pdf`, content: new Uint8Array(buf) }];
+  const fundFilter = normalizeFundFilter(body.fundFilter);
+  let buf: Uint8Array;
+  try {
+    buf = await buildFundPerformancePdf({ asOf, fundFilter, username });
+  } catch (e) {
+    return json({ error: (e as Error).message }, 400);
+  }
+  const attachments = [{ filename: `Reksa_Dana_Update${asOf ? `_${asOf}` : ''}.pdf`, content: buf }];
 
   const subject = body.subject as string | undefined;
   const emailBody = body.body as string | undefined;
@@ -1971,7 +1976,7 @@ on('POST', '/api/fund-performance/email', requireTab('send-fund-performance', as
   results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));
 
   await A.logEvent(user!.id, username, 'email_fund_performance',
-    `fund-performance to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
+    `fund-performance (${fundScopeLabel(fundFilter)}) to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
 
   if (!sent.length) return json({ error: 'All sends failed. Check the SMTP configuration.' }, 502);
   return json({ ok: true, sent, failed });
@@ -2032,6 +2037,7 @@ on('POST', '/api/schedules/otp/request', requireScheduleKindTab(async (req, _par
   const otpId = await Sched.requestOtp({
     kind, recipientType, recipientEmail: b.recipientEmail, recipientList: b.recipientList,
     sendPortfolio, sendStatement, subject: b.subject, body: b.body,
+    fundFilter: kind === 'fund_performance' ? normalizeFundFilter(b.fundFilter) : null,
     frequency, dayOfWeek: b.dayOfWeek, dayOfMonth: b.dayOfMonth, runTime: b.runTime,
     endDate: b.endDate, confirmationEmail: b.confirmationEmail,
     userId: user!.id, username: user!.username,
@@ -2133,7 +2139,8 @@ on('PATCH', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-pe
   const body = await bodyOf(req);
   const status = body.status as string;
   if (status !== 'active' && status !== 'paused') return json({ error: 'status must be "active" or "paused".' }, 400);
-  const job = await Sched.setJobStatus(params.id, status);
+  const job = status === 'active' ? await Sched.resumeJob(params.id) : await Sched.setJobStatus(params.id, status);
+  if (!job) return json({ error: 'Schedule not found.' }, 404);
   await A.logEvent(user!.id, user!.username, 'schedule_update', `${status === 'paused' ? 'paused' : 'resumed'} ${job.kind} schedule ${job.id}`);
   return json({ ok: true, job });
 }));

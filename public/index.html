@@ -212,7 +212,7 @@
           <button class="nav-link" data-tab="sinvest-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg></span>SInvest transactions</button>
           <button class="nav-link" data-tab="remisier-tx"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg></span>Remisier transactions</button>
           <button class="nav-link" data-tab="reconciliation"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calculator"></use></svg></span>Reconciliation</button>
-          <button class="nav-link" data-tab="send-statement"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Send statement</button>
+          <button class="nav-link" data-tab="send-statement"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Send e-statement &amp; portfolio</button>
           <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Send fund performance</button>
         </div>
         <div class="nav-group" data-group="revenue">
@@ -295,7 +295,7 @@
     <!-- USER PORTFOLIO -->
     <section id="portfolio" class="view">
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, email, or phone number. Use * as a wildcard, e.g. budi*santoso.</span></div>
         <div class="ask-bar">
           <input id="pfSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
           <button id="pfSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
@@ -393,7 +393,7 @@
          (PWC) on purpose — this is a sending tool, not a lookup dashboard. -->
     <section id="send-statement" class="view">
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, email, or phone number. Use * as a wildcard, e.g. budi*santoso.</span></div>
         <div class="ask-bar">
           <input id="ssSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
           <button id="ssSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
@@ -441,9 +441,18 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2><span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-package"></use></svg></span> <span data-i18n="ss_batch_title">Batch send</span></h2><span class="hint" data-i18n="ss_batch_hint">Send the same portfolio/e-statement documents to multiple investors at once — enter one email or SID per line, or comma-separated.</span></div>
-        <div class="field-card" style="margin-top:8px">
-          <label class="field-card-top" for="ssBatchInput"><span data-i18n="ss_batch_label">Emails or SIDs</span></label>
+        <div class="panel-head"><h2><span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-package"></use></svg></span> <span data-i18n="ss_batch_title">Batch send</span></h2><span class="hint" data-i18n="ss_batch_hint">Send the same documents to many investors. Search by name (use * as a wildcard, e.g. budi*santoso), SID, email, or phone number, then add each investor. You can also paste emails or SIDs below.</span></div>
+        <div class="ask-bar">
+          <input id="ssBatchSearchInput" type="text" autocomplete="off" aria-label="Search investors" data-i18n-placeholder="common_recipient_search_ph" placeholder="Name, SID, email, or phone" />
+          <button id="ssBatchSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
+        </div>
+        <div id="ssBatchResults" class="table-wrap"></div>
+        <div style="margin-top:16px">
+          <div class="field-card-top" style="margin-bottom:8px"><span data-i18n="ss_batch_picked_label">Picked investors</span> (<span id="ssBatchPickedCount">0</span>)</div>
+          <div id="ssBatchPickedList" class="chip-row"></div>
+        </div>
+        <div class="field-card" style="margin-top:16px">
+          <label class="field-card-top" for="ssBatchInput"><span data-i18n="ss_batch_label">Or paste emails or SIDs (one per line, or comma-separated)</span></label>
           <textarea id="ssBatchInput" rows="4" class="field-card-input" style="resize:vertical" placeholder="SID001, SID002&#10;jane@example.com"></textarea>
         </div>
         <div class="field-card-row" style="margin-top:16px">
@@ -631,12 +640,12 @@
 
     <!-- SEND FUND PERFORMANCE — broadcast the Reksa Dana
          Update PDF to a picked or pasted list of emails. Separate tool from
-         Send statement, which is scoped to one investor at a time. -->
+         Send e-statement & portfolio, which is scoped to each investor's own documents. -->
     <section id="send-fund-performance" class="view">
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="fpe_recipients_title">Recipients</h2><span class="hint" data-i18n="fpe_recipients_hint">Search registered users to add their email, or paste a list below — either or both.</span></div>
+        <div class="panel-head"><h2 data-i18n="fpe_recipients_title">Recipients</h2><span class="hint" data-i18n="fpe_recipients_hint">Search by name (use * as a wildcard, e.g. budi*santoso), SID, email, or phone number, then add each person. You can also paste a list of emails below.</span></div>
         <div class="ask-bar">
-          <input id="fpeSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
+          <input id="fpeSearchInput" type="text" autocomplete="off" aria-label="Search registered users" data-i18n-placeholder="common_recipient_search_ph" placeholder="Name, SID, email, or phone" />
           <button id="fpeSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
         </div>
         <div id="fpeResults" class="table-wrap"></div>
@@ -656,13 +665,26 @@
         <div class="panel-head"><h2 data-i18n="fpe_report_title">Fund performance report</h2></div>
         <div class="field-card-row">
           <div class="field-card">
-            <label class="field-card-top"><span data-i18n="perf_as_of">NAV as of</span></label>
+            <label class="field-card-top" for="fpeFundScope" data-i18n="fpe_scope_label">Funds in the report</label>
+            <select id="fpeFundScope" class="field-card-input">
+              <option value="all" data-i18n="fpe_scope_all">All funds</option>
+              <option value="types" data-i18n="fpe_scope_types">By category</option>
+              <option value="funds" data-i18n="fpe_scope_funds">Pick funds</option>
+            </select>
+          </div>
+          <div class="field-card">
+            <label class="field-card-top" for="fpeAsOf"><span data-i18n="perf_as_of">NAV as of</span></label>
             <input type="date" id="fpeAsOf" class="field-card-input" />
           </div>
         </div>
+        <div id="fpeFundScopeTypes" class="fund-pick hidden" role="group" aria-label="Fund categories"></div>
+        <div id="fpeFundScopeFunds" class="hidden">
+          <input type="search" id="fpeFundScopeFilter" class="fund-pick-filter" aria-label="Filter funds" data-i18n-placeholder="fpe_scope_filter_ph" placeholder="Filter funds by name" />
+          <div id="fpeFundScopeFundList" class="fund-pick" role="group" aria-label="Funds"></div>
+        </div>
         <div class="callout" style="margin-top:14px">
           <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-file"></use></svg></span>
-          <span data-i18n="fpe_hint">Attaches the Reksa Dana Update PDF (all fund types, NAV as of the date above) to one email per recipient.</span>
+          <span data-i18n="fpe_hint">Attaches the Reksa Dana Update PDF (the funds chosen above, NAV as of the date picked) to one email per recipient.</span>
         </div>
         <div class="exp" style="margin-top:16px">
           <button class="btn-primary lg" id="fpeComposeBtn"><span data-i18n="ss_compose">Compose email…</span> <span aria-hidden="true">→</span></button>
@@ -728,6 +750,20 @@
           <div class="callout hidden" id="fpeSchedCountPreview" style="margin-top:12px">
             <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>
             <span id="fpeSchedCountPreviewText"></span>
+          </div>
+
+          <div class="field-card" style="margin-top:16px">
+            <label class="field-card-top" for="fpeSchedFundScope" data-i18n="fpe_scope_label">Funds in the report</label>
+            <select id="fpeSchedFundScope" class="field-card-input">
+              <option value="all" data-i18n="fpe_scope_all">All funds</option>
+              <option value="types" data-i18n="fpe_scope_types">By category</option>
+              <option value="funds" data-i18n="fpe_scope_funds">Pick funds</option>
+            </select>
+          </div>
+          <div id="fpeSchedFundScopeTypes" class="fund-pick hidden" role="group" aria-label="Fund categories"></div>
+          <div id="fpeSchedFundScopeFunds" class="hidden">
+            <input type="search" id="fpeSchedFundScopeFilter" class="fund-pick-filter" aria-label="Filter funds" data-i18n-placeholder="fpe_scope_filter_ph" placeholder="Filter funds by name" />
+            <div id="fpeSchedFundScopeFundList" class="fund-pick" role="group" aria-label="Funds"></div>
           </div>
 
           <div class="field-card-row" style="margin-top:16px">
@@ -911,7 +947,7 @@
     <!-- PORTFOLIO (FIX) — same as PWC above, sourced from mi_fee_logs.portfolio_fix -->
     <section id="portfolio-fix" class="view">
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, email, or phone number. Use * as a wildcard, e.g. budi*santoso.</span></div>
         <div class="ask-bar">
           <input id="pfxSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
           <button id="pfxSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
@@ -1006,7 +1042,7 @@
     <!-- PORTFOLIO (TX) — live holdings, avg buy price from the transaction ledger, no as-of-date -->
     <section id="portfolio-tx" class="view">
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, email, or phone number. Use * as a wildcard, e.g. budi*santoso.</span></div>
         <div class="ask-bar">
           <input id="ptxSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
           <button id="ptxSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
@@ -1101,7 +1137,7 @@
     <!-- PORTFOLIO (SINVEST) — same as Portfolio (TX), sourced from the sinvest.trx_history custodian feed -->
     <section id="portfolio-sinvest" class="view">
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, email, or phone number. Use * as a wildcard, e.g. budi*santoso.</span></div>
         <div class="ask-bar">
           <input id="psiSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
           <button id="psiSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
@@ -1196,7 +1232,7 @@
     <!-- PORTFOLIO EXPLORER (goal_snapshots) -->
     <section id="portfolio-explorer" class="view">
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, or email.</span></div>
+        <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, email, or phone number. Use * as a wildcard, e.g. budi*santoso.</span></div>
         <div class="ask-bar">
           <input id="peSearchInput" type="text" autocomplete="off" data-i18n-placeholder="common_sid_ph" placeholder="e.g. SID code" />
           <button id="peSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
@@ -2826,7 +2862,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Bulk export</h3>
-          <p data-i18n="docs_bulk_export_desc">Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box — add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM, SID, name, email, phone, referrer_code, and sales_code for the current list, before you spend an export on it — that contact detail is shown here only, never written into the export files themselves. Once the list looks right, export it to CSV, Excel, or PDF: holdings only, same as Send statement's portfolio send — no fund-performance pages, since this is a list of investors' holdings, not a full fund report. Combined mode makes one file (Excel puts one sheet per investor, PDF one page per investor); separate mode makes one file per investor and bundles them into a single .zip download. Capped at 50 investors per export.</p>
+          <p data-i18n="docs_bulk_export_desc">Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box — add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM, SID, name, email, phone, referrer_code, and sales_code for the current list, before you spend an export on it — that contact detail is shown here only, never written into the export files themselves. Once the list looks right, export it to CSV, Excel, or PDF: holdings only, same as Send e-statement &amp; portfolio's portfolio send — no fund-performance pages, since this is a list of investors' holdings, not a full fund report. Combined mode makes one file (Excel puts one sheet per investor, PDF one page per investor); separate mode makes one file per investor and bundles them into a single .zip download. Capped at 50 investors per export.</p>
         </div>
       </div>
 
@@ -2849,12 +2885,12 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_reconciliation_desc">A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.</p>
         </div>
         <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Send statement</h3>
-          <p data-i18n="docs_send_statement_desc">Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, and/or their monthly transaction e-statement for a chosen month — either or both, in one email. The compose step shows an editable subject/body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's own date of birth on file (DDMMYYYY) as its open password — left unlocked if we have no birthdate for them — and the default letter tells them the password format. The Batch send box below sends the same documents (same portfolio date/e-statement month) to many investors at once — paste a list of emails and/or SIDs (one per line, or comma-separated), and it looks each one up and emails whichever ones it finds; anything not matched to an investor is reported back, not silently skipped. The "+ New schedule" button turns this into a recurring send (daily/weekly/monthly, at a chosen WIB time) instead of a one-off — creating one requires a one-time code emailed to whoever sets it up, and by default it runs indefinitely, but an optional end date can be set so it stops itself after its last scheduled send. Every scheduled send is logged in the same history as manual sends.</p>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Send e-statement &amp; portfolio</h3>
+          <p data-i18n="docs_send_statement_desc">Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, their monthly transaction e-statement for a chosen month, or both in one email. The compose step shows an editable subject and body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's date of birth on file (DDMMYYYY) as its open password, or left unlocked if we have no birthdate for them, and the default letter tells them the password format. Batch send sends the same documents to many investors at once: search by name (* works as a wildcard, e.g. budi*santoso), SID, email, or phone number and add investors one by one, and/or paste a list of emails or SIDs. Anything that doesn't match an investor is reported back, not silently skipped. "+ New schedule" turns this into a recurring send (daily, weekly, or monthly at a chosen WIB time) of the portfolio, the e-statement, or both. Creating a schedule needs a one-time code emailed to whoever sets it up. It runs until an optional end date. Resuming a paused schedule sends anything that came due while it was paused right away and refreshes its next run date. Every scheduled send is logged in the same history as manual sends.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Send fund performance</h3>
-          <p data-i18n="docs_send_fund_performance_desc">Broadcasts the "Reksa Dana Update" PDF (all fund types, NAV as of a chosen date) to a list of email addresses — search registered users to add their email, and/or paste a list of emails directly (one per line, or comma-separated). Sends one email per recipient, so one bad address doesn't block the rest. Separate tool from Send statement, which is scoped to one investor's own documents; this one can go to any list of emails, investor or not. Has its own send-history log, same as Send statement, and the same "+ New schedule" recurring/end-date option.</p>
+          <p data-i18n="docs_send_fund_performance_desc">Emails the "Reksa Dana Update" PDF to a list of people. Choose which funds the report covers: all funds, one or more fund categories, or specific funds, plus the NAV date. Add recipients by searching name (* works as a wildcard), SID, email, or phone number and adding them one by one, and/or paste a list of emails. Each recipient gets their own email, so one bad address doesn't block the rest. Unlike Send e-statement &amp; portfolio, this can go to any email, investor or not. It has its own send history, and "+ New schedule" sets up a recurring send with the same fund choice. Resuming a paused schedule sends anything that came due while it was paused right away and refreshes its next run date.</p>
         </div>
       </div>
 

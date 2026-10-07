@@ -20,7 +20,9 @@ const SHEETS = require('./sheets');
 const Mail = require('./mail');
 const Auth = require('./auth');
 const Sched = require('./schedules');
-const { pivotPerformanceByType, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM } = require('./report-helpers');
+const {
+  pivotPerformanceByType, normalizeFundFilter, fundScopeLabel, buildFundPerformancePdf, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM,
+} = require('./report-helpers');
 
 // Every export `source` maps to exactly one tab, so a single permission check
 // at the top of /api/export covers all of them (see requireTab below for the
@@ -453,9 +455,10 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.largestFundsAum(req.query.groupBy, date, exclude);
     res.json(await runQuery(q.sql, q.params));
   }));
-  // Shared by Overview, Performance, and Users transactions (fund filter) — allow any.
+  // Shared by Overview, Performance, Users transactions (fund filter), and
+  // Send fund performance (fund picker) — allow any.
   const requireOverviewOrPerformance = (req, res, next) => {
-    if (Auth.userCan(req.user, 'overview') || Auth.userCan(req.user, 'performance') || Auth.userCan(req.user, 'users-tx')) return next();
+    if (['overview', 'performance', 'users-tx', 'send-fund-performance'].some((t) => Auth.userCan(req.user, t))) return next();
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/funds/types', requireOverviewOrPerformance, handler(async (req, res) => {
@@ -1805,16 +1808,19 @@ function createApp({ serveStatic = true } = {}) {
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   app.post('/api/fund-performance/email', requireTab('send-fund-performance'), handler(async (req, res) => {
     const { to, subject, body, asOf } = req.body || {};
+    const fundFilter = normalizeFundFilter(req.body?.fundFilter);
     const recipients = [...new Set((Array.isArray(to) ? to : []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
     if (!recipients.length) return res.status(400).json({ error: 'At least one recipient email is required.' });
     const bad = recipients.find((e) => !EMAIL_RE.test(e));
     if (bad) return res.status(400).json({ error: `Invalid email address: ${bad}` });
 
     const username = req.user.username;
-    const q = Q.productPerformanceDetail(asOf);
-    const detail = await runQuery(q.sql, q.params);
-    const sheets = pivotPerformanceByType(detail);
-    const buf = await PDF.fundPerformanceReport(sheets, { username });
+    let buf;
+    try {
+      buf = await buildFundPerformancePdf({ asOf, fundFilter, username });
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
     const attachments = [{ filename: `Reksa_Dana_Update${asOf ? `_${asOf}` : ''}.pdf`, content: buf }];
 
     const senderEmail = process.env.SMTP_FROM_FUND_PERFORMANCE || 'hi@sayakaya.id';
@@ -1825,7 +1831,7 @@ function createApp({ serveStatic = true } = {}) {
     results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));
 
     await Auth.logEvent(req.user.id, username, 'email_fund_performance',
-      `fund-performance to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
+      `fund-performance (${fundScopeLabel(fundFilter)}) to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
 
     if (!sent.length) return res.status(502).json({ error: 'All sends failed. Check the SMTP configuration.' });
     res.json({ ok: true, sent, failed });
@@ -1882,6 +1888,7 @@ function createApp({ serveStatic = true } = {}) {
 
     const otpId = await Sched.requestOtp({
       kind, recipientType, recipientEmail, recipientList, sendPortfolio, sendStatement,
+      fundFilter: kind === 'fund_performance' ? normalizeFundFilter(req.body.fundFilter) : null,
       subject, body, frequency, dayOfWeek, dayOfMonth, runTime, endDate, confirmationEmail,
       userId: req.user.id, username: req.user.username,
     });
@@ -1979,7 +1986,8 @@ function createApp({ serveStatic = true } = {}) {
   app.patch('/api/schedules/:id', requireEitherScheduleTab, handler(async (req, res) => {
     const { status } = req.body || {};
     if (status !== 'active' && status !== 'paused') return res.status(400).json({ error: 'status must be "active" or "paused".' });
-    const job = await Sched.setJobStatus(req.params.id, status);
+    const job = status === 'active' ? await Sched.resumeJob(req.params.id) : await Sched.setJobStatus(req.params.id, status);
+    if (!job) return res.status(404).json({ error: 'Schedule not found.' });
     await Auth.logEvent(req.user.id, req.user.username, 'schedule_update', `${status === 'paused' ? 'paused' : 'resumed'} ${job.kind} schedule ${job.id}`);
     res.json({ ok: true, job });
   }));

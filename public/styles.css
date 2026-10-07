@@ -423,6 +423,23 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 }
 .field-card-input:focus { outline: none; }
 
+/* Send fund performance "Funds in the report": a scrollable checkbox list,
+   capped in height so 80+ funds don't push the Compose button off-screen. */
+.fund-pick {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px 14px;
+  max-height: 240px; overflow-y: auto; margin-top: 10px; padding: 8px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+}
+.fund-pick .ask-table-chk { color: var(--ink); min-height: 32px; cursor: pointer; }
+.fund-pick .ask-table-chk input { accent-color: var(--indigo); }
+.fund-pick .ask-table-chk small { color: var(--muted); }
+.fund-pick-filter {
+  width: 100%; margin-top: 10px; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px;
+  color: var(--ink); font: inherit; font-size: 14px; background: var(--input-bg);
+}
+.fund-pick-filter:focus { outline: 2px solid var(--amber); border-color: var(--amber); }
+@media (pointer: coarse) { .fund-pick .ask-table-chk { min-height: 44px; } }
+
 /* ---------- Callout: dashed, tinted informational box ---------- */
 .callout {
   display: flex; align-items: center; gap: 10px;

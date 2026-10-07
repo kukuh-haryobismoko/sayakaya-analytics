@@ -39,6 +39,36 @@ function pivotPerformanceByType(rows) {
   }));
 }
 
+// Which funds a fund-performance send covers: null = every fund, otherwise
+// { types: [...categories], fundIds: [...] } (a fund matching either is in).
+// Untrusted input (request body / stored schedule), so only string arrays
+// survive. A filter that names nothing is null, never "match nothing".
+function normalizeFundFilter(f) {
+  const list = (v) => (Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim()).filter(Boolean))].slice(0, 200) : []);
+  const types = list(f && f.types);
+  const fundIds = list(f && f.fundIds);
+  return types.length || fundIds.length ? { types, fundIds } : null;
+}
+
+// Short audit-log label for a (normalized) fund filter.
+function fundScopeLabel(f) {
+  if (!f) return 'all funds';
+  return [f.types.length && `categories: ${f.types.join(', ')}`, f.fundIds.length && `${f.fundIds.length} fund(s)`].filter(Boolean).join('; ');
+}
+
+// The Reksa Dana Update PDF, optionally narrowed by a fund filter — one
+// builder for the manual send and the scheduler. Throws when the filter
+// matches no fund (e.g. a picked fund was delisted) instead of emailing an
+// empty report.
+async function buildFundPerformancePdf({ asOf, fundFilter, username }) {
+  const q = Q.productPerformanceDetail(asOf);
+  let detail = await runQuery(q.sql, q.params);
+  const f = normalizeFundFilter(fundFilter);
+  if (f) detail = detail.filter((r) => f.types.includes(r.type) || f.fundIds.includes(String(PDF.val(r.fund_id))));
+  if (!detail.length) throw new Error('None of the chosen funds/categories has NAV data to report.');
+  return PDF.fundPerformanceReport(pivotPerformanceByType(detail), { username });
+}
+
 // PDF open-password: the investor's own birthdate as DDMMYYYY. null when
 // there's no birthdate on file, so the caller skips encrypting the PDF.
 function birthdatePassword(birthdate) {
@@ -137,6 +167,9 @@ function previousMonthYYYYMM(from = new Date()) {
 
 module.exports = {
   pivotPerformanceByType,
+  normalizeFundFilter,
+  fundScopeLabel,
+  buildFundPerformancePdf,
   birthdatePassword,
   buildStatementAttachments,
   aggregateBulkHoldings,

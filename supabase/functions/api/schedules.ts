@@ -9,10 +9,10 @@
 import crypto from 'node:crypto';
 import { runQuery } from './bigquery.ts';
 import * as Q from './queries.ts';
-import { fundPerformanceReport, val } from './pdf.ts';
+import { val } from './pdf.ts';
 import * as Mail from './mail.ts';
 import { logEvent } from './auth.ts';
-import { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } from './report-helpers.ts';
+import { buildFundPerformancePdf, fundScopeLabel, buildStatementAttachments, previousMonthYYYYMM, type FundFilter } from './report-helpers.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -35,6 +35,7 @@ export interface ScheduledJob {
   recipient_list: string[] | null;
   send_portfolio: boolean;
   send_statement: boolean;
+  fund_filter: FundFilter | null;
   subject: string | null;
   body: string | null;
   frequency: 'daily' | 'weekly' | 'monthly_last_day' | 'monthly_day';
@@ -213,6 +214,7 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
       recipient_list: p.recipientList && p.recipientList.length ? p.recipientList : null,
       send_portfolio: !!p.sendPortfolio,
       send_statement: !!p.sendStatement,
+      fund_filter: p.fundFilter || null, // kind = 'fund_performance'; null = all funds
       subject: p.subject || null,
       body: p.body || null,
       frequency: p.frequency,
@@ -246,6 +248,21 @@ export async function getJob(id: string): Promise<ScheduledJob | null> {
 // deno-lint-ignore no-explicit-any
 export function listQueue(jobId: string): Promise<any[]> {
   return rest(`/dashboard_schedule_queue?job_id=eq.${jobId}&select=*&order=created_at.desc`);
+}
+
+// Resume = paused -> active, then run this one job's tick right away instead
+// of waiting for the next cron ping (GitHub's schedule fires hours apart). A
+// run missed while paused goes out once now, and next_run_at moves to the next
+// future occurrence (or the job ends, if that falls past its end date). Only
+// paused jobs flip: an ended job has no next run left to resume.
+export async function resumeJob(id: string): Promise<ScheduledJob | null> {
+  const resumed = await rest(`/dashboard_scheduled_jobs?id=eq.${id}&status=eq.paused`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ status: 'active' }),
+  });
+  if (resumed.length) await runDueJobs(id);
+  return getJob(id);
 }
 
 export async function setJobStatus(id: string, status: string): Promise<ScheduledJob> {
@@ -301,9 +318,7 @@ async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sen
     try {
       if (job.kind === 'fund_performance') {
         if (!fundPerfBuffer) {
-          const q = Q.productPerformanceDetail();
-          const detail = await runQuery(q.sql, q.params);
-          fundPerfBuffer = new Uint8Array(await fundPerformanceReport(pivotPerformanceByType(detail), { username: job.created_by_username || 'schedule' }));
+          fundPerfBuffer = await buildFundPerformancePdf({ fundFilter: job.fund_filter, username: job.created_by_username || 'schedule' });
         }
         await Mail.sendStatementEmail({
           to: row.recipient_email, subject: job.subject ?? undefined, body: job.body ?? undefined,
@@ -311,7 +326,7 @@ async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sen
           from: senderEmail,
         });
         await logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_fund_performance',
-          `scheduled fund-performance to ${row.recipient_email}`);
+          `scheduled fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
       } else {
         const c = Q.userContact(row.recipient_user_id);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
@@ -341,9 +356,11 @@ async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sen
   return { sent, failed };
 }
 
-export async function runDueJobs(): Promise<{ jobsClaimed: number; recipientsEnqueued: number; sent: number; failed: number }> {
+// jobId (optional): limit the tick to one job — used by resumeJob().
+export async function runDueJobs(jobId?: string): Promise<{ jobsClaimed: number; recipientsEnqueued: number; sent: number; failed: number }> {
   const nowIso = new Date().toISOString();
-  const due: ScheduledJob[] = await rest(`/dashboard_scheduled_jobs?status=eq.active&next_run_at=lte.${nowIso}&select=*&order=next_run_at.asc&limit=${MAX_JOBS_ENQUEUED_PER_TICK}`);
+  const only = jobId ? `&id=eq.${jobId}` : '';
+  const due: ScheduledJob[] = await rest(`/dashboard_scheduled_jobs?status=eq.active&next_run_at=lte.${nowIso}${only}&select=*&order=next_run_at.asc&limit=${MAX_JOBS_ENQUEUED_PER_TICK}`);
 
   let enqueued = 0;
   for (const job of due) {
@@ -376,7 +393,9 @@ export async function runDueJobs(): Promise<{ jobsClaimed: number; recipientsEnq
     enqueued += await enqueueJob(job);
   }
 
-  const activeJobs: ScheduledJob[] = await rest('/dashboard_scheduled_jobs?status=eq.active&select=*');
+  // 'ended' too: a job's last run flips it to ended at claim time, above, and
+  // its queue still has to drain. Paused jobs are skipped until resumed.
+  const activeJobs: ScheduledJob[] = await rest(`/dashboard_scheduled_jobs?status=in.(active,ended)${only}&select=*`);
   let sent = 0, failed = 0;
   for (const job of activeJobs) {
     const r = await drainQueueForJob(job, DRAIN_LIMIT[job.kind] || 25);

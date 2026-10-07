@@ -466,7 +466,7 @@ export const productPerformanceDetail = (asOfDate?: string): Query => ({
       FROM periods p JOIN nav n ON n.product_id = p.product_id
       GROUP BY p.product_id, p.name, p.type, p.period, p.ord, p.latest_snap
     )
-    SELECT s.type, s.name, s.period, s.ord,
+    SELECT s.product_id AS fund_id, s.type, s.name, s.period, s.ord,
       ROUND(SAFE_DIVIDE(s.latest_snap.v - s.asof_snap.v, s.asof_snap.v) * 100, 2) AS pct_change,
       s.latest_snap.v AS latest_nav, s.asof_snap.v AS base_nav, s.latest_snap.d AS latest_nav_date,
       f.ipo_date
@@ -557,16 +557,26 @@ export function fundNavTrend({ type, period = '1Y', limit = 5, funds }: FundNavT
 const BONUS_PORT = '`sayakaya.main.bonus_portfolios`';
 const USER_PROFILES = '`sayakaya.main.user_profiles`';
 
-// SID search box: type a SID code (or name/email) to find the user to print.
-export const userSearch = (q?: string): Query => ({
-  sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.ifua_code AS ifua,
-      up.name, u.email
-    FROM ${USERS} u
-    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-    WHERE LOWER(u.sid_code) LIKE @q OR LOWER(up.name) LIKE @q OR LOWER(u.email) LIKE @q
-    ORDER BY u.sid_code LIMIT 20`,
-  params: { q: `%${String(q || '').trim().toLowerCase()}%` },
-});
+// Investor search box (Portfolio tabs, both Send tabs): SID, name, email, or
+// phone. `*` is a wildcard ("budi*santoso"); otherwise a contains-match.
+// Phones are stored as 62xxxxxxxxx digits, so a digits-only query drops a
+// leading 0/62 first: 0812…, +62 812… and 812… all find the same number.
+export const userSearch = (q?: string): Query => {
+  const s = String(q || '').trim().toLowerCase();
+  const params: Record<string, string> = { q: `%${s.replace(/[\\%_]/g, '\\$&').replace(/\*/g, '%')}%` };
+  const digits = s.replace(/[\s+\-().]/g, '');
+  if (/^\d{5,}$/.test(digits)) params.phone = `%${digits.replace(/^(62|0)/, '')}%`;
+  return {
+    sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.ifua_code AS ifua,
+        up.name, u.email, up.phone_number AS phone
+      FROM ${USERS} u
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      WHERE LOWER(u.sid_code) LIKE @q OR LOWER(up.name) LIKE @q OR LOWER(u.email) LIKE @q
+        ${params.phone ? "OR REGEXP_REPLACE(up.phone_number, r'\\D', '') LIKE @phone" : ''}
+      ORDER BY u.sid_code LIMIT 20`,
+    params,
+  };
+};
 
 // Exact-match resolver for batch sends: each entry in `identifiers` is either
 // a SID code or an email, matched case-insensitively. Deliberately not a LIKE

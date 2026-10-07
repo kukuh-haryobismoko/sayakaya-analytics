@@ -7,7 +7,7 @@
 
 import { runQuery } from './bigquery.ts';
 import * as Q from './queries.ts';
-import { portfolioReport, transactionStatement, val } from './pdf.ts';
+import { portfolioReport, transactionStatement, fundPerformanceReport, val } from './pdf.ts';
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
 
@@ -34,6 +34,38 @@ export function pivotPerformanceByType(rows: Record<string, unknown>[]) {
     }),
     pctCols: PERF_PERIODS,
   }));
+}
+
+// Which funds a fund-performance send covers: null = every fund, otherwise
+// { types: [...categories], fundIds: [...] } (a fund matching either is in).
+// Untrusted input (request body / stored schedule), so only string arrays
+// survive. A filter that names nothing is null, never "match nothing".
+export interface FundFilter { types: string[]; fundIds: string[] }
+export function normalizeFundFilter(f: unknown): FundFilter | null {
+  const list = (v: unknown) => (Array.isArray(v) ? [...new Set(v.map((x) => String(x).trim()).filter(Boolean))].slice(0, 200) : []);
+  const o = (f || {}) as Record<string, unknown>;
+  const types = list(o.types);
+  const fundIds = list(o.fundIds);
+  return types.length || fundIds.length ? { types, fundIds } : null;
+}
+
+// Short audit-log label for a (normalized) fund filter.
+export function fundScopeLabel(f: FundFilter | null): string {
+  if (!f) return 'all funds';
+  return [f.types.length && `categories: ${f.types.join(', ')}`, f.fundIds.length && `${f.fundIds.length} fund(s)`].filter(Boolean).join('; ');
+}
+
+// The Reksa Dana Update PDF, optionally narrowed by a fund filter — one
+// builder for the manual send and the scheduler. Throws when the filter
+// matches no fund (e.g. a picked fund was delisted) instead of emailing an
+// empty report.
+export async function buildFundPerformancePdf({ asOf, fundFilter, username }: { asOf?: string; fundFilter?: unknown; username?: string | null }): Promise<Uint8Array> {
+  const q = Q.productPerformanceDetail(asOf);
+  let detail = await runQuery(q.sql, q.params);
+  const f = normalizeFundFilter(fundFilter);
+  if (f) detail = detail.filter((r) => f.types.includes(r.type as string) || f.fundIds.includes(String(val(r.fund_id))));
+  if (!detail.length) throw new Error('None of the chosen funds/categories has NAV data to report.');
+  return new Uint8Array(await fundPerformanceReport(pivotPerformanceByType(detail), { username: username || undefined }));
 }
 
 // PDF open-password: the investor's own birthdate as DDMMYYYY. null when

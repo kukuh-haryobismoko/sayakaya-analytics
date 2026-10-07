@@ -4098,9 +4098,62 @@ async function loadSsLog() {
   } catch (e) { $('#ssLogTable').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
-// ---- Send statement (batch): same portfolio/e-statement documents to a
-// pasted list of emails/SIDs, resolved server-side to investors (one email
-// per matching recipient — see /api/statement/email-batch). ----------------
+// ---- Send statement (batch): same portfolio/e-statement documents to
+// picked and/or pasted investors (emails/SIDs), resolved server-side (one
+// email per matching recipient — see /api/statement/email-batch). ----------
+
+// Search-and-pick list behind both Send tabs' bulk sends: search by name
+// (* wildcard), SID, email, or phone (see queries.js userSearch), then
+// "+ Add" one person at a time. Only people with an email on file can be
+// added, since every send goes to the email on file.
+function setupRecipientPicker(p) {
+  const picked = new Map(); // user_id -> { sid, name, email }
+  const el = (n) => $(`#${p}${n}`);
+
+  async function search() {
+    const q = el('SearchInput').value.trim();
+    if (!q) return;
+    el('Results').innerHTML = '<div class="loading">Searching…</div>';
+    try { renderResults(await api(`/api/users/search?q=${encodeURIComponent(q)}`)); }
+    catch (e) { el('Results').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+  }
+
+  function renderResults(rows) {
+    if (!rows.length) { el('Results').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+    const body = rows.map((r, i) => {
+      const action = val(r.email)
+        ? `<button type="button" class="btn-ghost picker-add-btn" data-i="${i}">+ Add</button>`
+        : '<span class="hint">No email</span>';
+      const cell = (v) => `<td>${escapeHtml(val(v) || 'n/a')}</td>`;
+      return `<tr>${cell(r.sid)}${cell(r.name)}${cell(r.email)}${cell(r.phone)}<td>${action}</td></tr>`;
+    }).join('');
+    el('Results').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>Phone</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+    $$(`#${p}Results .picker-add-btn`).forEach((btn) => btn.addEventListener('click', () => {
+      const r = rows[btn.dataset.i];
+      const id = String(val(r.user_id));
+      if (picked.has(id)) { toast('Already added.'); return; }
+      picked.set(id, { sid: val(r.sid) || '', name: val(r.name) || '', email: val(r.email) });
+      render();
+    }));
+  }
+
+  function render() {
+    el('PickedCount').textContent = picked.size;
+    el('PickedList').innerHTML = picked.size
+      ? [...picked].map(([id, u]) => {
+        const label = `${u.name || u.email}${u.sid ? ` · ${u.sid}` : ''}`;
+        return `<button type="button" class="chip" data-id="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(label)}">${escapeHtml(label)} ✕</button>`;
+      }).join('')
+      : '<span class="hint">None picked yet.</span>';
+    $$(`#${p}PickedList .chip`).forEach((c) => c.addEventListener('click', () => { picked.delete(c.dataset.id); render(); }));
+  }
+
+  el('SearchBtn').addEventListener('click', search);
+  el('SearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+  render();
+  return { list: () => [...picked.values()] };
+}
+let ssBatchPicker, fpePicker;
 
 // Splits on newlines/commas/semicolons — each entry is either a SID or an
 // email, so (unlike parsePastedEmails) nothing is filtered by an email regex.
@@ -4116,10 +4169,13 @@ function openSsBatchCompose() {
   const portfolioDate = $('#ssBatchPortfolioDate').value;
   const statementMonth = $('#ssBatchStatementMonth').value;
   if (sendStatement && !statementMonth) { toast('Pick a month for the transaction e-statement.'); return; }
-  ssBatchIdentifiers = parseBatchIdentifiers($('#ssBatchInput').value);
-  if (!ssBatchIdentifiers.length) { toast('Enter at least one email or SID.'); return; }
+  // A picked investor goes by SID (exact match server-side), or their email
+  // if they have no SID yet.
+  const picked = ssBatchPicker.list().map((u) => u.sid || u.email);
+  ssBatchIdentifiers = [...new Set([...picked, ...parseBatchIdentifiers($('#ssBatchInput').value)])];
+  if (!ssBatchIdentifiers.length) { toast('Add or paste at least one investor.'); return; }
   const { subject, body } = defaultStatementEmail({ sendPortfolio, portfolioDate, sendStatement, statementMonth });
-  $('#ssBatchEmailTo').textContent = `Will be matched against ${ssBatchIdentifiers.length} entered email/SID${ssBatchIdentifiers.length === 1 ? '' : 's'} and sent to each investor found.`;
+  $('#ssBatchEmailTo').textContent = `Will be matched against ${ssBatchIdentifiers.length} picked or pasted email/SID${ssBatchIdentifiers.length === 1 ? '' : 's'} and sent to each investor found.`;
   $('#ssBatchEmailSubject').value = subject;
   $('#ssBatchEmailBody').value = body;
   $('#ssBatchEmailModal').showModal();
@@ -4150,48 +4206,6 @@ async function sendSsBatchEmail() {
 // SEND FUND PERFORMANCE (broadcast the Reksa Dana Update PDF to a picked
 // or pasted list of emails). Separate tool from Send statement, which is
 // scoped to one investor's own portfolio/e-statement.
-async function searchFpeUsers() {
-  const q = $('#fpeSearchInput').value.trim();
-  if (!q) return;
-  $('#fpeResults').innerHTML = '<div class="loading">Searching…</div>';
-  try {
-    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
-    renderFpeResults(rows);
-  } catch (e) { $('#fpeResults').innerHTML = `<div class="empty">${e.message}</div>`; }
-}
-
-function renderFpeResults(rows) {
-  if (!rows.length) { $('#fpeResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
-  const body = rows.map((r) => {
-    const email = val(r.email) || '';
-    const action = email
-      ? `<button class="btn-ghost fpe-add-btn" data-email="${email}">+ Add</button>`
-      : '<span class="hint">No email</span>';
-    return `<tr><td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${email || 'n/a'}</td><td>${action}</td></tr>`;
-  }).join('');
-  $('#fpeResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
-  $$('#fpeResults .fpe-add-btn').forEach((btn) => btn.addEventListener('click', () => addFpeRecipient(btn.dataset.email)));
-}
-
-// Keyed by lowercased email so the same investor can't be added twice.
-let fpePicked = new Map();
-function addFpeRecipient(email) {
-  const key = email.toLowerCase();
-  if (fpePicked.has(key)) { toast('Already added.'); return; }
-  fpePicked.set(key, email);
-  renderFpePicked();
-}
-function renderFpePicked() {
-  $('#fpePickedCount').textContent = fpePicked.size;
-  $('#fpePickedList').innerHTML = fpePicked.size
-    ? [...fpePicked.entries()].map(([key, email]) => `<button type="button" class="chip" data-key="${key}">${email} ✕</button>`).join('')
-    : '<span class="hint">None picked yet.</span>';
-  $$('#fpePickedList .chip').forEach((c) => c.addEventListener('click', () => {
-    fpePicked.delete(c.dataset.key);
-    renderFpePicked();
-  }));
-}
-
 // Splits on newlines, commas, and semicolons so either a one-per-line paste
 // or a comma-separated list works; silently drops anything that isn't a
 // plausible email instead of blocking the whole paste on one typo.
@@ -4201,10 +4215,72 @@ function parsePastedEmails(text) {
     .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)))];
 }
 
+// "Funds in the report" (Send fund performance page + its schedule modal):
+// all funds, by category, or picked funds. The fund list loads on first use
+// and is shared by both. read() returns the API's fundFilter: null for all
+// funds, otherwise { types } or { fundIds }.
+let fpeFundsPromise = null;
+function setupFundScope(p) {
+  const el = (n) => $(`#${p}FundScope${n}`);
+  const chk = (value, label, sub) => `<label class="ask-table-chk"><input type="checkbox" value="${escapeHtml(value)}"> ${escapeHtml(label)}${sub ? ` <small>${escapeHtml(sub)}</small>` : ''}</label>`;
+  let loaded = false;
+
+  async function load() {
+    if (loaded) return;
+    el('Types').innerHTML = el('FundList').innerHTML = '<div class="loading">Loading funds…</div>';
+    try {
+      const funds = (await (fpeFundsPromise ||= api('/api/funds/list')))
+        .map((f) => ({ id: val(f.id), name: val(f.name) || val(f.id), type: val(f.type) || '(none)' }));
+      if (!funds.length) { el('Types').innerHTML = el('FundList').innerHTML = '<div class="empty">No active funds found.</div>'; return; }
+      el('Types').innerHTML = [...new Set(funds.map((f) => f.type))].sort().map((ty) => chk(ty, ty)).join('');
+      el('FundList').innerHTML = funds.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name))
+        .map((f) => chk(f.id, f.name, f.type)).join('');
+      loaded = true;
+    } catch (e) {
+      fpeFundsPromise = null; // next open retries instead of reusing the failure
+      el('Types').innerHTML = el('FundList').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+    }
+  }
+  function sync() {
+    const scope = el('').value;
+    el('Types').classList.toggle('hidden', scope !== 'types');
+    el('Funds').classList.toggle('hidden', scope !== 'funds');
+    if (scope !== 'all') load();
+  }
+  el('').addEventListener('change', sync);
+  el('Filter').addEventListener('input', () => {
+    const q = el('Filter').value.trim().toLowerCase();
+    $$(`#${p}FundScopeFundList label`).forEach((l) => l.classList.toggle('hidden', !!q && !l.textContent.toLowerCase().includes(q)));
+  });
+  return {
+    read() {
+      const scope = el('').value;
+      if (scope === 'all') return null;
+      const picked = $$(`#${p}FundScope${scope === 'types' ? 'Types' : 'FundList'} input:checked`).map((c) => c.value);
+      if (!picked.length) throw new Error(scope === 'types' ? 'Pick at least one fund category.' : 'Pick at least one fund.');
+      return scope === 'types' ? { types: picked } : { fundIds: picked };
+    },
+    reset() {
+      el('').value = 'all';
+      el('Filter').value = '';
+      $$(`#${p}FundScopeTypes input, #${p}FundScopeFundList input`).forEach((c) => { c.checked = false; });
+      $$(`#${p}FundScopeFundList label`).forEach((l) => l.classList.remove('hidden'));
+      sync();
+    },
+  };
+}
+let fpeScope, fpeSchedScope;
+function fundScopeSummary(f) {
+  if (!f) return 'all funds';
+  return f.types?.length ? f.types.join(', ') : `${f.fundIds.length} fund${f.fundIds.length === 1 ? '' : 's'}`;
+}
+
 let fpeRecipients = [];
+let fpeFundFilter = null;
 function openFpeCompose() {
   const pasted = parsePastedEmails($('#fpePasteEmails').value);
-  fpeRecipients = [...new Set([...fpePicked.keys(), ...pasted])];
+  try { fpeFundFilter = fpeScope.read(); } catch (e) { toast(e.message); return; }
+  fpeRecipients = [...new Set([...fpePicker.list().map((u) => u.email.toLowerCase()), ...pasted])];
   if (!fpeRecipients.length) { toast('Add at least one recipient.'); return; }
   $('#fpeEmailTo').textContent = `Will be sent to ${fpeRecipients.length} recipient${fpeRecipients.length === 1 ? '' : 's'}.`;
   const asOf = $('#fpeAsOf').value;
@@ -4220,6 +4296,7 @@ async function sendFpeEmail() {
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({
         to: fpeRecipients, subject: $('#fpeEmailSubject').value, body: $('#fpeEmailBody').value, asOf: $('#fpeAsOf').value,
+        fundFilter: fpeFundFilter,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -4287,7 +4364,7 @@ function renderSchedules(kind, rows) {
   const body = rows.map((r) => `<tr>
       <td>${escapeHtml(schedRecipientSummary(r))}</td>
       <td>${escapeHtml(schedFrequencySummary(r))}</td>
-      <td>${r.kind === 'statement' ? [r.send_portfolio && 'Portfolio', r.send_statement && 'E-statement'].filter(Boolean).join(' + ') : 'Fund performance'}</td>
+      <td>${r.kind === 'statement' ? [r.send_portfolio && 'Portfolio', r.send_statement && 'E-statement'].filter(Boolean).join(' + ') : `Fund performance (${escapeHtml(fundScopeSummary(r.fund_filter))})`}</td>
       <td>${r.status === 'active' ? 'Active' : r.status === 'ended' ? 'Ended' : 'Paused'}</td>
       <td>${r.end_date || 'n/a'}</td>
       <td>${r.next_run_at ? toJakartaTime(r.next_run_at) : 'n/a'}</td>
@@ -4296,7 +4373,7 @@ function renderSchedules(kind, rows) {
       <td>${escapeHtml(r.created_by_username || 'n/a')}</td>
       <td>
         <button type="button" class="btn-ghost sched-detail-btn" data-id="${r.id}">Detail</button>
-        <button type="button" class="btn-ghost sched-toggle-btn" data-id="${r.id}" data-status="${r.status}">${r.status === 'active' ? 'Pause' : 'Resume'}</button>
+        ${r.status === 'ended' ? '' : `<button type="button" class="btn-ghost sched-toggle-btn" data-id="${r.id}" data-status="${r.status}">${r.status === 'active' ? 'Pause' : 'Resume'}</button>`}
         <button type="button" class="btn-ghost sched-delete-btn" data-id="${r.id}">Delete</button>
       </td>
     </tr>`).join('');
@@ -4306,11 +4383,19 @@ function renderSchedules(kind, rows) {
   $$(`#${prefix}Table .sched-detail-btn`).forEach((btn) => btn.addEventListener('click', () => openSchedDetail(kind, btn.dataset.id)));
   $$(`#${prefix}Table .sched-toggle-btn`).forEach((btn) => btn.addEventListener('click', async () => {
     const pausing = btn.dataset.status === 'active';
-    if (!confirm(pausing ? 'Pause this schedule? It will stop sending until resumed.' : 'Resume this schedule?')) return;
+    if (!confirm(pausing
+      ? 'Pause this schedule? It will stop sending until resumed.'
+      : 'Resume this schedule? If a send came due while it was paused, it goes out now, then the next run date is refreshed.')) return;
+    // Resuming runs the job's due send before answering, so it can take a while.
+    btn.disabled = true;
+    btn.textContent = pausing ? 'Pausing…' : 'Resuming…';
     try {
-      await api(`/api/schedules/${btn.dataset.id}`, { method: 'PATCH', body: JSON.stringify({ status: pausing ? 'paused' : 'active' }) });
-      loadSchedules(kind);
+      const { job } = await api(`/api/schedules/${btn.dataset.id}`, { method: 'PATCH', body: JSON.stringify({ status: pausing ? 'paused' : 'active' }) });
+      if (pausing) toast('Schedule paused.');
+      else if (job.status === 'ended') toast('Schedule resumed and finished: its end date has passed.');
+      else toast(`Schedule resumed. Next run: ${job.next_run_at ? `${toJakartaTime(job.next_run_at)} WIB` : 'n/a'}.`);
     } catch (e) { toast(e.message); }
+    loadSchedules(kind);
   }));
   $$(`#${prefix}Table .sched-delete-btn`).forEach((btn) => btn.addEventListener('click', async () => {
     if (!confirm('Delete this schedule? This cannot be undone.')) return;
@@ -4380,6 +4465,7 @@ function schedResetModal(kind) {
     : 'Dear Investor,\n\nPlease find attached our latest fund performance update (Reksa Dana Update), issued by PT Sayakaya Lahir Batin.\n\nBest regards,\nPT Sayakaya Lahir Batin';
   schedEl(prefix, 'ConfirmEmail').value = '';
   if (kind === 'statement') { schedEl(prefix, 'SendPortfolio').checked = true; schedEl(prefix, 'SendStatement').checked = true; }
+  else fpeSchedScope.reset();
   schedUpdateFieldVisibility(kind);
 }
 
@@ -4457,6 +4543,8 @@ async function schedSendOtp(kind) {
     if (kind === 'statement') {
       payload.sendPortfolio = schedEl(prefix, 'SendPortfolio').checked;
       payload.sendStatement = schedEl(prefix, 'SendStatement').checked;
+    } else {
+      payload.fundFilter = fpeSchedScope.read();
     }
     const { otpId, recipientCount } = await api('/api/schedules/otp/request', { method: 'POST', body: JSON.stringify(payload) });
     schedOtpState = { kind, otpId };
@@ -5457,19 +5545,20 @@ function wire() {
   });
 
   // send statement (batch)
+  ssBatchPicker = setupRecipientPicker('ssBatch');
   $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
   $('#ssBatchEmailCancelBtn').addEventListener('click', () => $('#ssBatchEmailModal').close());
   $('#ssBatchEmailSendBtn').addEventListener('click', () => { $('#ssBatchEmailModal').close(); sendSsBatchEmail(); });
 
   // send fund performance
-  $('#fpeSearchBtn').addEventListener('click', searchFpeUsers);
-  $('#fpeSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchFpeUsers(); });
+  fpePicker = setupRecipientPicker('fpe');
+  fpeScope = setupFundScope('fpe');
+  fpeSchedScope = setupFundScope('fpeSched');
   $('#fpeLogRefresh').addEventListener('click', loadFpeLog);
   $('#fpeComposeBtn').addEventListener('click', openFpeCompose);
   $('#fpeEmailCancelBtn').addEventListener('click', () => $('#fpeEmailModal').close());
   $('#fpeEmailSendBtn').addEventListener('click', () => { $('#fpeEmailModal').close(); sendFpeEmail(); });
-  renderFpePicked();
 
   // scheduled/automated sending — same wiring shape for both tabs
   function wireSchedModal(kind) {

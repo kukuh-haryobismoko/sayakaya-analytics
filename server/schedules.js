@@ -30,7 +30,7 @@ const Q = require('./queries');
 const PDF = require('./pdf');
 const Mail = require('./mail');
 const Auth = require('./auth');
-const { pivotPerformanceByType, buildStatementAttachments, previousMonthYYYYMM } = require('./report-helpers');
+const { buildFundPerformancePdf, fundScopeLabel, buildStatementAttachments, previousMonthYYYYMM } = require('./report-helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -164,8 +164,8 @@ async function previewRecipientCount(spec) {
 
 // ---- OTP-gated schedule creation --------------------------------------------
 // payload: { kind, recipientType, recipientEmail, recipientList, sendPortfolio,
-//   sendStatement, subject, body, frequency, dayOfWeek, dayOfMonth, runTime,
-//   confirmationEmail, userId, username }
+//   sendStatement, fundFilter, subject, body, frequency, dayOfWeek, dayOfMonth,
+//   runTime, confirmationEmail, userId, username }
 async function requestOtp(payload) {
   if (!payload.confirmationEmail || !EMAIL_RE.test(payload.confirmationEmail)) {
     throw new Error('A valid confirmation email is required.');
@@ -214,6 +214,7 @@ async function confirmOtp(otpId, code) {
       recipient_list: p.recipientList && p.recipientList.length ? p.recipientList : null,
       send_portfolio: !!p.sendPortfolio,
       send_statement: !!p.sendStatement,
+      fund_filter: p.fundFilter || null, // kind = 'fund_performance'; null = all funds
       subject: p.subject || null,
       body: p.body || null,
       frequency: p.frequency,
@@ -246,6 +247,21 @@ async function getJob(id) {
 // the per-recipient breakdown behind the schedule detail view.
 function listQueue(jobId) {
   return rest(`/dashboard_schedule_queue?job_id=eq.${jobId}&select=*&order=created_at.desc`);
+}
+
+// Resume = paused -> active, then run this one job's tick right away instead
+// of waiting for the next cron ping (GitHub's schedule fires hours apart). A
+// run missed while paused goes out once now, and next_run_at moves to the next
+// future occurrence (or the job ends, if that falls past its end date). Only
+// paused jobs flip: an ended job has no next run left to resume.
+async function resumeJob(id) {
+  const resumed = await rest(`/dashboard_scheduled_jobs?id=eq.${id}&status=eq.paused`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ status: 'active' }),
+  });
+  if (resumed.length) await runDueJobs(id);
+  return getJob(id);
 }
 
 async function setJobStatus(id, status) {
@@ -307,9 +323,7 @@ async function drainQueueForJob(job, limit) {
     try {
       if (job.kind === 'fund_performance') {
         if (!fundPerfBuffer) {
-          const q = Q.productPerformanceDetail();
-          const detail = await runQuery(q.sql, q.params);
-          fundPerfBuffer = await PDF.fundPerformanceReport(pivotPerformanceByType(detail), { username: job.created_by_username || 'schedule' });
+          fundPerfBuffer = await buildFundPerformancePdf({ fundFilter: job.fund_filter, username: job.created_by_username || 'schedule' });
         }
         await Mail.sendStatementEmail({
           to: row.recipient_email, subject: job.subject, body: job.body,
@@ -317,7 +331,7 @@ async function drainQueueForJob(job, limit) {
           from: senderEmail,
         });
         await Auth.logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_fund_performance',
-          `scheduled fund-performance to ${row.recipient_email}`);
+          `scheduled fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
       } else {
         const c = Q.userContact(row.recipient_user_id);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
@@ -350,9 +364,11 @@ async function drainQueueForJob(job, limit) {
 // conditional PATCH below) so a job is never enqueued twice even if two
 // ticks overlap; (2) drain a bounded number of pending queue rows so
 // existing large jobs make steady progress across ticks.
-async function runDueJobs() {
+// jobId (optional): limit the tick to one job — used by resumeJob().
+async function runDueJobs(jobId) {
   const nowIso = new Date().toISOString();
-  const due = await rest(`/dashboard_scheduled_jobs?status=eq.active&next_run_at=lte.${nowIso}&select=*&order=next_run_at.asc&limit=${MAX_JOBS_ENQUEUED_PER_TICK}`);
+  const only = jobId ? `&id=eq.${jobId}` : '';
+  const due = await rest(`/dashboard_scheduled_jobs?status=eq.active&next_run_at=lte.${nowIso}${only}&select=*&order=next_run_at.asc&limit=${MAX_JOBS_ENQUEUED_PER_TICK}`);
 
   let enqueued = 0;
   for (const job of due) {
@@ -388,7 +404,9 @@ async function runDueJobs() {
     enqueued += await enqueueJob(job);
   }
 
-  const activeJobs = await rest('/dashboard_scheduled_jobs?status=eq.active&select=*');
+  // 'ended' too: a job's last run flips it to ended at claim time, above, and
+  // its queue still has to drain. Paused jobs are skipped until resumed.
+  const activeJobs = await rest(`/dashboard_scheduled_jobs?status=in.(active,ended)${only}&select=*`);
   let sent = 0, failed = 0;
   for (const job of activeJobs) {
     const r = await drainQueueForJob(job, DRAIN_LIMIT[job.kind] || 25);
@@ -408,6 +426,7 @@ module.exports = {
   getJob,
   listQueue,
   setJobStatus,
+  resumeJob,
   deleteJob,
   runDueJobs,
 };
