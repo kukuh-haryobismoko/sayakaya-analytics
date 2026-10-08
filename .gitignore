@@ -3,3 +3,4 @@ node_modules/
 .DS_Store
 service-account.json
 .claude/settings.local.json
+presentation-docs/design-deck-*/data.json

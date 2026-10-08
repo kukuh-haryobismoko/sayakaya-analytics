@@ -516,6 +516,202 @@ async function main() {
     GROUP BY c.id, c.name, c.promo_code, c.start_date, c.end_date, c.bonus_amount, c.bonus_fund_id, c.min_amount, c.quota, c.used_quota
     ORDER BY buy_volume DESC NULLS LAST`, { rStart, rEnd });
 
+  // ---- Added for the October 2026 deck ----------------------------------
+  // Net flow per month since March, total and without the one account whose
+  // own net flow was largest that month (either direction). September's
+  // -55.6 B and early October's +51.7 B were mostly one account redeeming
+  // Rp 50 B on 28 Sep and buying it back on 5 Oct; the second column is
+  // everyone else.
+  console.error('Querying net flow by month, with and without the largest account...');
+  out.netFlowByMonth = await runQuery(`
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
+    per_user AS (
+      SELECT FORMAT_TIMESTAMP('%Y-%m', t.completed_at) ym, t.user_id,
+        SUM(IF(t.type='buy', t.final_amount, 0)) - SUM(IF(t.type='sell', t.final_amount, 0)) net
+      FROM \`sayakaya.main.transactions\` t
+      WHERE t.status='completed' AND t.type IN ('buy','sell')
+        AND t.completed_at >= TIMESTAMP('2026-03-01') AND t.completed_at < TIMESTAMP(@pEnd)
+        AND t.user_id NOT IN (SELECT id FROM raiz)
+      GROUP BY ym, t.user_id
+    ),
+    ranked AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY ym ORDER BY ABS(net) DESC) rn FROM per_user)
+    SELECT ym, ROUND(SUM(net)) net_flow, ROUND(SUM(IF(rn = 1, net, 0))) largest_account_net,
+      ROUND(SUM(IF(rn > 1, net, 0))) net_flow_excl_largest, COUNT(*) accounts
+    FROM ranked GROUP BY ym ORDER BY ym`, { raizCodes: RAIZ_CODES, pEnd });
+
+  // Fund-to-fund switches in the review month. A switch never shows up as
+  // a platform outflow, but it moves money between funds with different
+  // AperD rates, which is how AUM can rise while revenue falls.
+  console.error('Querying fund switches in the review month...');
+  out.switchFlows = await runQuery(`
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))
+    SELECT fo.name from_fund, fd.name to_fund, COUNT(DISTINCT s.user_id) accounts,
+      ROUND(SUM(s.origin_amount)) amount, MIN(DATE(s.created_at)) first_day, MAX(DATE(s.created_at)) last_day
+    FROM \`sayakaya.main.switching_transactions\` s
+    JOIN \`sayakaya.main.funds\` fo ON fo.id = s.origin_fund_id
+    JOIN \`sayakaya.main.funds\` fd ON fd.id = s.destination_fund_id
+    WHERE s.status = 'completed' AND s.created_at >= TIMESTAMP(@rStart) AND s.created_at < TIMESTAMP(@rEnd)
+      AND s.user_id NOT IN (SELECT id FROM raiz)
+    GROUP BY from_fund, to_fund ORDER BY amount DESC LIMIT 15`, { raizCodes: RAIZ_CODES, rStart, rEnd });
+
+  // The account behind the review month's largest single-account net flow:
+  // its moves of Rp 1 B or more since March, and its holdings today. Nothing
+  // identifying leaves BigQuery, only dates, types, funds and amounts. In
+  // 2026 this has been one account moving exactly Rp 50 B in and out.
+  console.error('Querying the largest single account (no identifiers)...');
+  const LARGEST_ACCT = `
+    raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
+    acct AS (
+      SELECT user_id FROM \`sayakaya.main.transactions\`
+      WHERE status='completed' AND type IN ('buy','sell') AND completed_at >= TIMESTAMP(@rStart) AND completed_at < TIMESTAMP(@rEnd)
+        AND user_id NOT IN (SELECT id FROM raiz)
+      GROUP BY user_id
+      ORDER BY ABS(SUM(IF(type='buy', final_amount, 0)) - SUM(IF(type='sell', final_amount, 0))) DESC LIMIT 1
+    )`;
+  out.largestAccount = {
+    moves: await runQuery(`
+      WITH ${LARGEST_ACCT}
+      SELECT DATE(t.completed_at, 'Asia/Jakarta') d, t.type, f.name fund, ROUND(t.final_amount) amount
+      FROM \`sayakaya.main.transactions\` t JOIN acct a ON a.user_id = t.user_id
+      LEFT JOIN \`sayakaya.main.funds\` f ON f.id = t.fund_id
+      WHERE t.status='completed' AND t.final_amount >= 1e9 AND t.completed_at >= TIMESTAMP('2026-03-01') AND t.completed_at < TIMESTAMP(@pEnd)
+      ORDER BY t.completed_at, t.type`, { raizCodes: RAIZ_CODES, rStart, rEnd, pEnd }),
+    profile: (await runQuery(`
+      WITH ${LARGEST_ACCT},
+      held AS (
+        SELECT fund_id, unit FROM \`sayakaya.main.portfolios\` WHERE deleted_at IS NULL AND unit > 0 AND user_id IN (SELECT user_id FROM acct)
+        UNION ALL
+        SELECT fund_id, unit FROM \`sayakaya.main.bonus_portfolios\` WHERE status = 'on_going' AND user_id IN (SELECT user_id FROM acct)
+      )
+      SELECT (SELECT FORMAT_DATETIME('%Y-%m', created_at) FROM \`sayakaya.main.users\` WHERE id IN (SELECT user_id FROM acct)) registered,
+        (SELECT ROUND(SUM(h.unit * f.latest_nav_value)) FROM held h JOIN \`sayakaya.main.funds\` f ON f.id = h.fund_id
+          WHERE h.fund_id NOT IN UNNEST(@fundExcludeIds)) aum_today`,
+      { raizCodes: RAIZ_CODES, rStart, rEnd, fundExcludeIds: FUND_EXCLUDE_IDS }))[0],
+  };
+
+  // Daily AUM from the start of the review month to today, same basis as
+  // aumTrendByMonth, to show a single account's exit and return.
+  console.error('Querying daily AUM (review month to today)...');
+  out.dailyAum = await runQuery(`
+    WITH raiz AS (
+      SELECT DISTINCT sid_code FROM \`sayakaya.main.users\`
+      WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) AND sid_code IS NOT NULL
+    )
+    SELECT DATE(p.created_at, 'Asia/Jakarta') d, ROUND(SUM(p.amount)) aum
+    FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` p LEFT JOIN raiz r ON p.sid_code = r.sid_code
+    WHERE r.sid_code IS NULL AND p.created_at >= TIMESTAMP(@rStart) AND p.created_at < TIMESTAMP_ADD(TIMESTAMP(@pEnd), INTERVAL 1 DAY)
+      AND p.sinvest_code NOT IN UNNEST(@fundExcludeSinvest)
+    GROUP BY d ORDER BY d`, { raizCodes: RAIZ_CODES, rStart, pEnd, fundExcludeSinvest: FUND_EXCLUDE_SINVEST });
+
+  // How well Google Analytics' user_id lines up with main.users in the
+  // review month (it is main.users.id, set by the app at login).
+  console.error('Querying GA4 user_id match rate...');
+  const gaFrom = rStart.replace(/-/g, ''); const gaTo = new Date(new Date(rEnd) - 86400000).toISOString().slice(0, 10).replace(/-/g, '');
+  out.gaMatch = (await runQuery(`
+    WITH g AS (
+      SELECT DISTINCT user_id FROM \`sayakaya.analytics_266759216.events_*\`
+      WHERE _TABLE_SUFFIX BETWEEN @gaFrom AND @gaTo AND user_id IS NOT NULL
+    )
+    SELECT COUNT(*) ga_users, COUNTIF(u.id IS NOT NULL) matched,
+      COUNTIF(UPPER(IFNULL(u.referrer_code,'')) IN UNNEST(@raizCodes)) raiz
+    FROM g LEFT JOIN \`sayakaya.main.users\` u ON u.id = g.user_id`, { gaFrom, gaTo, raizCodes: RAIZ_CODES }))[0];
+
+  // Install channels from Adjust for the review month (Marketing attribution tab).
+  console.error('Querying Adjust install channels...');
+  out.adjustChannels = await runQuery(`
+    SELECT COALESCE(_tracker_name_, '(no tracker)') channel,
+      COUNTIF(_activity_kind_ = 'install') installs,
+      COUNTIF(_event_name_ = 'registration_completed') registrations,
+      COUNTIF(_event_name_ = 'payment_completed') payments
+    FROM \`sayakaya.adjust_analytics.events\`
+    WHERE DATE(TIMESTAMP_SECONDS(_created_at_)) >= @rStart AND DATE(TIMESTAMP_SECONDS(_created_at_)) < @rEnd
+    GROUP BY channel ORDER BY installs DESC LIMIT 6`, { rStart, rEnd });
+
+  // Revenue change, comparison -> review month, split the way the Revenue
+  // trend tab splits it: revenue = days x average AUM x daily AperD yield,
+  // so the change is exactly days effect + AUM effect + rate/mix effect.
+  // Revenue is scaled to exclude RAIZ the same way as the deck's headline.
+  const revByYm = Object.fromEntries(out.revenueTrendByMonth.map((r) => [r.ym, r]));
+  const aumByYm = Object.fromEntries(out.aumTrendByMonth.map((r) => [r.ym, r]));
+  const monthRev = (ym, days) => {
+    const r = revByYm[ym]; const a = aumByYm[ym];
+    const total = Number(r.total_aperd) * (1 - Number(a.avg_raiz_aum) / Number(r.avg_total_aum));
+    const aum = Number(a.avg_nonraiz_aum);
+    return { revenue: total, days, aum, dailyYield: total / days / aum };
+  };
+  const daysIn = (ym) => { const b = monthBounds(ym); return Math.round((new Date(b.end) - new Date(b.start)) / 86400000); };
+  const c0 = monthRev(comparisonMonth, daysIn(comparisonMonth));
+  const r1 = monthRev(reviewMonth, daysIn(reviewMonth));
+  out.revenueCause = {
+    comparison: c0, review: r1,
+    change: r1.revenue - c0.revenue,
+    daysEffect: (r1.days - c0.days) * c0.aum * c0.dailyYield,
+    aumEffect: r1.days * (r1.aum - c0.aum) * c0.dailyYield,
+    rateMixEffect: r1.days * r1.aum * (r1.dailyYield - c0.dailyYield),
+    annualYieldPct: { comparison: c0.dailyYield * 365 * 100, review: r1.dailyYield * 365 * 100 },
+  };
+
+  // App behavior for the review month (Google Analytics joined to the main
+  // database by user_id, see the User behavior tab). The dashboard's query
+  // builders are reused with the deck's RAIZ exclusion added to their GA4
+  // filter: about 14% of logged-in app users are RAIZ.
+  console.error('Querying app behavior (GA4 x main, excl. RAIZ)...');
+  const Q = require('../server/queries');
+  const GA4_FILTER = '_TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL';
+  const RAIZ_GA = `${GA4_FILTER} AND user_id NOT IN (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes))`;
+  const noRaiz = (q) => {
+    const parts = q.sql.split(GA4_FILTER);
+    if (parts.length !== 2) throw new Error(`RAIZ filter not applied: expected one GA4 filter, found ${parts.length - 1}`);
+    return runQuery(parts.join(RAIZ_GA), { ...q.params, raizCodes: RAIZ_CODES });
+  };
+  const lastDay = (end) => new Date(new Date(end) - 86400000).toISOString().slice(0, 10);
+  const intentRows = await noRaiz(Q.behaviorIntentNoBuy(rStart, lastDay(rEnd)));
+  const intentBy = {};
+  for (const r of intentRows) {
+    const k = String(r.order_statuses).includes('expired') ? 'expired'
+      : String(r.order_statuses).includes('cancelled') ? 'cancelled'
+      : r.order_statuses === 'no order created' ? 'no_order' : 'other';
+    intentBy[k] = (intentBy[k] || 0) + 1;
+  }
+  out.appBehavior = {
+    segments: await noRaiz(Q.behaviorSegments(rStart, lastDay(rEnd))),
+    comparisonSegments: await noRaiz(Q.behaviorSegments(cStart, lastDay(cEnd))),
+    features: await noRaiz(Q.behaviorFeatureLift(rStart, lastDay(rEnd))),
+    push: await noRaiz(Q.behaviorPushImpact(rStart, lastDay(rEnd))),
+    products: (await noRaiz(Q.behaviorProductInterest(rStart, lastDay(rEnd)))).slice(0, 15),
+    // Counts only: the dashboard tab holds the named follow-up list.
+    intent: { people: intentRows.length, byOutcome: intentBy, withAum: intentRows.filter((r) => Number(r.aum_now) > 0).length },
+  };
+
+  // Referral links created since the program launched, per referrer, with
+  // how many of each referrer's invitees went on to buy. Identities stay out
+  // of the output; internal_domain flags a sayakaya.id email.
+  console.error('Querying referrer quality since launch...');
+  out.referrerQuality = await runQuery(`
+    WITH r AS (
+      SELECT ur.referrer_id, COUNT(*) referred,
+        COUNTIF(EXISTS(SELECT 1 FROM \`sayakaya.main.transactions\` t WHERE t.user_id = ur.user_id AND t.type='buy' AND t.status='completed')) bought
+      FROM \`sayakaya.main.user_referrals\` ur
+      WHERE ur.created_at >= DATETIME(@launch) AND ur.created_at < DATETIME(@pEnd)
+      GROUP BY 1
+    )
+    SELECT ROW_NUMBER() OVER (ORDER BY r.referred DESC, r.bought DESC) rnk, r.referred, r.bought,
+      LOWER(SPLIT(u.email, '@')[SAFE_OFFSET(1)]) = 'sayakaya.id' internal_domain
+    FROM r JOIN \`sayakaya.main.users\` u ON u.id = r.referrer_id
+    ORDER BY rnk`, { launch: REFERRAL_PROGRAM_LAUNCH, pEnd });
+
+  // Emails the dashboard sent in the review month (Email recap tab, Supabase).
+  console.error('Querying dashboard email sends (Supabase)...');
+  try {
+    const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/dashboard_email_recap`, {
+      method: 'POST',
+      headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_from: rStart, p_to: lastDay(rEnd) }),
+    });
+    const d = await res.json();
+    out.emails = { totals: d.totals, byCategory: d.by_category, tracking: d.tracking };
+  } catch (e) { out.emails = { error: e.message }; }
+
   console.log(JSON.stringify(out, null, 2));
   console.error('Done.');
 }
