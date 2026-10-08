@@ -214,6 +214,7 @@
           <button class="nav-link" data-tab="reconciliation"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calculator"></use></svg></span>Reconciliation</button>
           <button class="nav-link" data-tab="send-statement"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Send e-statement &amp; portfolio</button>
           <button class="nav-link" data-tab="send-fund-performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Send fund performance</button>
+          <button class="nav-link" data-tab="email-recap"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg></span>Email recap</button>
         </div>
         <div class="nav-group" data-group="revenue">
           <div class="nav-label"><span data-i18n="nav_group_revenue">Revenue &amp; Partners</span><span class="nav-group-caret"></span></div>
@@ -235,6 +236,7 @@
           <div class="nav-label"><span data-i18n="nav_group_product">Product</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="app-health"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg></span>App health</button>
           <button class="nav-link" data-tab="product-funnel"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg></span>Product funnel</button>
+          <button class="nav-link" data-tab="user-behavior"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg></span>User behavior</button>
           <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
         </div>
         <div class="nav-group" data-group="tools">
@@ -843,6 +845,112 @@
         <div id="fpeSchedDetailBody"></div>
         <div class="exp" style="margin-top:16px">
           <button class="btn-ghost" id="fpeSchedDetailCloseBtn" data-i18n="common_close">Close</button>
+        </div>
+      </dialog>
+    </section>
+
+    <!-- EMAIL RECAP: every email this dashboard sends through Amazon SES
+         (dashboard_email_log, Supabase) plus the delivery/open/click events
+         SES reports back for each one (dashboard_email_events). See
+         server/email-log.js and SUPABASE-DEPLOY.md "Email tracking". -->
+    <section id="email-recap" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="er_category_label">Category</span>
+              <select id="erCategory">
+                <option value="" data-i18n="er_cat_all">All categories</option>
+                <option value="statement" data-i18n="er_cat_statement">E-statement &amp; portfolio</option>
+                <option value="fund_performance" data-i18n="er_cat_fund_performance">Fund performance</option>
+                <option value="invite" data-i18n="er_cat_invite">Account invite</option>
+                <option value="password_reset" data-i18n="er_cat_password_reset">Password reset</option>
+                <option value="schedule_otp" data-i18n="er_cat_schedule_otp">Schedule confirmation code</option>
+                <option value="other" data-i18n="er_cat_other">Other sender</option>
+              </select>
+            </label>
+            <label><span data-i18n="er_source_label">Sent from</span>
+              <select id="erSource">
+                <option value="" data-i18n="er_src_all">Anywhere</option>
+                <option value="manual" data-i18n="er_src_manual">Manual send</option>
+                <option value="batch" data-i18n="er_src_batch">Batch send</option>
+                <option value="schedule" data-i18n="er_src_schedule">Schedule</option>
+                <option value="system" data-i18n="er_src_system">Account emails</option>
+                <option value="script" data-i18n="er_src_script">Script</option>
+                <option value="ses" data-i18n="er_src_ses">Other SES sender</option>
+              </select>
+            </label>
+            <label><span data-i18n="range_from">From</span> <input type="date" id="erFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="erTo" /></label>
+            <button id="erApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="er_info">Every email this dashboard sends: e-statements, fund performance updates, scheduled sends, and account emails (invites, password resets, schedule codes). Sent means Amazon SES accepted it. Delivered, opened, clicked, bounced, and complaints come back from SES afterwards. An open is counted when the email's images load, so mail apps that load images by themselves (Apple Mail) can count opens nobody made, and apps that block images miss real ones. Clicks need a web link in the email: statement emails carry PDFs and an email address, not links. Open and click rates are out of delivered emails.</span>
+        </div>
+        <p id="erTracking" class="hint" style="margin-top:10px"></p>
+        <div id="erKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="er_trend_title">Emails per day</h2></div>
+        <span class="hint" data-i18n="er_trend_hint">By the day each email was sent (WIB). Opens and clicks stay on the day the email went out, so recent days keep growing as people open them later.</span>
+        <p id="erTrendEmpty" class="empty" data-i18n="er_trend_empty" hidden>No emails were sent in this period.</p>
+        <div class="chart-wrap"><canvas id="erTrendChart" aria-label="Emails sent, opened, and clicked per day"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="er_category_title">By category</h2></div>
+        <div id="erCategoryTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="er_subject_title">By subject</h2></div>
+        <span class="hint" data-i18n="er_subject_hint">One row per subject line and category, most recently sent first. A recurring schedule with the same subject rolls up into one row. Emails sent before this log existed have no subject recorded.</span>
+        <div id="erSubjectTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="er_links_title">Clicked links</h2></div>
+        <span class="hint" data-i18n="er_links_hint">Links people clicked inside emails sent in this period. The part after "?" is removed before saving, since it can hold a one-time login token.</span>
+        <div id="erLinksTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="er_log_title">Every email</h2>
+          <div class="filters">
+            <select id="erOutcome" aria-label="Outcome">
+              <option value="" data-i18n="er_out_all">Any outcome</option>
+              <option value="failed" data-i18n="er_out_failed">Failed to send</option>
+              <option value="sent" data-i18n="er_out_sent">Sent, nothing back yet</option>
+              <option value="delivered" data-i18n="er_out_delivered">Delivered</option>
+              <option value="opened" data-i18n="er_out_opened">Opened</option>
+              <option value="clicked" data-i18n="er_out_clicked">Clicked</option>
+              <option value="bounced" data-i18n="er_out_bounced">Bounced</option>
+              <option value="complained" data-i18n="er_out_complained">Marked as spam</option>
+              <option value="rejected" data-i18n="er_out_rejected">Rejected by SES</option>
+            </select>
+            <input type="text" id="erSearch" aria-label="Search emails" data-i18n-placeholder="er_search_ph" placeholder="Recipient, subject, SID, or sender" style="min-width:240px" />
+            <button class="btn-primary" id="erSearchBtn" data-i18n="common_search">Search</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="er_log_hint">Uses the period, category, and sent-from filters above. Newest first. History opens one email's full delivery, open, and click record.</span>
+        <div id="erLogTable" class="table-wrap tall" style="margin-top:14px"></div>
+        <div class="pager">
+          <button id="erPrev" class="btn-ghost" data-i18n="common_prev">← Prev</button>
+          <span id="erPageInfo" class="mono"></span>
+          <button id="erNext" class="btn-ghost" data-i18n="common_next">Next →</button>
+        </div>
+      </div>
+
+      <dialog id="erEventsModal" class="admin-modal" aria-labelledby="erEventsTitle">
+        <div class="panel-head wrap"><h2 id="erEventsTitle" data-i18n="er_events_title">Email history</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
+        <p id="erEventsMeta" class="hint"></p>
+        <div id="erEventsBody" class="table-wrap" style="margin-top:12px"></div>
+        <div class="exp" style="margin-top:16px">
+          <button type="button" class="btn-ghost modal-close" data-i18n="common_close">Close</button>
         </div>
       </dialog>
     </section>
@@ -2658,6 +2766,79 @@
       </div>
     </section>
 
+    <!-- USER BEHAVIOR: GA4 app events (analytics_266759216, user_id =
+         main.users.id) joined to the main database. See queries.js
+         behavior* for the matching rules. -->
+    <section id="user-behavior" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="bhFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="bhTo" /></label>
+            <button id="bhApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="bh_info">Lines up what people do in the app (Google Analytics) with what the main database says about them: transactions, holdings, and KYC status. After login the app tags every event with the investor's user ID, which is how the two connect. Anything done before logging in (signing up, browsing as a guest) has no user ID and is left out. A push arriving or an app update doesn't count as using the app. "Bought" means a completed buy in the main database. App data arrives about a day late.</span>
+        </div>
+        <div id="bhKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_daily_title">Logged-in app users per day</h2></div>
+        <span class="hint" data-i18n="bh_daily_hint">People, not sessions. "Bought that day" is an app user who also completed a buy in the main database on the same date.</span>
+        <p id="bhDailyEmpty" class="empty" data-i18n="bh_empty" hidden>No logged-in app activity in this period.</p>
+        <div class="chart-wrap"><canvas id="bhDailyChart" aria-label="Logged-in app users, investors holding a portfolio, and buyers per day"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_segment_title">By investor status</h2></div>
+        <span class="hint" data-i18n="bh_segment_hint">Status is today's, not at the start of the period. Holding: owns fund units now. Redeemed: bought before, holds nothing now. Verified, never bought: passed KYC, no completed buy yet. Not verified: KYC not passed.</span>
+        <div id="bhSegmentTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_feature_title">In-app actions that come before a purchase</h2></div>
+        <span class="hint" data-i18n="bh_feature_hint">For each action: of the people who did it, how many completed a buy within 7 days of first doing it, next to the same rate for every app user (baseline). Lift 2.0 means twice as likely to buy as the average app user. This shows what buyers tend to do, not what makes them buy: steps inside the buy flow (order button, promo code) rank high because they are part of buying. Actions fewer than 10 people did are hidden.</span>
+        <div id="bhFeatureTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_push_title">Push campaigns: opened, then bought</h2></div>
+        <span class="hint" data-i18n="bh_push_hint">Logged-in people only, per push campaign name: who got it, who opened it, and who completed a buy within 72 hours. "Bought within 72h" counts everyone who received it, opened or not, so it includes people who would have bought anyway. Pushes with no campaign name are transactional, such as payment receipts.</span>
+        <div id="bhPushTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_product_title">Fund pages: viewed, then bought</h2></div>
+        <span class="hint" data-i18n="bh_product_hint">People who opened a fund's detail page, and how many bought that same fund within 7 days of their first view in the period. "Already holding" counts viewers who own the fund today.</span>
+        <div id="bhProductTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_intent_title">Started buying, never paid</h2></div>
+        <span class="hint" data-i18n="bh_intent_hint">Opened the buy form or created an order in this period, with no paid buy from then until 3 days after their last try. "No order created" means they left at the form; "expired" means the order was never paid. Newest first, up to 500 people.</span>
+        <div id="bhIntentTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_journey_title">One investor's journey</h2><span class="hint" data-i18n="bh_journey_hint">Search, then pick an investor to see their app activity and transactions in the period above on one timeline. Each lookup is recorded in the Activity log.</span></div>
+        <div class="ask-bar">
+          <input id="bhSearchInput" type="text" autocomplete="off" aria-label="Search investors" data-i18n-placeholder="common_recipient_search_ph" placeholder="Name, SID, email, or phone" />
+          <button id="bhSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
+        </div>
+        <div id="bhResults" class="table-wrap"></div>
+        <div id="bhJourney" class="hidden" style="margin-top:18px">
+          <h3 id="bhUserName" style="margin:0"></h3>
+          <p id="bhUserSub" class="hint" style="margin:4px 0 0"></p>
+          <div id="bhUserKpis" class="kpi-grid" style="margin-top:14px"></div>
+          <div id="bhTimeline" class="table-wrap tall"></div>
+        </div>
+      </div>
+    </section>
+
     <section id="ask" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="ask_title">Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data — no technical skills needed.</span></div>
@@ -2892,6 +3073,10 @@ ORDER BY n DESC"></textarea>
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Send fund performance</h3>
           <p data-i18n="docs_send_fund_performance_desc">Emails the "Reksa Dana Update" PDF to a list of people. Choose which funds the report covers: all funds, one or more fund categories, or specific funds, plus the NAV date. Add recipients by searching name (* works as a wildcard), SID, email, or phone number and adding them one by one, and/or paste a list of emails. Each recipient gets their own email, so one bad address doesn't block the rest. Unlike Send e-statement &amp; portfolio, this can go to any email, investor or not. It has its own send history, and "+ New schedule" sets up a recurring send with the same fund choice. Resuming a paused schedule sends anything that came due while it was paused right away and refreshes its next run date.</p>
         </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Email recap</h3>
+          <p data-i18n="docs_email_recap_desc">Every email this dashboard sends, in one place: e-statements and portfolios, fund performance updates, scheduled sends, and account emails (invites, password resets, schedule confirmation codes, with the code itself never stored). Each email shows who it went to, its subject, category, where it was sent from (a manual send, a batch, a schedule), a plain description of what it carried, and who sent it. Amazon SES then reports back whether it was delivered, opened, or clicked, or bounced or got marked as spam; open and click rates are out of delivered emails. Filter by period, category, and where it was sent from; the summary by category and by subject works like a campaign report, and History on any row shows that one email's full record. Opens are counted when images load, so some mail apps over-count or under-count them. Emails sent before this tab existed are included from the send history, without delivery or open data.</p>
+        </div>
       </div>
 
       <div class="panel">
@@ -2945,6 +3130,10 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_pfn_desc">From Google Analytics (own dataset, analytics_266759216, one physical table per day, Feb 2026 onward). A cohort funnel, not a same-period count per step: it finds every device whose first Register click fell in the chosen date range, then checks, with no date limit on this half, whether that same device ever reached OTP submitted, KYC started, KYC verified, order created, and payment completed. Counting each milestone only within the chosen range independently would make the funnel look like it climbs partway through (otp_on_submit alone fires on every login, not just signup, so it would outnumber registrations), since a real person can register in one period and pay in a much later one. Split by platform (Android/iOS); each column only decreases moving right, within a platform. The milestone join scans GA4's full history regardless of the date range chosen, typically well under 1GB.</p>
         </div>
         <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg> User behavior</h3>
+          <p data-i18n="docs_user_behavior_desc">Connects what people do in the app (Google Analytics events, which carry the investor's user ID after login) to the main database's transactions, holdings, and KYC status. For a chosen period it shows: logged-in app users per day and how many of them hold a portfolio or bought that day; app activity and buying by investor status (holding, redeemed, verified but never bought, not verified); which in-app actions come before a purchase within 7 days, compared with the average app user; each push campaign's opens and the buys that followed within 72 hours; fund detail pages viewed against buys of that same fund; and a follow-up list of people who started buying but never paid. Search any investor to see their app activity and transactions on one timeline, with their device, app version, and AUM; each lookup is recorded in the Activity log. Activity before login is not included, and it shows what buyers tend to do, not proof of what made them buy.</p>
+        </div>
+        <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Event code tracking</h3>
           <p data-i18n="docs_event_code_tracking_desc">A generic, ready-to-use tab for tracking an event's own referral/sales code, built ahead of any actual event — no code or campaign has been set up yet, so pick whichever of users.sales_code or users.referrer_code the event ends up using, then type in its code(s). Shows a funnel (tagged with the code → KYC verified → transacted → transacted again), the list of tagged users, their transaction detail (own date range, exportable), and a cohort retention table with the grain — Day/Week/Month — picked at run time. Update this write-up once the real event's rules replace the generic funnel/cohort steps.</p>
         </div>
@@ -2984,7 +3173,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-scroll"></use></svg> Activity log</h3>
-          <p data-i18n="docs_activity_log_desc">See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio, or changed an account — and when.</p>
+          <p data-i18n="docs_activity_log_desc">See who logged in, exported a file, asked an Ask question, ran a SQL query, viewed an investor's portfolio or app journey, or changed an account, and when.</p>
         </div>
       </div>
     </section>

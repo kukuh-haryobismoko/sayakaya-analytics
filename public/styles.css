@@ -18,6 +18,11 @@
   --pos-text: #086b48;
   --neg-text: #c8173f;
   --amber-mark: #b07400;
+  /* Series 2/3 for the Email recap and User behavior charts: the base amber
+     and teal fail the chart lightness band (too pale to read as a line on
+     white), these pass it plus colorblind separation next to --indigo. */
+  --chart-amber: #b07400;
+  --chart-green: #086b48;
   --teal-tint: #eefff9;  /* Green / G100 */
   --rose-tint: #ffe5ec;  /* Red / R100 */
   --amber-tint: #fff9e5; /* Yellow / Y100 */
@@ -57,6 +62,8 @@
   --pos-text: #33eaaa;
   --neg-text: #ff7e9f;
   --amber-mark: #ffd87e;
+  --chart-amber: #c08a1c;
+  --chart-green: #1a9d70;
   --teal-tint: rgba(51,234,170,.16);
   --rose-tint: rgba(255,126,159,.16);
   --amber-tint: rgba(255,216,126,.18);

@@ -222,6 +222,49 @@ they read the same BigQuery project, so they must match exactly.
 
 ---
 
+## Email tracking (Email recap tab)
+
+Every email the app sends is written to `dashboard_email_log` at send time,
+with no AWS setup at all (`server/email-log.js` / `email-log.ts`). Delivery,
+open, click, bounce and complaint data only arrives once Amazon SES publishes
+events for those emails to the app's webhook. One-time setup, in the AWS
+console, region **Asia Pacific (Singapore) ap-southeast-1** (the region in
+`SMTP_HOST`):
+
+1. **Webhook secret.** `SES_WEBHOOK_SECRET` is a Supabase secret (value in
+   `supabase/.env.secrets`). The webhook URL is
+   `https://josptpfisrsdjeggkqke.supabase.co/functions/v1/api/webhooks/ses?key=<SES_WEBHOOK_SECRET>`.
+2. **SNS topic.** SNS → Topics → Create topic → Standard, name
+   `sayakaya-ses-events`.
+3. **Subscription.** In that topic → Create subscription → protocol
+   **HTTPS**, endpoint = the webhook URL above. The function confirms the
+   subscription by itself; its status turns to *Confirmed* within a minute.
+   If it stays *Pending confirmation*, the `key` doesn't match the secret.
+4. **Configuration set.** SES → Configuration sets → Create set, name
+   `sayakaya-dashboard`. Open it → Event destinations → Add destination →
+   tick Sends, Rejects, Deliveries, Hard bounces, Complaints, Delivery delays,
+   Rendering failures, **Opens** and **Clicks** → destination **Amazon SNS** →
+   topic `sayakaya-ses-events`. Ticking Opens and Clicks is what makes SES add
+   its tracking image and rewrite links; reset/invite links carry
+   `ses:no-track` so login tokens never go through SES's redirect.
+5. **Turn it on, last.** Only after step 4 exists:
+   `supabase secrets set SES_CONFIGURATION_SET=sayakaya-dashboard --project-ref josptpfisrsdjeggkqke`.
+   The order matters: SES rejects any email that names a configuration set it
+   doesn't have, which would stop every statement and reset email. (Instead
+   of the secret you can assign the set as the default configuration set of
+   each sending identity, SES → Verified identities. Events then match by
+   SES message id rather than by tag, and mail other systems send from those
+   identities shows up as "Other SES sender".)
+6. **Check.** Send fund performance to yourself and open it. Within a
+   minute the Email recap tab says "Tracking is connected" and the row shows
+   Delivered and Opened. If nothing arrives, check the SNS topic's access
+   policy lets `ses.amazonaws.com` call `SNS:Publish`, and the function logs
+   for `/api/webhooks/ses` (401 = wrong key).
+
+Opens are counted when the tracking image loads: Apple Mail loads images on
+its own (over-counts), apps that block images under-count. Statement emails
+carry PDFs and a mailto link, so they can't record clicks.
+
 ## Troubleshooting
 
 **`401 {"code":"UNAUTHORIZED_NO_AUTH_HEADER"}` from the Supabase function** —

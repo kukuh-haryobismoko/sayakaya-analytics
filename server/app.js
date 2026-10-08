@@ -21,8 +21,9 @@ const Mail = require('./mail');
 const Auth = require('./auth');
 const Sched = require('./schedules');
 const {
-  pivotPerformanceByType, normalizeFundFilter, fundScopeLabel, buildFundPerformancePdf, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM,
+  pivotPerformanceByType, normalizeFundFilter, fundScopeLabel, statementDocsLabel, buildFundPerformancePdf, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM,
 } = require('./report-helpers');
+const EmailLog = require('./email-log');
 
 // Every export `source` maps to exactly one tab, so a single permission check
 // at the top of /api/export covers all of them (see requireTab below for the
@@ -171,7 +172,8 @@ function createApp({ serveStatic = true } = {}) {
   app.use('/api', async (req, res, next) => {
     if (req.path === '/health' || req.path === '/auth/login'
       || req.path === '/auth/forgot-password' || req.path === '/auth/reset-password'
-      || req.path === '/cron/run-due-schedules' || req.path === '/cron/retrain-models') return next();
+      || req.path === '/cron/run-due-schedules' || req.path === '/cron/retrain-models'
+      || req.path === '/webhooks/ses') return next();
     try {
       const authHeader = req.get('authorization') || '';
       const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -260,7 +262,7 @@ function createApp({ serveStatic = true } = {}) {
     const created = await Auth.createUser({ username: username || null, email, isSuperuser: !!isSuperuser, allowedTabs: allowedTabs || [] });
     const token = await Auth.createPasswordReset(created.id, Auth.INVITE_TTL_MS);
     const origin = process.env.APP_URL || req.get('origin') || '';
-    await Mail.sendInviteEmail({ to: email, activateUrl: `${origin}/?reset=${token}` });
+    await Mail.sendInviteEmail({ to: email, activateUrl: `${origin}/?reset=${token}`, sentBy: req.user.username || req.user.email });
     await Auth.logEvent(req.user.id, req.user.username, 'admin_user_create',
       `invited dashboard user "${username || email}"${isSuperuser ? ' (superuser)' : ''}`);
     res.json(Auth.publicUser(created));
@@ -607,9 +609,9 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), Portfolio (TX), Portfolio (SInvest), Send statement, and Send fund performance — allow any.
+  // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), Portfolio (TX), Portfolio (SInvest), Send statement, Send fund performance, and User behavior: allow any.
   const requireAnyPortfolio = (req, res, next) => {
-    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx') || Auth.userCan(req.user, 'portfolio-sinvest') || Auth.userCan(req.user, 'send-statement') || Auth.userCan(req.user, 'send-fund-performance')) return next();
+    if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx') || Auth.userCan(req.user, 'portfolio-sinvest') || Auth.userCan(req.user, 'send-statement') || Auth.userCan(req.user, 'send-fund-performance') || Auth.userCan(req.user, 'user-behavior')) return next();
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/users/search', requireAnyPortfolio, handler(async (req, res) => {
@@ -848,6 +850,29 @@ function createApp({ serveStatic = true } = {}) {
     const { from, to } = req.query;
     const q = Q.productFunnelByPlatform(from, to);
     res.json(await runQuery(q.sql, q.params));
+  }));
+
+  // ---- User behavior: GA4 app events (user_id) joined to the main database,
+  // see queries.js for the matching rules ------------------------------------
+  const behaviorRoute = (path, build) => app.get(path, requireTab('user-behavior'), handler(async (req, res) => {
+    const q = build(req.query.from, req.query.to);
+    res.json(await runQuery(q.sql, q.params));
+  }));
+  behaviorRoute('/api/behavior/segments', Q.behaviorSegments);
+  behaviorRoute('/api/behavior/daily', Q.behaviorDaily);
+  behaviorRoute('/api/behavior/features', Q.behaviorFeatureLift);
+  behaviorRoute('/api/behavior/push', Q.behaviorPushImpact);
+  behaviorRoute('/api/behavior/products', Q.behaviorProductInterest);
+  behaviorRoute('/api/behavior/intent', Q.behaviorIntentNoBuy);
+  app.get('/api/behavior/user', requireTab('user-behavior'), handler(async (req, res) => {
+    const { userId, from, to } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId is required.' });
+    const p = Q.behaviorUserProfile(userId, from, to);
+    const t = Q.behaviorUserTimeline(userId, from, to);
+    const [profile, timeline] = await Promise.all([runQuery(p.sql, p.params), runQuery(t.sql, t.params)]);
+    // A named individual's activity, not aggregate analytics: audited like a portfolio lookup.
+    await Auth.logEvent(req.user.id, req.user.username || req.user.email, 'view_user_journey', `SID ${PDF.val(profile[0]?.sid) || userId}`);
+    res.json({ profile: profile[0] || null, timeline });
   }));
 
   // ---- Product performance (NAV % change per fund type, external Apollo DB) --
@@ -1733,7 +1758,13 @@ function createApp({ serveStatic = true } = {}) {
     }
 
     const senderEmail = process.env.SMTP_FROM_STATEMENT || 'estatement@sayakaya.id';
-    await Mail.sendStatementEmail({ to: contact.email, subject, body, name: contact.name, attachments, from: senderEmail });
+    await Mail.sendStatementEmail({
+      to: contact.email, subject, body, name: contact.name, attachments, from: senderEmail,
+      log: {
+        category: 'statement', source: 'manual', sentBy: username, userId, sid,
+        description: `${statementDocsLabel({ sendPortfolio, portfolioDate, sendStatement, statementMonth })} for ${PDF.val(contact.name) || sid}`,
+      },
+    });
     const sent = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
     const recipient = `${PDF.val(contact.name) || sid} (SID ${sid}, ${contact.email})`;
     await Auth.logEvent(req.user.id, username, 'email_pdf', `send-statement (${sent}) to ${recipient}`);
@@ -1776,7 +1807,13 @@ function createApp({ serveStatic = true } = {}) {
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       if (!contact?.email) throw new Error('no email on file');
       const attachments = await buildStatementAttachments({ userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username });
-      await Mail.sendStatementEmail({ to: contact.email, subject, body, name: contact.name, attachments, from: senderEmail });
+      await Mail.sendStatementEmail({
+        to: contact.email, subject, body, name: contact.name, attachments, from: senderEmail,
+        log: {
+          category: 'statement', source: 'batch', sentBy: username, userId, sid,
+          description: `${statementDocsLabel({ sendPortfolio, portfolioDate, sendStatement, statementMonth })} for ${PDF.val(contact.name) || sid}`,
+        },
+      });
       return { sid, email: contact.email };
     }));
 
@@ -1825,7 +1862,13 @@ function createApp({ serveStatic = true } = {}) {
 
     const senderEmail = process.env.SMTP_FROM_FUND_PERFORMANCE || 'hi@sayakaya.id';
     const results = await Promise.allSettled(
-      recipients.map((email) => Mail.sendStatementEmail({ to: email, subject, body, attachments, from: senderEmail })),
+      recipients.map((email) => Mail.sendStatementEmail({
+        to: email, subject, body, attachments, from: senderEmail,
+        log: {
+          category: 'fund_performance', source: recipients.length > 1 ? 'batch' : 'manual', sentBy: username,
+          description: `Reksa Dana Update PDF${asOf ? ` as of ${asOf}` : ''} (${fundScopeLabel(fundFilter)})`,
+        },
+      })),
     );
     const sent = [], failed = [];
     results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));
@@ -1996,6 +2039,33 @@ function createApp({ serveStatic = true } = {}) {
     await Sched.deleteJob(req.params.id);
     await Auth.logEvent(req.user.id, req.user.username, 'schedule_delete', `deleted schedule ${req.params.id}`);
     res.json({ ok: true });
+  }));
+
+  // ---- Email recap: every email this app sends (server/email-log.js) and the
+  // delivery/open/click events SES reports back for it ---------------------
+  app.get('/api/email-recap/summary', requireTab('email-recap'), handler(async (req, res) => {
+    const { from, to, category, source } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to are required.' });
+    res.json(await EmailLog.recap({ from, to, category, source }));
+  }));
+  app.get('/api/email-recap/log', requireTab('email-recap'), handler(async (req, res) => {
+    res.json(await EmailLog.list(req.query));
+  }));
+  app.get('/api/email-recap/log/:id/events', requireTab('email-recap'), handler(async (req, res) => {
+    res.json(await EmailLog.events(req.params.id));
+  }));
+
+  // SES -> SNS -> here. SNS can't send a Bearer token, so this sits outside
+  // the session gate and checks a shared secret in the subscription URL
+  // instead (?key=SES_WEBHOOK_SECRET), same idea as the cron routes below.
+  // SNS posts text/plain, which the app-wide JSON parser skips.
+  // ponytail: URL secret only, add SNS message-signature verification if the URL ever leaks into a shared place.
+  app.post('/api/webhooks/ses', express.text({ type: '*/*', limit: '256kb' }), handler(async (req, res) => {
+    const expected = process.env.SES_WEBHOOK_SECRET;
+    if (!expected) return res.status(500).json({ error: 'SES_WEBHOOK_SECRET is not configured on the server.' });
+    if (!EmailLog.secretMatches(req.query.key, expected)) return res.status(401).json({ error: 'Unauthorized.' });
+    const r = await EmailLog.handleSnsMessage(req.body);
+    res.status(r.status).json(r.body);
   }));
 
   // ---- Scheduled-send execution: invoked by an external scheduler on a

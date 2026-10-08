@@ -1,6 +1,8 @@
 'use strict';
 
+const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const EmailLog = require('./email-log');
 const LOGO_BUFFER = Buffer.from(require('./logo-horizontal'), 'base64');
 const LOGO_CID = 'sayakaya-horizontal-logo';
 
@@ -48,12 +50,29 @@ function htmlEmail(body) {
 </div>`;
 }
 
+// Every email goes out through here, so each one lands in the Email recap
+// log (sent or failed) without its caller having to remember to.
+// log: { category, source, description, sentBy, userId, sid, jobId, subject }
+// (log.subject overrides what's recorded, e.g. to keep an OTP out of the log).
+async function send(message, log) {
+  const id = crypto.randomUUID();
+  const logged = { ...message, subject: log.subject || message.subject };
+  try {
+    const info = await transport.sendMail({ ...message, headers: EmailLog.sesHeaders(id, log.category) });
+    await EmailLog.record({ id, message: logged, log, status: 'sent', sesId: EmailLog.sesMessageId(info.response) });
+  } catch (e) {
+    await EmailLog.record({ id, message: logged, log, status: 'failed', error: e.message });
+    throw e;
+  }
+}
+
 // attachments: [{ filename, content: Buffer }, ...] — one or more PDFs.
 // from: overrides the default sender (server/app.js picks a different
 // verified SES identity for Send statement vs. Send fund performance).
-async function sendStatementEmail({ to, subject, body, name, attachments, from }) {
+// log: what the Email recap shows for this send (see send() above).
+async function sendStatementEmail({ to, subject, body, name, attachments, from, log }) {
   const text = body || defaultBody({ name });
-  await transport.sendMail({
+  await send({
     from: from || process.env.SMTP_FROM,
     to,
     subject: subject || defaultSubject(),
@@ -63,7 +82,7 @@ async function sendStatementEmail({ to, subject, body, name, attachments, from }
       ...attachments,
       { filename: 'sayakaya-horizontal.png', content: LOGO_BUFFER, cid: LOGO_CID, contentDisposition: 'inline' },
     ],
-  });
+  }, { category: 'statement', source: 'script', ...log });
 }
 
 // Dashboard-staff email (not investor-facing) — skips the APERD/regulatory
@@ -76,49 +95,49 @@ async function sendPasswordResetEmail({ to, username, resetUrl }) {
   <div style="font-size:14px;line-height:1.6">
     <p>Hi ${escapeHtml(username)},</p>
     <p>We received a request to reset your Sayakaya Analytics password.</p>
-    <p><a href="${resetUrl}" style="display:inline-block;background:#3a50ab;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Reset password</a></p>
+    <p><a href="${resetUrl}" ses:no-track style="display:inline-block;background:#3a50ab;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Reset password</a></p>
     <p style="color:#6b7280;font-size:12px">This link expires in 30 minutes and can only be used once. If you didn't request this, you can safely ignore this email — your password won't change.</p>
   </div>
 </div>`;
-  await transport.sendMail({
+  await send({
     from: process.env.SMTP_FROM,
     to,
     subject: 'Reset your Sayakaya Analytics password',
     text,
     html,
     attachments: [{ filename: 'sayakaya-horizontal.png', content: LOGO_BUFFER, cid: LOGO_CID, contentDisposition: 'inline' }],
-  });
+  }, { category: 'password_reset', source: 'system', description: `Password reset link for dashboard account ${username}` });
 }
 
 // Sent when an admin creates a dashboard account (email + access tabs only,
 // no password) — reuses the password-reset token/link mechanism, so this is
 // just different copy pointing at the same activation URL.
-async function sendInviteEmail({ to, activateUrl }) {
+async function sendInviteEmail({ to, activateUrl, sentBy }) {
   const text = `You've been invited to Sayakaya Analytics.\n\nActivate your account and set a password: ${activateUrl}\n\nThis link expires in 3 days and can only be used once. If you weren't expecting this, you can safely ignore this email.`;
   const html = `
 <div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1d2e">
   <div style="padding:24px 0 16px"><img src="cid:${LOGO_CID}" alt="Sayakaya" width="180" style="display:block"></div>
   <div style="font-size:14px;line-height:1.6">
     <p>You've been invited to Sayakaya Analytics.</p>
-    <p><a href="${activateUrl}" style="display:inline-block;background:#3a50ab;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Activate account</a></p>
+    <p><a href="${activateUrl}" ses:no-track style="display:inline-block;background:#3a50ab;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Activate account</a></p>
     <p style="color:#6b7280;font-size:12px">This link expires in 3 days and can only be used once. If you weren't expecting this, you can safely ignore this email.</p>
   </div>
 </div>`;
-  await transport.sendMail({
+  await send({
     from: process.env.SMTP_FROM,
     to,
     subject: 'Activate your Sayakaya Analytics account',
     text,
     html,
     attachments: [{ filename: 'sayakaya-horizontal.png', content: LOGO_BUFFER, cid: LOGO_CID, contentDisposition: 'inline' }],
-  });
+  }, { category: 'invite', source: 'system', description: 'Invitation to activate a dashboard account', sentBy });
 }
 
 // Confirms whoever is setting up an automated send actually controls the
 // confirmation email address before the schedule is created — dashboard-staff
 // email, so (like the password reset above) no APERD/regulatory footer.
 const KIND_LABEL = { statement: 'Send e-statement & portfolio', fund_performance: 'Send fund performance' };
-async function sendScheduleOtpEmail({ to, code, kind }) {
+async function sendScheduleOtpEmail({ to, code, kind, sentBy }) {
   const label = KIND_LABEL[kind] || 'a scheduled send';
   const text = `A ${label} schedule is being set up on Sayakaya Analytics.\n\nConfirmation code: ${code}\n\nThis code expires in 10 minutes. If you didn't request this, you can ignore this email — no schedule will be created without it.`;
   const html = `
@@ -130,13 +149,17 @@ async function sendScheduleOtpEmail({ to, code, kind }) {
     <p style="color:#6b7280;font-size:12px">This code expires in 10 minutes. If you didn't request this, you can ignore this email — no schedule will be created without it.</p>
   </div>
 </div>`;
-  await transport.sendMail({
+  await send({
     from: process.env.SMTP_FROM,
     to,
     subject: `Confirm your ${label} schedule — ${code}`,
     text,
     html,
     attachments: [{ filename: 'sayakaya-horizontal.png', content: LOGO_BUFFER, cid: LOGO_CID, contentDisposition: 'inline' }],
+  }, {
+    category: 'schedule_otp', source: 'system', sentBy,
+    description: `Confirmation code for a ${label} schedule`,
+    subject: `Confirm your ${label} schedule (code not logged)`,
   });
 }
 

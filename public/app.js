@@ -70,6 +70,7 @@ const ICONS = {
   trendUp: icon('trend-up'), trendDown: icon('trend-down'), activity: icon('activity'),
   receipt: icon('receipt'), folder: icon('folder'), check: icon('check'),
   hourglass: icon('hourglass'), xCircle: icon('x-circle'), eye: icon('eye'), eyeOff: icon('eye-off'), more: icon('more'),
+  monitor: icon('monitor'),
 };
 
 function val(x) { return x && typeof x === 'object' && 'value' in x ? x.value : x; }
@@ -111,6 +112,7 @@ function readThemeColors() {
     indigo: v('--indigo'), soft: v('--indigo-soft'), amber: v('--amber'),
     teal: v('--teal'), rose: v('--rose'), muted: v('--muted'), ink: v('--ink'), amberMark: v('--amber-mark'),
     grid: v('--line'), surface: v('--surface'), heatRgb: v('--heat-rgb'),
+    chartAmber: v('--chart-amber'), chartGreen: v('--chart-green'),
   };
 }
 let C = readThemeColors();
@@ -1342,6 +1344,382 @@ function loadProductFunnel() {
     $('#pfnKpis').innerHTML = '';
     $('#pfnTable').innerHTML = `<div class="empty">${e.message}</div>`;
   });
+}
+
+// genTable writes cell values as raw HTML; text that comes from people
+// (email subjects, campaign names, investor names) is escaped first.
+const escRows = (rows, keys) => rows.map((r) => ({ ...r, ...Object.fromEntries(keys.map((k) => [k, val(r[k]) == null ? null : escapeHtml(val(r[k]))])) }));
+const ratePct = (a, b) => (Number(b) ? (Number(a) / Number(b)) * 100 : null);
+// Jakarta wall-clock time for a Postgres timestamptz string.
+const wib = (ts) => (ts ? new Date(ts).toLocaleString('sv-SE', { timeZone: 'Asia/Jakarta' }).slice(0, 16) : 'n/a');
+function daysAgoRange(days) {
+  const to = new Date();
+  const from = new Date(); from.setDate(from.getDate() - days);
+  return { from: isoDate(from), to: isoDate(to) };
+}
+
+// EMAIL RECAP: every email the dashboard sends (dashboard_email_log in
+// Supabase, written by server/mail.js) and the delivery/open/click events
+// Amazon SES reports back for each one.
+let emailRecapLoaded = false;
+let erSummary = null;
+const er = { offset: 0, limit: 50, total: 0, rows: null };
+const ER_CATEGORY_KEYS = {
+  statement: 'er_cat_statement', fund_performance: 'er_cat_fund_performance', invite: 'er_cat_invite',
+  password_reset: 'er_cat_password_reset', schedule_otp: 'er_cat_schedule_otp', other: 'er_cat_other',
+};
+const ER_SOURCE_KEYS = {
+  manual: 'er_src_manual', batch: 'er_src_batch', schedule: 'er_src_schedule', system: 'er_src_system', script: 'er_src_script', ses: 'er_src_ses',
+};
+// outcome -> [label key, tag class]; problems red, engagement green, delivered blue, nothing-back grey.
+const ER_OUTCOME = {
+  failed: ['er_out_failed', 'sell'], bounced: ['er_out_bounced', 'sell'], complained: ['er_out_complained', 'sell'], rejected: ['er_out_rejected', 'sell'],
+  clicked: ['er_out_clicked', 'buy'], opened: ['er_out_opened', 'buy'], delivered: ['er_out_delivered', 'other'], sent: ['er_out_sent', 'expired'],
+};
+const ER_EVENT_KEYS = {
+  Send: 'er_ev_send', Delivery: 'er_ev_delivery', Open: 'er_ev_open', Click: 'er_ev_click', Bounce: 'er_ev_bounce',
+  Complaint: 'er_ev_complaint', Reject: 'er_ev_reject', DeliveryDelay: 'er_ev_delay', RenderingFailure: 'er_ev_rendering',
+};
+const erLabel = (keys, k) => (keys[k] ? t(keys[k]) : escapeHtml(k || 'n/a'));
+function erFilters() {
+  return { from: $('#erFrom').value, to: $('#erTo').value, category: $('#erCategory').value, source: $('#erSource').value };
+}
+const erQs = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v !== '' && v != null)).toString();
+const erWithRates = (r) => ({ ...r, open_rate: ratePct(r.opened, r.delivered), click_rate: ratePct(r.clicked, r.delivered) });
+
+function renderEmailRecapKpis(x) {
+  const n = (k) => Number(x[k]) || 0;
+  $('#erKpis').innerHTML = [
+    kpi(t('er_kpi_sent'), num(n('sent')), `${num(n('failed'))} ${t('er_kpi_failed_sub')} · ${num(n('recipients'))} ${t('er_kpi_recipients_sub')}`, 'accent', ICONS.activity),
+    kpi(t('er_kpi_delivered'), num(n('delivered')), `${pct(n('delivered'), n('sent'))} ${t('er_kpi_of_sent')}`, '', ICONS.check),
+    kpi(t('er_kpi_opened'), num(n('opened')), `${pct(n('opened'), n('delivered'))} ${t('er_kpi_of_delivered')} · ${num(n('opens'))} ${t('er_kpi_opens_total')}`, '', ICONS.eye),
+    kpi(t('er_kpi_clicked'), num(n('clicked')), `${pct(n('clicked'), n('delivered'))} ${t('er_kpi_of_delivered')} · ${pct(n('clicked'), n('opened'))} ${t('er_kpi_of_openers')}`, '', ICONS.trendUp),
+    kpi(t('er_kpi_bounced'), num(n('bounced')), `${pct(n('bounced'), n('sent'))} ${t('er_kpi_of_sent')}`, n('bounced') ? 'warn' : '', ICONS.xCircle),
+    kpi(t('er_kpi_complained'), num(n('complained')), t('er_kpi_complained_sub'), n('complained') ? 'warn' : '', ICONS.xCircle),
+  ].join('');
+}
+// Sent as bars, opened/clicked as lines: all three are email counts, so
+// they share one axis.
+function renderEmailTrendChart(days) {
+  $('#erTrendEmpty').hidden = days.length > 0;
+  paint('erTrendChart', {
+    type: 'bar',
+    data: {
+      labels: days.map((d) => d.day),
+      datasets: [
+        { type: 'bar', label: t('er_series_sent'), data: days.map((d) => d.sent), backgroundColor: C.indigo, borderRadius: 4, order: 3 },
+        { type: 'line', label: t('er_series_opened'), data: days.map((d) => d.opened), borderColor: C.chartAmber, backgroundColor: C.chartAmber, borderWidth: 2, pointRadius: 4, order: 1 },
+        { type: 'line', label: t('er_series_clicked'), data: days.map((d) => d.clicked), borderColor: C.chartGreen, backgroundColor: C.chartGreen, borderWidth: 2, pointRadius: 4, order: 2 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { beginAtZero: true, grid: { color: C.grid }, ticks: { precision: 0, callback: (v) => num(v) } },
+        x: { grid: { display: false } },
+      },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${num(c.raw)}` } },
+      },
+    },
+  });
+}
+function renderEmailRecap(d) {
+  const tr = d.tracking || {};
+  $('#erTracking').textContent = Number(tr.events)
+    ? t('er_tracking_on').replace('{time}', wib(tr.last_event_at))
+    : t('er_tracking_off');
+  renderEmailRecapKpis(d.totals || {});
+  renderEmailTrendChart(d.by_day || []);
+  const rateCols = [
+    { key: 'sent', label: t('er_col_sent'), type: 'num', sum: true },
+    { key: 'failed', label: t('er_col_failed'), type: 'num', sum: true },
+    { key: 'delivered', label: t('er_col_delivered'), type: 'num', sum: true },
+    { key: 'opened', label: t('er_col_opened'), type: 'num', sum: true },
+    { key: 'open_rate', label: t('er_col_open_rate'), type: 'pct' },
+    { key: 'clicked', label: t('er_col_clicked'), type: 'num', sum: true },
+    { key: 'click_rate', label: t('er_col_click_rate'), type: 'pct' },
+    { key: 'bounced', label: t('er_col_bounced'), type: 'num', sum: true },
+  ];
+  genTable('#erCategoryTable', (d.by_category || []).map((r) => ({ ...erWithRates(r), category: erLabel(ER_CATEGORY_KEYS, r.category) })), [
+    { key: 'category', label: t('er_col_category') }, ...rateCols,
+    { key: 'complained', label: t('er_col_complained'), type: 'num', sum: true },
+  ], t('er_empty'));
+  genTable('#erSubjectTable', escRows(d.by_subject || [], ['subject']).map((r) => ({
+    ...erWithRates(r), subject: r.subject || t('er_no_subject'), category: erLabel(ER_CATEGORY_KEYS, r.category),
+    first_sent: wib(r.first_sent), last_sent: wib(r.last_sent),
+  })), [
+    { key: 'subject', label: t('er_col_subject') }, { key: 'category', label: t('er_col_category') },
+    { key: 'first_sent', label: t('er_col_first_sent') }, { key: 'last_sent', label: t('er_col_last_sent') }, ...rateCols,
+  ], t('er_empty'));
+  genTable('#erLinksTable', escRows(d.top_links || [], ['link']), [
+    { key: 'link', label: t('er_col_link') },
+    { key: 'clicks', label: t('er_col_clicks'), type: 'num', sum: true },
+    { key: 'emails', label: t('er_col_emails'), type: 'num' },
+  ], t('er_links_empty'));
+}
+
+function renderEmailLog() {
+  const rows = er.rows || [];
+  $('#erPageInfo').textContent = er.total ? `${num(er.offset + 1)}-${num(er.offset + rows.length)} / ${num(er.total)}` : '';
+  $('#erPrev').disabled = er.offset === 0;
+  $('#erNext').disabled = er.offset + rows.length >= er.total;
+  if (!rows.length) { $('#erLogTable').innerHTML = `<div class="empty">${t('er_log_empty')}</div>`; return; }
+  const cell = (v) => (v == null || v === '' ? 'n/a' : escapeHtml(v));
+  const when = (ts) => `<td class="mono">${ts ? wib(ts) : 'n/a'}</td>`;
+  const body = rows.map((r) => {
+    const [key, cls] = ER_OUTCOME[r.outcome] || ['er_out_sent', 'expired'];
+    return `<tr>${when(r.created_at)}<td>${cell(r.recipient)}</td><td>${cell(r.subject)}</td>
+      <td>${erLabel(ER_CATEGORY_KEYS, r.category)}</td><td>${erLabel(ER_SOURCE_KEYS, r.source)}</td>
+      <td>${cell(r.description)}</td><td>${cell(r.sent_by)}</td>
+      <td><span class="tag ${cls}">${t(key)}</span></td>
+      ${when(r.delivered_at)}${when(r.opened_at)}<td class="num">${num(r.open_count || 0)}</td>
+      ${when(r.clicked_at)}<td class="num">${num(r.click_count || 0)}</td>
+      <td>${cell(r.error || r.bounce_type)}</td>
+      <td><button type="button" class="btn-ghost" data-er-events="${escapeHtml(r.id)}">${t('er_events_btn')}</button></td></tr>`;
+  }).join('');
+  const head = ['er_col_sent_at', 'er_col_recipient', 'er_col_subject', 'er_col_category', 'er_col_source', 'er_col_description',
+    'er_col_sent_by', 'er_col_outcome', 'er_col_delivered_at', 'er_col_first_open', 'er_col_opens', 'er_col_first_click', 'er_col_clicks', 'er_col_error']
+    .map((k) => `<th class="${['er_col_opens', 'er_col_clicks'].includes(k) ? 'num' : ''}">${t(k)}</th>`).join('');
+  $('#erLogTable').innerHTML = `<table><thead><tr>${head}<th></th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function loadEmailLog() {
+  $('#erLogTable').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
+  const p = api(`/api/email-recap/log?${erQs({ ...erFilters(), outcome: $('#erOutcome').value, search: $('#erSearch').value.trim(), limit: er.limit, offset: er.offset })}`);
+  p.then((d) => { er.rows = d.rows || []; er.total = d.total || 0; renderEmailLog(); })
+    .catch((e) => { $('#erLogTable').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; });
+  return p;
+}
+function loadEmailRecap() {
+  ['#erCategoryTable', '#erSubjectTable', '#erLinksTable'].forEach((s) => $(s).innerHTML = `<div class="loading">${t('common_loading')}</div>`);
+  $('#erKpis').innerHTML = '';
+  er.offset = 0;
+  const pSummary = api(`/api/email-recap/summary?${erQs(erFilters())}`);
+  const pLog = loadEmailLog();
+  gateTabLoad((v) => { emailRecapLoaded = v; }, [pSummary, pLog]);
+  pSummary.then((d) => { erSummary = d; renderEmailRecap(d); }).catch((e) => {
+    $('#erTracking').textContent = '';
+    ['#erCategoryTable', '#erSubjectTable', '#erLinksTable'].forEach((s) => $(s).innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`);
+  });
+  return Promise.allSettled([pSummary, pLog]);
+}
+function emailEventDetail(ev) {
+  const d = ev.detail || {};
+  if (ev.event_type === 'Click') return ev.link;
+  if (ev.event_type === 'Bounce') return [d.bounceType, d.bounceSubType].filter(Boolean).join(' / ') + (d.diagnostic ? `: ${d.diagnostic}` : '');
+  return d.smtpResponse || d.feedbackType || d.reason || d.delayType || d.error || '';
+}
+async function openEmailEvents(id) {
+  const row = (er.rows || []).find((r) => r.id === id);
+  $('#erEventsMeta').textContent = row ? `${row.recipient} · ${row.subject || t('er_no_subject')} · ${wib(row.created_at)}` : '';
+  $('#erEventsBody').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
+  $('#erEventsModal').showModal();
+  try {
+    const events = await api(`/api/email-recap/log/${encodeURIComponent(id)}/events`);
+    if (!events.length) { $('#erEventsBody').innerHTML = `<div class="empty">${t('er_events_empty')}</div>`; return; }
+    const body = events.map((ev) => `<tr><td class="mono">${wib(ev.occurred_at)}</td><td>${erLabel(ER_EVENT_KEYS, ev.event_type)}</td>
+      <td>${escapeHtml(emailEventDetail(ev) || 'n/a')}</td><td>${escapeHtml(ev.user_agent || 'n/a')}</td></tr>`).join('');
+    $('#erEventsBody').innerHTML = `<table><thead><tr><th>${t('er_col_time')}</th><th>${t('er_col_event')}</th><th>${t('er_col_detail')}</th><th>${t('er_col_mail_app')}</th></tr></thead><tbody>${body}</tbody></table>`;
+  } catch (e) { $('#erEventsBody').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+}
+
+// USER BEHAVIOR: GA4 app events (user_id = main.users.id) joined to the main
+// database; the matching rules live with the queries (server/queries.js behavior*).
+let behaviorLoaded = false;
+const bhCache = {};
+let bhSelected = null; // { userId, sid, name, email }
+const BH_SEGMENT_KEYS = { holding: 'bh_seg_holding', redeemed: 'bh_seg_redeemed', verified_no_buy: 'bh_seg_verified_no_buy', not_verified: 'bh_seg_not_verified' };
+function bhRange() { return { from: $('#bhFrom').value, to: $('#bhTo').value }; }
+
+function renderBehaviorKpis(rows) {
+  const sum = (k) => rows.reduce((s, r) => s + (Number(val(r[k])) || 0), 0);
+  const users = sum('app_users');
+  const holding = Number(val((rows.find((r) => val(r.segment) === 'holding') || {}).app_users)) || 0;
+  const avg = (k) => (users ? (rows.reduce((s, r) => s + (Number(val(r[k])) || 0) * (Number(val(r.app_users)) || 0), 0) / users).toFixed(1) : 'n/a');
+  $('#bhKpis').innerHTML = [
+    kpi(t('bh_kpi_users'), num(users), t('bh_kpi_users_sub'), 'accent', ICONS.users),
+    kpi(t('bh_kpi_holding'), num(holding), `${pct(holding, users)} ${t('bh_kpi_holding_sub')}`, '', ICONS.coin),
+    kpi(t('bh_kpi_buyers'), num(sum('buyers')), `${pct(sum('buyers'), users)} ${t('bh_kpi_of_app_users')} · ${idr(sum('buy_amount'))}`, '', ICONS.trendUp),
+    kpi(t('bh_kpi_sessions'), avg('avg_sessions'), `${avg('avg_active_days')} ${t('bh_kpi_active_days_sub')}`, '', ICONS.activity),
+  ].join('');
+}
+// People per day on one count axis: two lines for app users, bars for the
+// much smaller number who bought.
+function renderBehaviorDailyChart(rows) {
+  $('#bhDailyEmpty').hidden = rows.length > 0;
+  const line = (key, label, color) => ({
+    label, data: rows.map((d) => Number(val(d[key]))), borderColor: color, backgroundColor: color,
+    borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.25,
+  });
+  paint('bhDailyChart', {
+    type: 'line',
+    data: {
+      labels: rows.map((d) => val(d.day)),
+      datasets: [
+        line('app_users', t('bh_series_app_users'), C.indigo),
+        line('holding_users', t('bh_series_holding'), C.chartGreen),
+        { type: 'bar', label: t('bh_series_buyers'), data: rows.map((d) => Number(val(d.buyers))), backgroundColor: C.chartAmber, borderRadius: 4 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { beginAtZero: true, grid: { color: C.grid }, ticks: { precision: 0, callback: (v) => num(v) } },
+        x: { grid: { display: false } },
+      },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${num(c.raw)}` } },
+      },
+    },
+  });
+}
+function renderBehaviorSegments(rows) {
+  renderBehaviorKpis(rows);
+  genTable('#bhSegmentTable', rows.map((r) => ({ ...r, segment: erLabel(BH_SEGMENT_KEYS, val(r.segment)) })), [
+    { key: 'segment', label: t('bh_col_status') },
+    { key: 'app_users', label: t('bh_col_app_users'), type: 'num', sum: true },
+    { key: 'avg_active_days', label: t('bh_col_active_days') },
+    { key: 'avg_sessions', label: t('bh_col_sessions') },
+    { key: 'avg_screen_views', label: t('bh_col_screens') },
+    { key: 'median_engaged_min', label: t('bh_col_engaged_min') },
+    { key: 'buyers', label: t('bh_col_bought'), type: 'num', sum: true },
+    { key: 'buyer_rate_pct', label: t('bh_col_bought_pct'), type: 'pct' },
+    { key: 'buy_amount', label: t('bh_col_buy_amount'), type: 'idr', sum: true },
+    { key: 'sellers', label: t('bh_col_sold'), type: 'num', sum: true },
+    { key: 'sell_amount', label: t('bh_col_sell_amount'), type: 'idr', sum: true },
+  ], t('bh_empty'));
+}
+function renderBehaviorFeatures(rows) {
+  genTable('#bhFeatureTable', escRows(rows, ['event_name']).map((r) => ({ ...r, lift: `${Number(val(r.lift)).toFixed(2)}×` })), [
+    { key: 'event_name', label: t('bh_col_action') },
+    { key: 'users', label: t('bh_col_people'), type: 'num' },
+    { key: 'buyers_7d', label: t('bh_col_bought_7d'), type: 'num' },
+    { key: 'buy_rate_pct', label: t('bh_col_rate'), type: 'pct' },
+    { key: 'baseline_pct', label: t('bh_col_baseline'), type: 'pct' },
+    { key: 'lift', label: t('bh_col_lift') },
+  ], t('bh_empty'));
+}
+function renderBehaviorPush(rows) {
+  genTable('#bhPushTable', escRows(rows, ['campaign']), [
+    { key: 'campaign', label: t('bh_col_campaign') },
+    { key: 'first_seen', label: t('bh_col_first_seen'), type: 'date' },
+    { key: 'last_seen', label: t('bh_col_last_seen'), type: 'date' },
+    { key: 'received_users', label: t('bh_col_received'), type: 'num' },
+    { key: 'opened_users', label: t('bh_col_opened'), type: 'num' },
+    { key: 'open_rate_pct', label: t('bh_col_open_rate'), type: 'pct' },
+    { key: 'opened_then_bought', label: t('bh_col_opened_bought'), type: 'num' },
+    { key: 'opened_buy_amount', label: t('bh_col_opened_amount'), type: 'idr' },
+    { key: 'buyers_72h', label: t('bh_col_bought_72h'), type: 'num' },
+    { key: 'buy_rate_pct', label: t('bh_col_rate'), type: 'pct' },
+    { key: 'buy_amount_72h', label: t('bh_col_amount_72h'), type: 'idr' },
+  ], t('bh_empty'));
+}
+function renderBehaviorProducts(rows) {
+  genTable('#bhProductTable', escRows(rows, ['fund', 'fund_type']), [
+    { key: 'fund', label: t('bh_col_fund') },
+    { key: 'fund_type', label: t('bh_col_type') },
+    { key: 'views', label: t('bh_col_views'), type: 'num', sum: true },
+    { key: 'viewers', label: t('bh_col_viewers'), type: 'num' },
+    { key: 'buyers_7d', label: t('bh_col_bought_7d'), type: 'num' },
+    { key: 'view_to_buy_pct', label: t('bh_col_view_to_buy'), type: 'pct' },
+    { key: 'buy_amount_7d', label: t('bh_col_buy_amount'), type: 'idr', sum: true },
+    { key: 'viewers_holding_now', label: t('bh_col_already_holding'), type: 'num' },
+  ], t('bh_empty'));
+}
+function renderBehaviorIntent(rows) {
+  genTable('#bhIntentTable', escRows(rows, ['name', 'sid', 'email', 'phone', 'verification_status', 'order_statuses', 'last_fund_viewed'])
+    .map((r) => ({ ...r, order_statuses: r.order_statuses === 'no order created' ? t('bh_no_order') : r.order_statuses })), [
+    { key: 'name', label: t('bh_col_name') }, { key: 'sid', label: 'SID' },
+    { key: 'email', label: t('bh_col_email') }, { key: 'phone', label: t('bh_col_phone') },
+    { key: 'verification_status', label: t('bh_col_kyc') },
+    { key: 'last_try_wib', label: t('bh_col_last_try') },
+    { key: 'buy_sheet_opens', label: t('bh_col_sheet_opens'), type: 'num' },
+    { key: 'orders_created', label: t('bh_col_orders'), type: 'num' },
+    { key: 'order_statuses', label: t('bh_col_order_outcome') },
+    { key: 'last_fund_viewed', label: t('bh_col_last_fund') },
+    { key: 'aum_now', label: t('bh_col_aum_now'), type: 'idr' },
+    { key: 'last_completed_buy', label: t('bh_col_last_buy'), type: 'date' },
+  ], t('bh_intent_empty'));
+}
+const BH_SECTIONS = [
+  ['segments', '#bhSegmentTable', renderBehaviorSegments],
+  ['daily', null, renderBehaviorDailyChart],
+  ['features', '#bhFeatureTable', renderBehaviorFeatures],
+  ['push', '#bhPushTable', renderBehaviorPush],
+  ['products', '#bhProductTable', renderBehaviorProducts],
+  ['intent', '#bhIntentTable', renderBehaviorIntent],
+];
+function loadBehavior() {
+  const r = bhRange();
+  BH_SECTIONS.forEach(([, sel]) => sel && ($(sel).innerHTML = `<div class="loading">${t('common_loading')}</div>`));
+  $('#bhKpis').innerHTML = '';
+  const promises = BH_SECTIONS.map(([key, sel, render]) => {
+    const p = api(`/api/behavior/${key}?from=${r.from}&to=${r.to}`);
+    p.then((rows) => { bhCache[key] = rows; render(rows); }).catch((e) => {
+      if (sel) $(sel).innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+    });
+    return p;
+  });
+  gateTabLoad((v) => { behaviorLoaded = v; }, promises);
+  return Promise.allSettled(promises);
+}
+function repaintBehavior() {
+  BH_SECTIONS.forEach(([key, , render]) => bhCache[key] && render(bhCache[key]));
+  if (bhCache.user) renderBehaviorUser(bhCache.user);
+}
+
+async function searchBehaviorUsers() {
+  const q = $('#bhSearchInput').value.trim();
+  if (!q) return;
+  $('#bhResults').innerHTML = `<div class="loading">${t('bh_searching')}</div>`;
+  try {
+    const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
+    if (!rows.length) { $('#bhResults').innerHTML = `<div class="empty">${t('bh_no_match')}</div>`; return; }
+    const a = (v) => escapeHtml(val(v) || '');
+    const body = rows.map((u) => `<tr><td>${a(u.sid) || 'n/a'}</td><td>${a(u.name) || 'n/a'}</td><td>${a(u.email) || 'n/a'}</td>
+      <td><button type="button" class="btn-ghost" data-bh-user="${a(u.user_id)}" data-sid="${a(u.sid)}" data-name="${a(u.name)}" data-email="${a(u.email)}">${t('bh_show_journey')}</button></td></tr>`).join('');
+    $('#bhResults').innerHTML = `<table><thead><tr><th>SID</th><th>${t('bh_col_name')}</th><th>${t('bh_col_email')}</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+  } catch (e) { $('#bhResults').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+}
+function renderBehaviorUser({ profile: p, timeline }) {
+  if (!p) { $('#bhUserKpis').innerHTML = `<div class="empty">${t('bh_user_missing')}</div>`; $('#bhTimeline').innerHTML = ''; return; }
+  const v = (k) => escapeHtml(val(p[k]) ?? '');
+  $('#bhUserKpis').innerHTML = [
+    kpi(t('bh_user_registered'), v('registered_on') || 'n/a', `${t('bh_col_kyc')}: ${v('verification_status') || 'n/a'}${v('verified_on') ? ` (${v('verified_on')})` : ''}`, '', ICONS.user),
+    kpi(t('bh_user_aum'), idr(val(p.aum_now)), `${num(val(p.lifetime_buys) || 0)} ${t('bh_user_buys_since')} ${v('first_buy') || 'n/a'}`, 'accent', ICONS.coin),
+    kpi(t('bh_user_activity'), `${num(val(p.active_days) || 0)} ${t('bh_user_days')}`, `${num(val(p.sessions) || 0)} ${t('bh_user_sessions')} · ${t('bh_user_last_seen')} ${v('last_seen_wib') || 'n/a'}`, '', ICONS.activity),
+    kpi(t('bh_user_device'), v('platform') || 'n/a', [v('device'), v('app_version') && `v${v('app_version')}`].filter(Boolean).join(' · ') || t('bh_user_no_app'), '', ICONS.monitor),
+  ].join('');
+  const rows = escRows(timeline, ['event', 'detail', 'status', 'platform']).map((r) => ({
+    ...r,
+    source: r.source === 'transaction' ? `<span class="tag buy">${t('bh_src_transaction')}</span>` : `<span class="tag other">${t('bh_src_app')}</span>`,
+  }));
+  genTable('#bhTimeline', rows, [
+    { key: 'time_wib', label: t('bh_col_time') },
+    { key: 'source', label: t('bh_col_source') },
+    { key: 'event', label: t('bh_col_event') },
+    { key: 'detail', label: t('bh_col_detail') },
+    { key: 'amount', label: t('bh_col_amount'), type: 'idr' },
+    { key: 'status', label: t('bh_col_tx_status') },
+    { key: 'session_id', label: t('bh_col_session') },
+  ], t('bh_timeline_empty'));
+}
+async function loadBehaviorUser() {
+  if (!bhSelected) return;
+  const r = bhRange();
+  $('#bhJourney').classList.remove('hidden');
+  $('#bhUserName').textContent = bhSelected.name || bhSelected.sid;
+  $('#bhUserSub').textContent = `SID ${bhSelected.sid}${bhSelected.email ? ` · ${bhSelected.email}` : ''} · ${t('range_from')} ${r.from} ${t('range_to').toLowerCase()} ${r.to}`;
+  $('#bhUserKpis').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
+  $('#bhTimeline').innerHTML = '';
+  try {
+    bhCache.user = await api(`/api/behavior/user?userId=${encodeURIComponent(bhSelected.userId)}&from=${r.from}&to=${r.to}`);
+    renderBehaviorUser(bhCache.user);
+  } catch (e) { $('#bhUserKpis').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }
 
 // Marks a tab's "loaded" gate true right away (so a fast repeat tab-switch
@@ -5254,6 +5632,8 @@ function switchTab(name) {
   if (name === 'marketing' && !marketingLoaded) loadMarketing();
   if (name === 'app-health' && !appHealthLoaded) loadAppHealth();
   if (name === 'product-funnel' && !productFunnelLoaded) loadProductFunnel();
+  if (name === 'email-recap' && !emailRecapLoaded) loadEmailRecap();
+  if (name === 'user-behavior' && !behaviorLoaded) loadBehavior();
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
   if (name === 'presentation' || name === 'monthly-review') {
@@ -5367,6 +5747,8 @@ function repaintActiveTab() {
     case 'growth': growthLoaded = false; loadGrowth(); break;
     case 'predict': predictLoaded = false; loadPredict(); break;
     case 'push': pushLoaded = false; loadPush(); break;
+    case 'email-recap': if (erSummary) renderEmailRecap(erSummary); if (er.rows) renderEmailLog(); break;
+    case 'user-behavior': repaintBehavior(); break;
     case 'performance': renderPerfTrendChart(perfTrendCache); break;
     case 'portfolio': if (pfSelected) loadPortfolioUser(); break;
     case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
@@ -5735,6 +6117,23 @@ function wire() {
   $('#kalcerDetailCsv').addEventListener('click', () => download({ source: 'kalcer_referral_detail', format: 'csv', filename: 'kalcer_referrals', ...kalcerParams() }, 'kalcer_referrals.csv'));
   $('#kalcerDetailXlsx').addEventListener('click', () => download({ source: 'kalcer_referral_detail', format: 'xlsx', filename: 'kalcer_referrals', ...kalcerParams() }, 'kalcer_referrals.xlsx'));
   $('#pushApply').addEventListener('click', loadPush);
+  $('#erApply').addEventListener('click', loadEmailRecap);
+  const erReloadLog = () => { er.offset = 0; loadEmailLog(); };
+  $('#erSearchBtn').addEventListener('click', erReloadLog);
+  $('#erSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') erReloadLog(); });
+  $('#erOutcome').addEventListener('change', erReloadLog);
+  $('#erPrev').addEventListener('click', () => { if (er.offset > 0) { er.offset = Math.max(0, er.offset - er.limit); loadEmailLog(); } });
+  $('#erNext').addEventListener('click', () => { if (er.offset + er.limit < er.total) { er.offset += er.limit; loadEmailLog(); } });
+  $('#erLogTable').addEventListener('click', (e) => { const b = e.target.closest('[data-er-events]'); if (b) openEmailEvents(b.dataset.erEvents); });
+  $('#bhApply').addEventListener('click', () => { loadBehavior(); loadBehaviorUser(); });
+  $('#bhSearchBtn').addEventListener('click', searchBehaviorUsers);
+  $('#bhSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchBehaviorUsers(); });
+  $('#bhResults').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bh-user]');
+    if (!b) return;
+    bhSelected = { userId: b.dataset.bhUser, sid: b.dataset.sid, name: b.dataset.name, email: b.dataset.email };
+    loadBehaviorUser();
+  });
   $('#pushPlatformCsv').addEventListener('click', () => download({ source: 'push_by_platform', format: 'csv', filename: 'push_by_platform', ...pushRange() }, 'push_by_platform.csv'));
   $('#pushPlatformXlsx').addEventListener('click', () => download({ source: 'push_by_platform', format: 'xlsx', filename: 'push_by_platform', ...pushRange() }, 'push_by_platform.xlsx'));
   $('#pushCampaignCsv').addEventListener('click', () => download({ source: 'push_by_campaign', format: 'csv', filename: 'push_by_campaign', ...pushRange() }, 'push_by_campaign.csv'));
@@ -6244,6 +6643,10 @@ async function init() {
   $('#mktFrom').value = r.from; $('#mktTo').value = r.to;
   $('#ahFrom').value = r.from; $('#ahTo').value = r.to;
   $('#pfnFrom').value = r.from; $('#pfnTo').value = r.to;
+  // Shorter defaults than the 12 months above: the email log is new, and
+  // every User behavior query scans GA4 for the whole range (about 100 MB a month).
+  const er90 = daysAgoRange(90); $('#erFrom').value = er90.from; $('#erTo').value = er90.to;
+  const bh30 = daysAgoRange(30); $('#bhFrom').value = bh30.from; $('#bhTo').value = bh30.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   $('#sitxFrom').value = r.from; $('#sitxTo').value = r.to;

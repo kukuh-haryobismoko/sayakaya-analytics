@@ -55,6 +55,16 @@ export function fundScopeLabel(f: FundFilter | null): string {
   return [f.types.length && `categories: ${f.types.join(', ')}`, f.fundIds.length && `${f.fundIds.length} fund(s)`].filter(Boolean).join('; ');
 }
 
+// What a statement email carries, in words, for the Email recap log.
+export function statementDocsLabel({ sendPortfolio, portfolioDate, sendStatement, statementMonth }: {
+  sendPortfolio?: boolean; portfolioDate?: string; sendStatement?: boolean; statementMonth?: string;
+}): string {
+  return [
+    sendPortfolio && `Portfolio ${portfolioDate ? `as of ${portfolioDate}` : '(current holdings)'}`,
+    sendStatement && `transaction e-statement ${statementMonth}`,
+  ].filter(Boolean).join(' + ');
+}
+
 // The Reksa Dana Update PDF, optionally narrowed by a fund filter — one
 // builder for the manual send and the scheduler. Throws when the filter
 // matches no fund (e.g. a picked fund was delisted) instead of emailing an

@@ -172,6 +172,34 @@ const kalcerDetail = [
     referral_date: D('2026-05-18'), invitee_aum: '2.07e8' },
 ];
 
+// Email recap (Supabase RPC/PostgREST, plain JSON, no BigQuery wrappers).
+// The subject is an HTML payload on purpose: it must come out escaped.
+const XSS = '<img src=x onerror=alert(1)>';
+const emailSummary = {
+  totals: { sent: 12, failed: 1, recipients: 10, delivered: 11, opened: 6, clicked: 2, bounced: 1, complained: 0, opens: 9, clicks: 3 },
+  by_category: [{ category: 'statement', sent: 10, failed: 1, delivered: 9, opened: 5, clicked: 0, bounced: 1, complained: 0 },
+    { category: 'invite', sent: 2, failed: 0, delivered: 2, opened: 1, clicked: 2, bounced: 0, complained: 0 }],
+  by_day: [{ day: '2026-10-01', sent: 7, failed: 0, delivered: 7, opened: 4, clicked: 1 }, { day: '2026-10-02', sent: 5, failed: 1, delivered: 4, opened: 2, clicked: 1 }],
+  by_subject: [{ subject: XSS, category: 'statement', first_sent: '2026-10-01T01:00:00+00:00', last_sent: '2026-10-02T01:00:00+00:00', sent: 10, failed: 1, delivered: 9, opened: 5, clicked: 0, bounced: 1 }],
+  top_links: [{ link: 'https://sayakaya.id/app', clicks: 3, emails: 2 }],
+  tracking: { events: 20, last_event_at: '2026-10-02T03:00:00+00:00' },
+};
+const emailLog = { total: 1, rows: [{ id: '0b0b0b0b-0000-4000-8000-000000000001', created_at: '2026-10-02T01:00:00+00:00', recipient: 'a@b.c', subject: XSS,
+  category: 'statement', source: 'schedule', description: 'Portfolio (current holdings)', sent_by: 'kukuh', outcome: 'opened',
+  delivered_at: '2026-10-02T01:00:05+00:00', opened_at: '2026-10-02T02:00:00+00:00', open_count: 2, clicked_at: null, click_count: 0, error: null }] };
+// User behavior (BigQuery rows, same wrappers as the other GA4 tabs)
+const bhSegments = [
+  { segment: 'holding', app_users: 791, avg_active_days: 6, avg_sessions: 8.5, avg_screen_views: 63.3, median_engaged_min: 4, buyers: 239, buyer_rate_pct: 30.2, buy_amount: 6664265797, sellers: 129, sell_amount: 6538119127 },
+  { segment: 'not_verified', app_users: 140, avg_active_days: 2, avg_sessions: 1, avg_screen_views: 9, median_engaged_min: 0.2, buyers: 0, buyer_rate_pct: 0, buy_amount: 0, sellers: 0, sell_amount: 0 },
+];
+const bhDaily = [{ day: D('2026-09-08'), app_users: 247, holding_users: 208, buyers: 14 }];
+const bhFeatures = [{ event_name: 'top_up_product_click', users: 64, buyers_7d: 56, buy_rate_pct: 87.5, baseline_pct: 13.4, lift: 6.52 }];
+const bhPush = [{ campaign: XSS, first_seen: D('2026-09-08'), last_seen: D('2026-10-06'), received_users: 954, opened_users: 20, open_rate_pct: 2.1,
+  opened_then_bought: 0, opened_buy_amount: 0, buyers_72h: 37, buy_rate_pct: 3.8, buy_amount_72h: 2209048136 }];
+const bhProducts = [{ fund: 'Sucorinvest Maxi fund', fund_type: 'EQUITY', views: 393, viewers: 138, buyers_7d: 9, view_to_buy_pct: 6.5, buy_amount_7d: 57800000, viewers_holding_now: 24 }];
+const bhIntent = [{ name: 'A', sid: 'IDD1', email: 'a@b.c', phone: '62812', verification_status: 'verified', last_try_wib: '2026-10-06 23:36',
+  buy_sheet_opens: 1, orders_created: 1, order_statuses: 'no order created', last_fund_viewed: 'Pinnacle Money Market Fund', aum_now: '24520669', last_completed_buy: D('2026-08-29') }];
+
 sandbox.api = async (path) => {
   if (path.startsWith('/api/user-lifetime/summary')) return summaryUL;
   if (path.startsWith('/api/user-lifetime/detail'))  return [];
@@ -220,18 +248,26 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/app-health/crashes'))          return appCrashIssues;
   if (path.startsWith('/api/app-health/performance'))      return appPerfTraces;
   if (path.startsWith('/api/product-funnel'))              return productFunnel;
+  if (path.startsWith('/api/email-recap/summary'))         return emailSummary;
+  if (path.startsWith('/api/email-recap/log'))             return emailLog;
+  if (path.startsWith('/api/behavior/segments'))           return bhSegments;
+  if (path.startsWith('/api/behavior/daily'))              return bhDaily;
+  if (path.startsWith('/api/behavior/features'))           return bhFeatures;
+  if (path.startsWith('/api/behavior/push'))               return bhPush;
+  if (path.startsWith('/api/behavior/products'))           return bhProducts;
+  if (path.startsWith('/api/behavior/intent'))             return bhIntent;
   throw new Error('unexpected path ' + path);
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel', 'loadEmailRecap', 'loadBehavior']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   try { await sandbox.loadAumDrill('2026-08'); } catch (e) { errors.push(`loadAumDrill: ${e.message}`); }
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -287,6 +323,16 @@ sandbox.api = async (path) => {
   } else {
     console.log(`FAIL  #pfnKpis -> ${pfnKpisHtml.slice(0, 200) || '(never rendered)'}`);
     errors.push('#pfnKpis did not render KPI cards');
+  }
+  for (const sel of ['#erKpis', '#bhKpis']) {
+    if (get(sel)._html.includes('kpi-value')) console.log(`ok    ${sel}`);
+    else errors.push(`${sel} did not render KPI cards`);
+  }
+  // Email subjects and push campaign names are typed by people; genTable
+  // writes raw HTML, so the new tabs escape them first.
+  for (const sel of ['#erSubjectTable', '#erLogTable', '#bhPushTable']) {
+    if (get(sel)._html.includes(XSS)) errors.push(`${sel} rendered unescaped HTML`);
+    else console.log(`ok    ${sel} escapes HTML`);
   }
   // Platform AUM's own "as of" date input should default to the latest
   // available date from /api/funds/top/latest-date, same as #topFundsDate.

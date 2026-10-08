@@ -30,7 +30,7 @@ const Q = require('./queries');
 const PDF = require('./pdf');
 const Mail = require('./mail');
 const Auth = require('./auth');
-const { buildFundPerformancePdf, fundScopeLabel, buildStatementAttachments, previousMonthYYYYMM } = require('./report-helpers');
+const { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatementAttachments, previousMonthYYYYMM } = require('./report-helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -183,7 +183,7 @@ async function requestOtp(payload) {
       expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
     }),
   });
-  await Mail.sendScheduleOtpEmail({ to: payload.confirmationEmail, code, kind: payload.kind });
+  await Mail.sendScheduleOtpEmail({ to: payload.confirmationEmail, code, kind: payload.kind, sentBy: payload.username });
   return row.id;
 }
 
@@ -329,6 +329,10 @@ async function drainQueueForJob(job, limit) {
           to: row.recipient_email, subject: job.subject, body: job.body,
           attachments: [{ filename: 'Reksa_Dana_Update.pdf', content: fundPerfBuffer }],
           from: senderEmail,
+          log: {
+            category: 'fund_performance', source: 'schedule', sentBy: job.created_by_username, jobId: job.id,
+            description: `Scheduled ${job.frequency} Reksa Dana Update PDF (${fundScopeLabel(job.fund_filter)})`,
+          },
         });
         await Auth.logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_fund_performance',
           `scheduled fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
@@ -336,13 +340,21 @@ async function drainQueueForJob(job, limit) {
         const c = Q.userContact(row.recipient_user_id);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
         if (!contact?.email) throw new Error('no email on file');
+        const statementMonth = previousMonthYYYYMM(); // recurring sends always cover the last completed month
         const attachments = await buildStatementAttachments({
           userId: row.recipient_user_id, sid: row.recipient_sid, contact,
           sendPortfolio: job.send_portfolio, sendStatement: job.send_statement,
-          statementMonth: previousMonthYYYYMM(), // recurring sends always cover the last completed month
+          statementMonth,
           username: job.created_by_username || 'schedule',
         });
-        await Mail.sendStatementEmail({ to: contact.email, subject: job.subject, body: job.body, name: contact.name, attachments, from: senderEmail });
+        await Mail.sendStatementEmail({
+          to: contact.email, subject: job.subject, body: job.body, name: contact.name, attachments, from: senderEmail,
+          log: {
+            category: 'statement', source: 'schedule', sentBy: job.created_by_username, jobId: job.id,
+            userId: row.recipient_user_id, sid: row.recipient_sid,
+            description: `Scheduled ${job.frequency} ${statementDocsLabel({ sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth })} for ${PDF.val(contact.name) || row.recipient_sid}`,
+          },
+        });
         const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
         const recipient = `${PDF.val(contact.name) || row.recipient_sid} (SID ${row.recipient_sid}, ${contact.email})`;
         await Auth.logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_pdf',

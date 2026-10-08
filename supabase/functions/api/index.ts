@@ -15,8 +15,9 @@ import * as A from './auth.ts';
 import * as Mail from './mail.ts';
 import * as Sched from './schedules.ts';
 import {
-  pivotPerformanceByType, normalizeFundFilter, fundScopeLabel, buildFundPerformancePdf, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM,
+  pivotPerformanceByType, normalizeFundFilter, fundScopeLabel, statementDocsLabel, buildFundPerformancePdf, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM,
 } from './report-helpers.ts';
+import * as EmailLog from './email-log.ts';
 
 // Every export `source` maps to exactly one tab — mirrors server/app.js.
 const EXPORT_SOURCE_TAB: Record<string, string> = {
@@ -336,7 +337,7 @@ on('POST', '/api/admin/users', requireSuperuser(async (req, _params, _url, user)
   });
   const token = await A.createPasswordReset(created.id, A.INVITE_TTL_MS);
   const origin = Deno.env.get('APP_URL') || req.headers.get('origin') || '';
-  await Mail.sendInviteEmail({ to: email, activateUrl: `${origin}/?reset=${token}` });
+  await Mail.sendInviteEmail({ to: email, activateUrl: `${origin}/?reset=${token}`, sentBy: user!.username || user!.email });
   await A.logEvent(user!.id, user!.username, 'admin_user_create',
     `invited dashboard user "${username || email}"${body.isSuperuser ? ' (superuser)' : ''}`);
   return json(A.publicUser(created));
@@ -702,7 +703,7 @@ on('GET', '/api/top-investors', requireTab('top-investors', async (_req, _params
 }));
 
 // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
-on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement', 'send-fund-performance'], async (_req, _params, url) => {
+on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement', 'send-fund-performance', 'user-behavior'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
 }));
@@ -935,6 +936,43 @@ on('GET', '/api/app-health/performance', requireTab('app-health', async (_req, _
 on('GET', '/api/product-funnel', requireTab('product-funnel', async (_req, _params, url) => {
   const q = Q.productFunnelByPlatform(qp(url, 'from'), qp(url, 'to'));
   return json(await runQuery(q.sql, q.params));
+}));
+
+// ---- User behavior: GA4 app events (user_id) joined to the main database,
+// see queries.ts for the matching rules ------------------------------------
+on('GET', '/api/behavior/segments', requireTab('user-behavior', async (_req, _params, url) => {
+  const q = Q.behaviorSegments(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/behavior/daily', requireTab('user-behavior', async (_req, _params, url) => {
+  const q = Q.behaviorDaily(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/behavior/features', requireTab('user-behavior', async (_req, _params, url) => {
+  const q = Q.behaviorFeatureLift(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/behavior/push', requireTab('user-behavior', async (_req, _params, url) => {
+  const q = Q.behaviorPushImpact(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/behavior/products', requireTab('user-behavior', async (_req, _params, url) => {
+  const q = Q.behaviorProductInterest(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/behavior/intent', requireTab('user-behavior', async (_req, _params, url) => {
+  const q = Q.behaviorIntentNoBuy(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
+on('GET', '/api/behavior/user', requireTab('user-behavior', async (_req, _params, url, user) => {
+  const userId = qp(url, 'userId');
+  if (!userId) return json({ error: 'userId is required.' }, 400);
+  const p = Q.behaviorUserProfile(userId, qp(url, 'from'), qp(url, 'to'));
+  const t = Q.behaviorUserTimeline(userId, qp(url, 'from'), qp(url, 'to'));
+  const [profile, timeline] = await Promise.all([runQuery(p.sql, p.params), runQuery(t.sql, t.params)]);
+  // A named individual's activity, not aggregate analytics: audited like a portfolio lookup.
+  await A.logEvent(user!.id, user!.username || user!.email || '', 'view_user_journey', `SID ${val(profile[0]?.sid) || userId}`);
+  return json({ profile: profile[0] || null, timeline });
 }));
 
 // ---- Product performance (NAV % change per fund type) ----------------------
@@ -1868,6 +1906,10 @@ on('POST', '/api/statement/email', requireTab('send-statement', async (req, _par
     name: contact.name as string | undefined,
     attachments,
     from: senderEmail,
+    log: {
+      category: 'statement', source: 'manual', sentBy: username, userId, sid,
+      description: `${statementDocsLabel({ sendPortfolio, portfolioDate, sendStatement, statementMonth })} for ${val(contact.name) || sid}`,
+    },
   });
   const sent = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
   const recipient = `${val(contact.name) || sid} (SID ${sid}, ${contact.email})`;
@@ -1917,7 +1959,13 @@ on('POST', '/api/statement/email-batch', requireTab('send-statement', async (req
     const [contact] = await runQuery(c.sql, c.params, { redact: false });
     if (!contact?.email) throw new Error('no email on file');
     const attachments = await buildStatementAttachments({ userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username });
-    await Mail.sendStatementEmail({ to: contact.email as string, subject, body: emailBody, name: contact.name as string | undefined, attachments, from: senderEmail });
+    await Mail.sendStatementEmail({
+      to: contact.email as string, subject, body: emailBody, name: contact.name as string | undefined, attachments, from: senderEmail,
+      log: {
+        category: 'statement', source: 'batch', sentBy: username, userId, sid,
+        description: `${statementDocsLabel({ sendPortfolio, portfolioDate, sendStatement, statementMonth })} for ${val(contact.name) || sid}`,
+      },
+    });
     return { sid, email: contact.email as string };
   }));
 
@@ -1970,7 +2018,13 @@ on('POST', '/api/fund-performance/email', requireTab('send-fund-performance', as
   const emailBody = body.body as string | undefined;
   const senderEmail = Deno.env.get('SMTP_FROM_FUND_PERFORMANCE') || 'hi@sayakaya.id';
   const results = await Promise.allSettled(
-    recipients.map((email) => Mail.sendStatementEmail({ to: email, subject, body: emailBody, attachments, from: senderEmail })),
+    recipients.map((email) => Mail.sendStatementEmail({
+      to: email, subject, body: emailBody, attachments, from: senderEmail,
+      log: {
+        category: 'fund_performance', source: recipients.length > 1 ? 'batch' : 'manual', sentBy: username,
+        description: `Reksa Dana Update PDF${asOf ? ` as of ${asOf}` : ''} (${fundScopeLabel(fundFilter)})`,
+      },
+    })),
   );
   const sent: string[] = []; const failed: string[] = [];
   results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));
@@ -2151,6 +2205,32 @@ on('DELETE', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-p
   return json({ ok: true });
 }));
 
+// ---- Email recap: every email this app sends (email-log.ts) and the
+// delivery/open/click events SES reports back for it ----------------------
+on('GET', '/api/email-recap/summary', requireTab('email-recap', async (_req, _params, url) => {
+  const from = qp(url, 'from'); const to = qp(url, 'to');
+  if (!from || !to) return json({ error: 'from and to are required.' }, 400);
+  return json(await EmailLog.recap({ from, to, category: qp(url, 'category'), source: qp(url, 'source') }));
+}));
+on('GET', '/api/email-recap/log', requireTab('email-recap', async (_req, _params, url) => {
+  return json(await EmailLog.list(Object.fromEntries(url.searchParams)));
+}));
+on('GET', '/api/email-recap/log/:id/events', requireTab('email-recap', async (_req, params) => {
+  return json(await EmailLog.events(params.id));
+}));
+
+// SES -> SNS -> here. SNS can't send a Bearer token, so this is exempted
+// from the session check below and checks a shared secret in the
+// subscription URL instead (?key=SES_WEBHOOK_SECRET), like the cron routes.
+// ponytail: URL secret only, add SNS message-signature verification if the URL ever leaks into a shared place.
+on('POST', '/api/webhooks/ses', async (req, _params, url) => {
+  const expected = Deno.env.get('SES_WEBHOOK_SECRET');
+  if (!expected) return json({ error: 'SES_WEBHOOK_SECRET is not configured on the server.' }, 500);
+  if (!EmailLog.secretMatches(url.searchParams.get('key'), expected)) return json({ error: 'Unauthorized.' }, 401);
+  const r = await EmailLog.handleSnsMessage(await req.text());
+  return json(r.body, r.status);
+});
+
 // ---- Scheduled-send execution: invoked by an external scheduler on a timer
 // (see server/schedules.js's header comment for the full rationale) — never
 // by a dashboard session, so it's exempted from the Bearer-token check below
@@ -2194,7 +2274,8 @@ Deno.serve(async (req) => {
   let user: A.DashboardUser | null = null;
   const authExempt = pathname === '/api/health' || pathname === '/api/auth/login'
     || pathname === '/api/auth/forgot-password' || pathname === '/api/auth/reset-password'
-    || pathname === '/api/cron/run-due-schedules' || pathname === '/api/cron/retrain-models';
+    || pathname === '/api/cron/run-due-schedules' || pathname === '/api/cron/retrain-models'
+    || pathname === '/api/webhooks/ses';
   if (!authExempt) {
     const authHeader = req.headers.get('authorization') || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;

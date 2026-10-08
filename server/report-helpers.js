@@ -165,10 +165,19 @@ function previousMonthYYYYMM(from = new Date()) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+// What a statement email carries, in words, for the Email recap log.
+function statementDocsLabel({ sendPortfolio, portfolioDate, sendStatement, statementMonth }) {
+  return [
+    sendPortfolio && `Portfolio ${portfolioDate ? `as of ${portfolioDate}` : '(current holdings)'}`,
+    sendStatement && `transaction e-statement ${statementMonth}`,
+  ].filter(Boolean).join(' + ');
+}
+
 module.exports = {
   pivotPerformanceByType,
   normalizeFundFilter,
   fundScopeLabel,
+  statementDocsLabel,
   buildFundPerformancePdf,
   birthdatePassword,
   buildStatementAttachments,

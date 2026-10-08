@@ -112,6 +112,8 @@ server/
   pdf.js             Investor portfolio PDF generation (PDFKit)
   ml.js              BigQuery ML calls (forecasts, churn scoring)
   logo.js            Base64-inlined logo PNG (survives esbuild bundling on Netlify)
+  mail.js            SES SMTP sender; every email goes through send(), which logs it
+  email-log.js       Email recap: send log + SES event webhook (Supabase tables)
 
 netlify/functions/api.js   Netlify entrypoint (see §2)
 setup/ml_models.sql        One-time BQML model-training SQL — see PREDICTIVE-MODELS.md
@@ -154,6 +156,13 @@ All tables live in project **`sayakaya`**, region `asia-southeast2` (`BQ_LOCATIO
 | `mi_fee_logs` | `mi_fee` (daily AUM+revenue snapshot per fund), `portfolio_with_code` (daily per-user-per-fund AUM by SID) | AUM history, per-user performance |
 | `sinvest` | `trx_history` | Raw KSEI/custodian feed — reconciliation and the "Sinvest Transactions" explorer dataset. Every column is `STRING`; never cleaned. |
 | `ml` | `aum_forecast`, `tx_forecast`, `churn_model`, `churn_features` | BigQuery ML models (see `server/ml.js`, `PREDICTIVE-MODELS.md`) |
+| `analytics_266759216` | `events_*` (GA4 export, one table per day) | Product funnel, User behavior. `user_id` is `main.users.id` once the person is logged in, which is what lets User behavior join app events to transactions (`queries.js` `behavior*`) |
+
+Supabase Postgres (not BigQuery) holds the app's own state: dashboard
+accounts/sessions/audit log, schedules, and the Email recap's
+`dashboard_email_log` + `dashboard_email_events` (view
+`dashboard_email_overview`, function `dashboard_email_recap`). See
+`supabase/migrations/`.
 
 ### The recurring "active holdings" pattern
 
@@ -380,6 +389,9 @@ itself; most are further scoped to one nav tab via `requireTab(...)` in
 | `/ask` | POST | Natural language → SQL → rows |
 | `/ask/chart` | POST | Suggest a Chart.js config for a set of rows |
 | `/sql/estimate`, `/sql/run` | POST | SQL Lab: dry-run byte estimate, and execution |
+| `/email-recap/summary`, `/email-recap/log`, `/email-recap/log/:id/events` | GET | Email recap tab (Supabase `dashboard_email_*`) |
+| `/webhooks/ses` | POST | SES events via SNS; no session, checks `?key=SES_WEBHOOK_SECRET` |
+| `/behavior/segments`, `/daily`, `/features`, `/push`, `/products`, `/intent`, `/user` | GET | User behavior tab (GA4 joined to `main`) |
 | `/export` | POST | CSV/XLSX/PDF export; `source` selects the dataset (see `server/app.js`'s `source === '...'` branches), `format` selects the file type |
 
 ---

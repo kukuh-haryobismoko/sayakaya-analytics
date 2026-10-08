@@ -12,7 +12,7 @@ import * as Q from './queries.ts';
 import { val } from './pdf.ts';
 import * as Mail from './mail.ts';
 import { logEvent } from './auth.ts';
-import { buildFundPerformancePdf, fundScopeLabel, buildStatementAttachments, previousMonthYYYYMM, type FundFilter } from './report-helpers.ts';
+import { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatementAttachments, previousMonthYYYYMM, type FundFilter } from './report-helpers.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -183,7 +183,7 @@ export async function requestOtp(payload: any): Promise<string> {
       expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
     }),
   });
-  await Mail.sendScheduleOtpEmail({ to: payload.confirmationEmail, code, kind: payload.kind });
+  await Mail.sendScheduleOtpEmail({ to: payload.confirmationEmail, code, kind: payload.kind, sentBy: payload.username });
   return row.id;
 }
 
@@ -324,6 +324,10 @@ async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sen
           to: row.recipient_email, subject: job.subject ?? undefined, body: job.body ?? undefined,
           attachments: [{ filename: 'Reksa_Dana_Update.pdf', content: fundPerfBuffer }],
           from: senderEmail,
+          log: {
+            category: 'fund_performance', source: 'schedule', sentBy: job.created_by_username, jobId: job.id,
+            description: `Scheduled ${job.frequency} Reksa Dana Update PDF (${fundScopeLabel(job.fund_filter)})`,
+          },
         });
         await logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_fund_performance',
           `scheduled fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
@@ -331,15 +335,21 @@ async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sen
         const c = Q.userContact(row.recipient_user_id);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
         if (!contact?.email) throw new Error('no email on file');
+        const statementMonth = previousMonthYYYYMM(); // recurring sends always cover the last completed month
         const attachments = await buildStatementAttachments({
           userId: row.recipient_user_id, sid: row.recipient_sid, contact,
           sendPortfolio: job.send_portfolio, sendStatement: job.send_statement,
-          statementMonth: previousMonthYYYYMM(),
+          statementMonth,
           username: job.created_by_username || 'schedule',
         });
         await Mail.sendStatementEmail({
           to: contact.email as string, subject: job.subject ?? undefined, body: job.body ?? undefined,
           name: contact.name as string | undefined, attachments, from: senderEmail,
+          log: {
+            category: 'statement', source: 'schedule', sentBy: job.created_by_username, jobId: job.id,
+            userId: row.recipient_user_id, sid: row.recipient_sid,
+            description: `Scheduled ${job.frequency} ${statementDocsLabel({ sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth })} for ${val(contact.name as string | undefined) || row.recipient_sid}`,
+          },
         });
         const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
         const recipient = `${val(contact.name as string | undefined) || row.recipient_sid} (SID ${row.recipient_sid}, ${contact.email})`;
