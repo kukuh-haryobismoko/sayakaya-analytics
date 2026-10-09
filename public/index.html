@@ -1484,9 +1484,22 @@
             <div id="ovFundFilterList" class="dropdown-multi-list"></div>
           </div>
         </div>
+        <div class="dropdown-multi" id="ovUserFilterDropdown">
+          <!-- Label is set by updateOverviewUserFilterBtn() (applied rule count), so no data-i18n here. -->
+          <button type="button" class="dropdown-multi-btn" id="ovUserFilterBtn" aria-expanded="false" aria-controls="ovUserFilterPanel">All users</button>
+          <div class="dropdown-multi-panel align-left uf-panel" id="ovUserFilterPanel">
+            <div id="ovUserFilterRules" class="uf-rules"></div>
+            <p id="ovUserFilterEmpty" class="uf-empty" data-i18n="ov_uf_empty">No rules yet, so every user counts. Add one to include or exclude users by referrer code, sales code, SID, email, or institution accounts.</p>
+            <div class="dropdown-multi-actions">
+              <button type="button" class="link-btn" id="ovUserFilterAdd" data-i18n="ov_uf_add">Add rule</button>
+              <button type="button" class="link-btn" id="ovUserFilterClear" data-i18n="common_clear">Clear</button>
+            </div>
+            <span class="hint" data-i18n="ov_uf_hint">Separate values with commas or new lines, up to 300 in total. Upper and lower case match the same, and * stands for any text: BPJSKES* matches every code starting with BPJSKES. A user has to pass every rule.</span>
+          </div>
+        </div>
         <button id="ovFundFilterApply" class="btn-primary" data-i18n="apply">Apply</button>
       </div>
-      <span class="hint" data-i18n="ov_fund_filter_hint">Platform AUM uses its own as-of date above and only counts active funds, independent of the transaction date range at the top of the page. The fund filter scopes the KPIs and charts above the Largest funds table to the selected fund(s); total, verified, and new user counts stay platform-wide, and the Largest funds table has its own fund picker.</span>
+      <span class="hint" data-i18n="ov_fund_filter_hint">Platform AUM uses its own as-of date above and only counts active funds, independent of the transaction date range at the top of the page. The fund filter scopes the KPIs and charts above the Largest funds table to the selected fund(s); total, verified, and new user counts stay platform-wide, and the Largest funds table has its own fund picker. The user filter applies to every number on this tab, the Largest funds table included. While it is on, AUM by fund type adds up those users' holdings instead of each fund's total AUM.</span>
       <div id="kpis" class="kpi-grid" style="margin-top:14px"></div>
 
       <div class="panel">

@@ -421,10 +421,11 @@ function createApp({ serveStatic = true } = {}) {
     const { from, to, aumDate } = req.query;
     if (!aumDate) return res.status(400).json({ error: 'aumDate is required.' });
     const fundIds = parseFundIds(req.query.fundIds);
+    const uf = Q.normalizeUserFilter(req.query.userFilter);
     const [users, aum, tx, funds] = await Promise.all([
-      runQuery(Q.overviewUsers().sql, Q.overviewUsers().params),
-      runQuery(Q.platformAumAsOf(aumDate, fundIds).sql, Q.platformAumAsOf(aumDate, fundIds).params),
-      runQuery(Q.overviewTx(from, to, fundIds).sql, Q.overviewTx(from, to, fundIds).params),
+      runQuery(Q.overviewUsers(uf).sql, Q.overviewUsers(uf).params),
+      runQuery(Q.platformAumAsOf(aumDate, fundIds, uf).sql, Q.platformAumAsOf(aumDate, fundIds, uf).params),
+      runQuery(Q.overviewTx(from, to, fundIds, uf).sql, Q.overviewTx(from, to, fundIds, uf).params),
       runQuery(Q.overviewFunds(fundIds).sql, Q.overviewFunds(fundIds).params),
     ]);
     res.json({ ...users[0], ...aum[0], ...tx[0], ...funds[0] });
@@ -433,14 +434,14 @@ function createApp({ serveStatic = true } = {}) {
   // ---- Trends ---------------------------------------------------------------
   app.get('/api/trends', requireTab('overview'), handler(async (req, res) => {
     const { from, to, granularity } = req.query;
-    const q = Q.trends(from, to, granularity, parseFundIds(req.query.fundIds));
+    const q = Q.trends(from, to, granularity, parseFundIds(req.query.fundIds), Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
 
   // ---- Breakdowns -----------------------------------------------------------
   app.get('/api/breakdown/:dimension', requireTab('overview'), handler(async (req, res) => {
     const { from, to } = req.query;
-    const q = Q.breakdownBy(req.params.dimension, from, to, parseFundIds(req.query.fundIds));
+    const q = Q.breakdownBy(req.params.dimension, from, to, parseFundIds(req.query.fundIds), Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
 
@@ -455,7 +456,7 @@ function createApp({ serveStatic = true } = {}) {
     const { date, excludeFunds } = req.query;
     if (!date) return res.status(400).json({ error: 'date is required.' });
     const exclude = excludeFunds ? String(excludeFunds).split(',').filter(Boolean) : [];
-    const q = Q.largestFundsAum(req.query.groupBy, date, exclude);
+    const q = Q.largestFundsAum(req.query.groupBy, date, exclude, Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
   // Shared by Overview, Performance, Users transactions (fund filter), and
@@ -465,7 +466,7 @@ function createApp({ serveStatic = true } = {}) {
     res.status(403).json({ error: 'You do not have access to this section.' });
   };
   app.get('/api/funds/types', requireOverviewOrPerformance, handler(async (req, res) => {
-    const q = Q.fundTypes(parseFundIds(req.query.fundIds));
+    const q = Q.fundTypes(parseFundIds(req.query.fundIds), Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
   // Shared by Overview (fund-filter dropdown) and Performance (trend picker).
@@ -479,20 +480,20 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.userGrowth();
     res.json(await runQuery(q.sql, q.params));
   }));
-  app.get('/api/users/verification', requireTab('overview'), handler(async (_req, res) => {
-    const q = Q.verificationBreakdown();
+  app.get('/api/users/verification', requireTab('overview'), handler(async (req, res) => {
+    const q = Q.verificationBreakdown(Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
   app.get('/api/users/by-province', requireTab('overview'), handler(async (req, res) => {
-    const q = Q.usersByProvince(parseFundIds(req.query.fundIds));
+    const q = Q.usersByProvince(parseFundIds(req.query.fundIds), Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
   app.get('/api/users/top-cities', requireTab('overview'), handler(async (req, res) => {
-    const q = Q.topCitiesByInvestors(req.query.limit, parseFundIds(req.query.fundIds));
+    const q = Q.topCitiesByInvestors(req.query.limit, parseFundIds(req.query.fundIds), Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
   app.get('/api/users/top-cities-aum', requireTab('overview'), handler(async (req, res) => {
-    const q = Q.topCitiesByAum(req.query.limit, parseFundIds(req.query.fundIds));
+    const q = Q.topCitiesByAum(req.query.limit, parseFundIds(req.query.fundIds), Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
 
@@ -1265,7 +1266,7 @@ function createApp({ serveStatic = true } = {}) {
       if (!v.ok) return res.status(400).json({ error: v.error });
       rows = await runQuery(capRows(v.sql, limit || 100000), {});
     } else if (source === 'growth_top_funds') {
-      const q = Q.largestFundsAum(req.body.groupBy, req.body.date, req.body.excludeFunds);
+      const q = Q.largestFundsAum(req.body.groupBy, req.body.date, req.body.excludeFunds, Q.normalizeUserFilter(req.body.userFilter));
       rows = (await runQuery(q.sql, q.params)).map(({ is_total, ...r }) => r);
     } else if (source === 'transactions') {
       const q = Q.transactions({ ...req.body.filters, limit: limit || 100000, offset: 0 });

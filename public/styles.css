@@ -472,7 +472,10 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   opacity: 0; visibility: hidden; transform: translateY(-6px); pointer-events: none;
   transition: opacity .15s ease, transform .15s ease, visibility .15s;
 }
-.dropdown-multi-panel.open { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
+/* No visibility transition on the way in: the panel has to be focusable the
+   moment it opens (the Overview user filter focuses its first values box),
+   and opacity still fades it in. Closing keeps the base rule's transition. */
+.dropdown-multi-panel.open { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; transition: opacity .15s ease, transform .15s ease; }
 /* Default panels open leftward (right: 0) because their buttons normally sit
    near the right edge of a filter row. A button near the LEFT edge instead
    (e.g. the Overview fund filter) needs this to open rightward, or the panel
@@ -486,6 +489,26 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   border-radius: 7px; padding: 7px 9px; background: var(--input-bg); color: var(--ink); font: inherit;
 }
 .dropdown-multi-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+/* Overview user filter: wider than a checklist panel because each rule row
+   holds two selects plus a values box. The button picks up the accent only
+   while rules are applied, since they can shrink every number on the tab. */
+/* Border only, text stays --ink: dark-mode indigo on --surface is 3.54:1,
+   enough for a 2px edge (3:1) but not for 13px text (4.5:1). */
+.dropdown-multi-btn.is-active { border-color: var(--indigo); box-shadow: inset 0 0 0 1px var(--indigo); font-weight: 600; }
+.uf-panel { width: 380px; }
+.uf-rules { display: flex; flex-direction: column; gap: 10px; max-height: 320px; overflow-y: auto; }
+.uf-rule { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.uf-rule select { min-width: 0; }
+.uf-values {
+  grid-column: 1 / -1; resize: vertical; box-sizing: border-box; width: 100%;
+  border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px;
+  background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px;
+}
+.uf-empty { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.uf-rules:not(:empty) + .uf-empty { display: none; }
+.uf-rules:not(:empty) { margin-bottom: 10px; }
+.uf-panel .hint { display: block; margin-top: 4px; }
+.chart-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .dropdown-multi-actions { display: flex; gap: 10px; margin-bottom: 8px; }
 /* Plain-text button for a small in-panel action (e.g. "Select all" / "Clear"
    above a checkbox list) — same look as .gate-link, generalized past the
@@ -720,7 +743,7 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
   .chart-wrap.geo { height: 260px; }
   .kpi-value { font-size: 22px; }
   /* 44px touch height for the controls every section's filter bars use. */
-  .seg button, .btn-primary, .btn-ghost, select, input[type="date"], td .link-btn, .table-export-bar button { min-height: 44px; }
+  .seg button, .btn-primary, .btn-ghost, select, input[type="date"], td .link-btn, .table-export-bar button, .uf-remove, .uf-panel .dropdown-multi-actions .link-btn { min-height: 44px; }
   .nav-toggle { width: 44px; height: 44px; }
   /* Table/chart export buttons: 44px touch target, and always visible —
      .chart-export-bar's desktop "dim until hover" doesn't work on touch,

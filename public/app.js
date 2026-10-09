@@ -1777,6 +1777,67 @@ function overviewFundFilterClear() {
   updateOverviewFundFilterBtn();
 }
 
+// Overview user filter: include/exclude rules on referrer code, sales code,
+// SID, email, or institution accounts (see normalizeUserFilter in
+// server/queries.js for the matching rules). The panel is a draft;
+// ovUserFilter holds what was last applied, so a granularity click or a
+// Largest funds re-query never picks up half-typed rules.
+const UF_FIELDS = ['referrer_code', 'sales_code', 'sid', 'email', 'institution'];
+const UF_MAX_VALUES = 300; // same cap the server enforces
+let ovUserFilter = [];
+function addOverviewUserRule() {
+  const row = document.createElement('div');
+  row.className = 'uf-rule';
+  row.innerHTML = `
+    <select class="uf-mode" data-i18n-title="ov_uf_mode" title="${t('ov_uf_mode')}">
+      <option value="exclude" data-i18n="ov_uf_exclude">${t('ov_uf_exclude')}</option>
+      <option value="include" data-i18n="ov_uf_include">${t('ov_uf_include')}</option>
+    </select>
+    <select class="uf-field" data-i18n-title="ov_uf_field" title="${t('ov_uf_field')}">
+      ${UF_FIELDS.map((f) => `<option value="${f}" data-i18n="ov_uf_f_${f}">${t('ov_uf_f_' + f)}</option>`).join('')}
+    </select>
+    <button type="button" class="link-btn uf-remove" data-i18n="ov_uf_remove">${t('ov_uf_remove')}</button>
+    <textarea class="uf-values" rows="2"></textarea>`;
+  $('#ovUserFilterRules').appendChild(row);
+  syncOverviewUserRule(row);
+  row.querySelector('.uf-values').focus();
+}
+// Institution accounts is a yes/no flag, so its row has no values box.
+function syncOverviewUserRule(row) {
+  const field = row.querySelector('.uf-field').value;
+  const box = row.querySelector('.uf-values');
+  box.hidden = field === 'institution';
+  box.dataset.i18nPlaceholder = `ov_uf_ph_${field}`;
+  box.placeholder = t(`ov_uf_ph_${field}`);
+}
+function overviewUserRulesDraft() {
+  return $$('#ovUserFilterRules .uf-rule').map((row) => {
+    const field = row.querySelector('.uf-field').value;
+    const values = field === 'institution' ? [] : row.querySelector('.uf-values').value.split(/[\s,;]+/).filter(Boolean);
+    return { field, mode: row.querySelector('.uf-mode').value, values };
+  }).filter((r) => r.field === 'institution' || r.values.length);
+}
+function overviewUserQs() {
+  return ovUserFilter.length ? `userFilter=${encodeURIComponent(JSON.stringify(ovUserFilter))}` : '';
+}
+// Accent border while rules are on: the filter can shrink every number on the
+// tab (RAIZKAYA alone is ~80% of users), so it has to be visible at a glance.
+function updateOverviewUserFilterBtn() {
+  const n = ovUserFilter.length;
+  $('#ovUserFilterBtn').textContent = n
+    ? t('ov_uf_rules').replace('{n}', n).replace('{s}', n === 1 ? '' : 's')
+    : t('ov_uf_all_users');
+  $('#ovUserFilterBtn').classList.toggle('is-active', n > 0);
+}
+function setOverviewUserPanel(open) {
+  $('#ovUserFilterPanel').classList.toggle('open', open);
+  $('#ovUserFilterBtn').setAttribute('aria-expanded', String(open));
+}
+// Fund + user filter, as one query-string fragment for every Overview call.
+function overviewScopeQs() {
+  return [overviewFundQs(), overviewUserQs()].filter(Boolean).join('&');
+}
+
 // Platform AUM's own "as of" date — deliberately separate from the from/to
 // range above (that range only ever scoped buy/sell/transaction figures,
 // never AUM, which was confusing with both pickers sitting side by side).
@@ -1796,9 +1857,9 @@ async function loadOverview() {
     } catch { /* leave blank and retry on next load — /api/overview below will surface the error meanwhile */ }
   }
   const r = currentRange();
-  const fundQs = overviewFundQs();
-  const qs = `?from=${r.from}&to=${r.to}${fundQs ? '&' + fundQs : ''}`;
-  const aumQs = `?aumDate=${$('#ovAumDate').value}${fundQs ? '&' + fundQs : ''}&from=${r.from}&to=${r.to}`;
+  const scopeQs = overviewScopeQs();
+  const qs = `?from=${r.from}&to=${r.to}${scopeQs ? '&' + scopeQs : ''}`;
+  const aumQs = `?aumDate=${$('#ovAumDate').value}${scopeQs ? '&' + scopeQs : ''}&from=${r.from}&to=${r.to}`;
   $('#kpis').innerHTML = '<div class="loading">Loading metrics…</div>';
 
   const overviewFetch = api('/api/overview' + aumQs);
@@ -1813,12 +1874,12 @@ async function loadOverview() {
   // breakdown + funds + users, each independent
   api('/api/breakdown/type' + qs).then(renderTypeChart).catch(() => {});
   api('/api/breakdown/status' + qs).then(renderStatusChart).catch(() => {});
-  api('/api/users/verification').then(renderVerifyChart).catch(() => {});
-  api('/api/funds/types' + (fundQs ? '?' + fundQs : '')).then(renderFundTypeChart).catch(() => {});
+  api('/api/users/verification' + (scopeQs ? '?' + scopeQs : '')).then(renderVerifyChart).catch(() => {});
+  api('/api/funds/types' + (scopeQs ? '?' + scopeQs : '')).then(renderFundTypeChart).catch(() => {});
   loadTopFunds();
-  api('/api/users/by-province' + (fundQs ? '?' + fundQs : '')).then(renderGeoChart).catch(() => {});
-  api('/api/users/top-cities?limit=15' + (fundQs ? '&' + fundQs : '')).then(renderTopCities).catch(() => {});
-  api('/api/users/top-cities-aum?limit=15' + (fundQs ? '&' + fundQs : '')).then(renderTopCitiesAum).catch(() => {});
+  api('/api/users/by-province' + (scopeQs ? '?' + scopeQs : '')).then(renderGeoChart).catch(() => {});
+  api('/api/users/top-cities?limit=15' + (scopeQs ? '&' + scopeQs : '')).then(renderTopCities).catch(() => {});
+  api('/api/users/top-cities-aum?limit=15' + (scopeQs ? '&' + scopeQs : '')).then(renderTopCitiesAum).catch(() => {});
 }
 
 // ---- Investor distribution map (chartjs-chart-geo choropleth) -------------
@@ -1900,7 +1961,7 @@ async function renderGeoChart(rows) {
 }
 
 function renderTopCities(rows) {
-  if (!rows.length) { $('#topCitiesTable').innerHTML = '<div class="empty">No investors matched this date range.</div>'; return; }
+  if (!rows.length) { $('#topCitiesTable').innerHTML = `<div class="empty">${t('ov_no_investors_match')}</div>`; return; }
   const body = rows.map((r, i) => `<tr>
       <td class="num">${i + 1}</td>
       <td>${val(r.city_name)}</td>
@@ -1913,7 +1974,7 @@ function renderTopCities(rows) {
 }
 
 function renderTopCitiesAum(rows) {
-  if (!rows.length) { $('#topCitiesAumTable').innerHTML = '<div class="empty">No data.</div>'; return; }
+  if (!rows.length) { $('#topCitiesAumTable').innerHTML = `<div class="empty">${t('ov_no_investors_match')}</div>`; return; }
   const body = rows.map((r, i) => `<tr>
       <td class="num">${i + 1}</td>
       <td>${val(r.city_name)}</td>
@@ -1946,10 +2007,10 @@ function renderKpis(o) {
 
 async function loadTrends(gran) {
   const r = currentRange();
-  const fundQs = overviewFundQs();
+  const scopeQs = overviewScopeQs();
   $('#trendFinding').hidden = true;
   try {
-    const data = await api(`/api/trends?from=${r.from}&to=${r.to}&granularity=${gran}${fundQs ? '&' + fundQs : ''}`);
+    const data = await api(`/api/trends?from=${r.from}&to=${r.to}&granularity=${gran}${scopeQs ? '&' + scopeQs : ''}`);
     renderSeriesTrendFinding('#trendFinding', data, 'buy_volume', 'Buy volume');
     const labels = data.map((d) => val(d.bucket));
     paint('trendChart', {
@@ -1974,8 +2035,17 @@ async function loadTrends(gran) {
   } catch (e) { toast(e.message); }
 }
 
+// An empty result (now common once the Overview user filter narrows things
+// down) clears the old chart and says so, instead of leaving stale slices up.
+function setChartEmpty(id, empty) {
+  const wrap = $('#' + id).parentElement;
+  let msg = wrap.querySelector('.chart-empty');
+  if (empty && !msg) { msg = document.createElement('div'); msg.className = 'empty chart-empty'; wrap.appendChild(msg); }
+  if (msg) { msg.hidden = !empty; msg.textContent = t('chart_empty'); }
+}
 function doughnut(id, rows, labelKey, valueKey, fmt) {
-  if (!rows.length) { return; }
+  setChartEmpty(id, !rows.length);
+  if (!rows.length) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } return; }
   const values = rows.map((r) => Number(val(r[valueKey])) || 0);
   const total = values.reduce((a, b) => a + b, 0);
   paint(id, {
@@ -2043,7 +2113,8 @@ function loadTopFundsTable() {
   const date = $('#topFundsDate').value;
   if (!date) { $('#topFunds').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
   const exclude = topFundsExcluded();
-  const qs = `groupBy=${topFundsGroup}&date=${date}` + (exclude.length ? `&excludeFunds=${encodeURIComponent(exclude.join(','))}` : '');
+  const userQs = overviewUserQs();
+  const qs = `groupBy=${topFundsGroup}&date=${date}` + (exclude.length ? `&excludeFunds=${encodeURIComponent(exclude.join(','))}` : '') + (userQs ? `&${userQs}` : '');
   api(`/api/funds/top?${qs}`).then(renderTopFunds).catch(() => {});
 }
 async function loadTopFunds() {
@@ -6169,7 +6240,32 @@ function wire() {
   // #ovAumDate rides along on the same Apply click (read directly inside
   // loadOverview()), matching how #topFundsDate below only re-queries on its
   // own explicit Apply too.
-  $('#ovFundFilterApply').addEventListener('click', () => { updateOverviewFundFilterBtn(); loadOverview(); });
+  $('#ovFundFilterApply').addEventListener('click', () => {
+    const rules = overviewUserRulesDraft();
+    if (rules.reduce((n, r) => n + r.values.length, 0) > UF_MAX_VALUES) { toast(t('ov_uf_too_many')); return; }
+    ovUserFilter = rules;
+    setOverviewUserPanel(false);
+    updateOverviewFundFilterBtn(); updateOverviewUserFilterBtn(); loadOverview();
+  });
+  $('#ovUserFilterBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = !$('#ovUserFilterPanel').classList.contains('open');
+    setOverviewUserPanel(open);
+    if (open && !$('#ovUserFilterRules .uf-rule')) addOverviewUserRule();
+  });
+  $('#ovUserFilterAdd').addEventListener('click', addOverviewUserRule);
+  $('#ovUserFilterClear').addEventListener('click', () => { $('#ovUserFilterRules').innerHTML = ''; });
+  $('#ovUserFilterRules').addEventListener('change', (e) => { if (e.target.matches('.uf-field')) syncOverviewUserRule(e.target.closest('.uf-rule')); });
+  $('#ovUserFilterRules').addEventListener('click', (e) => { if (e.target.matches('.uf-remove')) e.target.closest('.uf-rule').remove(); });
+  $('#ovUserFilterDropdown').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { setOverviewUserPanel(false); $('#ovUserFilterBtn').focus(); }
+  });
+  // isConnected: a click on "Remove" lands here after its row is already
+  // gone from the DOM, and closest() on a detached node would close the panel.
+  document.addEventListener('click', (e) => {
+    if (e.target.isConnected && !e.target.closest('#ovUserFilterDropdown')) setOverviewUserPanel(false);
+  });
+  updateOverviewUserFilterBtn();
   $('#ovFundFilterSearch').addEventListener('input', filterOverviewFundList);
   $('#ovFundFilterSelectAll').addEventListener('click', overviewFundFilterSelectAll);
   $('#ovFundFilterClear').addEventListener('click', overviewFundFilterClear);
@@ -6458,7 +6554,7 @@ function wire() {
     const fmt = b.dataset.fmt;
     const date = $('#topFundsDate').value;
     if (!date) { toast('Pick a date first.'); return; }
-    download({ source: 'growth_top_funds', format: fmt, filename: 'top_funds', groupBy: topFundsGroup, date, excludeFunds: topFundsExcluded() }, `top_funds.${fmt}`);
+    download({ source: 'growth_top_funds', format: fmt, filename: 'top_funds', groupBy: topFundsGroup, date, excludeFunds: topFundsExcluded(), userFilter: ovUserFilter }, `top_funds.${fmt}`);
   }));
 
   // ask
@@ -6623,7 +6719,7 @@ function setConnStatus(live) {
 }
 // i18n.js calls this after a language switch, to re-render text this app
 // builds dynamically in JS rather than via a static data-i18n attribute.
-window.onLanguageChange = () => { setConnStatus(lastConnLive); renderAskThread(); repaintActiveTab(); };
+window.onLanguageChange = () => { setConnStatus(lastConnLive); renderAskThread(); updateOverviewUserFilterBtn(); repaintActiveTab(); };
 
 async function pollHealth() {
   try {

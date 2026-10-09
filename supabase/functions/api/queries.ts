@@ -54,18 +54,69 @@ function fundIdsClause(params: Record<string, unknown>, col: string, ids: string
   return `${joiner}${col} IN UNNEST(@fundIds)`;
 }
 
+// Overview user filter: rules like { field: 'referrer_code', mode: 'exclude',
+// values: ['RAIZKAYA'] }. Rules AND together, the values inside one rule OR
+// together. Values match the whole field case-insensitively, `*` is a
+// wildcard (BPJSKES* = every BPJS Kesehatan sales code). `institution` takes
+// no values, it's the users.is_institution flag. Malformed input throws
+// instead of being dropped, so a typo can never silently widen the numbers.
+export interface UserFilterRule { field: string; mode: 'include' | 'exclude'; values: string[] }
+const USER_FILTER_COLS: Record<string, string> = { sid: 'sid_code', email: 'email', referrer_code: 'referrer_code', sales_code: 'sales_code' };
+// ponytail: the filter rides in a GET query string, and Supabase's gateway
+// 414s somewhere past 16KB. Move the Overview routes to POST if lists need to grow.
+const USER_FILTER_MAX_VALUES = 300;
+export function normalizeUserFilter(raw: unknown): UserFilterRule[] {
+  if (!raw) return [];
+  let rules = raw;
+  if (typeof raw === 'string') {
+    try { rules = JSON.parse(raw); } catch { throw new Error('userFilter is not valid JSON.'); }
+  }
+  if (!Array.isArray(rules)) throw new Error('userFilter must be a list of rules.');
+  const out = rules.map((r): UserFilterRule => {
+    const { field, mode } = (r || {}) as { field?: string; mode?: string };
+    if (mode !== 'include' && mode !== 'exclude') throw new Error(`Unknown user filter mode: ${mode}`);
+    if (field === 'institution') return { field, mode, values: [] };
+    if (!field || !USER_FILTER_COLS[field]) throw new Error(`Unknown user filter field: ${field}`);
+    const values = (Array.isArray(r.values) ? r.values : [])
+      .map((v: unknown) => String(v).trim().toLowerCase()).filter(Boolean)
+      .map((v: string) => v.replace(/[\\%_]/g, '\\$&').replace(/\*/g, '%'));
+    return { field, mode, values };
+  }).filter((r) => r.field === 'institution' || r.values.length);
+  if (out.reduce((n, r) => n + r.values.length, 0) > USER_FILTER_MAX_VALUES) {
+    throw new Error(`The user filter takes at most ${USER_FILTER_MAX_VALUES} values in total.`);
+  }
+  return out;
+}
+// `col IN (users passing every rule)`, keyed on users.id, or on sid_code for
+// the portfolio_with_code snapshots. Omitted entirely when there are no rules.
+function userFilterClause(params: Record<string, unknown>, col: string, rules: UserFilterRule[], key = 'id', joiner = ' AND '): string {
+  if (!rules.length) return '';
+  const preds = rules.map((r, i) => {
+    let p = 'IFNULL(is_institution, FALSE)';
+    if (r.field !== 'institution') {
+      params[`uf${i}`] = r.values;
+      p = `EXISTS(SELECT 1 FROM UNNEST(@uf${i}) v WHERE LOWER(${USER_FILTER_COLS[r.field]}) LIKE v)`;
+    }
+    return r.mode === 'exclude' ? `NOT ${p}` : p;
+  });
+  return `${joiner}${col} IN (SELECT ${key} FROM ${USERS} WHERE ${preds.join(' AND ')})`;
+}
+
 // ---- Overview KPIs ----------------------------------------------------------
 
-export const overviewUsers = (): Query => ({
-  sql: `SELECT
-      COUNT(*) AS total_users,
-      COUNTIF(verification_status = 'verified') AS verified_users,
-      COUNTIF(DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)) AS new_users_30d
-    FROM ${USERS}`,
-  params: {},
-});
+export const overviewUsers = (userFilter: UserFilterRule[] = []): Query => {
+  const params: Record<string, unknown> = {};
+  return {
+    sql: `SELECT
+        COUNT(*) AS total_users,
+        COUNTIF(verification_status = 'verified') AS verified_users,
+        COUNTIF(DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)) AS new_users_30d
+      FROM ${USERS}${userFilterClause(params, 'id', userFilter, 'id', ' WHERE ')}`,
+    params,
+  };
+};
 
-export const overviewTx = (from?: string, to?: string, fundIds: string[] = []): Query => {
+export const overviewTx = (from?: string, to?: string, fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
   const ids = normalizeFundIds(fundIds);
   const params = range(from, to);
   const fundFilter = fundIdsClause(params, 'fund_id', ids);
@@ -78,7 +129,7 @@ export const overviewTx = (from?: string, to?: string, fundIds: string[] = []): 
         SUM(IF(type='sell' AND status='completed', final_amount, 0)) AS sell_volume,
         COUNT(DISTINCT user_id) AS active_users
       FROM ${TX}
-      WHERE DATE(created_at) BETWEEN @from AND @to${fundFilter}`,
+      WHERE DATE(created_at) BETWEEN @from AND @to${fundFilter}${userFilterClause(params, 'user_id', userFilter)}`,
     params,
   };
 };
@@ -98,13 +149,13 @@ export const overviewFunds = (fundIds: string[] = []): Query => {
 
 // ---- Time series ------------------------------------------------------------
 
-export const trends = (from?: string, to?: string, granularity = 'month', fundIds: string[] = []): Query => {
+export const trends = (from?: string, to?: string, granularity = 'month', fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
   const fmt = granularity === 'day' ? '%Y-%m-%d'
     : granularity === 'week' ? '%Y-%W'
     : '%Y-%m';
   const ids = normalizeFundIds(fundIds);
   const params = range(from, to);
-  const fundFilter = fundIdsClause(params, 'fund_id', ids);
+  const fundFilter = fundIdsClause(params, 'fund_id', ids) + userFilterClause(params, 'user_id', userFilter);
   return {
     sql: `SELECT
         FORMAT_TIMESTAMP('${fmt}', created_at) AS bucket,
@@ -122,12 +173,12 @@ export const trends = (from?: string, to?: string, granularity = 'month', fundId
 
 // ---- Breakdowns -------------------------------------------------------------
 
-export const breakdownBy = (column: string, from?: string, to?: string, fundIds: string[] = []): Query => {
+export const breakdownBy = (column: string, from?: string, to?: string, fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
   const allowed: Record<string, string> = { status: 'status', type: 'type', payment_method: 'payment_method', payment_gateway: 'payment_gateway' };
   const col = allowed[column] || 'status';
   const ids = normalizeFundIds(fundIds);
   const params = range(from, to);
-  const fundFilter = fundIdsClause(params, 'fund_id', ids);
+  const fundFilter = fundIdsClause(params, 'fund_id', ids) + userFilterClause(params, 'user_id', userFilter);
   return {
     sql: `SELECT
         IFNULL(${col}, '(none)') AS label,
@@ -142,9 +193,23 @@ export const breakdownBy = (column: string, from?: string, to?: string, fundIds:
 
 // ---- Funds ------------------------------------------------------------------
 
-export const fundTypes = (fundIds: string[] = []): Query => {
+// funds.latest_aum_value is a whole-fund total, so it can't be narrowed to a
+// set of users. With a user filter on, AUM is summed from those users' live
+// holdings instead (same definition as the Overview map, activeCte below).
+export const fundTypes = (fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
   const ids = normalizeFundIds(fundIds);
   const params: Record<string, unknown> = {};
+  if (userFilter.length) {
+    return {
+      sql: `WITH ${activeCte(params, ids)}
+      SELECT f.type AS label, COUNT(DISTINCT f.id) AS count, ROUND(SUM(a.unit * f.latest_nav_value)) AS aum
+      FROM active a
+      JOIN ${FUNDS} f ON f.id = a.fund_id
+      WHERE f.listing_status = 'ACTIVE'${userFilterClause(params, 'a.user_id', userFilter)}
+      GROUP BY f.type ORDER BY aum DESC`,
+      params,
+    };
+  }
   const fundFilter = fundIdsClause(params, 'id', ids);
   return {
     sql: `SELECT type AS label, COUNT(*) AS count, SUM(IFNULL(latest_aum_value,0)) AS aum
@@ -165,11 +230,14 @@ export const userGrowth = (): Query => ({
   params: {},
 });
 
-export const verificationBreakdown = (): Query => ({
-  sql: `SELECT IFNULL(verification_status,'(none)') AS label, COUNT(*) AS count
-    FROM ${USERS} GROUP BY label ORDER BY count DESC`,
-  params: {},
-});
+export const verificationBreakdown = (userFilter: UserFilterRule[] = []): Query => {
+  const params: Record<string, unknown> = {};
+  return {
+    sql: `SELECT IFNULL(verification_status,'(none)') AS label, COUNT(*) AS count
+      FROM ${USERS}${userFilterClause(params, 'id', userFilter, 'id', ' WHERE ')} GROUP BY label ORDER BY count DESC`,
+    params,
+  };
+};
 
 // ---- Transactions explorer (paged, filtered) --------------------------------
 // NOTE: the password column lives only on the users table; transactions has no
@@ -2139,7 +2207,7 @@ export const largestFundsLatestDate = (): Query => ({
   params: {},
 });
 
-export const largestFundsAum = (groupBy = 'fund', date?: string, excludeFunds: string[] = []): Query => {
+export const largestFundsAum = (groupBy = 'fund', date?: string, excludeFunds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
   const label = groupBy === 'manager' ? 'COALESCE(im.common_name, im.name)' : 'f.name';
   const names = (Array.isArray(excludeFunds) ? excludeFunds : []).filter(Boolean);
   const params: Record<string, unknown> = { date };
@@ -2149,7 +2217,7 @@ export const largestFundsAum = (groupBy = 'fund', date?: string, excludeFunds: s
     sql: `WITH latest AS (
         SELECT sid_code, id AS fund_id, amount
         FROM ${PORT_WITH_CODE}
-        WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND total_unit > 0
+        WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND total_unit > 0${userFilterClause(params, 'sid_code', userFilter, 'sid_code')}
       ),
       joined AS (
         SELECT ${label} AS label, l.amount, l.sid_code
@@ -2185,10 +2253,10 @@ export const largestFundsAum = (groupBy = 'fund', date?: string, excludeFunds: s
 // position once it's inactive (its NAV/AUM just stays frozen at whatever it
 // was on its last day), so it shouldn't keep counting toward "current"
 // platform AUM after that point.
-export const platformAumAsOf = (date?: string, fundIds: string[] = []): Query => {
+export const platformAumAsOf = (date?: string, fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
   const ids = normalizeFundIds(fundIds);
   const params: Record<string, unknown> = { date };
-  const fundFilter = fundIdsClause(params, 'p.id', ids);
+  const fundFilter = fundIdsClause(params, 'p.id', ids) + userFilterClause(params, 'p.sid_code', userFilter, 'sid_code');
   return {
     sql: `SELECT
         ROUND(SUM(p.amount)) AS platform_aum,
@@ -2278,7 +2346,7 @@ const CITY_LOOKUP_CTE = `city_lookup AS (
 // fundIds, when given, also switches investor_count/total_aum from "every
 // investor" to "investors holding one of the selected funds" (LEFT -> INNER
 // join on aum_by_user, which is itself already scoped to those funds).
-export const usersByProvince = (fundIds: string[] = []): Query => {
+export const usersByProvince = (fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
   const ids = normalizeFundIds(fundIds);
   const params: Record<string, unknown> = {};
   const active = activeCte(params, ids);
@@ -2296,7 +2364,7 @@ export const usersByProvince = (fundIds: string[] = []): Query => {
       ROUND(SUM(IFNULL(abu.aum, 0))) AS total_aum
     FROM ${USER_PROFILES} up
     JOIN city_lookup cl ON cl.city_code = up.id_address_city
-    ${aumJoin} aum_by_user abu ON abu.user_id = up.user_id
+    ${aumJoin} aum_by_user abu ON abu.user_id = up.user_id${userFilterClause(params, 'up.user_id', userFilter, 'id', '\n    WHERE ')}
     GROUP BY cl.province_name
     ORDER BY investor_count DESC`,
     params,
@@ -2308,7 +2376,7 @@ export const usersByProvince = (fundIds: string[] = []): Query => {
 // one map at a glance, so these are ranked lists instead of a second map).
 // Same join/shape for both, ordered differently — hence the shared builder.
 // Same fundIds behavior as usersByProvince above.
-function topCitiesQuery(limit: number | string, orderBy: 'investor_count' | 'total_aum', fundIds: string[] = []): Query {
+function topCitiesQuery(limit: number | string, orderBy: 'investor_count' | 'total_aum', fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query {
   const ids = normalizeFundIds(fundIds);
   const params: Record<string, unknown> = { limit: parseInt(String(limit), 10) };
   const active = activeCte(params, ids);
@@ -2326,15 +2394,15 @@ function topCitiesQuery(limit: number | string, orderBy: 'investor_count' | 'tot
         ROUND(SUM(IFNULL(abu.aum, 0))) AS total_aum
       FROM ${USER_PROFILES} up
       JOIN city_lookup cl ON cl.city_code = up.id_address_city
-      ${aumJoin} aum_by_user abu ON abu.user_id = up.user_id
+      ${aumJoin} aum_by_user abu ON abu.user_id = up.user_id${userFilterClause(params, 'up.user_id', userFilter, 'id', '\n      WHERE ')}
       GROUP BY cl.city_name, cl.province_name
       ORDER BY ${orderBy} DESC
       LIMIT @limit`,
     params,
   };
 }
-export const topCitiesByInvestors = (limit: number | string = 15, fundIds: string[] = []): Query => topCitiesQuery(limit, 'investor_count', fundIds);
-export const topCitiesByAum = (limit: number | string = 15, fundIds: string[] = []): Query => topCitiesQuery(limit, 'total_aum', fundIds);
+export const topCitiesByInvestors = (limit: number | string = 15, fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => topCitiesQuery(limit, 'investor_count', fundIds, userFilter);
+export const topCitiesByAum = (limit: number | string = 15, fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => topCitiesQuery(limit, 'total_aum', fundIds, userFilter);
 
 // Referral leaderboard: who brought in the most $ via referral_code/referrer_code.
 export const topReferrers = (limit: number | string = 20): Query => ({
