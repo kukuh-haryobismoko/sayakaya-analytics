@@ -52,6 +52,12 @@ get it automatically — see §2b for why, and add the route to
 
 ### 2a. Deploys are not symmetric — know what auto-deploys and what doesn't
 
+`npm run deploy:all` (`scripts/deploy-all.sh`) does the live deploy in one go,
+from a clean `main`: regenerates `DOKUMENTASI.md` (`scripts/generate-docs.js`,
+committed when it changed), runs `npm test`, `supabase db push --linked`,
+deploys the `api` function, and pushes `main` to both remotes, each with its
+own `gh` account. The table below is what happens without it.
+
 | Target | Trigger |
 |---|---|
 | Standalone Node | Nothing to deploy — you run it. |
@@ -156,7 +162,7 @@ All tables live in project **`sayakaya`**, region `asia-southeast2` (`BQ_LOCATIO
 | `mi_fee_logs` | `mi_fee` (daily AUM+revenue snapshot per fund), `portfolio_with_code` (daily per-user-per-fund AUM by SID) | AUM history, per-user performance |
 | `sinvest` | `trx_history` | Raw KSEI/custodian feed — reconciliation and the "Sinvest Transactions" explorer dataset. Every column is `STRING`; never cleaned. |
 | `ml` | `aum_forecast`, `tx_forecast`, `churn_model`, `churn_features` | BigQuery ML models (see `server/ml.js`, `PREDICTIVE-MODELS.md`) |
-| `analytics_266759216` | `events_*` (GA4 export, one table per day) | Product funnel, User behavior, Subscription analysis. `user_id` is `main.users.id` once the person is logged in, which is what lets User behavior and Subscription analysis join app events to transactions (`queries.js` `behavior*`, `subscription*`) |
+| `analytics_266759216` | `events_*` (GA4 export, one table per day) | Product funnel, User behavior, and the four analysis tabs (Subscription, Onboarding, Redemption, Engagement). `user_id` is `main.users.id` once the person is logged in, which is what lets them join app events to `users`, `user_profiles`, `user_status_logs`, `transactions`, `switching_transactions` and `portfolios` (`queries.js` `behavior*`, `subscription*`, `onboarding*`, `redemption*`, `switchingFunnel`, `engagement*`; `analysisCoverage` measures how well the two sides match) |
 
 Supabase Postgres (not BigQuery) holds the app's own state: dashboard
 accounts/sessions/audit log, schedules, and the Email recap's
@@ -395,7 +401,11 @@ itself; most are further scoped to one nav tab via `requireTab(...)` in
 | `/email-recap/summary`, `/email-recap/log`, `/email-recap/log/:id/events` | GET | Email recap tab (Supabase `dashboard_email_*`) |
 | `/webhooks/ses` | POST | SES events via SNS; no session, checks `?key=SES_WEBHOOK_SECRET` |
 | `/behavior/segments`, `/daily`, `/features`, `/push`, `/products`, `/intent`, `/user` | GET | User behavior tab (GA4 joined to `main`) |
-| `/subscription/funnel`, `/entry`, `/dropoff`, `/payment`, `/drivers`, `/timing`, `/hours`, `/chips` | GET | Subscription analysis tab (buy flow in GA4 checked against paid buys in `main`) |
+| `/subscription/funnel`, `/profile`, `/entry`, `/dropoff`, `/payment`, `/drivers`, `/timing`, `/hours`, `/chips` | GET | Subscription analysis tab (buy flow in GA4 checked against paid buys in `main`) |
+| `/onboarding/funnel`, `/outcome` | GET | Onboarding analysis tab (sign-ups in `main.users` → KYC screens in GA4 → review, risk profile, first buy) |
+| `/redemption/funnel`, `/switching`, `/profile`, `/signals` | GET | Redemption analysis tab (sell and switch flows in GA4 checked against `main`) |
+| `/engagement/features`, `/activity`, `/search`, `/discovery` | GET | Engagement analysis tab (app features and search against holdings and transactions) |
+| `/analysis/coverage` | GET | How well GA4 and `main` line up for a period; any of the four analysis tabs |
 | `/export` | POST | CSV/XLSX/PDF export; `source` selects the dataset (see `server/app.js`'s `source === '...'` branches), `format` selects the file type |
 
 ---

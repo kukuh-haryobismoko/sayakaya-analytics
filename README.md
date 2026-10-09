@@ -9,6 +9,12 @@ It is a small Node.js app — an Express backend that talks to BigQuery with a
 service account, and a zero-build static frontend. No framework toolchain, no
 database to run; you only need Node and a service-account key.
 
+**Full documentation (Indonesian, for non-technical and technical readers):
+[DOKUMENTASI.md](DOKUMENTASI.md)** covers the technology, every dataset, and
+what each tab reads and computes. It is generated from the code by
+`npm run docs` and refreshed on every `npm run deploy:all`; edit
+`docs/content.js` or the code, not the file itself.
+
 ---
 
 ## What you get
@@ -127,7 +133,15 @@ spending. Ad-hoc results are capped at 5,000 rows in the UI (100,000 for export)
 
 ## Deploying
 
-Any Node host works. For Google Cloud Run (same project, simplest auth):
+The live setup (GitHub Pages frontend + Supabase Edge Function backend) is
+deployed with one command, after committing your work on `main`:
+
+```bash
+npm run deploy:all   # docs, tests, Supabase migrations + function, push both remotes
+```
+
+See `scripts/deploy-all.sh` for the steps. To run the Node server elsewhere,
+any Node host works. For Google Cloud Run (same project, simplest auth):
 
 ```bash
 gcloud run deploy sayakaya-analytics \
