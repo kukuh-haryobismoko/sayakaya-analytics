@@ -986,18 +986,36 @@ on('GET', '/api/behavior/user', requireTab('user-behavior', async (_req, _params
   return json({ profile: profile[0] || null, timeline });
 }));
 
-// ---- Subscription analysis: buy-flow funnel, entry screens, drop-off,
-// payment methods and drivers (GA4 + main database), see queries.ts -------
-for (const [key, build] of Object.entries({
-  funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
-  payment: Q.subscriptionPayment, drivers: Q.subscriptionDrivers, timing: Q.subscriptionTiming,
-  hours: Q.subscriptionHours, chips: Q.subscriptionChips,
-})) {
-  on('GET', `/api/subscription/${key}`, requireTab('subscription-analysis', async (_req, _params, url) => {
-    const q = build(qp(url, 'from'), qp(url, 'to'));
-    return json(await runQuery(q.sql, q.params));
-  }));
+// ---- Analysis tabs: GA4 app events joined to the main database by
+// user_id, one tab each for buying, onboarding, selling and app features,
+// see queries.ts -----------------------------------------------------------
+const ANALYSIS_ROUTES: [string, string, Record<string, (from?: string, to?: string) => Q.Query>][] = [
+  ['subscription-analysis', 'subscription', {
+    funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
+    payment: Q.subscriptionPayment, drivers: Q.subscriptionDrivers, timing: Q.subscriptionTiming,
+    hours: Q.subscriptionHours, chips: Q.subscriptionChips, profile: Q.subscriptionProfile,
+  }],
+  ['onboarding-analysis', 'onboarding', { funnel: Q.onboardingFunnel, outcome: Q.onboardingOutcome }],
+  ['redemption-analysis', 'redemption', {
+    funnel: Q.redemptionFunnel, switching: Q.switchingFunnel, profile: Q.redemptionProfile, signals: Q.redemptionSignals,
+  }],
+  ['engagement-analysis', 'engagement', {
+    features: Q.engagementFeatures, search: Q.engagementSearch, discovery: Q.engagementDiscovery, activity: Q.engagementActivity,
+  }],
+];
+for (const [tab, prefix, builders] of ANALYSIS_ROUTES) {
+  for (const [key, build] of Object.entries(builders)) {
+    on('GET', `/api/${prefix}/${key}`, requireTab(tab, async (_req, _params, url) => {
+      const q = build(qp(url, 'from'), qp(url, 'to'));
+      return json(await runQuery(q.sql, q.params));
+    }));
+  }
 }
+// How well GA4 and the main database line up, shown on every analysis tab.
+on('GET', '/api/analysis/coverage', requireAnyTab(ANALYSIS_ROUTES.map(([tab]) => tab), async (_req, _params, url) => {
+  const q = Q.analysisCoverage(qp(url, 'from'), qp(url, 'to'));
+  return json(await runQuery(q.sql, q.params));
+}));
 
 // ---- Product performance (NAV % change per fund type) ----------------------
 on('GET', '/api/product-performance', requireTab('performance', async () => {

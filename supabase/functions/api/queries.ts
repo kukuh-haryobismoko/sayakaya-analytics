@@ -2378,17 +2378,25 @@ export const subscriptionPayment = (from?: string, to?: string): Query => {
 };
 
 // For every screen and in-app action: of the logged-in people who did it in
-// the period (subscribers: only before their first paid buy), how many
-// subscribed, against the same rate for everyone who did not do it. A person
-// counts as subscribed with a paid buy from their first app activity in the
-// period to the period's end. Lift 2.0 = twice the rate of those who did not.
-// "Before" allows 2 minutes after the buy's created_at: the app logs
-// order_created up to ~90 s after the backend writes the row (95th pct,
-// Sep 2026). Any longer and the payment receipt push and receipt screen
-// start counting as things people did before buying.
+// the period (people who reached the outcome: only what they did before
+// first reaching it), how many reached the outcome, against the same rate
+// for everyone who did not do it. A person reaches the outcome with an
+// outcome row from their first app activity in the period to the period's
+// end. Lift 2.0 = twice the rate of those who did not.
+// graceSeconds: how long after the outcome row's created_at still counts as
+// "before". Buying: 120, because the app logs order_created up to ~90 s
+// after the backend writes the row (95th pct, Sep 2026); any longer and the
+// payment receipt push and receipt screen start counting as things people
+// did before buying. Selling is the other way round: the row is written a
+// median 8 s after confirm_redeem_click, and the app opens the transaction
+// list in that same second, so -2 keeps the confirmation and drops what
+// comes after.
 // notification_foreground is a push arriving while the app is open, not
 // something the person did.
-export const subscriptionDrivers = (from?: string, to?: string): Query => {
+// outcomeSql: rows with user_id and created_at. flowNames: screens and
+// actions that are part of reaching the outcome (flagged in_flow).
+// population: extra condition on who counts at all.
+const ga4OutcomeDrivers = (from: string | undefined, to: string | undefined, { outcomeSql, flowNames, population = 'TRUE', graceSeconds = 120 }: { outcomeSql: string; flowNames: string; population?: string; graceSeconds?: number }): Query => {
   const r = range(from, to);
   return {
     sql: `WITH ev AS (
@@ -2398,38 +2406,40 @@ export const subscriptionDrivers = (from?: string, to?: string): Query => {
         FROM ${GA4_EVENTS}
         WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
           AND event_name NOT IN (${GA4_PASSIVE_EVENTS}, 'notification_foreground', 'session_start', 'user_engagement', 'first_open', 'app_exception')
+          AND ${population}
       ),
       people AS (SELECT user_id, MIN(ts) AS first_ts FROM ev GROUP BY user_id),
       conv AS (
-        SELECT pp.user_id, MIN(p.created_at) AS buy_ts
+        SELECT pp.user_id, MIN(o.created_at) AS outcome_ts
         FROM people pp
-        JOIN (${SUB_PAID_SQL}) p ON p.user_id = pp.user_id
-          AND p.created_at >= TIMESTAMP_SUB(pp.first_ts, INTERVAL 10 MINUTE) AND DATE(p.created_at) <= CAST(@to AS DATE)
+        JOIN (${outcomeSql}) o ON o.user_id = pp.user_id
+          AND o.created_at >= TIMESTAMP_SUB(pp.first_ts, INTERVAL 10 MINUTE) AND DATE(o.created_at) <= CAST(@to AS DATE)
         GROUP BY pp.user_id
       ),
       totals AS (SELECT COUNT(*) AS n, (SELECT COUNT(*) FROM conv) AS c FROM people),
       firsts AS (SELECT user_id, kind, name, MIN(ts) AS first_ts FROM ev WHERE name IS NOT NULL GROUP BY user_id, kind, name),
       did AS (
-        SELECT f.kind, f.name, c.user_id IS NOT NULL AS subscribed
+        SELECT f.kind, f.name, c.user_id IS NOT NULL AS converted
         FROM firsts f LEFT JOIN conv c USING (user_id)
-        WHERE c.user_id IS NULL OR f.first_ts <= TIMESTAMP_ADD(c.buy_ts, INTERVAL 2 MINUTE)
+        WHERE c.user_id IS NULL OR f.first_ts <= TIMESTAMP_ADD(c.outcome_ts, INTERVAL ${Number(graceSeconds)} SECOND)
       ),
       agg AS (
-        SELECT kind, name, COUNT(*) AS users, COUNTIF(subscribed) AS subscribed, ANY_VALUE(t.n) AS n, ANY_VALUE(t.c) AS c
+        SELECT kind, name, COUNT(*) AS users, COUNTIF(converted) AS converted, ANY_VALUE(t.n) AS n, ANY_VALUE(t.c) AS c
         FROM did CROSS JOIN totals t
         GROUP BY kind, name
         HAVING users >= 20
       )
-      SELECT kind, name, name IN (${SUB_FLOW_NAMES}) AS in_buy_flow, users, subscribed,
-        ROUND(SAFE_DIVIDE(subscribed, users) * 100, 1) AS rate_pct,
-        ROUND(SAFE_DIVIDE(c - subscribed, n - users) * 100, 1) AS rate_without_pct,
-        ROUND(SAFE_DIVIDE(SAFE_DIVIDE(subscribed, users), SAFE_DIVIDE(c - subscribed, n - users)), 2) AS lift,
-        ROUND(SAFE_DIVIDE(subscribed, c) * 100, 1) AS share_of_subscribers_pct
+      SELECT kind, name, name IN (${flowNames}) AS in_flow, users, converted, n AS population, c AS population_converted,
+        ROUND(SAFE_DIVIDE(converted, users) * 100, 1) AS rate_pct,
+        ROUND(SAFE_DIVIDE(c - converted, n - users) * 100, 1) AS rate_without_pct,
+        ROUND(SAFE_DIVIDE(SAFE_DIVIDE(converted, users), SAFE_DIVIDE(c - converted, n - users)), 2) AS lift,
+        ROUND(SAFE_DIVIDE(converted, c) * 100, 1) AS share_of_converted_pct
       FROM agg
       ORDER BY lift DESC, users DESC`,
     params: ga4Range(r),
   };
 };
+export const subscriptionDrivers = (from?: string, to?: string): Query => ga4OutcomeDrivers(from, to, { outcomeSql: SUB_PAID_SQL, flowNames: SUB_FLOW_NAMES });
 
 // People who signed up in the period: calendar days from sign-up to KYC
 // verified and to their first paid buy (no end date, so recent sign-ups have
@@ -2543,6 +2553,582 @@ export const subscriptionChips = (from?: string, to?: string): Query => {
       FROM scored
       GROUP BY chip
       ORDER BY chip`,
+    params: ga4Range(r),
+  };
+};
+
+// ---- Analysis tabs shared pieces (Subscription, Onboarding, Redemption,
+// Engagement). Every one joins GA4's user_id to main.users.id.
+// A sell or switch is done once it reaches any of these; cancelled is not.
+const DONE_STATUSES = `'completed', 'completed_payment', 'verified', 'verified_by_operational'`;
+// Unpaid or in-flight sells keep final_amount at 0; amount is what was asked for.
+const SELL_DONE_SQL = `SELECT id, user_id, fund_id, created_at, is_all_unit, COALESCE(NULLIF(final_amount, 0), amount) AS amount FROM ${TX}
+        WHERE type = 'sell' AND status IN (${DONE_STATUSES})`;
+// Live holdings value per person, same rule as the follow-up list above.
+const USER_AUM_SQL = `SELECT h.user_id, CAST(SUM(h.unit * f.latest_nav_value) AS FLOAT64) AS aum
+        FROM (
+          SELECT user_id, fund_id, unit FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0
+          UNION ALL
+          SELECT user_id, fund_id, unit FROM ${BONUS_PORT} WHERE status = 'on_going'
+        ) h
+        JOIN ${FUNDS} f ON f.id = h.fund_id
+        GROUP BY h.user_id`;
+const ga4Screens = (names: string) => `(event_name = 'screen_view' AND ${GA4_SCREEN} IN (${names}))`;
+
+// How well the two sides line up for the period: logged-in app users found
+// in main.users, and main-database buy, sell and switch rows with the
+// matching app event within 10 minutes (the rest came from outside the app,
+// such as admin entry, or the app's analytics did not send that event).
+export const analysisCoverage = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH ga AS (
+        SELECT DISTINCT user_id FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
+      ),
+      app AS (
+        SELECT user_id, event_name, TIMESTAMP_MICROS(event_timestamp) AS ts FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
+          AND event_name IN ('order_created', 'confirm_redeem_click', 'confirm_switch_click')
+      ),
+      db_rows AS (
+        SELECT user_id, created_at, IF(type = 'buy', 'order_created', 'confirm_redeem_click') AS app_event FROM ${TX}
+        WHERE type IN ('buy', 'sell') AND DATE(created_at) BETWEEN @from AND @to AND IFNULL(payment_method, '') != 'manual_bonus'
+        UNION ALL
+        SELECT user_id, created_at, 'confirm_switch_click' FROM ${SWITCHING} WHERE DATE(created_at) BETWEEN @from AND @to
+      ),
+      matched AS (
+        SELECT app_event, EXISTS (SELECT 1 FROM app a WHERE a.user_id = x.user_id AND a.event_name = x.app_event
+          AND a.ts BETWEEN TIMESTAMP_SUB(x.created_at, INTERVAL 10 MINUTE) AND TIMESTAMP_ADD(x.created_at, INTERVAL 10 MINUTE)) AS in_app
+        FROM db_rows x
+      ),
+      signups AS (SELECT id FROM ${USERS} WHERE DATE(created_at) BETWEEN @from AND @to)
+      SELECT
+        (SELECT COUNT(*) FROM ga) AS app_users,
+        (SELECT COUNT(*) FROM ga JOIN ${USERS} u ON u.id = ga.user_id) AS app_users_in_db,
+        (SELECT COUNTIF(app_event = 'order_created') FROM matched) AS db_buys,
+        (SELECT COUNTIF(app_event = 'order_created' AND in_app) FROM matched) AS db_buys_in_app,
+        (SELECT COUNTIF(app_event = 'confirm_redeem_click') FROM matched) AS db_sells,
+        (SELECT COUNTIF(app_event = 'confirm_redeem_click' AND in_app) FROM matched) AS db_sells_in_app,
+        (SELECT COUNTIF(app_event = 'confirm_switch_click') FROM matched) AS db_switches,
+        (SELECT COUNTIF(app_event = 'confirm_switch_click' AND in_app) FROM matched) AS db_switches_in_app,
+        (SELECT COUNT(*) FROM signups) AS db_signups,
+        (SELECT COUNT(*) FROM signups s JOIN ga ON ga.user_id = s.id) AS db_signups_in_app`,
+    params: ga4Range(r),
+  };
+};
+
+// Who opens the buy form and who goes on to pay, by what the main database
+// knows about them: age (user_profiles.birthdate, 17 to 90 kept), gender,
+// occupation, investment purpose, risk level from the risk questionnaire,
+// and how long they had had an account when they first opened the form.
+// Paid: a paid buy from 10 minutes before that first open to the period end.
+const PROFILE_DIMS = `UNNEST([
+          STRUCT('age_band' AS dimension, age_band AS value), ('gender', gender), ('occupation', occupation),
+          ('purpose', purpose), ('risk_level', risk_level), ('tenure', tenure)])`;
+export const subscriptionProfile = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH opens AS (
+        SELECT user_id, MIN(TIMESTAMP_MICROS(event_timestamp)) AS t1
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
+          AND (event_name = 'buy_bottom_sheet' OR ${ga4Screens(SUB_FORM_SCREENS)})
+        GROUP BY user_id
+      ),
+      paid AS (${SUB_PAID_SQL}),
+      scored AS (
+        SELECT o.user_id, o.t1, SUM(p.final_amount) AS paid_amount
+        FROM opens o
+        LEFT JOIN paid p ON p.user_id = o.user_id AND p.created_at BETWEEN TIMESTAMP_SUB(o.t1, INTERVAL 10 MINUTE) AND ${SUB_PAID_UNTIL}
+        GROUP BY o.user_id, o.t1
+      ),
+      prof AS (
+        SELECT paid_amount,
+          CASE WHEN age BETWEEN 17 AND 24 THEN '1_17_24' WHEN age BETWEEN 25 AND 34 THEN '2_25_34' WHEN age BETWEEN 35 AND 44 THEN '3_35_44'
+            WHEN age BETWEEN 45 AND 54 THEN '4_45_54' WHEN age BETWEEN 55 AND 90 THEN '5_55_plus' ELSE 'unknown' END AS age_band,
+          IFNULL(up.gender, 'unknown') AS gender, IFNULL(up.occupation, 'unknown') AS occupation,
+          IFNULL(up.investment_purpose, 'unknown') AS purpose, IFNULL(CAST(up.risk_level AS STRING), 'unknown') AS risk_level,
+          CASE WHEN tenure < 30 THEN '1_under_30d' WHEN tenure < 180 THEN '2_30_180d' WHEN tenure < 365 THEN '3_180_365d'
+            WHEN tenure < 730 THEN '4_1_2y' ELSE '5_over_2y' END AS tenure
+        FROM (
+          SELECT s.paid_amount, up.gender, up.occupation, up.investment_purpose, up.risk_level,
+            DATE_DIFF(DATE(s.t1), DATE(up.birthdate), YEAR) AS age, DATE_DIFF(DATE(s.t1), DATE(u.created_at), DAY) AS tenure
+          FROM scored s JOIN ${USERS} u ON u.id = s.user_id LEFT JOIN ${USER_PROFILES} up ON up.user_id = s.user_id
+        ) up
+      )
+      SELECT d.dimension, d.value, COUNT(*) AS opened_form, COUNTIF(paid_amount > 0) AS paid,
+        ROUND(SAFE_DIVIDE(COUNTIF(paid_amount > 0), COUNT(*)) * 100, 1) AS paid_pct,
+        SUM(IFNULL(paid_amount, 0)) AS paid_amount,
+        APPROX_QUANTILES(IF(paid_amount > 0, paid_amount, NULL), 2)[OFFSET(1)] AS median_paid_amount
+      FROM prof, ${PROFILE_DIMS} d
+      GROUP BY d.dimension, d.value
+      ORDER BY d.dimension, d.value`,
+    params: ga4Range(r),
+  };
+};
+
+// ---- Onboarding analysis: starts from the main database (everyone whose
+// account was created in the period, institutions left out), then looks in
+// GA4 for the KYC screens they reached, with no end date so a KYC finished
+// after the period still counts. KYC screens in the app's order (Sep 2026):
+// VerificationIntroScreen > IdentityPreviewScreen (KTP photo) >
+// SelfiePreviewScreen > ProfileVerificationScreen > OccupationVerification
+// > Address (and correspondence address) > BankVerificationScreen >
+// SignatureVerificationScreen > VerificationSuccessScreen (submitted).
+// Then the database again: KYC review (users.verification_status, with
+// user_status_logs holding each pending > verified/failed decision since
+// 21 Jul 2026), risk profile (user_profiles.risk_level) and first paid buy.
+// Steps count everyone who reached them, so a later step can only exceed
+// an earlier one when app tracking missed a screen. Columns are addr_step
+// and sign_step, not address and signature: runQuery strips any column
+// with those names from every result (KYC redaction, bigquery.js).
+const ONB_COHORT_SQL = `SELECT id AS user_id, created_at, verification_status, verified_at FROM ${USERS}
+        WHERE DATE(created_at) BETWEEN @from AND @to AND NOT IFNULL(is_institution, FALSE)`;
+export const onboardingFunnel = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  const reached = (cond: string) => `LOGICAL_OR(${cond})`;
+  return {
+    sql: `WITH cohort AS (${ONB_COHORT_SQL}),
+      ev AS (
+        SELECT e.user_id, e.platform, e.event_name, TIMESTAMP_MICROS(e.event_timestamp) AS ts,
+          IF(e.event_name = 'screen_view', ${GA4_SCREEN}, NULL) AS screen
+        FROM ${GA4_EVENTS} e JOIN cohort c ON c.user_id = e.user_id
+        WHERE _TABLE_SUFFIX >= @fromSuffix
+      ),
+      app AS (
+        SELECT user_id, ARRAY_AGG(platform IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS platform,
+          ${reached(`screen = 'VerificationIntroScreen' OR event_name = 'kyc_start'`)} AS kyc_intro,
+          ${reached(`screen = 'IdentityPreviewScreen'`)} AS ktp,
+          ${reached(`screen = 'SelfiePreviewScreen'`)} AS selfie,
+          ${reached(`screen = 'ProfileVerificationScreen'`)} AS personal,
+          ${reached(`screen = 'OccupationVerificationScreen'`)} AS occupation,
+          ${reached(`screen IN ('AddressVerificationScreen', 'CorrespondenceAddressVerificationScreen')`)} AS addr_step,
+          ${reached(`screen = 'BankVerificationScreen'`)} AS bank,
+          ${reached(`screen = 'SignatureVerificationScreen'`)} AS sign_step,
+          ${reached(`screen = 'VerificationSuccessScreen' OR event_name = 'kyc_success'`)} AS submitted
+        FROM ev GROUP BY user_id
+      ),
+      first_buy AS (SELECT p.user_id FROM (${SUB_PAID_SQL}) p JOIN cohort USING (user_id) GROUP BY p.user_id),
+      base AS (
+        SELECT c.verification_status, IFNULL(a.platform, '(not in app)') AS platform, a.user_id IS NOT NULL AS in_app,
+          a.kyc_intro, a.ktp, a.selfie, a.personal, a.occupation, a.addr_step, a.bank, a.sign_step, a.submitted,
+          up.risk_level IS NOT NULL AS risk_profiled, b.user_id IS NOT NULL AS bought
+        FROM cohort c
+        LEFT JOIN app a USING (user_id)
+        LEFT JOIN ${USER_PROFILES} up ON up.user_id = c.user_id
+        LEFT JOIN first_buy b ON b.user_id = c.user_id
+      )
+      SELECT IF(GROUPING(platform) = 1, 'all', platform) AS segment,
+        COUNT(*) AS signed_up, COUNTIF(in_app) AS in_app,
+        COUNTIF(kyc_intro) AS kyc_intro, COUNTIF(ktp) AS ktp, COUNTIF(selfie) AS selfie, COUNTIF(personal) AS personal,
+        COUNTIF(occupation) AS occupation, COUNTIF(addr_step) AS addr_step, COUNTIF(bank) AS bank,
+        COUNTIF(sign_step) AS sign_step, COUNTIF(submitted) AS submitted,
+        COUNTIF(verification_status = 'verified') AS verified,
+        COUNTIF(verification_status = 'failed') AS failed,
+        COUNTIF(risk_profiled) AS risk_profiled,
+        COUNTIF(bought) AS first_buy
+      FROM base
+      GROUP BY GROUPING SETS ((), (platform))
+      ORDER BY segment = 'all' DESC, signed_up DESC`,
+    params: ga4Range(r),
+  };
+};
+
+// The same sign-ups by where KYC ended up: verified first time, verified
+// after a failed review, failed, waiting for review, or never submitted.
+// Per outcome: median minutes in the app from opening KYC to submitting it,
+// app sessions until submitting, hours from submitting to the review
+// decision (user_status_logs), and paid buys. Then one row per "rejected"
+// screen the app showed (which part of KYC was sent back) with how many of
+// those people are verified now.
+export const onboardingOutcome = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH cohort AS (${ONB_COHORT_SQL}),
+      ev AS (
+        SELECT e.user_id, e.event_name, TIMESTAMP_MICROS(e.event_timestamp) AS ts, ${GA4_SESSION} AS session_id,
+          IF(e.event_name = 'screen_view', ${GA4_SCREEN}, NULL) AS screen
+        FROM ${GA4_EVENTS} e JOIN cohort c ON c.user_id = e.user_id
+        WHERE _TABLE_SUFFIX >= @fromSuffix
+      ),
+      app AS (
+        SELECT user_id,
+          MIN(IF(screen = 'VerificationIntroScreen' OR event_name = 'kyc_start', ts, NULL)) AS kyc_start_ts,
+          MIN(IF(screen = 'VerificationSuccessScreen' OR event_name = 'kyc_success', ts, NULL)) AS submit_ts
+        FROM ev GROUP BY user_id
+      ),
+      sessions AS (
+        SELECT e.user_id, COUNT(DISTINCT e.session_id) AS sessions_to_submit
+        FROM ev e JOIN app a USING (user_id)
+        WHERE a.submit_ts IS NOT NULL AND e.ts <= a.submit_ts
+        GROUP BY e.user_id
+      ),
+      review AS (
+        SELECT l.user_id, MIN(IF(l.status = 'verified', l.created_at, NULL)) AS verified_ts, MIN(IF(l.status = 'failed', l.created_at, NULL)) AS failed_ts
+        FROM \`sayakaya.main.user_status_logs\` l JOIN cohort USING (user_id)
+        GROUP BY l.user_id
+      ),
+      buys AS (
+        SELECT p.user_id, MIN(p.created_at) AS first_buy_ts, ARRAY_AGG(p.final_amount ORDER BY p.created_at LIMIT 1)[OFFSET(0)] AS first_amount
+        FROM (${SUB_PAID_SQL}) p JOIN cohort USING (user_id) GROUP BY p.user_id
+      ),
+      scored AS (
+        SELECT c.user_id,
+          CASE
+            WHEN c.verification_status = 'verified' AND rv.failed_ts IS NOT NULL THEN '2_verified_after_fail'
+            WHEN c.verification_status = 'verified' THEN '1_verified'
+            WHEN c.verification_status = 'failed' THEN '3_failed'
+            WHEN c.verification_status = 'pending_verification' THEN '4_waiting'
+            WHEN a.submit_ts IS NOT NULL THEN '5_submitted_not_reviewed'
+            ELSE '6_not_submitted'
+          END AS outcome,
+          TIMESTAMP_DIFF(a.submit_ts, a.kyc_start_ts, SECOND) / 60 AS fill_min,
+          s.sessions_to_submit,
+          TIMESTAMP_DIFF(COALESCE(rv.verified_ts, rv.failed_ts), a.submit_ts, MINUTE) / 60 AS review_hours,
+          b.first_buy_ts IS NOT NULL AS bought,
+          b.first_buy_ts <= TIMESTAMP_ADD(TIMESTAMP(c.created_at), INTERVAL 7 DAY) AS bought_7d,
+          b.first_amount
+        FROM cohort c
+        LEFT JOIN app a USING (user_id) LEFT JOIN sessions s USING (user_id)
+        LEFT JOIN review rv USING (user_id) LEFT JOIN buys b USING (user_id)
+      ),
+      rejected AS (
+        SELECT e.user_id, e.screen FROM ev e
+        WHERE e.screen IN ('IdentityRejectedScreen', 'ProfileRejectedScreen', 'OccupationRejectedScreen', 'AddressRejectedScreen', 'BankRejectedScreen')
+        GROUP BY e.user_id, e.screen
+      )
+      SELECT 'outcome' AS kind, outcome AS name, COUNT(*) AS users,
+        ROUND(APPROX_QUANTILES(IF(fill_min >= 0, fill_min, NULL), 2)[OFFSET(1)], 1) AS median_fill_min,
+        APPROX_QUANTILES(sessions_to_submit, 2)[OFFSET(1)] AS median_sessions,
+        ROUND(APPROX_QUANTILES(IF(review_hours >= 0, review_hours, NULL), 2)[OFFSET(1)], 1) AS median_review_hours,
+        COUNTIF(bought_7d) AS bought_7d, COUNTIF(bought) AS bought,
+        APPROX_QUANTILES(first_amount, 2)[OFFSET(1)] AS median_first_buy,
+        CAST(NULL AS INT64) AS verified_now
+      FROM scored GROUP BY outcome
+      UNION ALL
+      SELECT 'rejected', rj.screen, COUNT(*), NULL, NULL, NULL, NULL, NULL, NULL,
+        COUNTIF(c.verification_status = 'verified')
+      FROM rejected rj JOIN cohort c USING (user_id)
+      GROUP BY rj.screen
+      ORDER BY kind, name`,
+    params: ga4Range(r),
+  };
+};
+
+// ---- Redemption analysis -------------------------------------------------
+// An ordered app funnel that ends in a main-database row: per person, the
+// first time in the period they reached each app step, each one counted only
+// after the step before it (so the numbers only go down), then whether a
+// matching database row was written from 10 minutes before their last app
+// step onward. steps: SQL conditions on one GA4 event. Everyone and per
+// platform (at the first step).
+const ga4OrderedFunnel = (from: string | undefined, to: string | undefined, steps: string[], doneSql: string): Query => {
+  const r = range(from, to);
+  const n = steps.length;
+  const idx = [...Array(n).keys()].map((i) => i + 1);
+  return {
+    sql: `WITH ev AS (
+        SELECT user_id, platform, TIMESTAMP_MICROS(event_timestamp) AS ts,
+          CASE ${steps.map((cond, i) => `WHEN ${cond} THEN ${i + 1}`).join(' ')} END AS step
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
+      ),
+      s1 AS (SELECT user_id, MIN(ts) AS t1, ARRAY_AGG(platform ORDER BY ts LIMIT 1)[OFFSET(0)] AS platform FROM ev WHERE step = 1 GROUP BY user_id),
+      ${idx.slice(1).map((i) => `s${i} AS (SELECT s.user_id, MIN(e.ts) AS t${i} FROM s${i - 1} s JOIN ev e ON e.user_id = s.user_id AND e.step = ${i} AND e.ts >= s.t${i - 1} GROUP BY s.user_id),`).join('\n      ')}
+      done AS (
+        SELECT s.user_id, MIN(d.created_at) AS done_ts
+        FROM s${n} s JOIN (${doneSql}) d ON d.user_id = s.user_id
+          AND d.created_at BETWEEN TIMESTAMP_SUB(s.t${n}, INTERVAL 10 MINUTE) AND ${SUB_PAID_UNTIL}
+        GROUP BY s.user_id
+      )
+      SELECT IF(GROUPING(platform) = 1, 'all', platform) AS segment,
+        ${idx.map((i) => `COUNT(t${i}) AS step${i}`).join(', ')}, COUNT(done_ts) AS done,
+        ROUND(SAFE_DIVIDE(COUNT(done_ts), COUNT(t1)) * 100, 1) AS done_pct,
+        ROUND(APPROX_QUANTILES(TIMESTAMP_DIFF(t${n}, t1, SECOND) / 60, 2)[OFFSET(1)], 1) AS median_min_to_confirm
+      FROM s1 ${idx.slice(1).map((i) => `LEFT JOIN s${i} USING (user_id)`).join(' ')} LEFT JOIN done USING (user_id)
+      GROUP BY GROUPING SETS ((), (platform))
+      ORDER BY segment = 'all' DESC, step1 DESC`,
+    params: ga4Range(r),
+  };
+};
+// Sell flow (Sep 2026): redeem_click (portfolio page) > RedemptionFormBottomSheet
+// > redeem_product_click > RedemptionCheckoutScreen > confirm_redeem_click,
+// then the redemption questionnaire, which comes after confirming.
+export const redemptionFunnel = (from?: string, to?: string): Query => ga4OrderedFunnel(from, to, [
+  `event_name = 'redeem_click' OR ${ga4Screens(`'RedemptionFormBottomSheet'`)}`,
+  `event_name = 'redeem_product_click' OR ${ga4Screens(`'RedemptionCheckoutScreen'`)}`,
+  `event_name = 'confirm_redeem_click'`,
+], SELL_DONE_SQL);
+// Switch flow: switch_click > SwitchProductFormBottomSheet > fund list >
+// switch_product_click > SwitchProductConfirmationScreen > confirm_switch_click.
+export const switchingFunnel = (from?: string, to?: string): Query => ga4OrderedFunnel(from, to, [
+  `event_name = 'switch_click' OR ${ga4Screens(`'SwitchProductFormBottomSheet'`)}`,
+  ga4Screens(`'SwitchProductFundListScreen'`),
+  `event_name = 'switch_product_click' OR ${ga4Screens(`'SwitchProductConfirmationScreen'`)}`,
+  `event_name = 'confirm_switch_click'`,
+], `SELECT user_id, created_at FROM ${SWITCHING} WHERE status IN (${DONE_STATUSES})`);
+
+// Every sell done in the period (main database, app or not), cut four ways:
+// all, how long the person had held that fund (since their first paid buy or
+// switch-in of it), fund type, and full or partial. Per cut: amount, the
+// share that were full redemptions, people who paid a new buy within 30
+// days, people holding nothing today, and sells with the app's confirm event.
+const REDEEM_HELD_BAND = `CASE WHEN held_days IS NULL THEN 'unknown' WHEN held_days < 30 THEN '1_under_30d' WHEN held_days < 90 THEN '2_30_90d'
+          WHEN held_days < 180 THEN '3_90_180d' WHEN held_days < 365 THEN '4_180_365d' ELSE '5_over_1y' END`;
+export const redemptionProfile = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH s AS (SELECT * FROM (${SELL_DONE_SQL}) WHERE DATE(created_at) BETWEEN @from AND @to),
+      first_in AS (
+        SELECT user_id, fund_id, MIN(created_at) AS first_in FROM ${TX}
+        WHERE type IN ('buy', 'SWITCH_IN') AND status IN (${DONE_STATUSES}) GROUP BY user_id, fund_id
+      ),
+      paid AS (${SUB_PAID_SQL}),
+      aum AS (${USER_AUM_SQL}),
+      app AS (
+        SELECT user_id, TIMESTAMP_MICROS(event_timestamp) AS ts FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name = 'confirm_redeem_click'
+      ),
+      scored AS (
+        SELECT s.*, f.type AS fund_type, DATE_DIFF(DATE(s.created_at), DATE(fi.first_in), DAY) AS held_days,
+          EXISTS (SELECT 1 FROM paid p WHERE p.user_id = s.user_id
+            AND p.created_at > s.created_at AND p.created_at <= TIMESTAMP_ADD(s.created_at, INTERVAL 30 DAY)) AS rebought,
+          IFNULL(a.aum, 0) = 0 AS holds_nothing,
+          EXISTS (SELECT 1 FROM app x WHERE x.user_id = s.user_id
+            AND x.ts BETWEEN TIMESTAMP_SUB(s.created_at, INTERVAL 10 MINUTE) AND TIMESTAMP_ADD(s.created_at, INTERVAL 10 MINUTE)) AS via_app
+        FROM s
+        LEFT JOIN ${FUNDS} f ON f.id = s.fund_id
+        LEFT JOIN first_in fi ON fi.user_id = s.user_id AND fi.fund_id = s.fund_id
+        LEFT JOIN aum a ON a.user_id = s.user_id
+      )
+      SELECT d.dimension, d.value, COUNT(*) AS sells, COUNT(DISTINCT user_id) AS people, SUM(amount) AS amount,
+        ROUND(SAFE_DIVIDE(COUNTIF(is_all_unit), COUNT(*)) * 100, 1) AS full_pct,
+        APPROX_QUANTILES(held_days, 2)[OFFSET(1)] AS median_held_days,
+        COUNT(DISTINCT IF(rebought, user_id, NULL)) AS rebought_people,
+        COUNT(DISTINCT IF(holds_nothing, user_id, NULL)) AS left_people,
+        COUNTIF(via_app) AS via_app
+      FROM scored, UNNEST([
+          STRUCT('all' AS dimension, 'all' AS value), ('held', ${REDEEM_HELD_BAND}),
+          ('fund_type', IFNULL(fund_type, 'unknown')), ('size', IF(is_all_unit, 'full', 'partial'))]) d
+      GROUP BY d.dimension, d.value
+      ORDER BY d.dimension, d.value`,
+    params: ga4Range(r),
+  };
+};
+
+// What investors did in the app before they redeemed, against investors who
+// did not redeem: the same lift rule as Subscription analysis' drivers, over
+// people who already had a paid buy before the period. The flow list also
+// holds the way to the sell button (portfolio page, a fund inside it) and
+// the PIN every transaction asks for: nearly every seller passes them.
+const REDEEM_FLOW_NAMES = `'redeem_click', 'redeem_product_click', 'confirm_redeem_click', 'redemption_terms_click', 'redeem_portfolio_bonus_click',
+        'RedemptionFormBottomSheet', 'RedemptionCheckoutScreen', 'RedemptionQuestionnaireScreen', 'TransactionSuccessScreen',
+        'GoalDetailScreen', 'product_in_portfolio_click', 'portfolio_detail_click', 'PinScreen', 'pin_on_submit'`;
+export const redemptionSignals = (from?: string, to?: string): Query => ga4OutcomeDrivers(from, to, {
+  outcomeSql: SELL_DONE_SQL,
+  flowNames: REDEEM_FLOW_NAMES,
+  population: `user_id IN (SELECT user_id FROM ${TX} WHERE type = 'buy' AND status IN (${SUB_PAID_STATUSES}) AND DATE(created_at) < CAST(@from AS DATE))`,
+  graceSeconds: -2,
+});
+
+// ---- Engagement analysis -------------------------------------------------
+// App features (Sep 2026 event and screen names) grouped by what they are for.
+const ENG_FEATURES: Record<string, { events?: string[]; screens?: string[] }> = {
+  search: { events: ['search_trigger', 'search_result_click', 'search_history_click'], screens: ['ProductSearchScreen'] },
+  sort_filter: { events: ['sort_filter_open', 'sort_filter_apply'] },
+  watchlist: { events: ['watchlist_product_click', 'all_watchlist_product_click'], screens: ['WatchlistScreen'] },
+  compare: { screens: ['ProductComparisonScreen'] },
+  expert_picks: { events: ['mutual_fund_by_expert_click', 'mutual_fund_by_expert_invest_click', 'mutual_fund_by_expert_product_click', 'mutual_fund_by_expert_detail_click'] },
+  goal_planning: {
+    events: ['create_portfolio_click', 'set_portfolio_target_click', 'set_portfolio_strategy_click', 'set_portfolio_risk_level_click', 'portfolio_target_amount_fill', 'portfolio_target_time_fill', 'edit_portfolio_click'],
+    screens: ['CreateGoalScreen', 'CreateGoalStrategyScreen', 'CreateGoalRecommendationScreen', 'UpdateGoalScreen'],
+  },
+  calculators: {
+    events: ['simulation_click', 'simulation_budget_click', 'simulation_calculate_click', 'calculate_budget_click', 'simulation_housing_budget_click', 'simulation_housing_loan_saving_click', 'simulation_recalculate_click', 'simulation_calculation_formula_click'],
+    screens: ['CalculatorsScreen'],
+  },
+  learning: { events: ['news_click', 'all_news_click', 'news_share_click', 'investment_dictionary_click', 'tutorial_click', 'faq_click'], screens: ['TutorialDetailScreen'] },
+  promo: { events: ['all_promo_click', 'promo_click', 'promo_product_click', 'promo_code_copy'] },
+  referral: { events: ['referral_click'] },
+  notifications: { events: ['notification_open', 'notification_detail_click'], screens: ['NotificationsScreen'] },
+  help: { events: ['live_chat_click', 'help_center_click', 'telegram_community_click'], screens: ['CsChatScreen'] },
+  manager_pages: { events: ['sharia_click'], screens: ['InvestmentManagerScreen', 'FundGroupDetailScreen'] },
+  reports: { events: ['estatement_click', 'send_spt_email_click'], screens: ['TaxReportScreen'] },
+};
+const ENG_FEATURE_CASE = `CASE ${Object.entries(ENG_FEATURES).map(([key, f]) => [
+  ...(f.events ? [`WHEN event_name IN (${f.events.map((e) => `'${e}'`).join(', ')}) THEN '${key}'`] : []),
+  ...(f.screens ? [`WHEN ${ga4Screens(f.screens.map((e) => `'${e}'`).join(', '))} THEN '${key}'`] : []),
+].join(' ')).join(' ')} END`;
+// Paid buys and done sells in the period per person (main database).
+const PERIOD_TX_SQL = `SELECT user_id, COUNTIF(type = 'buy') AS buys, SUM(IF(type = 'buy', final_amount, 0)) AS buy_amount, COUNTIF(type = 'sell') AS sells
+        FROM ${TX}
+        WHERE type IN ('buy', 'sell') AND status IN (${DONE_STATUSES}) AND IFNULL(payment_method, '') != 'manual_bonus'
+          AND DATE(created_at) BETWEEN @from AND @to
+        GROUP BY user_id`;
+
+// Per feature: logged-in people who used it in the period, against every
+// logged-in app user (the "all" row), by what the main database says about
+// them: holding a portfolio today and its median value, and paid buys and
+// done sells in the period (at any point in it, not necessarily after using
+// the feature).
+export const engagementFeatures = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH ev AS (
+        SELECT user_id, ${ENG_FEATURE_CASE} AS feature
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
+          AND event_name NOT IN (${GA4_PASSIVE_EVENTS}, 'notification_foreground')
+      ),
+      app_users AS (SELECT DISTINCT user_id FROM ev),
+      used AS (SELECT DISTINCT user_id, feature FROM ev WHERE feature IS NOT NULL),
+      aum AS (${USER_AUM_SQL}),
+      tx AS (${PERIOD_TX_SQL}),
+      u AS (
+        SELECT a.user_id, IFNULL(m.aum, 0) AS aum, IFNULL(t.buys, 0) > 0 AS bought, IFNULL(t.buy_amount, 0) AS buy_amount, IFNULL(t.sells, 0) > 0 AS sold
+        FROM app_users a LEFT JOIN aum m USING (user_id) LEFT JOIN tx t USING (user_id)
+      ),
+      x AS (SELECT 'all' AS feature, u.* FROM u UNION ALL SELECT used.feature, u.* FROM used JOIN u USING (user_id))
+      SELECT feature, COUNT(*) AS users,
+        COUNTIF(aum > 0) AS holders, ROUND(SAFE_DIVIDE(COUNTIF(aum > 0), COUNT(*)) * 100, 1) AS holder_pct,
+        APPROX_QUANTILES(IF(aum > 0, aum, NULL), 2)[OFFSET(1)] AS median_aum,
+        COUNTIF(bought) AS buyers, ROUND(SAFE_DIVIDE(COUNTIF(bought), COUNT(*)) * 100, 1) AS buyer_pct, SUM(buy_amount) AS buy_amount,
+        COUNTIF(sold) AS sellers, ROUND(SAFE_DIVIDE(COUNTIF(sold), COUNT(*)) * 100, 1) AS seller_pct
+      FROM x
+      GROUP BY feature
+      ORDER BY feature = 'all' DESC, users DESC`,
+    params: ga4Range(r),
+  };
+};
+
+// What people type into fund search (whole terms, lower-cased): who searched,
+// who tapped a result in the same session within 30 minutes, who paid any
+// buy within 7 days, and who paid a buy of a fund they tapped (fund name
+// matched to main.funds). Terms fewer than 2 people typed are hidden: a
+// single person's term can be a reference number or a name.
+export const engagementSearch = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH s AS (
+        SELECT user_id, ${GA4_SESSION} AS session_id, TIMESTAMP_MICROS(event_timestamp) AS ts, LOWER(TRIM(${ga4Param('name')})) AS term
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name = 'search_trigger'
+      ),
+      c AS (
+        SELECT user_id, ${GA4_SESSION} AS session_id, TIMESTAMP_MICROS(event_timestamp) AS ts, ${ga4Param('product_name')} AS fund
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name = 'search_result_click'
+      ),
+      per AS (SELECT term, user_id, COUNT(*) AS searches, MIN(ts) AS first_ts FROM s WHERE IFNULL(term, '') != '' GROUP BY term, user_id),
+      clicks AS (
+        SELECT DISTINCT s.term, s.user_id, c.fund
+        FROM s JOIN c ON c.user_id = s.user_id AND c.session_id = s.session_id AND c.ts BETWEEN s.ts AND TIMESTAMP_ADD(s.ts, INTERVAL 30 MINUTE)
+        WHERE c.fund IS NOT NULL
+      ),
+      paid AS (
+        SELECT p.user_id, p.created_at, LOWER(f.name) AS fund FROM ${TX} p JOIN ${FUNDS} f ON f.id = p.fund_id
+        WHERE p.type = 'buy' AND p.status IN (${SUB_PAID_STATUSES}) AND IFNULL(p.payment_method, '') != 'manual_bonus'
+      ),
+      bought_any AS (
+        SELECT DISTINCT per.term, per.user_id FROM per JOIN paid p ON p.user_id = per.user_id
+          AND p.created_at BETWEEN per.first_ts AND TIMESTAMP_ADD(per.first_ts, INTERVAL 7 DAY)
+      ),
+      bought_clicked AS (
+        SELECT DISTINCT cl.term, cl.user_id FROM clicks cl
+        JOIN per USING (term, user_id)
+        JOIN paid p ON p.user_id = cl.user_id AND p.fund = LOWER(cl.fund)
+          AND p.created_at BETWEEN per.first_ts AND TIMESTAMP_ADD(per.first_ts, INTERVAL 7 DAY)
+      ),
+      tapped AS (SELECT DISTINCT term, user_id FROM clicks),
+      top AS (
+        SELECT term, STRING_AGG(fund, ', ' ORDER BY n DESC, fund LIMIT 3) AS top_tapped
+        FROM (SELECT term, fund, COUNT(*) AS n FROM clicks GROUP BY term, fund)
+        GROUP BY term
+      )
+      SELECT per.term, SUM(per.searches) AS searches, COUNT(*) AS users,
+        COUNT(tp.user_id) AS tapped_users,
+        COUNT(ba.user_id) AS bought_users, COUNT(bc.user_id) AS bought_tapped_users,
+        ANY_VALUE(top.top_tapped) AS top_tapped
+      FROM per
+      LEFT JOIN tapped tp USING (term, user_id)
+      LEFT JOIN bought_any ba USING (term, user_id)
+      LEFT JOIN bought_clicked bc USING (term, user_id)
+      LEFT JOIN top USING (term)
+      GROUP BY per.term
+      HAVING users >= 2
+      ORDER BY users DESC, searches DESC
+      LIMIT 50`,
+    params: ga4Range(r),
+  };
+};
+
+// How people narrow down funds: sort and filter choices, the expert-picks
+// theme they open, and the risk level they land on when the app asks for a
+// risk profile before showing a fund. Per choice: people, and who paid a
+// buy within 7 days of first making it.
+export const engagementDiscovery = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH e AS (
+        SELECT user_id, TIMESTAMP_MICROS(event_timestamp) AS ts,
+          CASE event_name WHEN 'sort_filter_apply' THEN 'sort' WHEN 'mutual_fund_by_expert_click' THEN 'expert' ELSE 'risk_gate' END AS kind,
+          CASE event_name
+            WHEN 'sort_filter_apply' THEN CONCAT(IFNULL(${ga4Param('sort_by')}, '-'), ' / ', IFNULL(${ga4Param('sort_return_period')}, '-'))
+            WHEN 'mutual_fund_by_expert_click' THEN ${ga4Param('goal_name')}
+            ELSE COALESCE(CAST(${ga4Param('level', 'int')} AS STRING), ${ga4Param('level')})
+          END AS value
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
+          AND event_name IN ('sort_filter_apply', 'mutual_fund_by_expert_click', 'risk_profile_gate_completed')
+      ),
+      per AS (SELECT kind, IFNULL(value, '-') AS value, user_id, COUNT(*) AS events, MIN(ts) AS first_ts FROM e GROUP BY kind, value, user_id),
+      paid AS (${SUB_PAID_SQL}),
+      scored AS (
+        SELECT per.*, EXISTS (SELECT 1 FROM paid p WHERE p.user_id = per.user_id
+          AND p.created_at BETWEEN TIMESTAMP_SUB(per.first_ts, INTERVAL 10 MINUTE) AND TIMESTAMP_ADD(per.first_ts, INTERVAL 7 DAY)) AS paid_7d
+        FROM per
+      )
+      SELECT kind, value, SUM(events) AS events, COUNT(*) AS users, COUNTIF(paid_7d) AS paid_users,
+        ROUND(SAFE_DIVIDE(COUNTIF(paid_7d), COUNT(*)) * 100, 1) AS paid_pct
+      FROM scored
+      GROUP BY kind, value
+      HAVING users >= 2
+      ORDER BY kind, users DESC`,
+    params: ga4Range(r),
+  };
+};
+
+// Investors holding fund units they bought, today (main.portfolios; people
+// holding only promo bonus units, mostly a few thousand rupiah from sign-up
+// campaigns, and institutions are left out; bonus units still count toward
+// AUM) by portfolio size and by how many days they opened the app in the period
+// (logged in; pushes arriving and app updates do not count). Shows how much
+// money sits with people who never opened the app, and whether active
+// investors buy and sell more in the period.
+export const engagementActivity = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH holders AS (
+        SELECT a.user_id, a.aum FROM (${USER_AUM_SQL}) a JOIN ${USERS} u ON u.id = a.user_id
+        WHERE a.aum > 0 AND NOT IFNULL(u.is_institution, FALSE)
+          AND a.user_id IN (SELECT user_id FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0)
+      ),
+      act AS (
+        SELECT user_id, COUNT(DISTINCT event_date) AS days FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name NOT IN (${GA4_PASSIVE_EVENTS})
+        GROUP BY user_id
+      ),
+      tx AS (${PERIOD_TX_SQL})
+      SELECT
+        CASE WHEN h.aum < 1e6 THEN '1_under_1m' WHEN h.aum < 1e7 THEN '2_1m_10m' WHEN h.aum < 1e8 THEN '3_10m_100m'
+          WHEN h.aum < 1e9 THEN '4_100m_1b' ELSE '5_over_1b' END AS aum_tier,
+        CASE WHEN IFNULL(a.days, 0) = 0 THEN '0_none' WHEN a.days <= 2 THEN '1_1_2' WHEN a.days <= 9 THEN '2_3_9' ELSE '3_10_plus' END AS activity,
+        COUNT(*) AS holders, SUM(h.aum) AS aum,
+        COUNTIF(IFNULL(t.buys, 0) > 0) AS bought, COUNTIF(IFNULL(t.sells, 0) > 0) AS sold
+      FROM holders h LEFT JOIN act a USING (user_id) LEFT JOIN tx t USING (user_id)
+      GROUP BY aum_tier, activity
+      ORDER BY aum_tier, activity`,
     params: ga4Range(r),
   };
 };

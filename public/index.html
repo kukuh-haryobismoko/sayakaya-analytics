@@ -219,6 +219,9 @@
           <button class="nav-link" data-tab="product-funnel"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg></span>Product funnel</button>
           <button class="nav-link" data-tab="user-behavior"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg></span>User behavior</button>
           <button class="nav-link" data-tab="subscription-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Subscription analysis</button>
+          <button class="nav-link" data-tab="onboarding-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg></span>Onboarding analysis</button>
+          <button class="nav-link" data-tab="redemption-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-down"></use></svg></span>Redemption analysis</button>
+          <button class="nav-link" data-tab="engagement-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Engagement analysis</button>
           <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
         </div>
         <div class="nav-group" data-group="tools">
@@ -2852,6 +2855,11 @@
           <span data-i18n="sa_info">Follows logged-in people through the app's buy flow (Google Analytics) and checks each step against the main database. A subscription counts as successful once the buy is paid: completed, payment received, or verified. Bonus buys entered by admins are left out. Screen names are the app's own (ProductDetailScreen is a fund's page, GoalDetailScreen a portfolio). App data arrives about a day late.</span>
         </div>
         <div id="saKpis" class="kpi-grid" style="margin-top:14px"></div>
+        <div class="datamap">
+          <h3 data-i18n="an_map_title">How the data connects</h3>
+          <p data-i18n-html="an_map"></p>
+          <ul id="saCoverage" aria-live="polite"></ul>
+        </div>
       </div>
 
       <div class="panel">
@@ -2865,9 +2873,29 @@
           </div>
         </div>
         <span class="hint" data-i18n="sa_funnel_hint">People who opened the buy form in this period, and how many of them went on to each next step. A step only counts if the step before it came first, so the numbers can only go down. Paid: a paid buy from their first order onward. First buyer: no paid buy before they first opened the form. The chart shows each step as a share of the people who opened the form.</span>
+        <p class="lineage" data-i18n-html="sa_lineage_funnel"></p>
+        <div id="saFunnelStory" class="story" aria-live="polite"></div>
         <p id="saFunnelEmpty" class="empty" data-i18n="sa_funnel_empty" hidden>Nobody opened the buy form in this period.</p>
         <div class="chart-wrap sm" style="margin-top:14px"><canvas id="saFunnelChart" aria-label="Share of people who opened the buy form reaching each later step"></canvas></div>
         <div id="saFunnelTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="sa_profile_title">Who opens the buy form, and who pays</h2>
+          <div class="seg" id="saProfileDim" role="group" data-i18n-aria-label="sa_profile_dim_label" aria-label="Group by">
+            <button class="on" data-dim="age_band" aria-pressed="true" data-i18n="sa_dim_age_band">Age</button>
+            <button data-dim="gender" aria-pressed="false" data-i18n="sa_dim_gender">Gender</button>
+            <button data-dim="occupation" aria-pressed="false" data-i18n="sa_dim_occupation">Occupation</button>
+            <button data-dim="purpose" aria-pressed="false" data-i18n="sa_dim_purpose">Investment purpose</button>
+            <button data-dim="risk_level" aria-pressed="false" data-i18n="sa_dim_risk_level">Risk level</button>
+            <button data-dim="tenure" aria-pressed="false" data-i18n="sa_dim_tenure">Account age</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="sa_profile_hint">People who opened the buy form in this period, grouped by what the main database knows about them, and how many paid a buy afterwards. Age and account age are as of their first open. Risk level is the result of the in-app risk questionnaire. Unknown: the profile field is empty.</span>
+        <p class="lineage" data-i18n-html="sa_lineage_profile"></p>
+        <div id="saProfileStory" class="story" aria-live="polite"></div>
+        <div id="saProfileTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
@@ -2879,6 +2907,8 @@
           </div>
         </div>
         <span class="hint" data-i18n="sa_entry_hint">The screen people were on right before the buy form opened, in the same app session. Ordered: created an order in that session. Paid: paid a buy within 3 days of opening the form from that screen. Going back to the form from checkout is not counted as a new open. Screens fewer than 3 people came from are hidden.</span>
+        <p class="lineage" data-i18n-html="sa_lineage_entry"></p>
+        <div id="saEntryStory" class="story" aria-live="polite"></div>
         <div id="saEntryTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2888,12 +2918,16 @@
           <div class="seg" id="saDropStep" role="group" data-i18n-aria-label="sa_drop_step_label" aria-label="Last step reached"></div>
         </div>
         <span class="hint" data-i18n="sa_drop_hint">App sessions that reached the buy form but created no order, by the furthest step reached. Next screen is where they went after their last buy-flow screen; "left the app" means nothing else happened in that session. Paid within 7 days: those people who came back and paid a buy within a week. Up to 12 exits per step.</span>
+        <p class="lineage" data-i18n-html="sa_lineage_drop"></p>
+        <div id="saDropStory" class="story" aria-live="polite"></div>
         <div id="saDropTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="sa_pay_title">Orders by payment method</h2></div>
         <span class="hint" data-i18n="sa_pay_hint">Every buy order created in this period, by how the person chose to pay. Expired: the payment window closed unpaid. Waiting: not paid yet and not expired. Minutes to pay is the median from order to payment, for paid orders. Paid another order: people with an expired or cancelled order here who paid a different buy within 7 days.</span>
+        <p class="lineage" data-i18n-html="sa_lineage_pay"></p>
+        <div id="saPayStory" class="story" aria-live="polite"></div>
         <div id="saPayTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
@@ -2903,6 +2937,8 @@
           <label class="hint"><input type="checkbox" id="saDriverFlow" /> <span data-i18n="sa_driver_flow">Include buy-flow steps</span></label>
         </div>
         <span class="hint" data-i18n="sa_driver_hint">For each screen and action: of the logged-in people who did it in this period, the share who paid a buy, next to the share among people who did not do it. Subscribers only count what they did before their first paid buy. Lift 2.0 means twice the rate of those who did not. Active people do more of everything, so this shows what subscribers tend to do, not what makes them subscribe. Buy-flow steps are hidden by default because they are part of subscribing. Fewer than 20 people: hidden.</span>
+        <p class="lineage" data-i18n-html="sa_lineage_driver"></p>
+        <div id="saDriverStory" class="story" aria-live="polite"></div>
         <div id="saDriverTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2910,7 +2946,8 @@
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="sa_timing_title">Time to first subscription</h2></div>
           <span class="hint" data-i18n="sa_timing_hint">People who signed up in this period: days from sign-up to KYC verified and to their first paid buy. There is no end date, so recent sign-ups have had less time.</span>
-          <p id="saTimingSummary" class="trend-finding" hidden></p>
+          <p class="lineage" data-i18n-html="sa_lineage_timing"></p>
+          <div id="saTimingSummary" class="story" aria-live="polite"></div>
           <p id="saTimingEmpty" class="empty" data-i18n="sa_timing_empty" hidden>Nobody signed up in this period.</p>
           <div class="chart-wrap sm"><canvas id="saTimingChart" aria-label="New sign-ups by days to KYC verified and to first paid buy"></canvas></div>
         </div>
@@ -2923,6 +2960,8 @@
             </div>
           </div>
           <span class="hint" data-i18n="sa_hours_hint">Each hour's share of the period's logged-in app sessions, next to its share of paid buy orders (WIB, by the time the order was created). Where the line sits above the bars, people buy more often than their app use alone would suggest.</span>
+          <p class="lineage" data-i18n-html="sa_lineage_hours"></p>
+          <div id="saHoursStory" class="story" aria-live="polite"></div>
           <p id="saHoursEmpty" class="empty" data-i18n="sa_hours_empty" hidden>No sessions or orders in this period.</p>
           <div class="chart-wrap sm"><canvas id="saHoursChart" aria-label="App sessions and paid buy orders by hour or weekday"></canvas></div>
         </div>
@@ -2931,7 +2970,195 @@
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="sa_chip_title">Preset amount buttons</h2></div>
         <span class="hint" data-i18n="sa_chip_hint">The amount buttons on the buy form. Per amount: who tapped it, who paid a buy within a day of their first tap, and how many of those kept that exact amount.</span>
+        <p class="lineage" data-i18n-html="sa_lineage_chip"></p>
+        <div id="saChipStory" class="story" aria-live="polite"></div>
         <div id="saChipTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ONBOARDING ANALYSIS: sign-ups from main.users, their KYC screens in
+         GA4 (user_id), then the review, risk profile and first paid buy back
+         in the main database. See queries.js onboarding*. -->
+    <section id="onboarding-analysis" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="obFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="obTo" /></label>
+            <button id="obApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="ob_info">Starts from the main database: every account created in this period (institution accounts left out). For each person it looks up the KYC screens they reached in the app, with no end date so a KYC finished after the period still counts, then goes back to the main database for the KYC review result, the risk profile and the first paid buy.</span>
+        </div>
+        <div id="obKpis" class="kpi-grid" style="margin-top:14px"></div>
+        <div class="datamap">
+          <h3 data-i18n="an_map_title">How the data connects</h3>
+          <p data-i18n-html="an_map"></p>
+          <ul id="obCoverage" aria-live="polite"></ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="ob_funnel_title">From sign-up to first buy</h2>
+          <div class="seg" id="obSegment" role="group" data-i18n-aria-label="ob_segment_label" aria-label="Platform"></div>
+        </div>
+        <span class="hint" data-i18n="ob_funnel_hint">Each step counts the people who reached it at any time. App steps come from the KYC screens; KYC verified, risk profile and first paid buy come from the main database, so a person verified without app tracking still counts there. A step can show slightly more people than the one before when the app did not send a screen event. Split by the platform they used first.</span>
+        <p class="lineage" data-i18n-html="ob_lineage_funnel"></p>
+        <div id="obFunnelStory" class="story" aria-live="polite"></div>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="obFunnelChart" aria-label="Sign-ups reaching each onboarding step"></canvas></div>
+        <div id="obFunnelTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="ob_outcome_title">Where KYC ended up</h2></div>
+        <span class="hint" data-i18n="ob_outcome_hint">The same sign-ups by KYC result today. Minutes to fill: from opening KYC to submitting it in the app. Review hours: from submitting to the review decision. Bought within 7 days: first paid buy within 7 days of creating the account.</span>
+        <p class="lineage" data-i18n-html="ob_lineage_outcome"></p>
+        <div id="obOutcomeStory" class="story" aria-live="polite"></div>
+        <div id="obOutcomeTable" class="table-wrap" style="margin-top:14px"></div>
+        <h3 style="margin:18px 0 0;font-size:14px" data-i18n="ob_rejected_title">Which part of KYC was sent back</h3>
+        <span class="hint" data-i18n="ob_rejected_hint">People who saw a rejection screen for a part of their KYC, and how many of them are verified now.</span>
+        <div id="obRejectedTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- REDEMPTION ANALYSIS: the sell and switch flows in GA4 (user_id)
+         checked against main.transactions / main.switching_transactions,
+         plus what sellers did before selling and what happened after.
+         See queries.js redemption* and switchingFunnel. -->
+    <section id="redemption-analysis" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="rdFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="rdTo" /></label>
+            <button id="rdApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="rd_info">Follows logged-in investors through the app's sell (redemption) and switch flows and checks each against the main database. A sell or switch counts once it is completed or verified. Holding time, full or partial sells, buying again and holding nothing today all come from the main database.</span>
+        </div>
+        <div id="rdKpis" class="kpi-grid" style="margin-top:14px"></div>
+        <div class="datamap">
+          <h3 data-i18n="an_map_title">How the data connects</h3>
+          <p data-i18n-html="an_map"></p>
+          <ul id="rdCoverage" aria-live="polite"></ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="rd_funnel_title">Sell flow, step by step</h2></div>
+        <span class="hint" data-i18n="rd_funnel_hint">People who opened the sell form in this period and how many reached each next step, each step counted only after the one before. Sold: a completed sell in the main database from their confirmation onward. The redemption questionnaire comes after confirming, so it is not a step.</span>
+        <p class="lineage" data-i18n-html="rd_lineage_funnel"></p>
+        <div id="rdFunnelStory" class="story" aria-live="polite"></div>
+        <div class="chart-wrap sm" style="margin-top:14px"><canvas id="rdFunnelChart" aria-label="Share of people who opened the sell form reaching each later step"></canvas></div>
+        <div id="rdFunnelTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="rd_profile_title">Who sells, and what happens after</h2>
+          <div class="seg" id="rdProfileDim" role="group" data-i18n-aria-label="rd_profile_dim_label" aria-label="Group by">
+            <button class="on" data-dim="held" aria-pressed="true" data-i18n="rd_dim_held">Time held</button>
+            <button data-dim="fund_type" aria-pressed="false" data-i18n="rd_dim_fund_type">Fund type</button>
+            <button data-dim="size" aria-pressed="false" data-i18n="rd_dim_size">Full or partial</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="rd_profile_hint">Every completed sell in the period, app or not. Held: days since the person first bought (or switched into) that fund. Full: sold all units of the fund. Bought again: paid a new buy within 30 days, so recent sells have had less time. Holding nothing: no fund units today.</span>
+        <p class="lineage" data-i18n-html="rd_lineage_profile"></p>
+        <div id="rdProfileStory" class="story" aria-live="polite"></div>
+        <div id="rdProfileTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="rd_signal_title">What investors did before selling</h2>
+          <label class="hint"><input type="checkbox" id="rdSignalFlow" /> <span data-i18n="rd_signal_flow">Include sell-flow steps</span></label>
+        </div>
+        <span class="hint" data-i18n="rd_signal_hint">Investors who already had a paid buy before the period: for each screen and action, the share who sold, next to the share among investors who did not do it. Sellers only count what they did before their first sell. The way to the sell button and the PIN are hidden by default because almost every seller passes them. Fewer than 20 people: hidden.</span>
+        <p class="lineage" data-i18n-html="rd_lineage_signal"></p>
+        <div id="rdSignalStory" class="story" aria-live="polite"></div>
+        <div id="rdSignalTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="rd_switch_title">Switch flow, step by step</h2></div>
+        <span class="hint" data-i18n="rd_switch_hint">People who opened the switch form in this period and how many reached each next step. Switched: a completed switch in the main database from their confirmation onward.</span>
+        <p class="lineage" data-i18n-html="rd_lineage_switch"></p>
+        <div id="rdSwitchStory" class="story" aria-live="polite"></div>
+        <div class="chart-wrap sm" style="margin-top:14px"><canvas id="rdSwitchChart" aria-label="Share of people who opened the switch form reaching each later step"></canvas></div>
+        <div id="rdSwitchTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ENGAGEMENT ANALYSIS: app features, search and discovery in GA4
+         (user_id) against holdings and transactions in the main database.
+         See queries.js engagement*. -->
+    <section id="engagement-analysis" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="egFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="egTo" /></label>
+            <button id="egApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="eg_info">Looks at what logged-in people use in the app and lines it up with what the main database says about them: holdings today, and buys and sells in the period. These comparisons describe who uses what. They do not show that a feature makes people invest.</span>
+        </div>
+        <div id="egKpis" class="kpi-grid" style="margin-top:14px"></div>
+        <div class="datamap">
+          <h3 data-i18n="an_map_title">How the data connects</h3>
+          <p data-i18n-html="an_map"></p>
+          <ul id="egCoverage" aria-live="polite"></ul>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="eg_feature_title">Features and the people who use them</h2></div>
+        <span class="hint" data-i18n="eg_feature_hint">Per feature: logged-in people who used it in the period, how many hold a portfolio today, their median portfolio value, and how many bought or sold in the period (at any point, not necessarily after using the feature). The first row is every logged-in app user, for comparison.</span>
+        <p class="lineage" data-i18n-html="eg_lineage_feature"></p>
+        <div id="egFeatureStory" class="story" aria-live="polite"></div>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="egFeatureChart" aria-label="Share of each feature's users who bought in the period, next to all app users"></canvas></div>
+        <div id="egFeatureTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="eg_activity_title">Investors by portfolio size and app use</h2></div>
+        <span class="hint" data-i18n="eg_activity_hint">Investors holding units they bought, today, by portfolio value and by how many days they opened the app in the period (logged in). Each cell: investors, and their portfolio value below. Institution accounts are left out.</span>
+        <p class="lineage" data-i18n-html="eg_lineage_activity"></p>
+        <div id="egActivityStory" class="story" aria-live="polite"></div>
+        <div id="egActivityTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="eg_search_title">What people search for</h2></div>
+        <span class="hint" data-i18n="eg_search_hint">Whole search terms, lower-cased. Tapped: tapped a result in the same session within 30 minutes. Bought: paid any buy within 7 days of the search. Bought what they tapped: paid a buy of a fund they tapped. Terms fewer than 2 people typed are hidden.</span>
+        <p class="lineage" data-i18n-html="eg_lineage_search"></p>
+        <div id="egSearchStory" class="story" aria-live="polite"></div>
+        <div id="egSearchTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="eg_discovery_title">How people narrow down funds</h2>
+          <div class="seg" id="egDiscoveryKind" role="group" data-i18n-aria-label="eg_discovery_kind_label" aria-label="Choice">
+            <button class="on" data-kind="sort" aria-pressed="true" data-i18n="eg_kind_sort">Sort</button>
+            <button data-kind="expert" aria-pressed="false" data-i18n="eg_kind_expert">Expert picks</button>
+            <button data-kind="risk_gate" aria-pressed="false" data-i18n="eg_kind_risk_gate">Risk level</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="eg_discovery_hint">Sort choices on the fund list, the expert-picks theme opened, and the risk level people land on when the app asks for a risk profile before showing a fund. Paid: a paid buy within 7 days of first making that choice.</span>
+        <p class="lineage" data-i18n-html="eg_lineage_discovery"></p>
+        <div id="egDiscoveryStory" class="story" aria-live="polite"></div>
+        <div id="egDiscoveryTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
     </section>
 
@@ -3231,7 +3458,19 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Subscription analysis</h3>
-          <p data-i18n="docs_sa_desc">Follows logged-in people through the app's buy flow (Google Analytics) and checks each step against paid buys in the main database (completed, payment received, or verified; admin bonus buys excluded). For a chosen period it shows: a step funnel from opening the buy form to checkout, payment method, order created, and paid, split by platform, first or repeat buyer, or app version, with median minutes to order and to pay; which screen people open the buy form from (and the one before that) and how many of them pay within 3 days; where sessions leave the buy flow without an order and whether those people pay within a week; every buy order by payment method with expired, cancelled, and unpaid amounts; which screens and actions subscribers did before their first paid buy compared with people who did not (lift; buy-flow steps hidden unless ticked); days from sign-up to KYC and to the first paid buy for new sign-ups; the hours and weekdays when paid orders happen compared with app use; and the preset amount buttons on the buy form. Activity before login is not included, and the comparisons show what subscribers tend to do, not proof of what made them subscribe.</p>
+          <p data-i18n="docs_sa_desc">Follows logged-in people through the app's buy flow (Google Analytics) and checks each step against paid buys in the main database (completed, payment received, or verified; admin bonus buys excluded). For a chosen period it shows: a step funnel from opening the buy form to checkout, payment method, order created, and paid, split by platform, first or repeat buyer, or app version, with median minutes to order and to pay; which screen people open the buy form from (and the one before that) and how many of them pay within 3 days; where sessions leave the buy flow without an order and whether those people pay within a week; every buy order by payment method with expired, cancelled, and unpaid amounts; which screens and actions subscribers did before their first paid buy compared with people who did not (lift; buy-flow steps hidden unless ticked); days from sign-up to KYC and to the first paid buy for new sign-ups; the hours and weekdays when paid orders happen compared with app use; and the preset amount buttons on the buy form. Activity before login is not included, and the comparisons show what subscribers tend to do, not proof of what made them subscribe. A panel compares who opens the buy form and who pays by age, gender, occupation, investment purpose, risk level and account age from the main database. Each panel names the tables it joins and opens with a finding written from its own numbers, and a data map at the top shows how well the app's analytics match the main database for the chosen period.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg> Onboarding analysis</h3>
+          <p data-i18n="docs_ob_desc">Starts from the main database: every account created in the chosen period (institution accounts left out). For each person it checks which KYC screens they reached in the app (KTP photo, selfie, personal data, occupation, address, bank account, signature, submitted), then the KYC review in the main database (verified first time, verified after a failed review, failed, waiting), the risk profile, and the first paid buy. It shows the biggest drop between steps, split by platform; minutes and app sessions to fill in KYC; hours to the review decision; which part of KYC was sent back; and how many verified people bought within 7 days. Each panel names the tables it joins and opens with a finding written from its own numbers.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-down"></use></svg> Redemption analysis</h3>
+          <p data-i18n="docs_rd_desc">Follows investors through the app's sell (redemption) and switch flows and checks each against completed sells and switches in the main database. It shows both flows step by step; every completed sell in the period by how long the fund was held, fund type, and full or partial, with how many sellers bought again within 30 days and how many hold nothing today; and which screens and actions investors used before selling, compared with investors who did not sell. Each panel names the tables it joins and opens with a finding written from its own numbers. The comparisons show patterns, not causes.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Engagement analysis</h3>
+          <p data-i18n="docs_eg_desc">Lines up what logged-in people use in the app with what the main database says about them. It shows each feature group (search, sort and filter, watchlist, goal planning, calculators, notifications and more) with how many of its users hold a portfolio, their median portfolio value, and how many bought or sold in the period; investors by portfolio size and by how many days they opened the app, including how much money sits with investors who did not open it; the search terms people type, whether they tapped a result and bought that fund; and the sort choices, expert-picks themes and risk levels people pick. Each panel names the tables it joins and opens with a finding written from its own numbers.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Event code tracking</h3>

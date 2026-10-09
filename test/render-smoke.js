@@ -217,12 +217,61 @@ const saDropoff = [
 const saPayment = [{ method: XSS, orders: 154, users: 36, paid: 102, expired: 33, cancelled: 19, waiting: 0, paid_pct: 66.2, median_min_to_pay: 1,
   paid_amount: 334586996, lost_amount: 231584232, lost_users: 19, lost_then_paid_users: 6 }];
 const saDrivers = [
-  { kind: 'screen', name: XSS, in_buy_flow: false, users: 642, subscribed: 214, rate_pct: 33.3, rate_without_pct: 9.2, lift: 3.61, share_of_subscribers_pct: 76.4 },
-  { kind: 'action', name: 'order_button', in_buy_flow: true, users: 295, subscribed: 277, rate_pct: 93.9, rate_without_pct: 0.3, lift: 332.09, share_of_subscribers_pct: 98.9 },
+  { kind: 'screen', name: XSS, in_flow: false, users: 642, converted: 214, population: 1124, population_converted: 239, rate_pct: 33.3, rate_without_pct: 9.2, lift: 3.61, share_of_converted_pct: 76.4 },
+  { kind: 'action', name: 'order_button', in_flow: true, users: 295, converted: 277, population: 1124, population_converted: 239, rate_pct: 93.9, rate_without_pct: 0.3, lift: 332.09, share_of_converted_pct: 98.9 },
 ];
 const saTimingSummary = { signed_up: 189, median_days_to_kyc: 0, median_days_kyc_to_buy: 1, median_days_to_buy: 2, median_sessions_before_buy: 3 };
 const saTiming = [{ bucket: '1_same_day', verified: 53, first_buy: 4, ...saTimingSummary }, { bucket: '6_not_yet', verified: 86, first_buy: 161, ...saTimingSummary }];
 const saHours = [{ dow: 1, hour: 9, sessions: 61, orders: 2, paid: 2 }];
+const saProfile = [
+  { dimension: 'age_band', value: '2_25_34', opened_form: 161, paid: 121, paid_pct: 75.2, paid_amount: 2118435831, median_paid_amount: 2238500 },
+  { dimension: 'age_band', value: '4_45_54', opened_form: 47, paid: 30, paid_pct: 63.8, paid_amount: 321910000, median_paid_amount: 4000000 },
+  { dimension: 'occupation', value: XSS, opened_form: 12, paid: 6, paid_pct: 50, paid_amount: 1000000, median_paid_amount: 100000 },
+];
+const anCoverage = [{ app_users: 1505, app_users_in_db: 1503, db_buys: 754, db_buys_in_app: 713, db_sells: 345, db_sells_in_app: 325, db_switches: 171, db_switches_in_app: 170, db_signups: 140, db_signups_in_app: 129 }];
+// Onboarding, Redemption and Engagement analysis (shapes from live BigQuery, Sep 2026).
+const obFunnel = [
+  { segment: 'all', signed_up: 140, in_app: 129, kyc_intro: 123, ktp: 83, selfie: 82, personal: 83, occupation: 77, addr_step: 77, bank: 77, sign_step: 76, submitted: 75, verified: 74, failed: 9, risk_profiled: 52, first_buy: 13 },
+  { segment: 'ANDROID', signed_up: 90, in_app: 90, kyc_intro: 89, ktp: 58, selfie: 57, personal: 58, occupation: 54, addr_step: 54, bank: 53, sign_step: 52, submitted: 51, verified: 43, failed: 8, risk_profiled: 31, first_buy: 8 },
+  { segment: 'IOS', signed_up: 39, in_app: 39, kyc_intro: 34, ktp: 25, selfie: 25, personal: 25, occupation: 23, addr_step: 23, bank: 24, sign_step: 24, submitted: 24, verified: 26, failed: 0, risk_profiled: 17, first_buy: 4 },
+];
+const obOutcome = [
+  { kind: 'outcome', name: '1_verified', users: 69, median_fill_min: 11.8, median_sessions: 1, median_review_hours: 0.9, bought_7d: 8, bought: 12, median_first_buy: 1000000, verified_now: null },
+  { kind: 'outcome', name: '2_verified_after_fail', users: 5, median_fill_min: 7.7, median_sessions: 1, median_review_hours: 37.5, bought_7d: 1, bought: 1, median_first_buy: 1000000, verified_now: null },
+  { kind: 'outcome', name: '3_failed', users: 9, median_fill_min: 13.2, median_sessions: 1, median_review_hours: 14.3, bought_7d: 0, bought: 0, median_first_buy: null, verified_now: null },
+  { kind: 'rejected', name: 'IdentityRejectedScreen', users: 4, median_fill_min: null, median_sessions: null, median_review_hours: null, bought_7d: null, bought: null, median_first_buy: null, verified_now: 3 },
+];
+const rdFunnel = [
+  { segment: 'all', step1: 190, step2: 171, step3: 165, done: 162, done_pct: 85.3, median_min_to_confirm: 0.3 },
+  { segment: 'ANDROID', step1: 116, step2: 104, step3: 101, done: 100, done_pct: 86.2, median_min_to_confirm: 0.3 },
+  { segment: 'IOS', step1: 74, step2: 67, step3: 64, done: 62, done_pct: 83.8, median_min_to_confirm: 0.2 },
+];
+const rdSwitching = [{ segment: 'all', step1: 78, step2: 73, step3: 50, step4: 47, done: 46, done_pct: 59, median_min_to_confirm: 0.7 }];
+const rdProfile = [
+  { dimension: 'all', value: 'all', sells: 345, people: 174, amount: 60326075601, full_pct: 46.7, median_held_days: 424, rebought_people: 56, left_people: 35, via_app: 325 },
+  { dimension: 'held', value: '1_under_30d', sells: 37, people: 24, amount: 528522536, full_pct: 70.3, median_held_days: 9, rebought_people: 8, left_people: 12, via_app: 36 },
+  { dimension: 'held', value: '5_over_1y', sells: 180, people: 95, amount: 4687737293, full_pct: 40.6, median_held_days: 978, rebought_people: 26, left_people: 13, via_app: 167 },
+];
+const rdSignals = [
+  { kind: 'screen', name: XSS, in_flow: false, users: 320, converted: 146, population: 912, population_converted: 162, rate_pct: 45.6, rate_without_pct: 2.7, lift: 16.88, share_of_converted_pct: 90.1 },
+  { kind: 'action', name: 'confirm_redeem_click', in_flow: true, users: 162, converted: 160, population: 912, population_converted: 162, rate_pct: 98.8, rate_without_pct: 0.3, lift: 370.37, share_of_converted_pct: 98.8 },
+];
+const egFeatures = [
+  { feature: 'all', users: 1171, holders: 797, holder_pct: 68.1, median_aum: 5000000, buyers: 240, buyer_pct: 20.5, buy_amount: 6224118571, sellers: 164, seller_pct: 14 },
+  { feature: 'search', users: 88, holders: 74, holder_pct: 84.1, median_aum: 12000000, buyers: 47, buyer_pct: 53.4, buy_amount: 1845135472, sellers: 26, seller_pct: 29.5 },
+  { feature: 'calculators', users: 30, holders: 18, holder_pct: 60, median_aum: 3000000, buyers: 11, buyer_pct: 36.7, buy_amount: 26138658, sellers: 6, seller_pct: 20 },
+];
+const egActivity = [
+  { aum_tier: '1_under_1m', activity: '0_none', holders: 231273, aum: 5998831974.7, bought: 1, sold: 0 },
+  { aum_tier: '4_100m_1b', activity: '0_none', holders: 38, aum: 10375194078.1, bought: 0, sold: 4 },
+  { aum_tier: '4_100m_1b', activity: '3_10_plus', holders: 57, aum: 19781234486.4, bought: 26, sold: 19 },
+  { aum_tier: '3_10m_100m', activity: '1_1_2', holders: 89, aum: 3434702877.4, bought: 12, sold: 5 },
+];
+const egSearch = [{ term: XSS, searches: 9, users: 7, tapped_users: 6, bought_users: 2, bought_tapped_users: 1, top_tapped: XSS }];
+const egDiscovery = [
+  { kind: 'sort', value: 'highest_return / one_year', events: 39, users: 16, paid_users: 5, paid_pct: 31.3 },
+  { kind: 'expert', value: XSS, events: 24, users: 16, paid_users: 3, paid_pct: 18.8 },
+];
 const saChips = [{ chip: 1000000, taps: 161, users: 89, paid_users: 61, paid_pct: 68.5, paid_chip_amount: 45, median_paid_amount: 1000000 }];
 
 sandbox.api = async (path) => {
@@ -289,18 +338,30 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/subscription/timing'))         return saTiming;
   if (path.startsWith('/api/subscription/hours'))          return saHours;
   if (path.startsWith('/api/subscription/chips'))          return saChips;
+  if (path.startsWith('/api/subscription/profile'))        return saProfile;
+  if (path.startsWith('/api/analysis/coverage'))           return anCoverage;
+  if (path.startsWith('/api/onboarding/funnel'))           return obFunnel;
+  if (path.startsWith('/api/onboarding/outcome'))          return obOutcome;
+  if (path.startsWith('/api/redemption/funnel'))           return rdFunnel;
+  if (path.startsWith('/api/redemption/switching'))        return rdSwitching;
+  if (path.startsWith('/api/redemption/profile'))          return rdProfile;
+  if (path.startsWith('/api/redemption/signals'))          return rdSignals;
+  if (path.startsWith('/api/engagement/features'))         return egFeatures;
+  if (path.startsWith('/api/engagement/activity'))         return egActivity;
+  if (path.startsWith('/api/engagement/search'))           return egSearch;
+  if (path.startsWith('/api/engagement/discovery'))        return egDiscovery;
   throw new Error('unexpected path ' + path);
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel', 'loadEmailRecap', 'loadBehavior', 'loadSubscription']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel', 'loadEmailRecap', 'loadBehavior', 'loadSubscription', 'loadOnboarding', 'loadRedemption', 'loadEngagement']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   try { await sandbox.loadAumDrill('2026-08'); } catch (e) { errors.push(`loadAumDrill: ${e.message}`); }
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -357,13 +418,14 @@ sandbox.api = async (path) => {
     console.log(`FAIL  #pfnKpis -> ${pfnKpisHtml.slice(0, 200) || '(never rendered)'}`);
     errors.push('#pfnKpis did not render KPI cards');
   }
-  for (const sel of ['#erKpis', '#bhKpis', '#saKpis']) {
+  for (const sel of ['#erKpis', '#bhKpis', '#saKpis', '#obKpis', '#rdKpis', '#egKpis']) {
     if (get(sel)._html.includes('kpi-value')) console.log(`ok    ${sel}`);
     else errors.push(`${sel} did not render KPI cards`);
   }
   // Email subjects and push campaign names are typed by people; genTable
   // writes raw HTML, so the new tabs escape them first.
-  for (const sel of ['#erSubjectTable', '#erLogTable', '#bhPushTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable']) {
+  for (const sel of ['#erSubjectTable', '#erLogTable', '#bhPushTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saProfileTable',
+    '#rdSignalTable', '#egSearchTable', '#egDiscoveryTable', '#saEntryStory', '#saDropStory', '#saPayStory', '#saDriverStory', '#saProfileStory', '#rdSignalStory', '#egSearchStory', '#egDiscoveryStory']) {
     if (get(sel)._html.includes(XSS)) errors.push(`${sel} rendered unescaped HTML`);
     else console.log(`ok    ${sel} escapes HTML`);
   }
@@ -374,7 +436,18 @@ sandbox.api = async (path) => {
     [(get('#saKpis')._html.match(/kpi-value/g) || []).length === 4, '#saKpis has 4 cards'],
     [!get('#saDriverTable')._html.includes('order_button'), '#saDriverTable hides buy-flow steps'],
     [get('#saDropStep')._html.includes('data-step="1"') && get('#saDropStep')._html.includes('data-step="3"'), '#saDropStep has a button per step'],
-    [String(get('#saTimingSummary').textContent).startsWith('189 '), '#saTimingSummary filled'],
+    [get('#saTimingSummary')._html.includes('189 '), '#saTimingSummary filled'],
+    [get('#saCoverage')._html.includes('99.9%') && get('#saCoverage')._html.includes('94.6%'), '#saCoverage shows how GA4 matches the database'],
+    [get('#saFunnelStory')._html.includes('401') && get('#saFunnelStory')._html.includes('69.1%'), '#saFunnelStory written from the funnel rows'],
+    [get('#obFunnelStory')._html.includes('140') && get('#obFunnelStory')._html.includes('13 (9.3%)'), '#obFunnelStory written from the onboarding rows'],
+    [get('#obOutcomeStory')._html.includes('69'), '#obOutcomeStory filled'],
+    [get('#rdFunnelStory')._html.includes('162 (85.3%)'), '#rdFunnelStory written from the sell funnel'],
+    [get('#rdProfileStory')._html.includes('345'), '#rdProfileStory filled'],
+    [get('#rdSignalStory')._html.includes('16.9'), '#rdSignalStory names the top signal'],
+    [!get('#rdSignalTable')._html.includes('confirm_redeem_click'), '#rdSignalTable hides sell-flow steps'],
+    [get('#egActivityStory')._html.includes('38'), '#egActivityStory filled'],
+    [get('#egActivityTable')._html.includes('231,273'), '#egActivityTable pivots tiers by app use'],
+    [get('#egFeatureStory')._html.includes('1,171'), '#egFeatureStory written from the feature rows'],
   ]) {
     if (ok) console.log(`ok    ${label}`);
     else { console.log(`FAIL  ${label}`); errors.push(label); }

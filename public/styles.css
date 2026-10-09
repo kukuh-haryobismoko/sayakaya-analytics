@@ -772,3 +772,19 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
      when it's wider than the whole row. */
   .seg { flex-wrap: wrap; max-width: 100%; flex-shrink: 0; }
 }
+
+/* ---------- Analysis tabs: a finding written from the loaded numbers, the
+   tables each panel joins, and how well GA4 lines up with the database.
+   Neutral box rather than another tinted callout: the callout already
+   means "how to read this", the finding is the data talking. ---------- */
+.story { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font-size: 13px; line-height: 1.6; }
+.story:empty { display: none; }
+.story strong:first-child { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.lineage { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.lineage code, .datamap code { font-size: 11px; background: var(--surface-alt); color: var(--ink); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.datamap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.6; }
+.datamap h3 { margin: 0 0 4px; font-size: 13px; }
+.datamap p { margin: 0; color: var(--muted); }
+.datamap ul { margin: 8px 0 0; padding-left: 18px; }
+.datamap li { margin: 2px 0; }
+.pivot td .hint { display: block; }

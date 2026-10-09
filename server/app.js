@@ -877,16 +877,36 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ profile: profile[0] || null, timeline });
   }));
 
-  // ---- Subscription analysis: buy-flow funnel, entry screens, drop-off,
-  // payment methods and drivers (GA4 + main database), see queries.js -------
-  Object.entries({
-    funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
-    payment: Q.subscriptionPayment, drivers: Q.subscriptionDrivers, timing: Q.subscriptionTiming,
-    hours: Q.subscriptionHours, chips: Q.subscriptionChips,
-  }).forEach(([key, build]) => app.get(`/api/subscription/${key}`, requireTab('subscription-analysis'), handler(async (req, res) => {
-    const q = build(req.query.from, req.query.to);
+  // ---- Analysis tabs: GA4 app events joined to the main database by
+  // user_id, one tab each for buying, onboarding, selling and app features,
+  // see queries.js -----------------------------------------------------------
+  const ANALYSIS_ROUTES = [
+    ['subscription-analysis', 'subscription', {
+      funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
+      payment: Q.subscriptionPayment, drivers: Q.subscriptionDrivers, timing: Q.subscriptionTiming,
+      hours: Q.subscriptionHours, chips: Q.subscriptionChips, profile: Q.subscriptionProfile,
+    }],
+    ['onboarding-analysis', 'onboarding', { funnel: Q.onboardingFunnel, outcome: Q.onboardingOutcome }],
+    ['redemption-analysis', 'redemption', {
+      funnel: Q.redemptionFunnel, switching: Q.switchingFunnel, profile: Q.redemptionProfile, signals: Q.redemptionSignals,
+    }],
+    ['engagement-analysis', 'engagement', {
+      features: Q.engagementFeatures, search: Q.engagementSearch, discovery: Q.engagementDiscovery, activity: Q.engagementActivity,
+    }],
+  ];
+  ANALYSIS_ROUTES.forEach(([tab, prefix, builders]) => Object.entries(builders).forEach(([key, build]) => (
+    app.get(`/api/${prefix}/${key}`, requireTab(tab), handler(async (req, res) => {
+      const q = build(req.query.from, req.query.to);
+      res.json(await runQuery(q.sql, q.params));
+    }))
+  )));
+  // How well GA4 and the main database line up, shown on every analysis tab.
+  app.get('/api/analysis/coverage', (req, res, next) => (
+    ANALYSIS_ROUTES.some(([tab]) => Auth.userCan(req.user, tab)) ? next() : res.status(403).json({ error: 'You do not have access to this section.' })
+  ), handler(async (req, res) => {
+    const q = Q.analysisCoverage(req.query.from, req.query.to);
     res.json(await runQuery(q.sql, q.params));
-  })));
+  }));
 
   // ---- Product performance (NAV % change per fund type, external Apollo DB) --
   app.get('/api/product-performance', requireTab('performance'), handler(async (_req, res) => {

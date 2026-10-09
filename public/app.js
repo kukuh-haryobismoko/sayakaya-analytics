@@ -1750,48 +1750,193 @@ async function loadBehaviorUser() {
   } catch (e) { $('#bhUserKpis').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }
 
-// SUBSCRIPTION ANALYSIS: the app's buy flow (GA4) checked against paid buys
-// in the main database; matching rules in server/queries.js subscription*.
-let subscriptionLoaded = false;
-const saCache = {};
-const saView = { split: 'all', level: 'screen', step: 1, by: 'hour' };
+// ANALYSIS TABS (Subscription, Onboarding, Redemption, Engagement): GA4 app
+// events joined to the main database by user_id = main.users.id; matching
+// rules live with the queries (server/queries.js). Every panel names the
+// tables it joins and opens with a finding written from the rows it loaded,
+// so a reader can check each sentence against the table under it.
+const tf = (key, vars = {}) => t(key).replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
+const nval = (v) => Number(val(v)) || 0;
+const pctOf = (a, b) => (b ? (a / b) * 100 : 0);
+function story(sel, sentences) {
+  const text = sentences.filter(Boolean).join(' ');
+  $(sel).innerHTML = text ? `<strong>${t('an_finding')}</strong>${text}` : '';
+}
+// Loading and error text for a section's own spot: a table div, a chart's
+// message line, or the data-map list.
+function anStatus(sel, cls, text) {
+  const el = $(sel);
+  if (el.tagName === 'P') { el.textContent = text; el.hidden = false; return; }
+  el.innerHTML = el.tagName === 'UL' ? `<li>${escapeHtml(text)}</li>` : `<div class="${cls}">${escapeHtml(text)}</div>`;
+}
+function renderCoverage(sel, rows) {
+  const c = rows && rows[0];
+  if (!c) return;
+  const line = (key, matched, total) => `<li>${tf(key, { pct: pct(nval(c[matched]), nval(c[total])), n: num(nval(c[total])) })}</li>`;
+  $(sel).innerHTML = [
+    line('an_cov_users', 'app_users_in_db', 'app_users'),
+    line('an_cov_buys', 'db_buys_in_app', 'db_buys'),
+    line('an_cov_sells', 'db_sells_in_app', 'db_sells'),
+    line('an_cov_switches', 'db_switches_in_app', 'db_switches'),
+    line('an_cov_signups', 'db_signups_in_app', 'db_signups'),
+  ].join('');
+}
+// Every section of one tab: [endpoint, where loading and errors show,
+// renderer]. Rows land in tab.cache under the endpoint's last segment, so a
+// language or theme switch repaints from the cache.
+function loadAnalysis(tab) {
+  const r = { from: $(`#${tab.prefix}From`).value, to: $(`#${tab.prefix}To`).value };
+  tab.charts.forEach((id) => { if (charts[id]) { charts[id].destroy(); delete charts[id]; } });
+  $(`#${tab.prefix}Kpis`).innerHTML = '';
+  $$(`#${tab.id} .story`).forEach((el) => { el.innerHTML = ''; });
+  if (tab.reset) tab.reset();
+  const promises = [['analysis/coverage', `#${tab.prefix}Coverage`, () => renderCoverage(`#${tab.prefix}Coverage`, tab.cache.coverage)], ...tab.sections]
+    .map(([path, sel, render]) => {
+      const key = path.split('/').pop();
+      delete tab.cache[key];
+      anStatus(sel, 'loading', t('common_loading'));
+      const p = api(`/api/${path}?from=${r.from}&to=${r.to}`);
+      p.then((rows) => { tab.cache[key] = rows; render(); }).catch((e) => anStatus(sel, 'empty', e.message));
+      return p;
+    });
+  gateTabLoad((v) => { tab.loaded = v; }, promises);
+  return Promise.allSettled(promises);
+}
+function repaintAnalysis(tab) {
+  renderCoverage(`#${tab.prefix}Coverage`, tab.cache.coverage);
+  tab.sections.forEach(([path, , render]) => tab.cache[path.split('/').pop()] && render());
+}
+// Seg-style buttons: one pressed at a time, pressed state for screen readers.
+function wireSeg(sel, attr, apply) {
+  $(sel).addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    $$(`${sel} button`).forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    apply(b.dataset[attr]);
+  });
+}
+function segButtons(sel, attr, values, current, label) {
+  $(sel).innerHTML = values.map((v) => {
+    const on = v === current;
+    return `<button data-${attr}="${escapeHtml(v)}" class="${on ? 'on' : ''}" aria-pressed="${on}">${label(v)}</button>`;
+  }).join('');
+}
+// Largest share lost between two consecutive steps, over steps[from..].
+function biggestDrop(steps, counts, from = 1) {
+  let drop = null;
+  for (let i = Math.max(1, from); i < steps.length; i++) {
+    const d = counts[i - 1] ? ((counts[i - 1] - counts[i]) / counts[i - 1]) * 100 : 0;
+    if (!drop || d > drop.pct) drop = { pct: d, key: steps[i][1] };
+  }
+  return drop;
+}
+// One segment's steps: horizontal bars as a share of the first step, and
+// optionally a table with each step against the first and the one before.
+function renderSteps({ chartId, tableSel, steps, row, color }) {
+  const counts = steps.map(([k]) => nval(row && row[k]));
+  const first = counts[0];
+  paint(chartId, {
+    type: 'bar',
+    data: {
+      labels: steps.map(([, l]) => t(l)),
+      datasets: [{ label: t('an_people'), data: counts.map((c) => pctOf(c, first)), counts, backgroundColor: color || C.indigo, borderRadius: 4 }],
+    },
+    options: {
+      indexAxis: 'y', maintainAspectRatio: false,
+      scales: { x: { beginAtZero: true, max: 100, grid: { color: C.grid }, ticks: { callback: (v) => `${v}%` } }, y: { grid: { display: false } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${num(c.dataset.counts[c.dataIndex])} (${c.raw.toFixed(1)}%)` } } },
+    },
+  });
+  if (tableSel) {
+    genTable(tableSel, steps.map(([, l], i) => ({
+      step: t(l), people: counts[i], of_first: first ? pctOf(counts[i], first) : null, of_prev: i && counts[i - 1] ? pctOf(counts[i], counts[i - 1]) : null,
+    })), [
+      { key: 'step', label: t('an_col_step') }, { key: 'people', label: t('an_people'), type: 'num' },
+      { key: 'of_first', label: t('an_col_of_first'), type: 'pct' }, { key: 'of_prev', label: t('an_col_of_prev'), type: 'pct' },
+    ], t('an_empty'));
+  }
+  return counts;
+}
+function segLabel(v) {
+  if (v === 'all') return t('sa_split_all');
+  if (v === 'first' || v === 'repeat') return t(`sa_buyer_${v}`);
+  if (v === '(not in app)') return t('ob_not_in_app');
+  return { ANDROID: 'Android', IOS: 'iOS' }[v] || escapeHtml(v);
+}
+// The "screen or action vs outcome" table shared by Subscription drivers and
+// Redemption signals.
+function driverRows(rows, withFlow) {
+  return rows.filter((r) => withFlow || !val(r.in_flow)).map((r) => ({
+    ...r,
+    name: `${escapeHtml(val(r.name))}${val(r.in_flow) ? ` <span class="tag other">${t('an_tag_flow')}</span>` : ''}`,
+    kind: t(val(r.kind) === 'screen' ? 'sa_kind_screen' : 'sa_kind_action'),
+    lift: val(r.lift) == null ? null : `${Number(val(r.lift)).toFixed(2)}×`,
+  }));
+}
+function renderDriverTable(sel, rows, withFlow, labels) {
+  genTable(sel, driverRows(rows, withFlow), [
+    { key: 'name', label: t('sa_col_name') }, { key: 'kind', label: t('sa_col_kind') },
+    { key: 'users', label: t('sa_col_did_it'), type: 'num' },
+    { key: 'converted', label: t(labels.converted), type: 'num' },
+    { key: 'rate_pct', label: t(labels.rate), type: 'pct' },
+    { key: 'rate_without_pct', label: t('sa_col_rate_without'), type: 'pct' },
+    { key: 'lift', label: t('sa_col_lift') },
+    { key: 'share_of_converted_pct', label: t(labels.share), type: 'pct' },
+  ], t('sa_driver_empty'));
+}
+// Top three non-flow rows by lift, at least 30 people each.
+function driverStory(sel, rows, key) {
+  const top = (rows || []).filter((r) => !val(r.in_flow) && nval(r.users) >= 30 && nval(r.lift) > 1).slice(0, 3);
+  if (!rows || !rows.length) { story(sel, []); return; }
+  const r0 = rows[0];
+  story(sel, [
+    tf(`${key}_base`, { n: num(nval(r0.population)), c: num(nval(r0.population_converted)), pct: pct(nval(r0.population_converted), nval(r0.population)) }),
+    top.length ? tf(key, { list: top.map((r) => `${escapeHtml(val(r.name))} (${Number(val(r.lift)).toFixed(1)}×)`).join(', ') }) : '',
+    t('an_story_correlation'),
+  ]);
+}
+
+// ---------- Subscription analysis ----------
+const SA_TAB = { id: 'subscription-analysis', prefix: 'sa', cache: {}, loaded: false, charts: ['saFunnelChart', 'saTimingChart', 'saHoursChart'] };
+const saCache = SA_TAB.cache;
+const saView = { split: 'all', level: 'screen', step: 1, by: 'hour', dim: 'age_band' };
 const SA_STEPS = [
   ['opened_form', 'sa_step_form'], ['checkout', 'sa_step_checkout'], ['payment_method', 'sa_step_payment'],
   ['ordered', 'sa_step_ordered'], ['paid', 'sa_step_paid'],
 ];
 const SA_DROP_STEPS = { 1: 'sa_step_form', 2: 'sa_step_checkout', 3: 'sa_step_payment' };
 const SA_BUCKETS = ['1_same_day', '2_1_3', '3_4_7', '4_8_30', '5_over_30', '6_not_yet'];
-function saRange() { return { from: $('#saFrom').value, to: $('#saTo').value }; }
 // Screen, event and version names come from the app's analytics payloads, so
 // they are escaped; the two placeholders the server adds are translated.
 const SA_PLACEHOLDERS = { '(session start)': 'sa_session_start', '(left the app)': 'sa_left_app' };
 const saName = (v) => (SA_PLACEHOLDERS[v] ? t(SA_PLACEHOLDERS[v]) : escapeHtml(v ?? ''));
-function saSegment(v) {
-  if (v === 'all') return t('sa_split_all');
-  if (v === 'first' || v === 'repeat') return t(`sa_buyer_${v}`);
-  return { ANDROID: 'Android', IOS: 'iOS' }[v] || escapeHtml(v);
+const saSegment = segLabel;
+// Profile values: bucket keys are translated, free-text profile answers
+// (occupation, purpose) are shown as stored.
+function profileLabel(dim, v) {
+  if (v === 'unknown') return t('an_unknown');
+  if (dim === 'age_band' || dim === 'tenure') return t(`sa_${dim}_${v}`);
+  if (dim === 'gender') return t(`an_gender_${v}`) === `an_gender_${v}` ? escapeHtml(v) : t(`an_gender_${v}`);
+  if (dim === 'risk_level') return tf('an_risk_level', { n: escapeHtml(v) });
+  const s = escapeHtml(v);
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function renderSaKpis() {
   const all = (saCache.funnel || []).find((r) => val(r.split) === 'all');
   const cards = [];
   if (all) {
-    const n = (k) => Number(val(all[k])) || 0;
-    let drop = null;
-    for (let i = 1; i < SA_STEPS.length; i++) {
-      const prev = n(SA_STEPS[i - 1][0]);
-      const d = prev ? ((prev - n(SA_STEPS[i][0])) / prev) * 100 : 0;
-      if (!drop || d > drop.pct) drop = { pct: d, key: SA_STEPS[i][1] };
-    }
+    const counts = SA_STEPS.map(([k]) => nval(all[k]));
+    const drop = biggestDrop(SA_STEPS, counts);
     cards.push(
-      kpi(t('sa_kpi_opened'), num(n('opened_form')), t('sa_kpi_opened_sub'), '', ICONS.users),
-      kpi(t('sa_kpi_paid'), pct(n('paid'), n('opened_form')), `${num(n('paid'))} ${t('sa_kpi_paid_sub')}`, 'accent', ICONS.coin),
-      kpi(t('sa_kpi_drop'), n('opened_form') ? `${drop.pct.toFixed(0)}%` : 'n/a', n('opened_form') ? `${t('sa_kpi_drop_sub')} ${t(drop.key)}` : '', 'warn', ICONS.trendDown),
+      kpi(t('sa_kpi_opened'), num(counts[0]), t('sa_kpi_opened_sub'), '', ICONS.users),
+      kpi(t('sa_kpi_paid'), pct(counts[4], counts[0]), `${num(counts[4])} ${t('sa_kpi_paid_sub')}`, 'accent', ICONS.coin),
+      kpi(t('sa_kpi_drop'), counts[0] ? `${drop.pct.toFixed(0)}%` : 'n/a', counts[0] ? `${t('sa_kpi_drop_sub')} ${t(drop.key)}` : '', 'warn', ICONS.trendDown),
     );
   }
   const pay = saCache.payment || [];
   if (pay.length) {
-    const s = (k) => pay.reduce((a, r) => a + (Number(val(r[k])) || 0), 0);
+    const s = (k) => pay.reduce((a, r) => a + nval(r[k]), 0);
     const lost = s('expired') + s('cancelled');
     cards.push(kpi(t('sa_kpi_unpaid'), pct(lost, s('orders')), `${num(lost)} ${t('sa_kpi_unpaid_sub')} · ${idr(s('lost_amount'))}`, 'warn', ICONS.xCircle));
   }
@@ -1804,7 +1949,7 @@ function renderSaFunnel() {
   if (!saCache.funnel) return;
   const all = saCache.funnel.find((r) => val(r.split) === 'all');
   const rows = saCache.funnel.filter((r) => val(r.split) === saView.split);
-  $('#saFunnelEmpty').hidden = Boolean(all && Number(val(all.opened_form)));
+  $('#saFunnelEmpty').hidden = Boolean(all && nval(all.opened_form));
   const series = rows.slice(0, 5);
   const colors = pie();
   paint('saFunnelChart', {
@@ -1812,12 +1957,8 @@ function renderSaFunnel() {
     data: {
       labels: SA_STEPS.map(([, k]) => t(k)),
       datasets: series.map((r, i) => {
-        const base = Number(val(r.opened_form)) || 0;
-        const counts = SA_STEPS.map(([k]) => Number(val(r[k])) || 0);
-        return {
-          label: saSegment(val(r.segment)), backgroundColor: colors[i], borderRadius: 4, counts,
-          data: counts.map((c) => (base ? (c / base) * 100 : 0)),
-        };
+        const counts = SA_STEPS.map(([k]) => nval(r[k]));
+        return { label: saSegment(val(r.segment)), backgroundColor: colors[i], borderRadius: 4, counts, data: counts.map((c) => pctOf(c, counts[0])) };
       }),
     },
     options: {
@@ -1839,6 +1980,48 @@ function renderSaFunnel() {
     { key: 'median_min_to_order', label: t('sa_col_min_to_order') },
     { key: 'median_min_to_pay', label: t('sa_col_min_to_pay') },
   ], t('sa_funnel_empty'));
+  if (!all || !nval(all.opened_form)) { story('#saFunnelStory', []); return; }
+  const counts = SA_STEPS.map(([k]) => nval(all[k]));
+  const drop = biggestDrop(SA_STEPS, counts);
+  const seg = (split, v) => saCache.funnel.find((r) => val(r.split) === split && val(r.segment) === v);
+  const and = seg('platform', 'ANDROID'), ios = seg('platform', 'IOS');
+  const first = seg('buyer_type', 'first'), repeat = seg('buyer_type', 'repeat');
+  story('#saFunnelStory', [
+    tf('sa_story_funnel', {
+      opened: num(counts[0]), paid: num(counts[4]), paidPct: pct(counts[4], counts[0]),
+      step: t(drop.key), drop: drop.pct.toFixed(0), min: val(all.median_min_to_order) ?? 'n/a',
+    }),
+    and && ios ? tf('sa_story_funnel_platform', { a: `${nval(and.paid_pct).toFixed(1)}%`, i: `${nval(ios.paid_pct).toFixed(1)}%` }) : '',
+    first && repeat ? tf('sa_story_funnel_buyer', { first: `${nval(first.paid_pct).toFixed(1)}%`, repeat: `${nval(repeat.paid_pct).toFixed(1)}%`, n: num(nval(first.opened_form)) }) : '',
+  ]);
+}
+
+function renderSaProfile() {
+  if (!saCache.profile) return;
+  const dim = saView.dim;
+  const rows = saCache.profile.filter((r) => val(r.dimension) === dim);
+  genTable('#saProfileTable', rows.map((r) => ({ ...r, value: profileLabel(dim, val(r.value)) })), [
+    { key: 'value', label: t(`sa_dim_${dim}`) },
+    { key: 'opened_form', label: t('sa_step_form'), type: 'num', sum: true },
+    { key: 'paid', label: t('sa_step_paid'), type: 'num', sum: true },
+    { key: 'paid_pct', label: t('sa_col_paid_pct'), type: 'pct' },
+    { key: 'paid_amount', label: t('sa_col_paid_amount'), type: 'idr', sum: true },
+    { key: 'median_paid_amount', label: t('sa_col_median_paid'), type: 'idr' },
+  ], t('sa_funnel_empty'));
+  const known = rows.filter((r) => val(r.value) !== 'unknown' && nval(r.opened_form) >= 10);
+  if (known.length < 2) { story('#saProfileStory', []); return; }
+  const byRate = [...known].sort((a, b) => nval(b.paid_pct) - nval(a.paid_pct));
+  const totalAmount = rows.reduce((a, r) => a + nval(r.paid_amount), 0);
+  const big = [...known].sort((a, b) => nval(b.paid_amount) - nval(a.paid_amount))[0];
+  const label = (r) => profileLabel(dim, val(r.value));
+  story('#saProfileStory', [
+    tf('sa_story_profile', {
+      dim: t(`sa_dim_${dim}`).toLowerCase(),
+      best: label(byRate[0]), bestPct: `${nval(byRate[0].paid_pct).toFixed(1)}%`, bestN: num(nval(byRate[0].opened_form)),
+      worst: label(byRate[byRate.length - 1]), worstPct: `${nval(byRate[byRate.length - 1].paid_pct).toFixed(1)}%`, worstN: num(nval(byRate[byRate.length - 1].opened_form)),
+    }),
+    tf('sa_story_profile_amount', { big: label(big), share: pct(nval(big.paid_amount), totalAmount), median: idr(val(big.median_paid_amount)) }),
+  ]);
 }
 
 function renderSaEntry() {
@@ -1855,6 +2038,17 @@ function renderSaEntry() {
     { key: 'paid_users', label: t('sa_col_paid'), type: 'num' },
     { key: 'paid_pct', label: t('sa_col_paid_pct'), type: 'pct' },
   ], t('sa_entry_empty'));
+  const screens = saCache.entry.filter((r) => val(r.level) === 'screen');
+  const solid = screens.filter((r) => nval(r.users) >= 10).sort((a, b) => nval(b.paid_pct) - nval(a.paid_pct));
+  if (!screens.length) { story('#saEntryStory', []); return; }
+  const top = [...screens].sort((a, b) => nval(b.opens) - nval(a.opens))[0];
+  story('#saEntryStory', [
+    tf('sa_story_entry_top', { top: saName(val(top.came_from)), opens: num(nval(top.opens)), users: num(nval(top.users)), pct: `${nval(top.paid_pct).toFixed(1)}%` }),
+    solid.length >= 2 ? tf('sa_story_entry_range', {
+      best: saName(val(solid[0].came_from)), bestPct: `${nval(solid[0].paid_pct).toFixed(1)}%`,
+      worst: saName(val(solid[solid.length - 1].came_from)), worstPct: `${nval(solid[solid.length - 1].paid_pct).toFixed(1)}%`,
+    }) : '',
+  ]);
 }
 
 // The step buttons carry each step's session count; the table opens with
@@ -1862,13 +2056,10 @@ function renderSaEntry() {
 function renderSaDrop() {
   if (!saCache.dropoff) return;
   const totals = saCache.dropoff.filter((r) => val(r.exit_screen) == null);
-  if (totals.length && !totals.some((r) => Number(val(r.step)) === saView.step)) saView.step = Number(val(totals[0].step));
-  $('#saDropStep').innerHTML = totals.map((r) => {
-    const s = Number(val(r.step));
-    const on = s === saView.step;
-    return `<button data-step="${s}" class="${on ? 'on' : ''}" aria-pressed="${on}">${t(SA_DROP_STEPS[s])} (${num(val(r.sessions))})</button>`;
-  }).join('');
-  const inStep = (r) => Number(val(r.step)) === saView.step;
+  if (totals.length && !totals.some((r) => nval(r.step) === saView.step)) saView.step = nval(totals[0].step);
+  segButtons('#saDropStep', 'step', totals.map((r) => String(nval(r.step))), String(saView.step),
+    (s) => `${t(SA_DROP_STEPS[s])} (${num(nval(totals.find((r) => String(nval(r.step)) === s).sessions))})`);
+  const inStep = (r) => nval(r.step) === saView.step;
   const total = totals.filter(inStep).map((r) => ({ ...r, exit_screen: `<strong>${t('sa_all_exits')}</strong>` }));
   const detail = saCache.dropoff.filter((r) => inStep(r) && val(r.exit_screen) != null)
     .map((r) => ({ ...r, exit_screen: saName(val(r.exit_screen)) }));
@@ -1879,11 +2070,23 @@ function renderSaDrop() {
     { key: 'paid_later_users', label: t('sa_col_paid_7d'), type: 'num' },
     { key: 'paid_later_pct', label: t('sa_col_paid_pct'), type: 'pct' },
   ], t('sa_drop_empty'));
+  if (!totals.length) { story('#saDropStory', []); return; }
+  const worst = [...totals].sort((a, b) => nval(b.sessions) - nval(a.sessions))[0];
+  const exit = saCache.dropoff.filter((r) => nval(r.step) === nval(worst.step) && val(r.exit_screen) != null)[0];
+  story('#saDropStory', [
+    tf('sa_story_drop', {
+      sessions: num(totals.reduce((a, r) => a + nval(r.sessions), 0)),
+      step: t(SA_DROP_STEPS[nval(worst.step)]), stepSessions: num(nval(worst.sessions)),
+      exit: exit ? saName(val(exit.exit_screen)) : 'n/a', exitSessions: exit ? num(nval(exit.sessions)) : '0',
+      paidLater: `${nval(worst.paid_later_pct).toFixed(1)}%`,
+    }),
+  ]);
 }
 
 function renderSaPayment() {
   if (!saCache.payment) return;
-  genTable('#saPayTable', escRows(saCache.payment, ['method']), [
+  const rows = saCache.payment;
+  genTable('#saPayTable', escRows(rows, ['method']), [
     { key: 'method', label: t('sa_col_method') },
     { key: 'orders', label: t('sa_col_orders'), type: 'num', sum: true },
     { key: 'users', label: t('sa_col_people'), type: 'num' },
@@ -1898,27 +2101,26 @@ function renderSaPayment() {
     { key: 'lost_users', label: t('sa_col_lost_users'), type: 'num' },
     { key: 'lost_then_paid_users', label: t('sa_col_lost_then_paid'), type: 'num' },
   ], t('sa_pay_empty'));
+  const s = (k) => rows.reduce((a, r) => a + nval(r[k]), 0);
+  const solid = rows.filter((r) => nval(r.orders) >= 20).sort((a, b) => nval(b.paid_pct) - nval(a.paid_pct));
+  if (!rows.length) { story('#saPayStory', []); return; }
+  const lost = s('expired') + s('cancelled');
+  const worst = solid[solid.length - 1];
+  story('#saPayStory', [
+    tf('sa_story_pay', { lostPct: pct(lost, s('orders')), orders: num(s('orders')), lost: num(lost), amount: idr(s('lost_amount')) }),
+    solid.length >= 2 ? tf('sa_story_pay_range', {
+      worst: escapeHtml(val(worst.method)), worstPct: `${nval(worst.paid_pct).toFixed(1)}%`,
+      best: escapeHtml(val(solid[0].method)), bestPct: `${nval(solid[0].paid_pct).toFixed(1)}%`,
+    }) : '',
+    worst && nval(worst.lost_users) ? tf('sa_story_pay_recover', { worst: escapeHtml(val(worst.method)), lost: num(nval(worst.lost_users)), recovered: num(nval(worst.lost_then_paid_users)) }) : '',
+  ]);
 }
 
 function renderSaDrivers() {
   if (!saCache.drivers) return;
-  const withFlow = $('#saDriverFlow').checked;
-  const rows = saCache.drivers.filter((r) => withFlow || !val(r.in_buy_flow)).map((r) => ({
-    ...r,
-    name: `${escapeHtml(val(r.name))}${val(r.in_buy_flow) ? ` <span class="tag other">${t('sa_tag_buy_flow')}</span>` : ''}`,
-    kind: t(val(r.kind) === 'screen' ? 'sa_kind_screen' : 'sa_kind_action'),
-    lift: val(r.lift) == null ? null : `${Number(val(r.lift)).toFixed(2)}×`,
-  }));
-  genTable('#saDriverTable', rows, [
-    { key: 'name', label: t('sa_col_name') },
-    { key: 'kind', label: t('sa_col_kind') },
-    { key: 'users', label: t('sa_col_did_it'), type: 'num' },
-    { key: 'subscribed', label: t('sa_col_subscribed'), type: 'num' },
-    { key: 'rate_pct', label: t('sa_col_rate'), type: 'pct' },
-    { key: 'rate_without_pct', label: t('sa_col_rate_without'), type: 'pct' },
-    { key: 'lift', label: t('sa_col_lift') },
-    { key: 'share_of_subscribers_pct', label: t('sa_col_share_subs'), type: 'pct' },
-  ], t('sa_driver_empty'));
+  renderDriverTable('#saDriverTable', saCache.drivers, $('#saDriverFlow').checked,
+    { converted: 'sa_col_subscribed', rate: 'sa_col_rate', share: 'sa_col_share_subs' });
+  driverStory('#saDriverStory', saCache.drivers, 'sa_story_driver');
 }
 
 function renderSaTiming() {
@@ -1926,14 +2128,16 @@ function renderSaTiming() {
   const rows = saCache.timing;
   const by = Object.fromEntries(rows.map((r) => [val(r.bucket), r]));
   const s = rows[0] || {};
-  const signed = Number(val(s.signed_up)) || 0;
+  const signed = nval(s.signed_up);
   const days = (k) => (val(s[k]) == null ? 'n/a' : num(val(s[k])));
   $('#saTimingEmpty').textContent = t('sa_timing_empty');
   $('#saTimingEmpty').hidden = signed > 0;
-  $('#saTimingSummary').hidden = !signed;
-  $('#saTimingSummary').textContent = t('sa_timing_summary').replace('{n}', num(signed)).replace('{kyc}', days('median_days_to_kyc'))
-    .replace('{buy}', days('median_days_kyc_to_buy')).replace('{sessions}', days('median_sessions_before_buy'));
-  const series = (k, label, color) => ({ label, backgroundColor: color, borderRadius: 4, data: SA_BUCKETS.map((b) => Number(val(by[b]?.[k])) || 0) });
+  const notYet = by['6_not_yet'] || {};
+  story('#saTimingSummary', signed ? [
+    tf('sa_timing_summary', { n: num(signed), kyc: days('median_days_to_kyc'), buy: days('median_days_kyc_to_buy'), sessions: days('median_sessions_before_buy') }),
+    tf('sa_story_timing_share', { verified: pct(signed - nval(notYet.verified), signed), bought: pct(signed - nval(notYet.first_buy), signed) }),
+  ] : []);
+  const series = (k, label, color) => ({ label, backgroundColor: color, borderRadius: 4, data: SA_BUCKETS.map((b) => nval(by[b] && by[b][k])) });
   paint('saTimingChart', {
     type: 'bar',
     data: {
@@ -1951,25 +2155,30 @@ function renderSaTiming() {
 // Shares, not counts: sessions run in the hundreds per hour and paid orders
 // in single digits, so on one count axis the orders line would sit flat on
 // zero. Equal shares mean people buy as often as they open the app then.
+const DOW_ORDER = [2, 3, 4, 5, 6, 7, 1]; // BigQuery DAYOFWEEK, Monday first
+function hourShares(rows, byHour) {
+  const keys = byHour ? [...Array(24).keys()] : DOW_ORDER;
+  const field = byHour ? 'hour' : 'dow';
+  const counts = (k) => keys.map((x) => rows.filter((r) => nval(r[field]) === x).reduce((a, r) => a + nval(r[k]), 0));
+  const share = (arr) => { const total = arr.reduce((a, b) => a + b, 0); return arr.map((v) => pctOf(v, total)); };
+  const sessions = counts('sessions');
+  const paid = counts('paid');
+  return { keys, sessions, paid, sessionShare: share(sessions), paidShare: share(paid) };
+}
 function renderSaHours() {
   if (!saCache.hours) return;
   const rows = saCache.hours;
   const byHour = saView.by === 'hour';
-  const keys = byHour ? [...Array(24).keys()] : [2, 3, 4, 5, 6, 7, 1]; // BigQuery DAYOFWEEK, Monday first
-  const field = byHour ? 'hour' : 'dow';
-  const counts = (k) => keys.map((x) => rows.filter((r) => Number(val(r[field])) === x).reduce((a, r) => a + (Number(val(r[k])) || 0), 0));
-  const share = (arr) => { const total = arr.reduce((a, b) => a + b, 0); return arr.map((v) => (total ? (v / total) * 100 : 0)); };
-  const sessions = counts('sessions');
-  const paid = counts('paid');
+  const h = hourShares(rows, byHour);
   $('#saHoursEmpty').textContent = t('sa_hours_empty');
   $('#saHoursEmpty').hidden = rows.length > 0;
   paint('saHoursChart', {
     type: 'bar',
     data: {
-      labels: keys.map((x) => (byHour ? String(x).padStart(2, '0') : t(`sa_dow_${x}`))),
+      labels: h.keys.map((x) => (byHour ? String(x).padStart(2, '0') : t(`sa_dow_${x}`))),
       datasets: [
-        { type: 'bar', label: t('sa_series_sessions'), data: share(sessions), counts: sessions, backgroundColor: C.soft, borderRadius: 4 },
-        { type: 'line', label: t('sa_series_paid'), data: share(paid), counts: paid, borderColor: C.chartAmber, backgroundColor: C.chartAmber, borderWidth: 2, pointRadius: 2, tension: 0.25 },
+        { type: 'bar', label: t('sa_series_sessions'), data: h.sessionShare, counts: h.sessions, backgroundColor: C.soft, borderRadius: 4 },
+        { type: 'line', label: t('sa_series_paid'), data: h.paidShare, counts: h.paid, borderColor: C.chartAmber, backgroundColor: C.chartAmber, borderWidth: 2, pointRadius: 2, tension: 0.25 },
       ],
     },
     options: {
@@ -1982,11 +2191,22 @@ function renderSaHours() {
       },
     },
   });
+  if (!rows.length) { story('#saHoursStory', []); return; }
+  const hr = hourShares(rows, true), dw = hourShares(rows, false);
+  const peak = (x) => x.paidShare.indexOf(Math.max(...x.paidShare));
+  const ph = peak(hr), pd = peak(dw);
+  const morning = [9, 10, 11, 12].reduce((a, i) => ({ paid: a.paid + hr.paidShare[i], sessions: a.sessions + hr.sessionShare[i] }), { paid: 0, sessions: 0 });
+  story('#saHoursStory', [
+    tf('sa_story_hours', { hour: String(hr.keys[ph]).padStart(2, '0'), paid: `${hr.paidShare[ph].toFixed(1)}%`, sessions: `${hr.sessionShare[ph].toFixed(1)}%` }),
+    tf('sa_story_hours_window', { paid: `${morning.paid.toFixed(0)}%`, sessions: `${morning.sessions.toFixed(0)}%` }),
+    tf('sa_story_hours_day', { day: t(`sa_dow_${dw.keys[pd]}`), paid: `${dw.paidShare[pd].toFixed(1)}%` }),
+  ]);
 }
 
 function renderSaChips() {
   if (!saCache.chips) return;
-  genTable('#saChipTable', saCache.chips, [
+  const rows = saCache.chips;
+  genTable('#saChipTable', rows, [
     { key: 'chip', label: t('sa_col_chip'), type: 'idr' },
     { key: 'taps', label: t('sa_col_taps'), type: 'num', sum: true },
     { key: 'users', label: t('sa_col_people'), type: 'num' },
@@ -1995,42 +2215,389 @@ function renderSaChips() {
     { key: 'paid_chip_amount', label: t('sa_col_kept_amount'), type: 'num' },
     { key: 'median_paid_amount', label: t('sa_col_median_paid'), type: 'idr' },
   ], t('sa_chip_empty'));
+  if (!rows.length) { story('#saChipStory', []); return; }
+  const top = [...rows].sort((a, b) => nval(b.users) - nval(a.users))[0];
+  const big = rows.filter((r) => nval(r.chip) >= 1e8).sort((a, b) => nval(b.users) - nval(a.users))[0];
+  story('#saChipStory', [
+    tf('sa_story_chip', { chip: idrFull(val(top.chip)), users: num(nval(top.users)), pct: `${nval(top.paid_pct).toFixed(1)}%` }),
+    big && nval(big.paid_users) ? tf('sa_story_chip_big', { chip: idrFull(val(big.chip)), paid: num(nval(big.paid_users)), kept: num(nval(big.paid_chip_amount)), median: idrFull(val(big.median_paid_amount)) }) : '',
+  ]);
 }
 
-// [endpoint, where loading/errors show, renderer]. Chart-only panels show
-// their status in the panel's own message line.
-const SA_SECTIONS = [
-  ['funnel', '#saFunnelTable', () => { renderSaFunnel(); renderSaKpis(); }],
-  ['entry', '#saEntryTable', renderSaEntry],
-  ['dropoff', '#saDropTable', renderSaDrop],
-  ['payment', '#saPayTable', () => { renderSaPayment(); renderSaKpis(); }],
-  ['drivers', '#saDriverTable', renderSaDrivers],
-  ['timing', '#saTimingEmpty', renderSaTiming],
-  ['hours', '#saHoursEmpty', renderSaHours],
-  ['chips', '#saChipTable', renderSaChips],
+SA_TAB.sections = [
+  ['subscription/funnel', '#saFunnelTable', () => { renderSaFunnel(); renderSaKpis(); }],
+  ['subscription/profile', '#saProfileTable', renderSaProfile],
+  ['subscription/entry', '#saEntryTable', renderSaEntry],
+  ['subscription/dropoff', '#saDropTable', renderSaDrop],
+  ['subscription/payment', '#saPayTable', () => { renderSaPayment(); renderSaKpis(); }],
+  ['subscription/drivers', '#saDriverTable', renderSaDrivers],
+  ['subscription/timing', '#saTimingEmpty', renderSaTiming],
+  ['subscription/hours', '#saHoursEmpty', renderSaHours],
+  ['subscription/chips', '#saChipTable', renderSaChips],
 ];
-function saStatus(sel, cls, text) {
-  const el = $(sel);
-  if (el.tagName === 'P') { el.textContent = text; el.hidden = false; } else el.innerHTML = `<div class="${cls}">${escapeHtml(text)}</div>`;
+SA_TAB.reset = () => { $('#saDropStep').innerHTML = ''; $('#saFunnelEmpty').hidden = true; };
+
+// ---------- Onboarding analysis ----------
+const OB_TAB = { id: 'onboarding-analysis', prefix: 'ob', cache: {}, loaded: false, charts: ['obFunnelChart'] };
+const obView = { segment: 'all' };
+const OB_STEPS = [
+  ['signed_up', 'ob_step_signed_up'], ['in_app', 'ob_step_in_app'], ['kyc_intro', 'ob_step_kyc_intro'], ['ktp', 'ob_step_ktp'],
+  ['selfie', 'ob_step_selfie'], ['personal', 'ob_step_personal'], ['occupation', 'ob_step_occupation'], ['addr_step', 'ob_step_address'],
+  ['bank', 'ob_step_bank'], ['sign_step', 'ob_step_signature'], ['submitted', 'ob_step_submitted'], ['verified', 'ob_step_verified'],
+  ['risk_profiled', 'ob_step_risk'], ['first_buy', 'ob_step_first_buy'],
+];
+const OB_REJECTED = {
+  IdentityRejectedScreen: 'ob_rej_identity', ProfileRejectedScreen: 'ob_rej_profile', OccupationRejectedScreen: 'ob_rej_occupation',
+  AddressRejectedScreen: 'ob_rej_address', BankRejectedScreen: 'ob_rej_bank',
+};
+function renderObFunnel() {
+  if (!OB_TAB.cache.funnel) return;
+  const rows = OB_TAB.cache.funnel;
+  if (!rows.some((r) => val(r.segment) === obView.segment)) obView.segment = 'all';
+  segButtons('#obSegment', 'segment', rows.map((r) => val(r.segment)), obView.segment, segLabel);
+  const row = rows.find((r) => val(r.segment) === obView.segment);
+  const counts = renderSteps({ chartId: 'obFunnelChart', tableSel: '#obFunnelTable', steps: OB_STEPS, row });
+  const all = rows.find((r) => val(r.segment) === 'all');
+  if (all) {
+    const n = (k) => nval(all[k]);
+    $('#obKpis').innerHTML = [
+      kpi(t('ob_kpi_signed'), num(n('signed_up')), t('ob_kpi_signed_sub'), '', ICONS.userPlus),
+      kpi(t('ob_kpi_submitted'), pct(n('submitted'), n('signed_up')), `${num(n('submitted'))} ${t('ob_kpi_submitted_sub')}`, '', ICONS.check),
+      kpi(t('ob_kpi_verified'), pct(n('verified'), n('signed_up')), `${num(n('failed'))} ${t('ob_kpi_verified_sub')}`, 'accent', ICONS.user),
+      kpi(t('ob_kpi_bought'), pct(n('first_buy'), n('signed_up')), `${num(n('first_buy'))} ${t('ob_kpi_bought_sub')}`, 'amber', ICONS.coin),
+    ].join('');
+  }
+  if (!row || !counts[0]) { story('#obFunnelStory', []); return; }
+  const at = (k) => counts[OB_STEPS.findIndex(([key]) => key === k)];
+  // Biggest drop inside the app's KYC screens only (in_app to submitted).
+  const drop = biggestDrop(OB_STEPS.slice(1, 11), counts.slice(1, 11));
+  const and = rows.find((r) => val(r.segment) === 'ANDROID'), ios = rows.find((r) => val(r.segment) === 'IOS');
+  story('#obFunnelStory', [
+    tf('ob_story_funnel', {
+      signed: num(at('signed_up')), inApp: num(at('in_app')), submitted: num(at('submitted')), submittedPct: pct(at('submitted'), at('signed_up')),
+      verified: num(at('verified')), verifiedPct: pct(at('verified'), at('signed_up')), bought: num(at('first_buy')), boughtPct: pct(at('first_buy'), at('signed_up')),
+    }),
+    drop ? tf('ob_story_funnel_drop', { step: t(drop.key), drop: drop.pct.toFixed(0) }) : '',
+    obView.segment === 'all' && and && ios ? tf('ob_story_funnel_platform', {
+      a: pct(nval(and.verified), nval(and.signed_up)), i: pct(nval(ios.verified), nval(ios.signed_up)),
+      ab: pct(nval(and.first_buy), nval(and.signed_up)), ib: pct(nval(ios.first_buy), nval(ios.signed_up)),
+    }) : '',
+  ]);
 }
-function loadSubscription() {
-  const r = saRange();
-  ['saFunnelChart', 'saTimingChart', 'saHoursChart'].forEach((id) => { if (charts[id]) { charts[id].destroy(); delete charts[id]; } });
-  $('#saKpis').innerHTML = '';
-  $('#saDropStep').innerHTML = '';
-  $('#saTimingSummary').hidden = true;
-  $('#saFunnelEmpty').hidden = true;
-  const promises = SA_SECTIONS.map(([key, sel, render]) => {
-    delete saCache[key];
-    saStatus(sel, 'loading', t('common_loading'));
-    const p = api(`/api/subscription/${key}?from=${r.from}&to=${r.to}`);
-    p.then((rows) => { saCache[key] = rows; render(); }).catch((e) => saStatus(sel, 'empty', e.message));
-    return p;
+function renderObOutcome() {
+  if (!OB_TAB.cache.outcome) return;
+  const rows = OB_TAB.cache.outcome;
+  const outcomes = rows.filter((r) => val(r.kind) === 'outcome');
+  const rejected = rows.filter((r) => val(r.kind) === 'rejected');
+  genTable('#obOutcomeTable', outcomes.map((r) => ({ ...r, name: t(`ob_outcome_${String(val(r.name)).slice(2)}`) })), [
+    { key: 'name', label: t('ob_col_outcome') },
+    { key: 'users', label: t('an_people'), type: 'num', sum: true },
+    { key: 'median_fill_min', label: t('ob_col_fill_min') },
+    { key: 'median_sessions', label: t('ob_col_sessions') },
+    { key: 'median_review_hours', label: t('ob_col_review_hours') },
+    { key: 'bought_7d', label: t('ob_col_bought_7d'), type: 'num', sum: true },
+    { key: 'bought', label: t('ob_col_bought'), type: 'num', sum: true },
+    { key: 'median_first_buy', label: t('ob_col_first_buy'), type: 'idr' },
+  ], t('ob_empty'));
+  genTable('#obRejectedTable', rejected.map((r) => ({ ...r, name: OB_REJECTED[val(r.name)] ? t(OB_REJECTED[val(r.name)]) : escapeHtml(val(r.name)) })), [
+    { key: 'name', label: t('ob_col_part') },
+    { key: 'users', label: t('an_people'), type: 'num' },
+    { key: 'verified_now', label: t('ob_col_verified_now'), type: 'num' },
+  ], t('ob_rejected_empty'));
+  const o = (k) => outcomes.find((r) => String(val(r.name)).slice(2) === k) || {};
+  const v1 = o('verified'), v2 = o('verified_after_fail'), f = o('failed');
+  const verified = nval(v1.users) + nval(v2.users);
+  if (!outcomes.length) { story('#obOutcomeStory', []); return; }
+  const topRej = [...rejected].sort((a, b) => nval(b.users) - nval(a.users))[0];
+  story('#obOutcomeStory', [
+    verified ? tf('ob_story_outcome', {
+      v1: num(nval(v1.users)), review: val(v1.median_review_hours) ?? 'n/a', fill: val(v1.median_fill_min) ?? 'n/a', sessions: val(v1.median_sessions) ?? 'n/a',
+    }) : '',
+    nval(f.users) + nval(v2.users) ? tf('ob_story_outcome_fail', { failed: num(nval(f.users) + nval(v2.users)), fixed: num(nval(v2.users)) }) : '',
+    verified ? tf('ob_story_outcome_buy', { verified: num(verified), b7: num(nval(v1.bought_7d) + nval(v2.bought_7d)), b: num(nval(v1.bought) + nval(v2.bought)) }) : '',
+    topRej ? tf('ob_story_outcome_rejected', { part: OB_REJECTED[val(topRej.name)] ? t(OB_REJECTED[val(topRej.name)]) : escapeHtml(val(topRej.name)), n: num(nval(topRej.users)) }) : '',
+  ]);
+}
+OB_TAB.sections = [
+  ['onboarding/funnel', '#obFunnelTable', renderObFunnel],
+  ['onboarding/outcome', '#obOutcomeTable', renderObOutcome],
+];
+OB_TAB.reset = () => { $('#obSegment').innerHTML = ''; $('#obRejectedTable').innerHTML = ''; };
+
+// ---------- Redemption analysis ----------
+const RD_TAB = { id: 'redemption-analysis', prefix: 'rd', cache: {}, loaded: false, charts: ['rdFunnelChart', 'rdSwitchChart'] };
+const rdView = { dim: 'held' };
+const RD_STEPS = [['step1', 'rd_step_form'], ['step2', 'rd_step_checkout'], ['step3', 'rd_step_confirm'], ['done', 'rd_step_done']];
+const SW_STEPS = [['step1', 'sw_step_form'], ['step2', 'sw_step_list'], ['step3', 'sw_step_confirm_screen'], ['step4', 'sw_step_confirm'], ['done', 'sw_step_done']];
+function renderRdKpis() {
+  const f = (RD_TAB.cache.funnel || []).find((r) => val(r.segment) === 'all');
+  const p = (RD_TAB.cache.profile || []).find((r) => val(r.dimension) === 'all');
+  const cards = [];
+  if (f) {
+    cards.push(
+      kpi(t('rd_kpi_opened'), num(nval(f.step1)), t('rd_kpi_opened_sub'), '', ICONS.users),
+      kpi(t('rd_kpi_sold'), pct(nval(f.done), nval(f.step1)), `${num(nval(f.done))} ${t('rd_kpi_sold_sub')}`, 'warn', ICONS.trendDown),
+    );
+  }
+  if (p) {
+    cards.push(
+      kpi(t('rd_kpi_amount'), idr(val(p.amount)), tf('rd_kpi_amount_sub', { sells: num(nval(p.sells)), people: num(nval(p.people)) }), '', ICONS.coin),
+      kpi(t('rd_kpi_rebought'), pct(nval(p.rebought_people), nval(p.people)), tf('rd_kpi_rebought_sub', { left: num(nval(p.left_people)) }), 'accent', ICONS.trendUp),
+    );
+  }
+  $('#rdKpis').innerHTML = cards.join('');
+}
+// Steps chart for everyone, table with one row per platform.
+function renderFlow({ rows, chartId, tableSel, steps, storySel, storyKey, color }) {
+  const all = rows.find((r) => val(r.segment) === 'all');
+  const counts = renderSteps({ chartId, steps, row: all, color });
+  genTable(tableSel, rows.map((r) => ({ ...r, segment: segLabel(val(r.segment)) })), [
+    { key: 'segment', label: t('sa_col_segment') },
+    ...steps.map(([k, l]) => ({ key: k, label: t(l), type: 'num' })),
+    { key: 'done_pct', label: t('rd_col_done_pct'), type: 'pct' },
+    { key: 'median_min_to_confirm', label: t('rd_col_min_to_confirm') },
+  ], t('an_empty'));
+  if (!all || !counts[0]) { story(storySel, []); return; }
+  const drop = biggestDrop(steps, counts);
+  const and = rows.find((r) => val(r.segment) === 'ANDROID'), ios = rows.find((r) => val(r.segment) === 'IOS');
+  story(storySel, [
+    tf(storyKey, { opened: num(counts[0]), done: num(counts[counts.length - 1]), donePct: pct(counts[counts.length - 1], counts[0]), min: val(all.median_min_to_confirm) ?? 'n/a' }),
+    tf('an_story_drop', { step: t(drop.key), drop: drop.pct.toFixed(0) }),
+    and && ios ? tf('an_story_platform', { a: `${nval(and.done_pct).toFixed(1)}%`, i: `${nval(ios.done_pct).toFixed(1)}%` }) : '',
+  ]);
+}
+function renderRdFunnel() {
+  if (!RD_TAB.cache.funnel) return;
+  renderFlow({ rows: RD_TAB.cache.funnel, chartId: 'rdFunnelChart', tableSel: '#rdFunnelTable', steps: RD_STEPS, storySel: '#rdFunnelStory', storyKey: 'rd_story_funnel', color: C.rose });
+  renderRdKpis();
+}
+function renderRdSwitch() {
+  if (!RD_TAB.cache.switching) return;
+  renderFlow({ rows: RD_TAB.cache.switching, chartId: 'rdSwitchChart', tableSel: '#rdSwitchTable', steps: SW_STEPS, storySel: '#rdSwitchStory', storyKey: 'rd_story_switch', color: C.teal });
+}
+function rdValueLabel(dim, v) {
+  if (v === 'unknown') return t('an_unknown');
+  if (dim === 'held') return t(`rd_held_${v}`);
+  if (dim === 'size') return t(`rd_size_${v}`);
+  return escapeHtml(v);
+}
+function renderRdProfile() {
+  if (!RD_TAB.cache.profile) return;
+  renderRdKpis();
+  const dim = rdView.dim;
+  const rows = RD_TAB.cache.profile.filter((r) => val(r.dimension) === dim);
+  genTable('#rdProfileTable', rows.map((r) => ({ ...r, value: rdValueLabel(dim, val(r.value)) })), [
+    { key: 'value', label: t(`rd_dim_${dim}`) },
+    { key: 'sells', label: t('rd_col_sells'), type: 'num', sum: true },
+    { key: 'people', label: t('an_people'), type: 'num' },
+    { key: 'amount', label: t('rd_col_amount'), type: 'idr', sum: true },
+    { key: 'full_pct', label: t('rd_col_full_pct'), type: 'pct' },
+    { key: 'median_held_days', label: t('rd_col_held_days') },
+    { key: 'rebought_people', label: t('rd_col_rebought'), type: 'num' },
+    { key: 'left_people', label: t('rd_col_left'), type: 'num' },
+    { key: 'via_app', label: t('rd_col_via_app'), type: 'num', sum: true },
+  ], t('rd_empty'));
+  const all = RD_TAB.cache.profile.find((r) => val(r.dimension) === 'all');
+  if (!all) { story('#rdProfileStory', []); return; }
+  const top = [...rows].sort((a, b) => nval(b.sells) - nval(a.sells))[0];
+  const solid = rows.filter((r) => nval(r.people) >= 10 && val(r.value) !== 'unknown').sort((a, b) => pctOf(nval(b.left_people), nval(b.people)) - pctOf(nval(a.left_people), nval(a.people)));
+  story('#rdProfileStory', [
+    tf('rd_story_profile', {
+      sells: num(nval(all.sells)), people: num(nval(all.people)), amount: idr(val(all.amount)), full: `${nval(all.full_pct).toFixed(1)}%`,
+      rebought: num(nval(all.rebought_people)), reboughtPct: pct(nval(all.rebought_people), nval(all.people)),
+      left: num(nval(all.left_people)), leftPct: pct(nval(all.left_people), nval(all.people)), held: val(all.median_held_days) ?? 'n/a',
+    }),
+    top ? tf('rd_story_profile_dim', {
+      dim: t(`rd_dim_${dim}`).toLowerCase(), top: rdValueLabel(dim, val(top.value)), topSells: num(nval(top.sells)),
+      left: solid[0] ? rdValueLabel(dim, val(solid[0].value)) : 'n/a', leftPct: solid[0] ? pct(nval(solid[0].left_people), nval(solid[0].people)) : 'n/a',
+    }) : '',
+  ]);
+}
+function renderRdSignals() {
+  if (!RD_TAB.cache.signals) return;
+  renderDriverTable('#rdSignalTable', RD_TAB.cache.signals, $('#rdSignalFlow').checked,
+    { converted: 'rd_col_sold', rate: 'rd_col_sold_rate', share: 'rd_col_share_sellers' });
+  driverStory('#rdSignalStory', RD_TAB.cache.signals, 'rd_story_signal');
+}
+RD_TAB.sections = [
+  ['redemption/funnel', '#rdFunnelTable', renderRdFunnel],
+  ['redemption/profile', '#rdProfileTable', renderRdProfile],
+  ['redemption/signals', '#rdSignalTable', renderRdSignals],
+  ['redemption/switching', '#rdSwitchTable', renderRdSwitch],
+];
+
+// ---------- Engagement analysis ----------
+const EG_TAB = { id: 'engagement-analysis', prefix: 'eg', cache: {}, loaded: false, charts: ['egFeatureChart'] };
+const egView = { kind: 'sort' };
+const EG_TIERS = ['1_under_1m', '2_1m_10m', '3_10m_100m', '4_100m_1b', '5_over_1b'];
+const EG_BANDS = ['0_none', '1_1_2', '2_3_9', '3_10_plus'];
+const featLabel = (v) => (v === 'all' ? t('eg_feat_all') : t(`eg_feat_${v}`));
+function renderEgFeatures() {
+  if (!EG_TAB.cache.features) return;
+  const rows = EG_TAB.cache.features;
+  const all = rows.find((r) => val(r.feature) === 'all');
+  paint('egFeatureChart', {
+    type: 'bar',
+    data: {
+      labels: rows.map((r) => featLabel(val(r.feature))),
+      datasets: [{
+        label: t('eg_col_buyer_pct'), data: rows.map((r) => nval(r.buyer_pct)), counts: rows.map((r) => nval(r.users)),
+        backgroundColor: rows.map((r) => (val(r.feature) === 'all' ? C.muted : C.indigo)), borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y', maintainAspectRatio: false,
+      scales: { x: { beginAtZero: true, grid: { color: C.grid }, ticks: { callback: (v) => `${v}%` } }, y: { grid: { display: false } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.raw.toFixed(1)}% · ${num(c.dataset.counts[c.dataIndex])} ${t('an_people').toLowerCase()}` } } },
+    },
   });
-  gateTabLoad((v) => { subscriptionLoaded = v; }, promises);
-  return Promise.allSettled(promises);
+  genTable('#egFeatureTable', rows.map((r) => ({ ...r, feature: val(r.feature) === 'all' ? `<strong>${featLabel('all')}</strong>` : featLabel(val(r.feature)) })), [
+    { key: 'feature', label: t('eg_col_feature') },
+    { key: 'users', label: t('an_people'), type: 'num' },
+    { key: 'holders', label: t('eg_col_holders'), type: 'num' },
+    { key: 'holder_pct', label: t('eg_col_holder_pct'), type: 'pct' },
+    { key: 'median_aum', label: t('eg_col_median_aum'), type: 'idr' },
+    { key: 'buyers', label: t('eg_col_buyers'), type: 'num' },
+    { key: 'buyer_pct', label: t('eg_col_buyer_pct'), type: 'pct' },
+    { key: 'buy_amount', label: t('eg_col_buy_amount'), type: 'idr' },
+    { key: 'sellers', label: t('eg_col_sellers'), type: 'num' },
+    { key: 'seller_pct', label: t('eg_col_seller_pct'), type: 'pct' },
+  ], t('an_empty'));
+  renderEgKpis();
+  if (!all) { story('#egFeatureStory', []); return; }
+  const feats = rows.filter((r) => val(r.feature) !== 'all');
+  const used = [...feats].sort((a, b) => nval(b.users) - nval(a.users))[0];
+  const solid = feats.filter((r) => nval(r.users) >= 20).sort((a, b) => nval(b.buyer_pct) - nval(a.buyer_pct));
+  story('#egFeatureStory', [
+    tf('eg_story_feature', { all: num(nval(all.users)), holderPct: `${nval(all.holder_pct).toFixed(1)}%`, buyerPct: `${nval(all.buyer_pct).toFixed(1)}%` }),
+    used ? tf('eg_story_feature_top', { top: featLabel(val(used.feature)), users: num(nval(used.users)) }) : '',
+    solid.length >= 2 ? tf('eg_story_feature_range', {
+      best: featLabel(val(solid[0].feature)), bestPct: `${nval(solid[0].buyer_pct).toFixed(1)}%`,
+      low: featLabel(val(solid[solid.length - 1].feature)), lowPct: `${nval(solid[solid.length - 1].buyer_pct).toFixed(1)}%`,
+      allPct: `${nval(all.buyer_pct).toFixed(1)}%`,
+    }) : '',
+    t('an_story_correlation'),
+  ]);
 }
-function repaintSubscription() { SA_SECTIONS.forEach(([key, , render]) => saCache[key] && render()); }
+function renderEgKpis() {
+  const all = (EG_TAB.cache.features || []).find((r) => val(r.feature) === 'all');
+  const act = EG_TAB.cache.activity || [];
+  const cards = [];
+  if (all) {
+    cards.push(
+      kpi(t('eg_kpi_users'), num(nval(all.users)), t('eg_kpi_users_sub'), '', ICONS.users),
+      kpi(t('eg_kpi_holders'), `${nval(all.holder_pct).toFixed(1)}%`, `${num(nval(all.holders))} ${t('eg_kpi_holders_sub')}`, 'accent', ICONS.coin),
+      kpi(t('eg_kpi_buyers'), `${nval(all.buyer_pct).toFixed(1)}%`, `${num(nval(all.buyers))} ${t('eg_kpi_buyers_sub')}`, '', ICONS.trendUp),
+    );
+  }
+  if (act.length) {
+    const silent = act.filter((r) => val(r.activity) === '0_none' && val(r.aum_tier) !== '1_under_1m');
+    cards.push(kpi(t('eg_kpi_silent'), idr(silent.reduce((a, r) => a + nval(r.aum), 0)), tf('eg_kpi_silent_sub', { n: num(silent.reduce((a, r) => a + nval(r.holders), 0)) }), 'warn', ICONS.eyeOff));
+  }
+  $('#egKpis').innerHTML = cards.join('');
+}
+// Pivot: one row per portfolio size, one column per app-use band.
+function renderEgActivity() {
+  if (!EG_TAB.cache.activity) return;
+  const rows = EG_TAB.cache.activity;
+  const cell = (tier, band) => rows.find((r) => val(r.aum_tier) === tier && val(r.activity) === band);
+  const pivot = EG_TIERS.filter((tier) => rows.some((r) => val(r.aum_tier) === tier)).map((tier) => {
+    const out = { tier: t(`eg_tier_${tier}`) };
+    let holders = 0, aum = 0, bought = 0;
+    EG_BANDS.forEach((band) => {
+      const c = cell(tier, band);
+      out[band] = c ? `${num(nval(c.holders))}<span class="hint">${idr(nval(c.aum))}</span>` : '0';
+      holders += c ? nval(c.holders) : 0; aum += c ? nval(c.aum) : 0; bought += c ? nval(c.bought) : 0;
+    });
+    out.total = `${num(holders)}<span class="hint">${idr(aum)}</span>`;
+    out.bought_pct = pctOf(bought, holders);
+    return out;
+  });
+  genTable('#egActivityTable', pivot, [
+    { key: 'tier', label: t('eg_col_tier') },
+    ...EG_BANDS.map((b) => ({ key: b, label: t(`eg_band_${b}`) })),
+    { key: 'total', label: t('eg_col_total') },
+    { key: 'bought_pct', label: t('eg_col_bought_pct'), type: 'pct' },
+  ], t('an_empty'));
+  $('#egActivityTable table')?.classList.add('pivot');
+  renderEgKpis();
+  if (!rows.length) { story('#egActivityStory', []); return; }
+  const sum = (pred, k) => rows.filter(pred).reduce((a, r) => a + nval(r[k]), 0);
+  const notSmall = (r) => val(r.aum_tier) !== '1_under_1m';
+  const big = (r) => ['4_100m_1b', '5_over_1b'].includes(val(r.aum_tier));
+  const silent = (r) => val(r.activity) === '0_none';
+  const holders = sum(notSmall, 'holders'), aum = sum(notSmall, 'aum');
+  const sh = sum((r) => notSmall(r) && silent(r), 'holders'), sa = sum((r) => notSmall(r) && silent(r), 'aum');
+  const band = (b) => (r) => notSmall(r) && val(r.activity) === b;
+  const small = sum((r) => !notSmall(r), 'holders'), smallSilent = sum((r) => !notSmall(r) && silent(r), 'holders');
+  story('#egActivityStory', [
+    tf('eg_story_activity', { holders: num(holders), silent: num(sh), silentPct: pct(sh, holders), aum: idr(sa), aumPct: pct(sa, aum) }),
+    tf('eg_story_activity_big', { n: num(sum((r) => big(r) && silent(r), 'holders')), aum: idr(sum((r) => big(r) && silent(r), 'aum')) }),
+    tf('eg_story_activity_buy', {
+      active: pct(sum(band('3_10_plus'), 'bought'), sum(band('3_10_plus'), 'holders')),
+      quiet: pct(sum(band('1_1_2'), 'bought'), sum(band('1_1_2'), 'holders')),
+    }),
+    small ? tf('eg_story_activity_small', { n: num(small), pct: pct(smallSilent, small) }) : '',
+  ]);
+}
+function renderEgSearch() {
+  if (!EG_TAB.cache.search) return;
+  const rows = EG_TAB.cache.search;
+  genTable('#egSearchTable', escRows(rows, ['term', 'top_tapped']), [
+    { key: 'term', label: t('eg_col_term') },
+    { key: 'searches', label: t('eg_col_searches'), type: 'num' },
+    { key: 'users', label: t('an_people'), type: 'num' },
+    { key: 'tapped_users', label: t('eg_col_tapped'), type: 'num' },
+    { key: 'bought_users', label: t('eg_col_bought_7d'), type: 'num' },
+    { key: 'bought_tapped_users', label: t('eg_col_bought_tapped'), type: 'num' },
+    { key: 'top_tapped', label: t('eg_col_top_tapped') },
+  ], t('eg_search_empty'));
+  if (!rows.length) { story('#egSearchStory', []); return; }
+  const top = rows[0];
+  story('#egSearchStory', [
+    tf('eg_story_search', { terms: rows.slice(0, 3).map((r) => `"${escapeHtml(val(r.term))}"`).join(', ') }),
+    tf('eg_story_search_top', {
+      term: escapeHtml(val(top.term)), n: num(nval(top.users)), tapped: num(nval(top.tapped_users)),
+      bought: num(nval(top.bought_users)), boughtTapped: num(nval(top.bought_tapped_users)),
+    }),
+  ]);
+}
+function discoveryLabel(kind, v) {
+  if (kind === 'risk_gate') return tf('an_risk_level', { n: escapeHtml(v) });
+  // Sort values are "sort_by / return period"; "none" means that part was not set.
+  if (kind === 'sort') return escapeHtml(v.split(' / ').filter((x) => x !== 'none' && x !== '-').join(' / ').replace(/_/g, ' ')) || t('eg_sort_default');
+  return escapeHtml(v);
+}
+function renderEgDiscovery() {
+  if (!EG_TAB.cache.discovery) return;
+  const kind = egView.kind;
+  const rows = EG_TAB.cache.discovery.filter((r) => val(r.kind) === kind);
+  genTable('#egDiscoveryTable', rows.map((r) => ({ ...r, value: discoveryLabel(kind, val(r.value)) })), [
+    { key: 'value', label: t(`eg_kind_${kind}`) },
+    { key: 'events', label: t('eg_col_events'), type: 'num' },
+    { key: 'users', label: t('an_people'), type: 'num' },
+    { key: 'paid_users', label: t('eg_col_paid_7d'), type: 'num' },
+    { key: 'paid_pct', label: t('sa_col_paid_pct'), type: 'pct' },
+  ], t('an_empty'));
+  if (!rows.length) { story('#egDiscoveryStory', []); return; }
+  const top = rows[0];
+  const best = rows.filter((r) => nval(r.users) >= 5).sort((a, b) => nval(b.paid_pct) - nval(a.paid_pct))[0];
+  story('#egDiscoveryStory', [
+    tf('eg_story_discovery', { kind: t(`eg_kind_${kind}`).toLowerCase(), top: discoveryLabel(kind, val(top.value)), users: num(nval(top.users)), pct: `${nval(top.paid_pct).toFixed(1)}%` }),
+    best ? tf('eg_story_discovery_best', { best: discoveryLabel(kind, val(best.value)), pct: `${nval(best.paid_pct).toFixed(1)}%`, users: num(nval(best.users)) }) : '',
+  ]);
+}
+EG_TAB.sections = [
+  ['engagement/features', '#egFeatureTable', renderEgFeatures],
+  ['engagement/activity', '#egActivityTable', renderEgActivity],
+  ['engagement/search', '#egSearchTable', renderEgSearch],
+  ['engagement/discovery', '#egDiscoveryTable', renderEgDiscovery],
+];
+const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB];
+function loadSubscription() { return loadAnalysis(SA_TAB); }
+function loadOnboarding() { return loadAnalysis(OB_TAB); }
+function loadRedemption() { return loadAnalysis(RD_TAB); }
+function loadEngagement() { return loadAnalysis(EG_TAB); }
 
 // Marks a tab's "loaded" gate true right away (so a fast repeat tab-switch
 // doesn't double-fire its fetches) but un-latches it if any of its fetches
@@ -6007,7 +6574,9 @@ function switchTab(name) {
   if (name === 'product-funnel' && !productFunnelLoaded) loadProductFunnel();
   if (name === 'email-recap' && !emailRecapLoaded) loadEmailRecap();
   if (name === 'user-behavior' && !behaviorLoaded) loadBehavior();
-  if (name === 'subscription-analysis' && !subscriptionLoaded) loadSubscription();
+  // Loaded analysis tabs repaint from cache: a language or theme switch made
+  // while another tab was open would otherwise leave them in the old one.
+  ANALYSIS_TABS.forEach((tab) => { if (name === tab.id) (tab.loaded ? repaintAnalysis(tab) : loadAnalysis(tab)); });
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
   if (name === 'presentation' || name === 'monthly-review') {
@@ -6123,6 +6692,8 @@ function applyPermissions(user) {
 function repaintActiveTab() {
   const active = document.querySelector('.view.active');
   if (!active) return;
+  const analysis = ANALYSIS_TABS.find((tab) => tab.id === active.id);
+  if (analysis) { repaintAnalysis(analysis); return; }
   switch (active.id) {
     case 'overview': overviewLoaded = false; loadOverview(); break;
     case 'aum': aumCache = []; loadAumHistory(); break;
@@ -6132,7 +6703,6 @@ function repaintActiveTab() {
     case 'push': pushLoaded = false; loadPush(); break;
     case 'email-recap': if (erSummary) renderEmailRecap(erSummary); if (er.rows) renderEmailLog(); break;
     case 'user-behavior': repaintBehavior(); break;
-    case 'subscription-analysis': repaintSubscription(); break;
     case 'performance': renderPerfTrendChart(perfTrendCache); break;
     case 'portfolio': if (pfSelected) loadPortfolioUser(); break;
     case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
@@ -6511,18 +7081,17 @@ function wire() {
   $('#erLogTable').addEventListener('click', (e) => { const b = e.target.closest('[data-er-events]'); if (b) openEmailEvents(b.dataset.erEvents); });
   $('#bhApply').addEventListener('click', () => { loadBehavior(); loadBehaviorUser(); });
   $('#bhSearchBtn').addEventListener('click', searchBehaviorUsers);
-  $('#saApply').addEventListener('click', loadSubscription);
+  ANALYSIS_TABS.forEach((tab) => $(`#${tab.prefix}Apply`).addEventListener('click', () => loadAnalysis(tab)));
   $('#saDriverFlow').addEventListener('change', renderSaDrivers);
-  const saSeg = (sel, attr, apply) => $(sel).addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    $$(`${sel} button`).forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
-    apply(b.dataset[attr]);
-  });
-  saSeg('#saSplit', 'split', (v) => { saView.split = v; renderSaFunnel(); });
-  saSeg('#saEntryLevel', 'level', (v) => { saView.level = v; renderSaEntry(); });
-  saSeg('#saDropStep', 'step', (v) => { saView.step = Number(v); renderSaDrop(); });
-  saSeg('#saHoursBy', 'by', (v) => { saView.by = v; renderSaHours(); });
+  $('#rdSignalFlow').addEventListener('change', renderRdSignals);
+  wireSeg('#saSplit', 'split', (v) => { saView.split = v; renderSaFunnel(); });
+  wireSeg('#saProfileDim', 'dim', (v) => { saView.dim = v; renderSaProfile(); });
+  wireSeg('#saEntryLevel', 'level', (v) => { saView.level = v; renderSaEntry(); });
+  wireSeg('#saDropStep', 'step', (v) => { saView.step = Number(v); renderSaDrop(); });
+  wireSeg('#saHoursBy', 'by', (v) => { saView.by = v; renderSaHours(); });
+  wireSeg('#obSegment', 'segment', (v) => { obView.segment = v; renderObFunnel(); });
+  wireSeg('#rdProfileDim', 'dim', (v) => { rdView.dim = v; renderRdProfile(); });
+  wireSeg('#egDiscoveryKind', 'kind', (v) => { egView.kind = v; renderEgDiscovery(); });
   $('#bhSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchBehaviorUsers(); });
   $('#bhResults').addEventListener('click', (e) => {
     const b = e.target.closest('[data-bh-user]');
@@ -7065,11 +7634,11 @@ async function init() {
   $('#ahFrom').value = r.from; $('#ahTo').value = r.to;
   $('#pfnFrom').value = r.from; $('#pfnTo').value = r.to;
   // Shorter defaults than the 12 months above: the email log is new, and
-  // every User behavior and Subscription analysis query scans GA4 for the
-  // whole range (about 100 MB a month).
+  // every User behavior and analysis-tab query scans GA4 for the whole range
+  // (about 100 MB a month).
   const er90 = daysAgoRange(90); $('#erFrom').value = er90.from; $('#erTo').value = er90.to;
   const bh30 = daysAgoRange(30); $('#bhFrom').value = bh30.from; $('#bhTo').value = bh30.to;
-  $('#saFrom').value = bh30.from; $('#saTo').value = bh30.to;
+  ANALYSIS_TABS.forEach((tab) => { $(`#${tab.prefix}From`).value = bh30.from; $(`#${tab.prefix}To`).value = bh30.to; });
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   $('#sitxFrom').value = r.from; $('#sitxTo').value = r.to;
