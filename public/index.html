@@ -210,7 +210,7 @@
           <button class="nav-link" data-tab="marketing"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Marketing attribution</button>
           <button class="nav-link" data-tab="referral-program"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gift"></use></svg></span>Referral program</button>
           <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Referral program (KYC based)</button>
-          <button class="nav-link" data-tab="kalcer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>Kalcer ambassadors</button>
+          <button class="nav-link" data-tab="kalcer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>Referral activity</button>
           <button class="nav-link" data-tab="push"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Push delivery</button>
         </div>
         <div class="nav-group" data-group="product">
@@ -2552,13 +2552,13 @@
       </div>
     </section>
 
-    <!-- KALCER AMBASSADORS: a separate ambassador/referral bonus program,
-         its own dataset (kalcer.kalcer_fix), independent of the Referral
-         program tabs above (those run on main.user_referrals). -->
+    <!-- REFERRAL ACTIVITY (was "Kalcer ambassadors"): every user-to-user
+         referral link in main.user_referrals, not one program's ambassadors.
+         The tab id stays "kalcer" because Manage users stores access by tab id. -->
     <section id="kalcer" class="view">
       <div class="panel">
         <div class="panel-head wrap">
-          <h2 data-i18n="kalcer_title">Kalcer ambassadors</h2>
+          <h2 data-i18n="kalcer_title">Referral activity</h2>
           <div class="range">
             <label><span data-i18n="common_as_of">As of</span> <input type="date" id="kalcerDate" /></label>
             <button id="kalcerDateApply" class="btn-primary" data-i18n="common_go">Go</button>
@@ -2573,7 +2573,7 @@
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2 data-i18n="kalcer_summary_title">Ambassadors</h2>
+          <h2 data-i18n="kalcer_summary_title">Referrers</h2>
           <div class="exp">
             <button class="btn-ghost" id="kalcerSummaryCsv" data-i18n="common_csv">CSV</button>
             <button class="btn-ghost" id="kalcerSummaryXlsx" data-i18n="common_excel">Excel</button>
@@ -3104,8 +3104,8 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition (and, correspondingly, which invitees show up in the Invited users table below it). Here, "Invited" is gated by the invitee's KYC verification date instead of their registration date (with the same 1-day grace window) — an invitee who was verified inside the period counts as invited even if they registered long before it, and one who's never been verified never counts, no matter how old the referral. Use this tab when you want "who's KYC-verified and in play for this campaign," rather than "who signed up because of this campaign."</p>
         </div>
         <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Kalcer ambassadors</h3>
-          <p data-i18n="docs_kalcer_desc">Built from main.user_referrals (the immutable referral link, set once at referral time, unlike referrer_code which can be reassigned later) plus each referred investor's AUM as of a picked date, from mi_fee_logs.portfolio_with_code, same source and one-day correction as the HNWI tab. Ambassadors: one row per referrer, with how many people they referred, their first and most recent referral date, and the combined AUM of everyone they referred. Referrals: one row per referral, with the referral date and that investor's own AUM. No bonus amounts, tiers, or eligibility status, that program's exact rules aren't documented anywhere in this codebase, so this only reports referral activity and AUM, not what anyone is paid. Search by the referrer's SID, name, or email.</p>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Referral activity</h3>
+          <p data-i18n="docs_kalcer_desc">Who referred whom across every user-to-user referral in the app, not only one program's ambassadors. Built from main.user_referrals (the immutable referral link, set once at referral time, unlike referrer_code which can be reassigned later) plus each referred investor's AUM as of a picked date, from mi_fee_logs.portfolio_with_code, same source and one-day correction as the HNWI tab. Referrers: one row per referrer, with how many people they referred, their first and most recent referral date, and the combined AUM of everyone they referred. Referrals: one row per referral, with the referral date and that investor's own AUM. No bonus amounts, tiers, or eligibility status, that program's exact rules aren't documented anywhere in this codebase, so this only reports referral activity and AUM, not what anyone is paid. Search by the referrer's SID, name, or email.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Push delivery</h3>

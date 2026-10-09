@@ -1084,8 +1084,9 @@ function loadDormant() {
   return Promise.allSettled([pSummary, pRepeat, pTtc]);
 }
 
-// KALCER AMBASSADORS: raw main.user_referrals links + dated AUM, no bonus
-// math (see queries.js). An "as of" date picker, same pattern as HNWI, plus
+// REFERRAL ACTIVITY (tab id "kalcer", kept so saved access rights still
+// match): raw main.user_referrals links + dated AUM, no bonus math (see
+// queries.js). An "as of" date picker, same pattern as HNWI, plus
 // a free-text search shared by both tables below.
 let kalcerLoaded = false;
 let kalcerDateDefaulted = false;
@@ -1136,7 +1137,7 @@ async function loadKalcer() {
       { key: 'first_referral_date', label: 'First referral', type: 'date' },
       { key: 'last_referral_date', label: 'Last referral', type: 'date' },
       { key: 'total_aum_referred', label: 'AUM referred', type: 'idr', sum: true },
-    ], 'No ambassadors match.');
+    ], 'No referrers match.');
   }).catch((e) => {
     $('#kalcerKpis').innerHTML = '';
     $('#kalcerSummaryTable').innerHTML = `<div class="empty">${e.message}</div>`;
@@ -6211,10 +6212,10 @@ function wire() {
   $('#kalcerDateApply').addEventListener('click', loadKalcer);
   $('#kalcerSearchBtn').addEventListener('click', loadKalcer);
   $('#kalcerSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadKalcer(); });
-  $('#kalcerSummaryCsv').addEventListener('click', () => download({ source: 'kalcer_ambassador_summary', format: 'csv', filename: 'kalcer_ambassadors', ...kalcerParams() }, 'kalcer_ambassadors.csv'));
-  $('#kalcerSummaryXlsx').addEventListener('click', () => download({ source: 'kalcer_ambassador_summary', format: 'xlsx', filename: 'kalcer_ambassadors', ...kalcerParams() }, 'kalcer_ambassadors.xlsx'));
-  $('#kalcerDetailCsv').addEventListener('click', () => download({ source: 'kalcer_referral_detail', format: 'csv', filename: 'kalcer_referrals', ...kalcerParams() }, 'kalcer_referrals.csv'));
-  $('#kalcerDetailXlsx').addEventListener('click', () => download({ source: 'kalcer_referral_detail', format: 'xlsx', filename: 'kalcer_referrals', ...kalcerParams() }, 'kalcer_referrals.xlsx'));
+  $('#kalcerSummaryCsv').addEventListener('click', () => download({ source: 'kalcer_ambassador_summary', format: 'csv', filename: 'referrers', ...kalcerParams() }, 'referrers.csv'));
+  $('#kalcerSummaryXlsx').addEventListener('click', () => download({ source: 'kalcer_ambassador_summary', format: 'xlsx', filename: 'referrers', ...kalcerParams() }, 'referrers.xlsx'));
+  $('#kalcerDetailCsv').addEventListener('click', () => download({ source: 'kalcer_referral_detail', format: 'csv', filename: 'referrals', ...kalcerParams() }, 'referrals.csv'));
+  $('#kalcerDetailXlsx').addEventListener('click', () => download({ source: 'kalcer_referral_detail', format: 'xlsx', filename: 'referrals', ...kalcerParams() }, 'referrals.xlsx'));
   $('#pushApply').addEventListener('click', loadPush);
   $('#erApply').addEventListener('click', loadEmailRecap);
   const erReloadLog = () => { er.offset = 0; loadEmailLog(); };
