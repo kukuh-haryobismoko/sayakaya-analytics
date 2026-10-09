@@ -218,6 +218,7 @@
           <button class="nav-link" data-tab="app-health"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg></span>App health</button>
           <button class="nav-link" data-tab="product-funnel"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg></span>Product funnel</button>
           <button class="nav-link" data-tab="user-behavior"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg></span>User behavior</button>
+          <button class="nav-link" data-tab="subscription-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Subscription analysis</button>
           <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
         </div>
         <div class="nav-group" data-group="tools">
@@ -2833,6 +2834,107 @@
       </div>
     </section>
 
+    <!-- SUBSCRIPTION ANALYSIS: the app's buy flow from GA4 (user_id =
+         main.users.id) checked against paid buys in the main database. See
+         queries.js subscription* for the matching rules. -->
+    <section id="subscription-analysis" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="common_period">Period</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="saFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="saTo" /></label>
+            <button id="saApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="callout" style="margin-top:8px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
+          <span data-i18n="sa_info">Follows logged-in people through the app's buy flow (Google Analytics) and checks each step against the main database. A subscription counts as successful once the buy is paid: completed, payment received, or verified. Bonus buys entered by admins are left out. Screen names are the app's own (ProductDetailScreen is a fund's page, GoalDetailScreen a portfolio). App data arrives about a day late.</span>
+        </div>
+        <div id="saKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="sa_funnel_title">Buy flow, step by step</h2>
+          <div class="seg" id="saSplit" role="group" data-i18n-aria-label="sa_split_label" aria-label="Split by">
+            <button class="on" data-split="all" aria-pressed="true" data-i18n="sa_split_all">Everyone</button>
+            <button data-split="platform" aria-pressed="false" data-i18n="sa_split_platform">Platform</button>
+            <button data-split="buyer_type" aria-pressed="false" data-i18n="sa_split_buyer">First or repeat</button>
+            <button data-split="app_version" aria-pressed="false" data-i18n="sa_split_version">App version</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="sa_funnel_hint">People who opened the buy form in this period, and how many of them went on to each next step. A step only counts if the step before it came first, so the numbers can only go down. Paid: a paid buy from their first order onward. First buyer: no paid buy before they first opened the form. The chart shows each step as a share of the people who opened the form.</span>
+        <p id="saFunnelEmpty" class="empty" data-i18n="sa_funnel_empty" hidden>Nobody opened the buy form in this period.</p>
+        <div class="chart-wrap sm" style="margin-top:14px"><canvas id="saFunnelChart" aria-label="Share of people who opened the buy form reaching each later step"></canvas></div>
+        <div id="saFunnelTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="sa_entry_title">Where people open the buy form from</h2>
+          <div class="seg" id="saEntryLevel" role="group" data-i18n-aria-label="sa_entry_level_label" aria-label="How far back">
+            <button class="on" data-level="screen" aria-pressed="true" data-i18n="sa_entry_screen">Screen before</button>
+            <button data-level="path" aria-pressed="false" data-i18n="sa_entry_path">Two screens before</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="sa_entry_hint">The screen people were on right before the buy form opened, in the same app session. Ordered: created an order in that session. Paid: paid a buy within 3 days of opening the form from that screen. Going back to the form from checkout is not counted as a new open. Screens fewer than 3 people came from are hidden.</span>
+        <div id="saEntryTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="sa_drop_title">Where people leave the buy flow</h2>
+          <div class="seg" id="saDropStep" role="group" data-i18n-aria-label="sa_drop_step_label" aria-label="Last step reached"></div>
+        </div>
+        <span class="hint" data-i18n="sa_drop_hint">App sessions that reached the buy form but created no order, by the furthest step reached. Next screen is where they went after their last buy-flow screen; "left the app" means nothing else happened in that session. Paid within 7 days: those people who came back and paid a buy within a week. Up to 12 exits per step.</span>
+        <div id="saDropTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="sa_pay_title">Orders by payment method</h2></div>
+        <span class="hint" data-i18n="sa_pay_hint">Every buy order created in this period, by how the person chose to pay. Expired: the payment window closed unpaid. Waiting: not paid yet and not expired. Minutes to pay is the median from order to payment, for paid orders. Paid another order: people with an expired or cancelled order here who paid a different buy within 7 days.</span>
+        <div id="saPayTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="sa_driver_title">What people did before subscribing</h2>
+          <label class="hint"><input type="checkbox" id="saDriverFlow" /> <span data-i18n="sa_driver_flow">Include buy-flow steps</span></label>
+        </div>
+        <span class="hint" data-i18n="sa_driver_hint">For each screen and action: of the logged-in people who did it in this period, the share who paid a buy, next to the share among people who did not do it. Subscribers only count what they did before their first paid buy. Lift 2.0 means twice the rate of those who did not. Active people do more of everything, so this shows what subscribers tend to do, not what makes them subscribe. Buy-flow steps are hidden by default because they are part of subscribing. Fewer than 20 people: hidden.</span>
+        <div id="saDriverTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="sa_timing_title">Time to first subscription</h2></div>
+          <span class="hint" data-i18n="sa_timing_hint">People who signed up in this period: days from sign-up to KYC verified and to their first paid buy. There is no end date, so recent sign-ups have had less time.</span>
+          <p id="saTimingSummary" class="trend-finding" hidden></p>
+          <p id="saTimingEmpty" class="empty" data-i18n="sa_timing_empty" hidden>Nobody signed up in this period.</p>
+          <div class="chart-wrap sm"><canvas id="saTimingChart" aria-label="New sign-ups by days to KYC verified and to first paid buy"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head wrap">
+            <h2 data-i18n="sa_hours_title">When people subscribe</h2>
+            <div class="seg" id="saHoursBy" role="group" data-i18n-aria-label="sa_hours_by_label" aria-label="Group by">
+              <button class="on" data-by="hour" aria-pressed="true" data-i18n="sa_hours_hour">Hour</button>
+              <button data-by="dow" aria-pressed="false" data-i18n="sa_hours_dow">Weekday</button>
+            </div>
+          </div>
+          <span class="hint" data-i18n="sa_hours_hint">Each hour's share of the period's logged-in app sessions, next to its share of paid buy orders (WIB, by the time the order was created). Where the line sits above the bars, people buy more often than their app use alone would suggest.</span>
+          <p id="saHoursEmpty" class="empty" data-i18n="sa_hours_empty" hidden>No sessions or orders in this period.</p>
+          <div class="chart-wrap sm"><canvas id="saHoursChart" aria-label="App sessions and paid buy orders by hour or weekday"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="sa_chip_title">Preset amount buttons</h2></div>
+        <span class="hint" data-i18n="sa_chip_hint">The amount buttons on the buy form. Per amount: who tapped it, who paid a buy within a day of their first tap, and how many of those kept that exact amount.</span>
+        <div id="saChipTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+    </section>
+
     <section id="ask" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="ask_title">Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data — no technical skills needed.</span></div>
@@ -3126,6 +3228,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg> User behavior</h3>
           <p data-i18n="docs_user_behavior_desc">Connects what people do in the app (Google Analytics events, which carry the investor's user ID after login) to the main database's transactions, holdings, and KYC status. For a chosen period it shows: logged-in app users per day and how many of them hold a portfolio or bought that day; app activity and buying by investor status (holding, redeemed, verified but never bought, not verified); which in-app actions come before a purchase within 7 days, compared with the average app user; each push campaign's opens and the buys that followed within 72 hours; fund detail pages viewed against buys of that same fund; and a follow-up list of people who started buying but never paid. Search any investor to see their app activity and transactions on one timeline, with their device, app version, and AUM; each lookup is recorded in the Activity log. Activity before login is not included, and it shows what buyers tend to do, not proof of what made them buy.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Subscription analysis</h3>
+          <p data-i18n="docs_sa_desc">Follows logged-in people through the app's buy flow (Google Analytics) and checks each step against paid buys in the main database (completed, payment received, or verified; admin bonus buys excluded). For a chosen period it shows: a step funnel from opening the buy form to checkout, payment method, order created, and paid, split by platform, first or repeat buyer, or app version, with median minutes to order and to pay; which screen people open the buy form from (and the one before that) and how many of them pay within 3 days; where sessions leave the buy flow without an order and whether those people pay within a week; every buy order by payment method with expired, cancelled, and unpaid amounts; which screens and actions subscribers did before their first paid buy compared with people who did not (lift; buy-flow steps hidden unless ticked); days from sign-up to KYC and to the first paid buy for new sign-ups; the hours and weekdays when paid orders happen compared with app use; and the preset amount buttons on the buy form. Activity before login is not included, and the comparisons show what subscribers tend to do, not proof of what made them subscribe.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Event code tracking</h3>

@@ -986,6 +986,19 @@ on('GET', '/api/behavior/user', requireTab('user-behavior', async (_req, _params
   return json({ profile: profile[0] || null, timeline });
 }));
 
+// ---- Subscription analysis: buy-flow funnel, entry screens, drop-off,
+// payment methods and drivers (GA4 + main database), see queries.ts -------
+for (const [key, build] of Object.entries({
+  funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
+  payment: Q.subscriptionPayment, drivers: Q.subscriptionDrivers, timing: Q.subscriptionTiming,
+  hours: Q.subscriptionHours, chips: Q.subscriptionChips,
+})) {
+  on('GET', `/api/subscription/${key}`, requireTab('subscription-analysis', async (_req, _params, url) => {
+    const q = build(qp(url, 'from'), qp(url, 'to'));
+    return json(await runQuery(q.sql, q.params));
+  }));
+}
+
 // ---- Product performance (NAV % change per fund type) ----------------------
 on('GET', '/api/product-performance', requireTab('performance', async () => {
   const q = Q.productPerformance();

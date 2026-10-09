@@ -2126,6 +2126,404 @@ const behaviorUserTimeline = (userId, from, to) => {
   };
 };
 
+// ---- Subscription analysis: which screens and actions come before a paid
+// buy (a fund subscription), and where people leave the buy flow. Same GA4
+// to main-database join as User behavior. The app's buy flow, in order:
+// buy form (SubscriptionFormBottomSheet, or the multi-fund form from the
+// cart) > SubscriptionCheckoutScreen > SubscriptionPaymentMethodBottomSheet
+// > order_created (PaymentScreen). "Paid" is a buy that reached completed,
+// completed_payment or verified in the main database. manual_bonus buys are
+// entered by admins, not made in the app, so they never count.
+const GA4_SCREEN = ga4Param('firebase_screen');
+const GA4_SESSION = ga4Param('ga_session_id', 'int');
+const SUB_FORM_SCREENS = `'SubscriptionFormBottomSheet', 'MultipleSubscriptionFormBottomSheet'`;
+// Coming back to the form from a later step is not a new way in.
+const SUB_LATER_SCREENS = `'SubscriptionCheckoutScreen', 'SubscriptionPaymentMethodBottomSheet', 'PaymentScreen'`;
+// Screens and taps that are part of buying (or the button that opens the
+// buy form). They rank first among "what comes before a subscription" by
+// construction, so the Drivers table can hide them.
+const SUB_FLOW_NAMES = `${SUB_FORM_SCREENS}, ${SUB_LATER_SCREENS}, 'SubscriptionTopUpScreen', 'CartScreen', 'PromoCodesScreen', 'PaymentProofPreviewScreen', 'TransactionSuccessScreen',
+        'buy_bottom_sheet', 'price_chips', 'promo_code', 'order_button', 'order_created', 'payment_complete',
+        'top_up_portfolio_click', 'top_up_portfolio_detail_click', 'top_up_portfolio_detail_options_click', 'top_up_product_click',
+        'top_up_other_product_click', 'buy_repeat_portfolio_click', 'buy_repeat_click'`;
+const SUB_PAID_STATUSES = `'completed', 'completed_payment', 'verified'`;
+const SUB_PAID_SQL = `SELECT user_id, created_at, paid_at, amount, final_amount FROM ${TX}
+        WHERE type = 'buy' AND status IN (${SUB_PAID_STATUSES}) AND IFNULL(payment_method, '') != 'manual_bonus'`;
+// The main-database side of a GA4 window: the period's last day plus one,
+// for orders paid shortly after midnight.
+const SUB_PAID_UNTIL = 'TIMESTAMP_ADD(TIMESTAMP(CAST(@to AS DATE)), INTERVAL 2 DAY)';
+
+// Per person, the first time in the period they reached each step, each step
+// counted only after the one before it (so the funnel never goes up). Paid
+// is any paid buy from 10 minutes before their first order onwards. One
+// query, four cuts: everyone, platform, first or repeat buyer (any paid buy
+// before they first opened the form), and app version at that first open.
+const subscriptionFunnel = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH ev AS (
+        SELECT user_id, platform, app_info.version AS app_version, TIMESTAMP_MICROS(event_timestamp) AS ts,
+          CASE
+            WHEN event_name = 'buy_bottom_sheet' OR (event_name = 'screen_view' AND ${GA4_SCREEN} IN (${SUB_FORM_SCREENS})) THEN 1
+            WHEN event_name = 'screen_view' AND ${GA4_SCREEN} = 'SubscriptionCheckoutScreen' THEN 2
+            WHEN event_name = 'screen_view' AND ${GA4_SCREEN} = 'SubscriptionPaymentMethodBottomSheet' THEN 3
+            WHEN event_name = 'order_created' THEN 4
+          END AS step
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
+          AND event_name IN ('buy_bottom_sheet', 'screen_view', 'order_created')
+      ),
+      s1 AS (
+        SELECT user_id, MIN(ts) AS t1, ARRAY_AGG(STRUCT(platform, app_version) ORDER BY ts LIMIT 1)[OFFSET(0)] AS d
+        FROM ev WHERE step = 1 GROUP BY user_id
+      ),
+      s2 AS (SELECT s.user_id, MIN(e.ts) AS t2 FROM s1 s JOIN ev e ON e.user_id = s.user_id AND e.step = 2 AND e.ts >= s.t1 GROUP BY s.user_id),
+      s3 AS (SELECT s.user_id, MIN(e.ts) AS t3 FROM s2 s JOIN ev e ON e.user_id = s.user_id AND e.step = 3 AND e.ts >= s.t2 GROUP BY s.user_id),
+      s4 AS (SELECT s.user_id, MIN(e.ts) AS t4 FROM s3 s JOIN ev e ON e.user_id = s.user_id AND e.step = 4 AND e.ts >= s.t3 GROUP BY s.user_id),
+      paid AS (${SUB_PAID_SQL}),
+      s5 AS (
+        SELECT s.user_id, ARRAY_AGG(STRUCT(p.created_at, p.paid_at) ORDER BY p.created_at LIMIT 1)[OFFSET(0)] AS tx
+        FROM s4 s JOIN paid p ON p.user_id = s.user_id
+          AND p.created_at BETWEEN TIMESTAMP_SUB(s.t4, INTERVAL 10 MINUTE) AND ${SUB_PAID_UNTIL}
+        GROUP BY s.user_id
+      ),
+      prior AS (
+        SELECT DISTINCT s.user_id FROM s1 s
+        JOIN paid p ON p.user_id = s.user_id AND p.created_at < TIMESTAMP_SUB(s.t1, INTERVAL 10 MINUTE)
+      ),
+      base AS (
+        SELECT s1.d.platform AS platform, IF(pr.user_id IS NULL, 'first', 'repeat') AS buyer_type,
+          IFNULL(s1.d.app_version, '(unknown)') AS app_version, s1.t1, s2.t2, s3.t3, s4.t4, s5.tx
+        FROM s1
+        LEFT JOIN s2 USING (user_id) LEFT JOIN s3 USING (user_id) LEFT JOIN s4 USING (user_id) LEFT JOIN s5 USING (user_id)
+        LEFT JOIN prior pr USING (user_id)
+      )
+      SELECT
+        CASE WHEN GROUPING(platform) = 0 THEN 'platform' WHEN GROUPING(buyer_type) = 0 THEN 'buyer_type'
+          WHEN GROUPING(app_version) = 0 THEN 'app_version' ELSE 'all' END AS split,
+        COALESCE(platform, buyer_type, app_version, 'all') AS segment,
+        COUNT(*) AS opened_form, COUNT(t2) AS checkout, COUNT(t3) AS payment_method, COUNT(t4) AS ordered, COUNT(tx) AS paid,
+        ROUND(SAFE_DIVIDE(COUNT(tx), COUNT(*)) * 100, 1) AS paid_pct,
+        ROUND(APPROX_QUANTILES(TIMESTAMP_DIFF(t4, t1, SECOND) / 60, 2)[OFFSET(1)], 1) AS median_min_to_order,
+        ROUND(APPROX_QUANTILES(TIMESTAMP_DIFF(tx.paid_at, tx.created_at, SECOND) / 60, 2)[OFFSET(1)], 1) AS median_min_to_pay
+      FROM base
+      GROUP BY GROUPING SETS ((), (platform), (buyer_type), (app_version))
+      ORDER BY split, opened_form DESC`,
+    params: ga4Range(r),
+  };
+};
+
+// Which screen people were on right before each buy-form open (and the one
+// before that), within the same app session. Per screen: how many of those
+// people created an order in that session, and how many paid within 3 days
+// of an open from that screen.
+const subscriptionEntry = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH sv AS (
+        SELECT user_id, ${GA4_SESSION} AS session_id, TIMESTAMP_MICROS(event_timestamp) AS ts, ${GA4_SCREEN} AS screen
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name = 'screen_view'
+      ),
+      seq AS (
+        SELECT *, LAG(screen) OVER w AS prev1, LAG(screen, 2) OVER w AS prev2
+        FROM sv WINDOW w AS (PARTITION BY user_id, session_id ORDER BY ts)
+      ),
+      opens AS (
+        SELECT user_id, session_id, ts, IFNULL(prev1, '(session start)') AS came_from, IFNULL(prev2, '(session start)') AS before_that
+        FROM seq
+        WHERE screen IN (${SUB_FORM_SCREENS}) AND IFNULL(prev1, '') NOT IN (${SUB_FORM_SCREENS}, ${SUB_LATER_SCREENS})
+      ),
+      orders AS (
+        SELECT user_id, ${GA4_SESSION} AS session_id, TIMESTAMP_MICROS(event_timestamp) AS ts
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name = 'order_created'
+      ),
+      paid AS (${SUB_PAID_SQL}),
+      scored AS (
+        SELECT o.*,
+          EXISTS (SELECT 1 FROM orders x WHERE x.user_id = o.user_id AND x.session_id = o.session_id AND x.ts >= o.ts) AS ordered,
+          EXISTS (SELECT 1 FROM paid p WHERE p.user_id = o.user_id
+            AND p.created_at BETWEEN TIMESTAMP_SUB(o.ts, INTERVAL 10 MINUTE) AND TIMESTAMP_ADD(o.ts, INTERVAL 3 DAY)) AS paid
+        FROM opens o
+      )
+      SELECT IF(GROUPING(before_that) = 1, 'screen', 'path') AS level, came_from, before_that,
+        COUNT(*) AS opens, COUNT(DISTINCT user_id) AS users,
+        COUNT(DISTINCT IF(ordered, user_id, NULL)) AS ordered_users,
+        COUNT(DISTINCT IF(paid, user_id, NULL)) AS paid_users,
+        ROUND(SAFE_DIVIDE(COUNT(DISTINCT IF(paid, user_id, NULL)), COUNT(DISTINCT user_id)) * 100, 1) AS paid_pct
+      FROM scored
+      GROUP BY GROUPING SETS ((came_from), (came_from, before_that))
+      HAVING users >= 3
+      ORDER BY level DESC, users DESC`,
+    params: ga4Range(r),
+  };
+};
+
+// App sessions that reached the buy form but created no order: the furthest
+// step reached, the next screen after the last buy-flow screen ("(left the
+// app)" when nothing followed in that session), and how many of those people
+// came back and paid within 7 days. Up to 12 exits per step, plus one total
+// row per step (exit_screen empty).
+const subscriptionDropoff = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH ev AS (
+        SELECT user_id, ${GA4_SESSION} AS session_id, TIMESTAMP_MICROS(event_timestamp) AS ts, event_name, ${GA4_SCREEN} AS screen
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name IN ('screen_view', 'order_created')
+      ),
+      sv AS (
+        SELECT user_id, session_id, ts,
+          CASE WHEN screen IN (${SUB_FORM_SCREENS}) THEN 1 WHEN screen = 'SubscriptionCheckoutScreen' THEN 2
+            WHEN screen = 'SubscriptionPaymentMethodBottomSheet' THEN 3 END AS step,
+          LEAD(screen) OVER (PARTITION BY user_id, session_id ORDER BY ts) AS next_screen
+        FROM ev WHERE event_name = 'screen_view'
+      ),
+      sess AS (
+        SELECT user_id, session_id, MAX(step) AS furthest, MAX(IF(step IS NOT NULL, ts, NULL)) AS last_ts,
+          ARRAY_AGG(IF(step IS NOT NULL, IFNULL(next_screen, '(left the app)'), NULL) IGNORE NULLS ORDER BY ts DESC LIMIT 1)[SAFE_OFFSET(0)] AS went_to
+        FROM sv GROUP BY user_id, session_id
+        HAVING furthest IS NOT NULL
+      ),
+      ordered AS (SELECT DISTINCT user_id, session_id FROM ev WHERE event_name = 'order_created'),
+      paid AS (${SUB_PAID_SQL}),
+      dropped AS (
+        SELECT s.*,
+          EXISTS (SELECT 1 FROM paid p WHERE p.user_id = s.user_id
+            AND p.created_at BETWEEN s.last_ts AND TIMESTAMP_ADD(s.last_ts, INTERVAL 7 DAY)) AS paid_later
+        FROM sess s
+        LEFT JOIN ordered o ON o.user_id = s.user_id AND o.session_id = s.session_id
+        WHERE o.user_id IS NULL
+      ),
+      grouped AS (
+        SELECT furthest AS step, IF(GROUPING(went_to) = 1, NULL, went_to) AS exit_screen,
+          COUNT(*) AS sessions, COUNT(DISTINCT user_id) AS users,
+          COUNT(DISTINCT IF(paid_later, user_id, NULL)) AS paid_later_users
+        FROM dropped
+        GROUP BY GROUPING SETS ((furthest), (furthest, went_to))
+      )
+      SELECT *, ROUND(SAFE_DIVIDE(paid_later_users, users) * 100, 1) AS paid_later_pct
+      FROM grouped
+      QUALIFY exit_screen IS NULL OR ROW_NUMBER() OVER (PARTITION BY step, exit_screen IS NULL ORDER BY sessions DESC) <= 12
+      ORDER BY step, exit_screen IS NOT NULL, sessions DESC`,
+    params: ga4Range(r),
+  };
+};
+
+// Every buy order created in the period (main database), by how the person
+// chose to pay: paid, expired, cancelled, still waiting, and the median
+// minutes from order to payment. "Paid another order within 7 days" counts
+// people whose order here expired or was cancelled and who then paid a
+// different order.
+const subscriptionPayment = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH o AS (
+        SELECT user_id, created_at, paid_at, amount, final_amount, status,
+          status IN (${SUB_PAID_STATUSES}) AS is_paid,
+          status IN ('expired', 'cancelled') AS is_lost,
+          CASE
+            WHEN payment_method = 'virtual_account' THEN CONCAT('Virtual account ', IFNULL(virtual_account_bank, ''))
+            WHEN payment_method = 'bank_transfer' THEN CONCAT('Bank transfer ', IFNULL(virtual_account_bank, ''))
+            ELSE IFNULL(payment_method, '(none)')
+          END AS method
+        FROM ${TX}
+        WHERE type = 'buy' AND DATE(created_at) BETWEEN @from AND @to AND IFNULL(payment_method, '') != 'manual_bonus'
+      ),
+      paid AS (${SUB_PAID_SQL}),
+      scored AS (
+        SELECT o.*,
+          is_lost AND EXISTS (SELECT 1 FROM paid p WHERE p.user_id = o.user_id
+            AND p.created_at > o.created_at AND p.created_at <= TIMESTAMP_ADD(o.created_at, INTERVAL 7 DAY)) AS lost_then_paid
+        FROM o
+      )
+      SELECT TRIM(method) AS method, COUNT(*) AS orders, COUNT(DISTINCT user_id) AS users,
+        COUNTIF(is_paid) AS paid, COUNTIF(status = 'expired') AS expired, COUNTIF(status = 'cancelled') AS cancelled,
+        COUNTIF(NOT is_paid AND NOT is_lost) AS waiting,
+        ROUND(SAFE_DIVIDE(COUNTIF(is_paid), COUNT(*)) * 100, 1) AS paid_pct,
+        ROUND(APPROX_QUANTILES(IF(is_paid, TIMESTAMP_DIFF(paid_at, created_at, SECOND) / 60, NULL), 2)[OFFSET(1)], 1) AS median_min_to_pay,
+        SUM(IF(is_paid, final_amount, 0)) AS paid_amount,
+        SUM(IF(is_lost, amount, 0)) AS lost_amount,
+        COUNT(DISTINCT IF(is_lost, user_id, NULL)) AS lost_users,
+        COUNT(DISTINCT IF(lost_then_paid, user_id, NULL)) AS lost_then_paid_users
+      FROM scored
+      GROUP BY method
+      ORDER BY orders DESC`,
+    params: r,
+  };
+};
+
+// For every screen and in-app action: of the logged-in people who did it in
+// the period (subscribers: only before their first paid buy), how many
+// subscribed, against the same rate for everyone who did not do it. A person
+// counts as subscribed with a paid buy from their first app activity in the
+// period to the period's end. Lift 2.0 = twice the rate of those who did not.
+// "Before" allows 2 minutes after the buy's created_at: the app logs
+// order_created up to ~90 s after the backend writes the row (95th pct,
+// Sep 2026). Any longer and the payment receipt push and receipt screen
+// start counting as things people did before buying.
+// notification_foreground is a push arriving while the app is open, not
+// something the person did.
+const subscriptionDrivers = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH ev AS (
+        SELECT user_id, TIMESTAMP_MICROS(event_timestamp) AS ts,
+          IF(event_name = 'screen_view', 'screen', 'action') AS kind,
+          IF(event_name = 'screen_view', ${GA4_SCREEN}, event_name) AS name
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL
+          AND event_name NOT IN (${GA4_PASSIVE_EVENTS}, 'notification_foreground', 'session_start', 'user_engagement', 'first_open', 'app_exception')
+      ),
+      people AS (SELECT user_id, MIN(ts) AS first_ts FROM ev GROUP BY user_id),
+      conv AS (
+        SELECT pp.user_id, MIN(p.created_at) AS buy_ts
+        FROM people pp
+        JOIN (${SUB_PAID_SQL}) p ON p.user_id = pp.user_id
+          AND p.created_at >= TIMESTAMP_SUB(pp.first_ts, INTERVAL 10 MINUTE) AND DATE(p.created_at) <= CAST(@to AS DATE)
+        GROUP BY pp.user_id
+      ),
+      totals AS (SELECT COUNT(*) AS n, (SELECT COUNT(*) FROM conv) AS c FROM people),
+      firsts AS (SELECT user_id, kind, name, MIN(ts) AS first_ts FROM ev WHERE name IS NOT NULL GROUP BY user_id, kind, name),
+      did AS (
+        SELECT f.kind, f.name, c.user_id IS NOT NULL AS subscribed
+        FROM firsts f LEFT JOIN conv c USING (user_id)
+        WHERE c.user_id IS NULL OR f.first_ts <= TIMESTAMP_ADD(c.buy_ts, INTERVAL 2 MINUTE)
+      ),
+      agg AS (
+        SELECT kind, name, COUNT(*) AS users, COUNTIF(subscribed) AS subscribed, ANY_VALUE(t.n) AS n, ANY_VALUE(t.c) AS c
+        FROM did CROSS JOIN totals t
+        GROUP BY kind, name
+        HAVING users >= 20
+      )
+      SELECT kind, name, name IN (${SUB_FLOW_NAMES}) AS in_buy_flow, users, subscribed,
+        ROUND(SAFE_DIVIDE(subscribed, users) * 100, 1) AS rate_pct,
+        ROUND(SAFE_DIVIDE(c - subscribed, n - users) * 100, 1) AS rate_without_pct,
+        ROUND(SAFE_DIVIDE(SAFE_DIVIDE(subscribed, users), SAFE_DIVIDE(c - subscribed, n - users)), 2) AS lift,
+        ROUND(SAFE_DIVIDE(subscribed, c) * 100, 1) AS share_of_subscribers_pct
+      FROM agg
+      ORDER BY lift DESC, users DESC`,
+    params: ga4Range(r),
+  };
+};
+
+// People who signed up in the period: calendar days from sign-up to KYC
+// verified and to their first paid buy (no end date, so recent sign-ups have
+// had less time), plus the logged-in app sessions they had
+// before that first buy. One row per bucket; the medians repeat on every row.
+const SUB_DAY_BUCKET = (col) => `CASE WHEN ${col} IS NULL THEN '6_not_yet' WHEN ${col} <= 0 THEN '1_same_day'
+          WHEN ${col} <= 3 THEN '2_1_3' WHEN ${col} <= 7 THEN '3_4_7' WHEN ${col} <= 30 THEN '4_8_30' ELSE '5_over_30' END`;
+const subscriptionTiming = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH cohort AS (
+        SELECT id AS user_id, created_at, verified_at FROM ${USERS}
+        WHERE DATE(created_at) BETWEEN @from AND @to
+      ),
+      first_buy AS (
+        SELECT p.user_id, MIN(p.created_at) AS buy_ts
+        FROM (${SUB_PAID_SQL}) p JOIN cohort c USING (user_id)
+        GROUP BY p.user_id
+      ),
+      sessions AS (
+        SELECT e.user_id, COUNT(DISTINCT ${GA4_SESSION}) AS sessions_before
+        FROM ${GA4_EVENTS} e
+        JOIN first_buy f ON f.user_id = e.user_id AND TIMESTAMP_MICROS(e.event_timestamp) <= f.buy_ts
+        WHERE _TABLE_SUFFIX >= @fromSuffix AND e.user_id IS NOT NULL
+        GROUP BY e.user_id
+      ),
+      d AS (
+        SELECT
+          DATE_DIFF(DATE(c.verified_at), DATE(c.created_at), DAY) AS days_to_kyc,
+          DATE_DIFF(DATE(f.buy_ts), DATE(c.created_at), DAY) AS days_to_buy,
+          DATE_DIFF(DATE(f.buy_ts), DATE(c.verified_at), DAY) AS days_kyc_to_buy,
+          s.sessions_before
+        FROM cohort c LEFT JOIN first_buy f USING (user_id) LEFT JOIN sessions s USING (user_id)
+      ),
+      summary AS (
+        SELECT COUNT(*) AS signed_up,
+          APPROX_QUANTILES(days_to_kyc, 2)[OFFSET(1)] AS median_days_to_kyc,
+          APPROX_QUANTILES(days_kyc_to_buy, 2)[OFFSET(1)] AS median_days_kyc_to_buy,
+          APPROX_QUANTILES(days_to_buy, 2)[OFFSET(1)] AS median_days_to_buy,
+          APPROX_QUANTILES(sessions_before, 2)[OFFSET(1)] AS median_sessions_before_buy
+        FROM d
+      ),
+      b AS (
+        SELECT 'kyc' AS milestone, ${SUB_DAY_BUCKET('days_to_kyc')} AS bucket FROM d
+        UNION ALL
+        SELECT 'buy', ${SUB_DAY_BUCKET('days_to_buy')} FROM d
+      )
+      SELECT b.bucket, COUNTIF(b.milestone = 'kyc') AS verified, COUNTIF(b.milestone = 'buy') AS first_buy, ANY_VALUE(s).*
+      FROM b CROSS JOIN summary s
+      GROUP BY b.bucket
+      ORDER BY b.bucket`,
+    params: ga4Range(r),
+  };
+};
+
+// Logged-in app sessions against buy orders and paid buys, by WIB hour and
+// weekday (1 = Sunday, BigQuery's DAYOFWEEK).
+const subscriptionHours = (from, to) => {
+  const r = range(from, to);
+  const wib = (ts) => `DATETIME(${ts}, 'Asia/Jakarta')`;
+  return {
+    sql: `WITH s AS (
+        SELECT EXTRACT(DAYOFWEEK FROM ${wib('TIMESTAMP_MICROS(event_timestamp)')}) AS dow,
+          EXTRACT(HOUR FROM ${wib('TIMESTAMP_MICROS(event_timestamp)')}) AS hour, COUNT(*) AS sessions
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name = 'session_start'
+        GROUP BY dow, hour
+      ),
+      o AS (
+        SELECT EXTRACT(DAYOFWEEK FROM ${wib('created_at')}) AS dow, EXTRACT(HOUR FROM ${wib('created_at')}) AS hour,
+          COUNT(*) AS orders, COUNTIF(status IN (${SUB_PAID_STATUSES})) AS paid
+        FROM ${TX}
+        WHERE type = 'buy' AND DATE(created_at) BETWEEN @from AND @to AND IFNULL(payment_method, '') != 'manual_bonus'
+        GROUP BY dow, hour
+      )
+      SELECT dow, hour, IFNULL(s.sessions, 0) AS sessions, IFNULL(o.orders, 0) AS orders, IFNULL(o.paid, 0) AS paid
+      FROM s FULL JOIN o USING (dow, hour)
+      ORDER BY dow, hour`,
+    params: ga4Range(r),
+  };
+};
+
+// The preset amount chips on the buy form: per chip, who tapped it, who paid
+// a buy within a day of their first tap, and whether that buy kept the chip's
+// amount.
+const subscriptionChips = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH taps AS (
+        SELECT user_id,
+          CAST(COALESCE(${ga4Param('nominal', 'double')}, ${ga4Param('nominal', 'int')}, SAFE_CAST(${ga4Param('nominal')} AS FLOAT64)) AS INT64) AS chip,
+          TIMESTAMP_MICROS(event_timestamp) AS ts
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id IS NOT NULL AND event_name = 'price_chips'
+      ),
+      per_user AS (SELECT chip, user_id, COUNT(*) AS taps, MIN(ts) AS first_ts FROM taps WHERE chip IS NOT NULL GROUP BY chip, user_id),
+      paid AS (${SUB_PAID_SQL}),
+      scored AS (
+        SELECT u.chip, u.user_id, ANY_VALUE(u.taps) AS taps,
+          ARRAY_AGG(IF(p.user_id IS NULL, NULL, STRUCT(p.amount, p.final_amount)) IGNORE NULLS ORDER BY p.created_at LIMIT 1)[SAFE_OFFSET(0)] AS buy
+        FROM per_user u
+        LEFT JOIN paid p ON p.user_id = u.user_id
+          AND p.created_at BETWEEN TIMESTAMP_SUB(u.first_ts, INTERVAL 10 MINUTE) AND TIMESTAMP_ADD(u.first_ts, INTERVAL 1 DAY)
+        GROUP BY u.chip, u.user_id
+      )
+      SELECT chip, SUM(taps) AS taps, COUNT(*) AS users,
+        COUNTIF(buy IS NOT NULL) AS paid_users,
+        ROUND(SAFE_DIVIDE(COUNTIF(buy IS NOT NULL), COUNT(*)) * 100, 1) AS paid_pct,
+        COUNTIF(buy.amount = chip) AS paid_chip_amount,
+        APPROX_QUANTILES(buy.final_amount, 2)[OFFSET(1)] AS median_paid_amount
+      FROM scored
+      GROUP BY chip
+      ORDER BY chip`,
+    params: ga4Range(r),
+  };
+};
+
 // ---- Growth: campaigns, referrals, switching, manager/demographic AUM splits --
 const CAMPAIGNS = '`sayakaya.main.campaigns`';
 const SWITCHING = '`sayakaya.main.switching_transactions`';
@@ -4198,6 +4596,8 @@ module.exports = {
   productFunnelByPlatform,
   behaviorSegments, behaviorDaily, behaviorFeatureLift, behaviorPushImpact, behaviorProductInterest,
   behaviorIntentNoBuy, behaviorUserProfile, behaviorUserTimeline,
+  subscriptionFunnel, subscriptionEntry, subscriptionDropoff, subscriptionPayment, subscriptionDrivers,
+  subscriptionTiming, subscriptionHours, subscriptionChips,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,
   campaignPerformance, switchingTopPairs, aumByManager, largestFundsAum, largestFundsLatestDate, platformAumAsOf,
   aumByRisk, aumByIncome, usersByProvince, topCitiesByInvestors, topCitiesByAum, topReferrers,

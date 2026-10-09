@@ -199,6 +199,31 @@ const bhPush = [{ campaign: XSS, first_seen: D('2026-09-08'), last_seen: D('2026
 const bhProducts = [{ fund: 'Sucorinvest Maxi fund', fund_type: 'EQUITY', views: 393, viewers: 138, buyers_7d: 9, view_to_buy_pct: 6.5, buy_amount_7d: 57800000, viewers_holding_now: 24 }];
 const bhIntent = [{ name: 'A', sid: 'IDD1', email: 'a@b.c', phone: '62812', verification_status: 'verified', last_try_wib: '2026-10-06 23:36',
   buy_sheet_opens: 1, orders_created: 1, order_statuses: 'no order created', last_fund_viewed: 'Pinnacle Money Market Fund', aum_now: '24520669', last_completed_buy: D('2026-08-29') }];
+// Subscription analysis (shapes from live BigQuery, Sep 2026). Screen,
+// event and payment-method names come from app payloads, hence XSS.
+const saFunnel = [
+  { split: 'all', segment: 'all', opened_form: 401, checkout: 331, payment_method: 324, ordered: 294, paid: 277, paid_pct: 69.1, median_min_to_order: 0.8, median_min_to_pay: 1 },
+  { split: 'platform', segment: 'IOS', opened_form: 151, checkout: 133, payment_method: 131, ordered: 119, paid: 113, paid_pct: 74.8, median_min_to_order: 1.1, median_min_to_pay: 0.8 },
+];
+const saEntry = [
+  { level: 'screen', came_from: XSS, before_that: null, opens: 825, users: 251, ordered_users: 163, paid_users: 155, paid_pct: 61.8 },
+  { level: 'path', came_from: 'ProductDetailScreen', before_that: 'ProductListScreen', opens: 193, users: 106, ordered_users: 60, paid_users: 55, paid_pct: 51.9 },
+];
+const saDropoff = [
+  { step: 1, exit_screen: null, sessions: 177, users: 125, paid_later_users: 19, paid_later_pct: 15.2 },
+  { step: 1, exit_screen: XSS, sessions: 76, users: 67, paid_later_users: 11, paid_later_pct: 16.4 },
+  { step: 3, exit_screen: null, sessions: 107, users: 75, paid_later_users: 25, paid_later_pct: 33.3 },
+];
+const saPayment = [{ method: XSS, orders: 154, users: 36, paid: 102, expired: 33, cancelled: 19, waiting: 0, paid_pct: 66.2, median_min_to_pay: 1,
+  paid_amount: 334586996, lost_amount: 231584232, lost_users: 19, lost_then_paid_users: 6 }];
+const saDrivers = [
+  { kind: 'screen', name: XSS, in_buy_flow: false, users: 642, subscribed: 214, rate_pct: 33.3, rate_without_pct: 9.2, lift: 3.61, share_of_subscribers_pct: 76.4 },
+  { kind: 'action', name: 'order_button', in_buy_flow: true, users: 295, subscribed: 277, rate_pct: 93.9, rate_without_pct: 0.3, lift: 332.09, share_of_subscribers_pct: 98.9 },
+];
+const saTimingSummary = { signed_up: 189, median_days_to_kyc: 0, median_days_kyc_to_buy: 1, median_days_to_buy: 2, median_sessions_before_buy: 3 };
+const saTiming = [{ bucket: '1_same_day', verified: 53, first_buy: 4, ...saTimingSummary }, { bucket: '6_not_yet', verified: 86, first_buy: 161, ...saTimingSummary }];
+const saHours = [{ dow: 1, hour: 9, sessions: 61, orders: 2, paid: 2 }];
+const saChips = [{ chip: 1000000, taps: 161, users: 89, paid_users: 61, paid_pct: 68.5, paid_chip_amount: 45, median_paid_amount: 1000000 }];
 
 sandbox.api = async (path) => {
   if (path.startsWith('/api/user-lifetime/summary')) return summaryUL;
@@ -256,18 +281,26 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/behavior/push'))               return bhPush;
   if (path.startsWith('/api/behavior/products'))           return bhProducts;
   if (path.startsWith('/api/behavior/intent'))             return bhIntent;
+  if (path.startsWith('/api/subscription/funnel'))         return saFunnel;
+  if (path.startsWith('/api/subscription/entry'))          return saEntry;
+  if (path.startsWith('/api/subscription/dropoff'))        return saDropoff;
+  if (path.startsWith('/api/subscription/payment'))        return saPayment;
+  if (path.startsWith('/api/subscription/drivers'))        return saDrivers;
+  if (path.startsWith('/api/subscription/timing'))         return saTiming;
+  if (path.startsWith('/api/subscription/hours'))          return saHours;
+  if (path.startsWith('/api/subscription/chips'))          return saChips;
   throw new Error('unexpected path ' + path);
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel', 'loadEmailRecap', 'loadBehavior']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel', 'loadEmailRecap', 'loadBehavior', 'loadSubscription']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   try { await sandbox.loadAumDrill('2026-08'); } catch (e) { errors.push(`loadAumDrill: ${e.message}`); }
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -324,15 +357,27 @@ sandbox.api = async (path) => {
     console.log(`FAIL  #pfnKpis -> ${pfnKpisHtml.slice(0, 200) || '(never rendered)'}`);
     errors.push('#pfnKpis did not render KPI cards');
   }
-  for (const sel of ['#erKpis', '#bhKpis']) {
+  for (const sel of ['#erKpis', '#bhKpis', '#saKpis']) {
     if (get(sel)._html.includes('kpi-value')) console.log(`ok    ${sel}`);
     else errors.push(`${sel} did not render KPI cards`);
   }
   // Email subjects and push campaign names are typed by people; genTable
   // writes raw HTML, so the new tabs escape them first.
-  for (const sel of ['#erSubjectTable', '#erLogTable', '#bhPushTable']) {
+  for (const sel of ['#erSubjectTable', '#erLogTable', '#bhPushTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable']) {
     if (get(sel)._html.includes(XSS)) errors.push(`${sel} rendered unescaped HTML`);
     else console.log(`ok    ${sel} escapes HTML`);
+  }
+  // Subscription analysis: all four KPI cards (funnel + payment), buy-flow
+  // steps hidden from Drivers until ticked, one drop-off button per step,
+  // and the sign-up timing line filled from the repeated medians.
+  for (const [ok, label] of [
+    [(get('#saKpis')._html.match(/kpi-value/g) || []).length === 4, '#saKpis has 4 cards'],
+    [!get('#saDriverTable')._html.includes('order_button'), '#saDriverTable hides buy-flow steps'],
+    [get('#saDropStep')._html.includes('data-step="1"') && get('#saDropStep')._html.includes('data-step="3"'), '#saDropStep has a button per step'],
+    [String(get('#saTimingSummary').textContent).startsWith('189 '), '#saTimingSummary filled'],
+  ]) {
+    if (ok) console.log(`ok    ${label}`);
+    else { console.log(`FAIL  ${label}`); errors.push(label); }
   }
   // Platform AUM's own "as of" date input should default to the latest
   // available date from /api/funds/top/latest-date, same as #topFundsDate.

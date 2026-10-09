@@ -877,6 +877,17 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ profile: profile[0] || null, timeline });
   }));
 
+  // ---- Subscription analysis: buy-flow funnel, entry screens, drop-off,
+  // payment methods and drivers (GA4 + main database), see queries.js -------
+  Object.entries({
+    funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
+    payment: Q.subscriptionPayment, drivers: Q.subscriptionDrivers, timing: Q.subscriptionTiming,
+    hours: Q.subscriptionHours, chips: Q.subscriptionChips,
+  }).forEach(([key, build]) => app.get(`/api/subscription/${key}`, requireTab('subscription-analysis'), handler(async (req, res) => {
+    const q = build(req.query.from, req.query.to);
+    res.json(await runQuery(q.sql, q.params));
+  })));
+
   // ---- Product performance (NAV % change per fund type, external Apollo DB) --
   app.get('/api/product-performance', requireTab('performance'), handler(async (_req, res) => {
     const q = Q.productPerformance();

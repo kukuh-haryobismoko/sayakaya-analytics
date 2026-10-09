@@ -1750,6 +1750,288 @@ async function loadBehaviorUser() {
   } catch (e) { $('#bhUserKpis').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }
 
+// SUBSCRIPTION ANALYSIS: the app's buy flow (GA4) checked against paid buys
+// in the main database; matching rules in server/queries.js subscription*.
+let subscriptionLoaded = false;
+const saCache = {};
+const saView = { split: 'all', level: 'screen', step: 1, by: 'hour' };
+const SA_STEPS = [
+  ['opened_form', 'sa_step_form'], ['checkout', 'sa_step_checkout'], ['payment_method', 'sa_step_payment'],
+  ['ordered', 'sa_step_ordered'], ['paid', 'sa_step_paid'],
+];
+const SA_DROP_STEPS = { 1: 'sa_step_form', 2: 'sa_step_checkout', 3: 'sa_step_payment' };
+const SA_BUCKETS = ['1_same_day', '2_1_3', '3_4_7', '4_8_30', '5_over_30', '6_not_yet'];
+function saRange() { return { from: $('#saFrom').value, to: $('#saTo').value }; }
+// Screen, event and version names come from the app's analytics payloads, so
+// they are escaped; the two placeholders the server adds are translated.
+const SA_PLACEHOLDERS = { '(session start)': 'sa_session_start', '(left the app)': 'sa_left_app' };
+const saName = (v) => (SA_PLACEHOLDERS[v] ? t(SA_PLACEHOLDERS[v]) : escapeHtml(v ?? ''));
+function saSegment(v) {
+  if (v === 'all') return t('sa_split_all');
+  if (v === 'first' || v === 'repeat') return t(`sa_buyer_${v}`);
+  return { ANDROID: 'Android', IOS: 'iOS' }[v] || escapeHtml(v);
+}
+
+function renderSaKpis() {
+  const all = (saCache.funnel || []).find((r) => val(r.split) === 'all');
+  const cards = [];
+  if (all) {
+    const n = (k) => Number(val(all[k])) || 0;
+    let drop = null;
+    for (let i = 1; i < SA_STEPS.length; i++) {
+      const prev = n(SA_STEPS[i - 1][0]);
+      const d = prev ? ((prev - n(SA_STEPS[i][0])) / prev) * 100 : 0;
+      if (!drop || d > drop.pct) drop = { pct: d, key: SA_STEPS[i][1] };
+    }
+    cards.push(
+      kpi(t('sa_kpi_opened'), num(n('opened_form')), t('sa_kpi_opened_sub'), '', ICONS.users),
+      kpi(t('sa_kpi_paid'), pct(n('paid'), n('opened_form')), `${num(n('paid'))} ${t('sa_kpi_paid_sub')}`, 'accent', ICONS.coin),
+      kpi(t('sa_kpi_drop'), n('opened_form') ? `${drop.pct.toFixed(0)}%` : 'n/a', n('opened_form') ? `${t('sa_kpi_drop_sub')} ${t(drop.key)}` : '', 'warn', ICONS.trendDown),
+    );
+  }
+  const pay = saCache.payment || [];
+  if (pay.length) {
+    const s = (k) => pay.reduce((a, r) => a + (Number(val(r[k])) || 0), 0);
+    const lost = s('expired') + s('cancelled');
+    cards.push(kpi(t('sa_kpi_unpaid'), pct(lost, s('orders')), `${num(lost)} ${t('sa_kpi_unpaid_sub')} · ${idr(s('lost_amount'))}`, 'warn', ICONS.xCircle));
+  }
+  $('#saKpis').innerHTML = cards.join('');
+}
+
+// Each step as a share of the people who opened the form, so segments of
+// different sizes compare. Up to 5 segments on the chart; the table has all.
+function renderSaFunnel() {
+  if (!saCache.funnel) return;
+  const all = saCache.funnel.find((r) => val(r.split) === 'all');
+  const rows = saCache.funnel.filter((r) => val(r.split) === saView.split);
+  $('#saFunnelEmpty').hidden = Boolean(all && Number(val(all.opened_form)));
+  const series = rows.slice(0, 5);
+  const colors = pie();
+  paint('saFunnelChart', {
+    type: 'bar',
+    data: {
+      labels: SA_STEPS.map(([, k]) => t(k)),
+      datasets: series.map((r, i) => {
+        const base = Number(val(r.opened_form)) || 0;
+        const counts = SA_STEPS.map(([k]) => Number(val(r[k])) || 0);
+        return {
+          label: saSegment(val(r.segment)), backgroundColor: colors[i], borderRadius: 4, counts,
+          data: counts.map((c) => (base ? (c / base) * 100 : 0)),
+        };
+      }),
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true, max: 100, grid: { color: C.grid }, ticks: { callback: (v) => `${v}%` } },
+        x: { grid: { display: false } },
+      },
+      plugins: {
+        legend: { display: series.length > 1, position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw.toFixed(1)}% (${num(c.dataset.counts[c.dataIndex])})` } },
+      },
+    },
+  });
+  genTable('#saFunnelTable', rows.map((r) => ({ ...r, segment: saSegment(val(r.segment)) })), [
+    { key: 'segment', label: t('sa_col_segment') },
+    ...SA_STEPS.map(([k, label]) => ({ key: k, label: t(label), type: 'num' })),
+    { key: 'paid_pct', label: t('sa_col_paid_pct'), type: 'pct' },
+    { key: 'median_min_to_order', label: t('sa_col_min_to_order') },
+    { key: 'median_min_to_pay', label: t('sa_col_min_to_pay') },
+  ], t('sa_funnel_empty'));
+}
+
+function renderSaEntry() {
+  if (!saCache.entry) return;
+  const path = saView.level === 'path';
+  const rows = saCache.entry.filter((r) => val(r.level) === saView.level)
+    .map((r) => ({ ...r, came_from: saName(val(r.came_from)), before_that: saName(val(r.before_that)) }));
+  genTable('#saEntryTable', rows, [
+    ...(path ? [{ key: 'before_that', label: t('sa_col_before_that') }] : []),
+    { key: 'came_from', label: t('sa_col_came_from') },
+    { key: 'opens', label: t('sa_col_opens'), type: 'num' },
+    { key: 'users', label: t('sa_col_people'), type: 'num' },
+    { key: 'ordered_users', label: t('sa_col_ordered'), type: 'num' },
+    { key: 'paid_users', label: t('sa_col_paid'), type: 'num' },
+    { key: 'paid_pct', label: t('sa_col_paid_pct'), type: 'pct' },
+  ], t('sa_entry_empty'));
+}
+
+// The step buttons carry each step's session count; the table opens with
+// that step's total row, then its most common next screens.
+function renderSaDrop() {
+  if (!saCache.dropoff) return;
+  const totals = saCache.dropoff.filter((r) => val(r.exit_screen) == null);
+  if (totals.length && !totals.some((r) => Number(val(r.step)) === saView.step)) saView.step = Number(val(totals[0].step));
+  $('#saDropStep').innerHTML = totals.map((r) => {
+    const s = Number(val(r.step));
+    const on = s === saView.step;
+    return `<button data-step="${s}" class="${on ? 'on' : ''}" aria-pressed="${on}">${t(SA_DROP_STEPS[s])} (${num(val(r.sessions))})</button>`;
+  }).join('');
+  const inStep = (r) => Number(val(r.step)) === saView.step;
+  const total = totals.filter(inStep).map((r) => ({ ...r, exit_screen: `<strong>${t('sa_all_exits')}</strong>` }));
+  const detail = saCache.dropoff.filter((r) => inStep(r) && val(r.exit_screen) != null)
+    .map((r) => ({ ...r, exit_screen: saName(val(r.exit_screen)) }));
+  genTable('#saDropTable', [...total, ...detail], [
+    { key: 'exit_screen', label: t('sa_col_next_screen') },
+    { key: 'sessions', label: t('sa_col_sessions'), type: 'num' },
+    { key: 'users', label: t('sa_col_people'), type: 'num' },
+    { key: 'paid_later_users', label: t('sa_col_paid_7d'), type: 'num' },
+    { key: 'paid_later_pct', label: t('sa_col_paid_pct'), type: 'pct' },
+  ], t('sa_drop_empty'));
+}
+
+function renderSaPayment() {
+  if (!saCache.payment) return;
+  genTable('#saPayTable', escRows(saCache.payment, ['method']), [
+    { key: 'method', label: t('sa_col_method') },
+    { key: 'orders', label: t('sa_col_orders'), type: 'num', sum: true },
+    { key: 'users', label: t('sa_col_people'), type: 'num' },
+    { key: 'paid', label: t('sa_col_paid'), type: 'num', sum: true },
+    { key: 'expired', label: t('sa_col_expired'), type: 'num', sum: true },
+    { key: 'cancelled', label: t('sa_col_cancelled'), type: 'num', sum: true },
+    { key: 'waiting', label: t('sa_col_waiting'), type: 'num', sum: true },
+    { key: 'paid_pct', label: t('sa_col_paid_pct'), type: 'pct' },
+    { key: 'median_min_to_pay', label: t('sa_col_min_to_pay') },
+    { key: 'paid_amount', label: t('sa_col_paid_amount'), type: 'idr', sum: true },
+    { key: 'lost_amount', label: t('sa_col_lost_amount'), type: 'idr', sum: true },
+    { key: 'lost_users', label: t('sa_col_lost_users'), type: 'num' },
+    { key: 'lost_then_paid_users', label: t('sa_col_lost_then_paid'), type: 'num' },
+  ], t('sa_pay_empty'));
+}
+
+function renderSaDrivers() {
+  if (!saCache.drivers) return;
+  const withFlow = $('#saDriverFlow').checked;
+  const rows = saCache.drivers.filter((r) => withFlow || !val(r.in_buy_flow)).map((r) => ({
+    ...r,
+    name: `${escapeHtml(val(r.name))}${val(r.in_buy_flow) ? ` <span class="tag other">${t('sa_tag_buy_flow')}</span>` : ''}`,
+    kind: t(val(r.kind) === 'screen' ? 'sa_kind_screen' : 'sa_kind_action'),
+    lift: val(r.lift) == null ? null : `${Number(val(r.lift)).toFixed(2)}×`,
+  }));
+  genTable('#saDriverTable', rows, [
+    { key: 'name', label: t('sa_col_name') },
+    { key: 'kind', label: t('sa_col_kind') },
+    { key: 'users', label: t('sa_col_did_it'), type: 'num' },
+    { key: 'subscribed', label: t('sa_col_subscribed'), type: 'num' },
+    { key: 'rate_pct', label: t('sa_col_rate'), type: 'pct' },
+    { key: 'rate_without_pct', label: t('sa_col_rate_without'), type: 'pct' },
+    { key: 'lift', label: t('sa_col_lift') },
+    { key: 'share_of_subscribers_pct', label: t('sa_col_share_subs'), type: 'pct' },
+  ], t('sa_driver_empty'));
+}
+
+function renderSaTiming() {
+  if (!saCache.timing) return;
+  const rows = saCache.timing;
+  const by = Object.fromEntries(rows.map((r) => [val(r.bucket), r]));
+  const s = rows[0] || {};
+  const signed = Number(val(s.signed_up)) || 0;
+  const days = (k) => (val(s[k]) == null ? 'n/a' : num(val(s[k])));
+  $('#saTimingEmpty').textContent = t('sa_timing_empty');
+  $('#saTimingEmpty').hidden = signed > 0;
+  $('#saTimingSummary').hidden = !signed;
+  $('#saTimingSummary').textContent = t('sa_timing_summary').replace('{n}', num(signed)).replace('{kyc}', days('median_days_to_kyc'))
+    .replace('{buy}', days('median_days_kyc_to_buy')).replace('{sessions}', days('median_sessions_before_buy'));
+  const series = (k, label, color) => ({ label, backgroundColor: color, borderRadius: 4, data: SA_BUCKETS.map((b) => Number(val(by[b]?.[k])) || 0) });
+  paint('saTimingChart', {
+    type: 'bar',
+    data: {
+      labels: SA_BUCKETS.map((b) => t(`sa_bucket_${b}`)),
+      datasets: [series('verified', t('sa_series_kyc'), C.indigo), series('first_buy', t('sa_series_first_buy'), C.chartGreen)],
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, grid: { color: C.grid }, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+      plugins: { legend: { position: 'bottom' } },
+    },
+  });
+}
+
+// Shares, not counts: sessions run in the hundreds per hour and paid orders
+// in single digits, so on one count axis the orders line would sit flat on
+// zero. Equal shares mean people buy as often as they open the app then.
+function renderSaHours() {
+  if (!saCache.hours) return;
+  const rows = saCache.hours;
+  const byHour = saView.by === 'hour';
+  const keys = byHour ? [...Array(24).keys()] : [2, 3, 4, 5, 6, 7, 1]; // BigQuery DAYOFWEEK, Monday first
+  const field = byHour ? 'hour' : 'dow';
+  const counts = (k) => keys.map((x) => rows.filter((r) => Number(val(r[field])) === x).reduce((a, r) => a + (Number(val(r[k])) || 0), 0));
+  const share = (arr) => { const total = arr.reduce((a, b) => a + b, 0); return arr.map((v) => (total ? (v / total) * 100 : 0)); };
+  const sessions = counts('sessions');
+  const paid = counts('paid');
+  $('#saHoursEmpty').textContent = t('sa_hours_empty');
+  $('#saHoursEmpty').hidden = rows.length > 0;
+  paint('saHoursChart', {
+    type: 'bar',
+    data: {
+      labels: keys.map((x) => (byHour ? String(x).padStart(2, '0') : t(`sa_dow_${x}`))),
+      datasets: [
+        { type: 'bar', label: t('sa_series_sessions'), data: share(sessions), counts: sessions, backgroundColor: C.soft, borderRadius: 4 },
+        { type: 'line', label: t('sa_series_paid'), data: share(paid), counts: paid, borderColor: C.chartAmber, backgroundColor: C.chartAmber, borderWidth: 2, pointRadius: 2, tension: 0.25 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: { y: { beginAtZero: true, grid: { color: C.grid }, ticks: { callback: (v) => `${v}%` } }, x: { grid: { display: false } } },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw.toFixed(1)}% (${num(c.dataset.counts[c.dataIndex])})` } },
+      },
+    },
+  });
+}
+
+function renderSaChips() {
+  if (!saCache.chips) return;
+  genTable('#saChipTable', saCache.chips, [
+    { key: 'chip', label: t('sa_col_chip'), type: 'idr' },
+    { key: 'taps', label: t('sa_col_taps'), type: 'num', sum: true },
+    { key: 'users', label: t('sa_col_people'), type: 'num' },
+    { key: 'paid_users', label: t('sa_col_paid_1d'), type: 'num' },
+    { key: 'paid_pct', label: t('sa_col_paid_pct'), type: 'pct' },
+    { key: 'paid_chip_amount', label: t('sa_col_kept_amount'), type: 'num' },
+    { key: 'median_paid_amount', label: t('sa_col_median_paid'), type: 'idr' },
+  ], t('sa_chip_empty'));
+}
+
+// [endpoint, where loading/errors show, renderer]. Chart-only panels show
+// their status in the panel's own message line.
+const SA_SECTIONS = [
+  ['funnel', '#saFunnelTable', () => { renderSaFunnel(); renderSaKpis(); }],
+  ['entry', '#saEntryTable', renderSaEntry],
+  ['dropoff', '#saDropTable', renderSaDrop],
+  ['payment', '#saPayTable', () => { renderSaPayment(); renderSaKpis(); }],
+  ['drivers', '#saDriverTable', renderSaDrivers],
+  ['timing', '#saTimingEmpty', renderSaTiming],
+  ['hours', '#saHoursEmpty', renderSaHours],
+  ['chips', '#saChipTable', renderSaChips],
+];
+function saStatus(sel, cls, text) {
+  const el = $(sel);
+  if (el.tagName === 'P') { el.textContent = text; el.hidden = false; } else el.innerHTML = `<div class="${cls}">${escapeHtml(text)}</div>`;
+}
+function loadSubscription() {
+  const r = saRange();
+  ['saFunnelChart', 'saTimingChart', 'saHoursChart'].forEach((id) => { if (charts[id]) { charts[id].destroy(); delete charts[id]; } });
+  $('#saKpis').innerHTML = '';
+  $('#saDropStep').innerHTML = '';
+  $('#saTimingSummary').hidden = true;
+  $('#saFunnelEmpty').hidden = true;
+  const promises = SA_SECTIONS.map(([key, sel, render]) => {
+    delete saCache[key];
+    saStatus(sel, 'loading', t('common_loading'));
+    const p = api(`/api/subscription/${key}?from=${r.from}&to=${r.to}`);
+    p.then((rows) => { saCache[key] = rows; render(); }).catch((e) => saStatus(sel, 'empty', e.message));
+    return p;
+  });
+  gateTabLoad((v) => { subscriptionLoaded = v; }, promises);
+  return Promise.allSettled(promises);
+}
+function repaintSubscription() { SA_SECTIONS.forEach(([key, , render]) => saCache[key] && render()); }
+
 // Marks a tab's "loaded" gate true right away (so a fast repeat tab-switch
 // doesn't double-fire its fetches) but un-latches it if any of its fetches
 // end up failing, so switchTab retries the whole tab on the next visit
@@ -5725,6 +6007,7 @@ function switchTab(name) {
   if (name === 'product-funnel' && !productFunnelLoaded) loadProductFunnel();
   if (name === 'email-recap' && !emailRecapLoaded) loadEmailRecap();
   if (name === 'user-behavior' && !behaviorLoaded) loadBehavior();
+  if (name === 'subscription-analysis' && !subscriptionLoaded) loadSubscription();
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
   if (name === 'presentation' || name === 'monthly-review') {
@@ -5849,6 +6132,7 @@ function repaintActiveTab() {
     case 'push': pushLoaded = false; loadPush(); break;
     case 'email-recap': if (erSummary) renderEmailRecap(erSummary); if (er.rows) renderEmailLog(); break;
     case 'user-behavior': repaintBehavior(); break;
+    case 'subscription-analysis': repaintSubscription(); break;
     case 'performance': renderPerfTrendChart(perfTrendCache); break;
     case 'portfolio': if (pfSelected) loadPortfolioUser(); break;
     case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
@@ -6227,6 +6511,18 @@ function wire() {
   $('#erLogTable').addEventListener('click', (e) => { const b = e.target.closest('[data-er-events]'); if (b) openEmailEvents(b.dataset.erEvents); });
   $('#bhApply').addEventListener('click', () => { loadBehavior(); loadBehaviorUser(); });
   $('#bhSearchBtn').addEventListener('click', searchBehaviorUsers);
+  $('#saApply').addEventListener('click', loadSubscription);
+  $('#saDriverFlow').addEventListener('change', renderSaDrivers);
+  const saSeg = (sel, attr, apply) => $(sel).addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    $$(`${sel} button`).forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    apply(b.dataset[attr]);
+  });
+  saSeg('#saSplit', 'split', (v) => { saView.split = v; renderSaFunnel(); });
+  saSeg('#saEntryLevel', 'level', (v) => { saView.level = v; renderSaEntry(); });
+  saSeg('#saDropStep', 'step', (v) => { saView.step = Number(v); renderSaDrop(); });
+  saSeg('#saHoursBy', 'by', (v) => { saView.by = v; renderSaHours(); });
   $('#bhSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchBehaviorUsers(); });
   $('#bhResults').addEventListener('click', (e) => {
     const b = e.target.closest('[data-bh-user]');
@@ -6769,9 +7065,11 @@ async function init() {
   $('#ahFrom').value = r.from; $('#ahTo').value = r.to;
   $('#pfnFrom').value = r.from; $('#pfnTo').value = r.to;
   // Shorter defaults than the 12 months above: the email log is new, and
-  // every User behavior query scans GA4 for the whole range (about 100 MB a month).
+  // every User behavior and Subscription analysis query scans GA4 for the
+  // whole range (about 100 MB a month).
   const er90 = daysAgoRange(90); $('#erFrom').value = er90.from; $('#erTo').value = er90.to;
   const bh30 = daysAgoRange(30); $('#bhFrom').value = bh30.from; $('#bhTo').value = bh30.to;
+  $('#saFrom').value = bh30.from; $('#saTo').value = bh30.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   $('#sitxFrom').value = r.from; $('#sitxTo').value = r.to;
