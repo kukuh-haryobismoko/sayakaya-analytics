@@ -184,12 +184,38 @@ function exportTableCsv(table, name) {
   const csv = '﻿' + tableToAoa(table).map((r) => r.map(esc).join(',')).join('\n');
   downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${name}.csv`);
 }
-function exportTableXlsx(table, name) {
+// Export-only libraries load on first use instead of render-blocking every
+// page from <head>: ~470KB gzipped (~1.5MB of JS to parse) that most visits
+// never touch. Scripts within one entry load in order (autotable is a jsPDF
+// plugin); `ready` skips the fetch when the global already exists.
+const EXPORT_LIBS = {
+  xlsx: { ready: () => window.XLSX, src: ['https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'] },
+  pdf: { ready: () => window.jspdf, src: ['https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js', 'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js'] },
+  zip: { ready: () => window.JSZip, src: ['https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'] },
+};
+const scriptLoads = {};
+function loadScript(src) {
+  return scriptLoads[src] ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => { delete scriptLoads[src]; reject(new Error('Could not load the export library. Check your connection and try again.')); };
+    document.head.appendChild(s);
+  });
+}
+async function loadExportLib(name) {
+  const lib = EXPORT_LIBS[name];
+  if (lib.ready()) return;
+  for (const src of lib.src) await loadScript(src);
+}
+async function exportTableXlsx(table, name) {
+  await loadExportLib('xlsx');
   XLSX.writeFile(XLSX.utils.table_to_book(table), `${name}.xlsx`);
 }
-function exportTablePdf(table, name) {
+async function exportTablePdf(table, name) {
   const rows = tableToAoa(table);
   if (!rows.length) return;
+  await loadExportLib('pdf');
   const doc = new window.jspdf.jsPDF({ orientation: rows[0].length > 6 ? 'landscape' : 'portrait' });
   doc.autoTable({ head: [rows[0]], body: rows.slice(1), styles: { fontSize: 8 } });
   doc.save(`${name}.pdf`);
@@ -261,7 +287,8 @@ function wireTableExportBar(wrap) {
     const table = wrap.querySelector('table');
     if (!table) return;
     const name = wrap.id || 'table';
-    ({ copy: copyTable, csv: exportTableCsv, xlsx: exportTableXlsx, pdf: exportTablePdf, png: exportTablePng })[btn.dataset.fmt](table, name);
+    Promise.resolve(({ copy: copyTable, csv: exportTableCsv, xlsx: exportTableXlsx, pdf: exportTablePdf, png: exportTablePng })[btn.dataset.fmt](table, name))
+      .catch((err) => toast(err.message));
   });
   wrap.parentNode.insertBefore(bar, wrap);
 }
@@ -1841,37 +1868,36 @@ function overviewScopeQs() {
 // Platform AUM's own "as of" date — deliberately separate from the from/to
 // range above (that range only ever scoped buy/sell/transaction figures,
 // never AUM, which was confusing with both pickers sitting side by side).
-// Same defaulting pattern as topFundsDate below: fetch the latest available
-// date once, on first load.
-let ovAumDateDefaulted = false;
+// It and the Largest funds table both default to the latest snapshot date,
+// fetched once and shared; a failed lookup is cleared so the next load retries.
+let latestDateLoad = null;
+function latestSnapshotDate() {
+  return latestDateLoad ||= api('/api/funds/top/latest-date').then((r) => r.latestDate, (err) => { latestDateLoad = null; throw err; });
+}
+async function defaultToLatestDate(sel) {
+  if ($(sel).value) return;
+  try {
+    const d = await latestSnapshotDate();
+    if (d && !$(sel).value) $(sel).value = val(d);
+  } catch { /* left blank: the request that needs the date reports the error */ }
+}
 
 async function loadOverview() {
   if (!overviewFundOptionsLoaded) { overviewFundOptionsLoaded = true; loadOverviewFundOptions(); }
-  if (!ovAumDateDefaulted) {
-    try {
-      const { latestDate } = await api('/api/funds/top/latest-date');
-      if (latestDate) {
-        ovAumDateDefaulted = true;
-        if (!$('#ovAumDate').value) $('#ovAumDate').value = val(latestDate);
-      }
-    } catch { /* leave blank and retry on next load — /api/overview below will surface the error meanwhile */ }
-  }
   const r = currentRange();
   const scopeQs = overviewScopeQs();
   const qs = `?from=${r.from}&to=${r.to}${scopeQs ? '&' + scopeQs : ''}`;
-  const aumQs = `?aumDate=${$('#ovAumDate').value}${scopeQs ? '&' + scopeQs : ''}&from=${r.from}&to=${r.to}`;
   $('#kpis').innerHTML = '<div class="loading">Loading metrics…</div>';
 
-  const overviewFetch = api('/api/overview' + aumQs);
+  // Every request goes out at once. Only the KPI call and the Largest funds
+  // table wait for the latest-date lookup; the charts used to queue behind
+  // both of them even though they never needed the AUM date.
+  const overviewFetch = defaultToLatestDate('#ovAumDate').then(() =>
+    api(`/api/overview?aumDate=${$('#ovAumDate').value}${scopeQs ? '&' + scopeQs : ''}&from=${r.from}&to=${r.to}`));
   gateTabLoad((v) => { overviewLoaded = v; }, [overviewFetch]);
-  try {
-    const o = await overviewFetch;
-    renderKpis(o);
-  } catch (e) { $('#kpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+  overviewFetch.then(renderKpis, (e) => { $('#kpis').innerHTML = `<div class="empty">${e.message}</div>`; });
 
   loadTrends($('.seg button.on', )?.dataset.g || 'month');
-
-  // breakdown + funds + users, each independent
   api('/api/breakdown/type' + qs).then(renderTypeChart).catch(() => {});
   api('/api/breakdown/status' + qs).then(renderStatusChart).catch(() => {});
   api('/api/users/verification' + (scopeQs ? '?' + scopeQs : '')).then(renderVerifyChart).catch(() => {});
@@ -2064,7 +2090,6 @@ const renderFundTypeChart = (rows) => doughnut('fundTypeChart', rows, 'label', '
 
 let topFundsCache = [];
 let topFundsGroup = 'fund';
-let topFundsDateDefaulted = false;
 function renderTopFunds(rows) {
   topFundsCache = rows;
   const funds = rows.filter((f) => !val(f.is_total));
@@ -2118,18 +2143,12 @@ function loadTopFundsTable() {
   api(`/api/funds/top?${qs}`).then(renderTopFunds).catch(() => {});
 }
 async function loadTopFunds() {
-  if (!topFundsDateDefaulted) {
-    try {
-      const { latestDate } = await api('/api/funds/top/latest-date');
-      if (latestDate) {
-        topFundsDateDefaulted = true;
-        if (!$('#topFundsDate').value) $('#topFundsDate').value = val(latestDate);
-      }
-    } catch { /* leave blank and retry on next load — user can still pick a date manually */ }
-  }
+  await defaultToLatestDate('#topFundsDate');
   const date = $('#topFundsDate').value;
   if (!date) { $('#topFunds').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
-  await loadTopFundsOptions(date);
+  // Checklist and table in parallel: the table reads the exclusions already
+  // on screen, and the rebuilt checklist keeps them by name.
+  loadTopFundsOptions(date);
   loadTopFundsTable();
 }
 
@@ -3928,10 +3947,9 @@ async function loadEvcCohort() {
   $('#evcCohortTxHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
   const regQs = evcBaseQs(); regQs.set('grain', evcGranularity); regQs.set('basis', 'registration');
   const txQs = evcBaseQs(); txQs.set('grain', evcGranularity); txQs.set('basis', 'first_tx');
-  try { renderEvcCohort('#evcCohortRegHeatmap', await api(`/api/event-code/cohort?${regQs}`)); }
-  catch (e) { $('#evcCohortRegHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
-  try { renderEvcCohort('#evcCohortTxHeatmap', await api(`/api/event-code/cohort?${txQs}`)); }
-  catch (e) { $('#evcCohortTxHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
+  // Both cohorts at once: they're independent queries.
+  await Promise.all([[regQs, '#evcCohortRegHeatmap'], [txQs, '#evcCohortTxHeatmap']].map(([qs, el]) =>
+    api(`/api/event-code/cohort?${qs}`).then((rows) => renderEvcCohort(el, rows), (e) => { $(el).innerHTML = `<div class="empty">${e.message}</div>`; })));
 }
 
 function evcTxParams() {
@@ -4343,6 +4361,7 @@ function setupBulkExport({ prefix: p, source }) {
   // parallelism would just trade that for a 50-request burst on one call.
   async function exportSeparate(format) {
     const date = $(`#${p}BulkDate`).value;
+    await loadExportLib('zip');
     const zip = new JSZip();
     const results = await mapLimit([...basket.values()], 5, (u) => {
       const filename = `${source.replace('_full', '')}_${u.sid || u.userId}${date ? '_' + date : ''}`;
@@ -5733,6 +5752,15 @@ const presentationCache = {}; // month -> pdf.js PDFDocumentProxy
 let presActiveView = 'presentation'; // which PRES_VIEWS entry is on-screen
 let presPdfDoc = null;
 let presPageNum = 1;
+// pdf.js (an ES module) loads on the first deck opened, not on every page
+// load: only the presentation tabs use it.
+let pdfJsLoad = null;
+function loadPdfJs() {
+  return pdfJsLoad ||= import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.3.289/pdf.min.mjs').then((lib) => {
+    lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.3.289/pdf.worker.min.mjs';
+    return lib;
+  }, (err) => { pdfJsLoad = null; throw err; });
+}
 async function loadPresentation(view, month) {
   presActiveView = view;
   presPageNum = 1;
@@ -5741,7 +5769,7 @@ async function loadPresentation(view, month) {
       const res = await fetch(`${API_BASE}/api/presentations/${month}`, { headers: authHeaders() });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Request failed (${res.status})`);
       const data = await res.arrayBuffer();
-      presentationCache[month] = await window.pdfjsLib.getDocument({ data }).promise;
+      presentationCache[month] = await (await loadPdfJs()).getDocument({ data }).promise;
     }
     presPdfDoc = presentationCache[month];
     await presRenderPage(1);
@@ -6758,22 +6786,31 @@ async function init() {
   if (resetGateToken) { showGateCard('gate-reset'); return; }
 
   // Health is the one route that doesn't need a session — check it either way.
-  try {
-    const h = await api('/api/health');
+  // Not awaited: it runs a real BigQuery query (up to its 5s timeout) and only
+  // drives the connection pill and the Ask box, so it must never hold the
+  // login check below.
+  api('/api/health').then((h) => {
     setConnStatus(!!h.bigquery);
     setInterval(pollHealth, 30000);
     const askOn = !!h.askEnabled;
     $('#askDisabled').classList.toggle('hidden', askOn);
     $('#askBox').classList.toggle('hidden', !askOn);
-  } catch { setConnStatus(false); }
+  }).catch(() => setConnStatus(false));
 
   const auth = getAuth();
   if (!auth) { showGate(); return; }
+  // A stored session opens the app straight away with the cached user, and
+  // /api/auth/me re-checks it in the background. An expired or revoked token
+  // comes back 401, which api() turns into clearAuth() + the login card. The
+  // server enforces every permission itself, so the cached user only decides
+  // which nav links show until the fresh copy arrives.
+  hideGate();
+  applyPermissions(auth.user);
+  boot();
   try {
     const me = await api('/api/auth/me');
-    hideGate();
+    setAuth({ ...auth, user: me.user });
     applyPermissions(me.user);
-    boot();
   } catch {
     clearAuth();
     showGate();

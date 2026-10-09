@@ -3,7 +3,9 @@
 // filesystem access needed to *write* a workbook — lower risk than the
 // BigQuery SDK, but unverified under Supabase's ~2s CPU budget for the
 // largest exports; test with a real 100k-row export after deploying).
-import ExcelJS from 'npm:exceljs@4.4.0';
+// exceljs is the heaviest dependency here (~300ms to evaluate), so it loads
+// only when an .xlsx is actually built, not on every cold start.
+const loadExcel = async () => (await import('npm:exceljs@4.4.0')).default;
 
 function inferColumns(rows: Record<string, unknown>[]): string[] {
   if (!rows.length) return [];
@@ -56,6 +58,7 @@ const PCT_FMT = '0.00"%"';
 function num(v: unknown): unknown { return v === '' || v == null ? v : Number(v as string); }
 
 export async function toXlsxBuffer(rows: Record<string, unknown>[], sheetName = 'Data', pctCols: string[] = [], username?: string): Promise<ArrayBuffer> {
+  const ExcelJS = await loadExcel();
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';
   wb.created = new Date();
@@ -81,6 +84,7 @@ export async function toXlsxBuffer(rows: Record<string, unknown>[], sheetName = 
 
 // sheets: [{ name, rows, pctCols }] — one worksheet per entry, e.g. one per fund type.
 export async function toXlsxMultiSheet(sheets: { name: string; rows: Record<string, unknown>[]; pctCols?: string[] }[], username?: string): Promise<ArrayBuffer> {
+  const ExcelJS = await loadExcel();
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';
   wb.created = new Date();

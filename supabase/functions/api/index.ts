@@ -150,6 +150,11 @@ const CORS_HEADERS: Record<string, string> = {
   // browsers otherwise hide from cross-origin fetch() responses (this is the
   // cross-origin path — GitHub Pages calling this function).
   'access-control-expose-headers': 'Content-Disposition',
+  // Every call carries an Authorization header, so the browser preflights it
+  // with an OPTIONS request first, and each of those boots this function too
+  // (~1s). Without max-age Chrome keeps a preflight for 5 seconds; 7200 is
+  // Chrome's cap, so a repeat call to the same URL skips it for 2 hours.
+  'access-control-max-age': '7200',
 };
 
 function withCors(res: Response): Response {

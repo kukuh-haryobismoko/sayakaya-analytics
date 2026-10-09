@@ -1,7 +1,6 @@
 // Ported from server/mail.js, using npm:nodemailer (same version pin as
 // package.json). If you change the email wording/layout, change it in
 // server/mail.js too (or vice versa) — the two are not auto-synced.
-import nodemailer from 'npm:nodemailer@9.0.6';
 import { Buffer } from 'node:buffer';
 import LOGO_HORIZONTAL_BASE64 from './logo-horizontal.ts';
 import * as EmailLog from './email-log.ts';
@@ -9,12 +8,22 @@ import * as EmailLog from './email-log.ts';
 const LOGO_BUFFER = Buffer.from(LOGO_HORIZONTAL_BASE64, 'base64');
 const LOGO_CID = 'sayakaya-horizontal-logo';
 
-const transport = nodemailer.createTransport({
-  host: Deno.env.get('SMTP_HOST'),
-  port: Number(Deno.env.get('SMTP_PORT') || 587),
-  secure: Number(Deno.env.get('SMTP_PORT')) === 465, // 587 = STARTTLS, 465 = implicit TLS
-  auth: { user: Deno.env.get('SMTP_USER'), pass: Deno.env.get('SMTP_PASS') },
-});
+// nodemailer loads on the first send, not at import time, so requests that
+// never send mail don't pay for it on a cold start.
+// deno-lint-ignore no-explicit-any
+let transport: any = null;
+async function getTransport() {
+  if (!transport) {
+    const { default: nodemailer } = await import('npm:nodemailer@9.0.6');
+    transport = nodemailer.createTransport({
+      host: Deno.env.get('SMTP_HOST'),
+      port: Number(Deno.env.get('SMTP_PORT') || 587),
+      secure: Number(Deno.env.get('SMTP_PORT')) === 465, // 587 = STARTTLS, 465 = implicit TLS
+      auth: { user: Deno.env.get('SMTP_USER'), pass: Deno.env.get('SMTP_PASS') },
+    });
+  }
+  return transport;
+}
 
 // Fallback text used only when a caller doesn't pass its own subject/body —
 // the "Send statement" tab's compose modal always sends edited text
@@ -67,7 +76,7 @@ async function send(message: Message, log: EmailLog.EmailLogMeta): Promise<void>
   const id = crypto.randomUUID();
   const logged = { ...message, subject: log.subject || message.subject };
   try {
-    const info = await transport.sendMail({ ...message, headers: EmailLog.sesHeaders(id, log.category) });
+    const info = await (await getTransport()).sendMail({ ...message, headers: EmailLog.sesHeaders(id, log.category) });
     await EmailLog.record({ id, message: logged, log, status: 'sent', sesId: EmailLog.sesMessageId(info.response) });
   } catch (e) {
     await EmailLog.record({ id, message: logged, log, status: 'failed', error: (e as Error).message });

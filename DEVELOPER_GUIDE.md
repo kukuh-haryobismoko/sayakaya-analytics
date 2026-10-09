@@ -196,8 +196,11 @@ rounded per-fund sums can differ by a few rupiah — see §9).
 
 ### `server/bigquery.js` — the only place that talks to BigQuery
 - `runQuery(sql, params, opts)` — every query in the app funnels through this.
-  Sets `maximumBytesBilled` (cost guardrail) and **`useQueryCache: false`**
-  (every report must reflect live table state, not a stale cached job result).
+  Sets `maximumBytesBilled` (cost guardrail) and leaves BigQuery's result
+  cache **on**: BigQuery drops a cached result as soon as any referenced table
+  changes (and never caches streaming-buffer tables, external tables, or
+  `CURRENT_DATE()`-style queries), so it can't serve stale numbers, while a
+  refresh skips rescanning e.g. 5.6GB of `portfolio_with_code`.
 - `dryRun(sql, params)` — used by the SQL Lab's "Estimate cost" button.
 - `validateAdHoc(sqlRaw)` — the only gate between free-text user SQL (SQL Lab,
   Ask) and BigQuery: single statement, must start with `SELECT`/`WITH`, blocks
@@ -432,8 +435,9 @@ tradeoffs, some are open issues worth revisiting:
   `unit * latest_nav_value`; the holdings table sums per-fund values that were
   each `ROUND()`-ed first. Cosmetic, not a data bug, but a support question
   waiting to happen.
-- **`/api/health` runs a real BigQuery job** (`SELECT 1`, uncached — see
-  `runQuery`'s `useQueryCache: false`) **on every call**, and the frontend
+- **`/api/health` runs a real BigQuery job** (`SELECT 1`) **on every call**
+  (the frontend no longer waits on it at startup; it only drives the
+  connection pill), and the frontend
   polls it every 30 seconds per open tab, unauthenticated (it's exempt from
   the password gate so the gate screen itself can show connectivity). Several
   tabs left open all day means a steady trickle of BigQuery jobs just for
@@ -504,3 +508,28 @@ automatically applies everywhere; don't duplicate logic into
 **not** share this — port the change to `supabase/functions/api/` by hand if
 you want it there too, then `supabase functions deploy api` (§2a: nothing
 auto-deploys that target).
+
+## Performance notes (Supabase path)
+
+Measured October 2026, GitHub Pages frontend calling the `api` edge function:
+
+- **Every call boots a worker (~1s) before the handler runs**, even a bare
+  OPTIONS (the Supabase gateway itself answers in ~95ms). Keep heavy npm
+  packages out of module top level: `exceljs`, `pdfkit` and `nodemailer` are
+  imported inside the functions that use them (`export.ts`, `pdf.ts`,
+  `mail.ts`), which cut local boot from ~200ms to ~40ms.
+- **CORS preflights**: every call carries `Authorization`, so the browser
+  sends OPTIONS first. `access-control-max-age: 7200` (Chrome's cap) lets a
+  repeat call to the same URL skip it.
+- **BigQuery auth** uses a self-signed JWT as the bearer token, so a cold
+  worker doesn't wait on an OAuth token exchange.
+- **Frontend**: a stored session opens the app immediately and `/api/auth/me`
+  re-checks it in the background; `/api/health` is never awaited; Overview
+  fires all its requests at once (only the KPI call and Largest funds wait
+  for the latest-date lookup); export libraries and pdf.js load on first use.
+- **Biggest remaining cost**: `mi_fee_logs.portfolio_with_code` (70M rows,
+  15GB) has no partitioning or clustering, so every as-of-date query scans
+  ~5.6GB. Partitioning it by `DATE(created_at)` and clustering by `sid_code`
+  in the pipeline that writes it would make those queries both fast and cheap;
+  the dashboard's `DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date` filters
+  would then need rewriting as a `created_at` range so BigQuery can prune.

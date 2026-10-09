@@ -23,30 +23,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <!-- Choropleth controller/projection for the Overview investor-distribution map — same CDN-script pattern as Chart.js above, no bundler. -->
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-geo@4.3.6/build/index.umd.min.js"></script>
-  <!-- Universal table export (every table on the page, see app.js's table
-       export bar): SheetJS writes a real .xlsx straight from a DOM table
-       element, jsPDF + autotable lays the same rows out as a PDF. Writing
-       either format from scratch is not a "few lines", so these are loaded
-       the same CDN-script way as Chart.js above rather than reinvented. -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
-  <!-- Bulk export's "separate files" mode bundles one file per investor into
-       a single .zip download instead of triggering N browser downloads —
-       same reasoning as the export libraries above, writing a zip's central
-       directory by hand isn't a "few lines". -->
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <!-- Presentation tab renders deck PDF pages onto a canvas (one page per screen,
-       no scrolling, exact page-jump control) — the browser's built-in PDF viewer
-       can't be driven that precisely. pdf.js only ships as an ES module now, so
-       it's loaded as one and exposed as window.pdfjsLib for app.js (a classic
-       script) to use; module scripts run after classic ones, and pdfjsLib is
-       only touched from a later user action, so there's no load-order race. -->
-  <script type="module">
-    import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.3.289/pdf.min.mjs';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.3.289/pdf.worker.min.mjs';
-    window.pdfjsLib = pdfjsLib;
-  </script>
+  <!-- Export libraries (SheetJS, jsPDF + autotable, JSZip) and pdf.js are not
+       loaded here: app.js fetches each on first use (loadExportLib,
+       loadPdfJs), so the ~470KB they add never blocks the first render. -->
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -96,7 +75,9 @@
 <symbol id="i-export" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="3" x2="12" y2="15"/><polyline points="8,7 12,3 16,7"/><path d="M5 15v4a2 2 0 002 2h10a2 2 0 002-2v-4"/></symbol>
 </svg>
   <!-- Login gate -->
-  <div id="gate" class="gate">
+  <!-- Starts hidden: init() shows it only when there's no stored session (or a
+       reset link), so refreshing while logged in never flashes the login form. -->
+  <div id="gate" class="gate hidden">
     <div class="gate-card" id="gate-login">
       <img class="gate-mark" src="logo.png" alt="Sayakaya" />
       <h1>Sayakaya Analytics</h1>

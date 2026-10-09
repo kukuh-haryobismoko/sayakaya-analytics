@@ -58,7 +58,9 @@ async function runQuery(sql, params = {}, { maxBytes = MAX_BYTES_BILLED, redact 
     params,
     location: LOCATION,
     maximumBytesBilled: maxBytes,
-    useQueryCache: false, // every report must reflect live table state, not BigQuery's cached job results
+    // Result cache left on: BigQuery drops it as soon as a referenced table
+    // changes (see supabase/functions/api/bigquery.ts), so repeat loads are
+    // fast and free without ever serving stale numbers.
   });
   const [rows] = await job.getQueryResults();
   return redact ? redactSensitiveColumns(rows) : rows;

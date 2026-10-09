@@ -1,5 +1,12 @@
 // Ported from server/pdf.js, using npm:pdfkit.
-import PDFDocument from 'npm:pdfkit@0.19.1';
+// pdfkit is loaded on first use instead of at import time: this function
+// re-evaluates its imports on every cold start, and most requests never
+// build a PDF, so a top-level import made login and dashboard calls slower too.
+// deno-lint-ignore no-explicit-any
+async function newDoc(opts: Record<string, unknown>): Promise<any> {
+  const { default: PDFDocument } = await import('npm:pdfkit@0.19.1');
+  return new PDFDocument(opts);
+}
 import { Buffer } from 'node:buffer';
 import LOGO_BASE64 from './logo.ts';
 import LOGO_H_BASE64 from './logo-horizontal.ts';
@@ -346,9 +353,9 @@ function perfSheetPage(doc: any, sheet: PerfSheet, width: number) {
 // "Reksa Dana Update" NAV sheet, one landscape page per fund type (the extra
 // width fits all 13 columns without wrapping; landscape is scoped to this
 // report only — the embedded pages inside portfolioReport() stay portrait).
-export function fundPerformanceReport(sheets: PerfSheet[], options: { username?: string } = {}): Promise<Buffer> {
+export async function fundPerformanceReport(sheets: PerfSheet[], options: { username?: string } = {}): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
-  const doc: any = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 });
+  const doc: any = await newDoc({ size: 'A4', layout: 'landscape', margin: 40 });
   if (options.username) doc.info.Author = options.username;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   if (!sheets.length) {
@@ -423,7 +430,7 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: 
     .text(OJK_LINE, { width });
 }
 
-export function portfolioReport(
+export async function portfolioReport(
   { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] },
   performanceSheets: PerfSheet[],
   options: { columns?: string[]; username?: string; password?: string } = {},
@@ -432,7 +439,7 @@ export function portfolioReport(
   // instance API (font/text/moveDown etc. all really exist at runtime) —
   // `any` here matches the same pragmatism already used in the helpers below.
   // deno-lint-ignore no-explicit-any
-  const doc: any = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
+  const doc: any = await newDoc({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
   if (options.username) doc.info.Author = options.username;
   drawPortfolioHoldingsPage(doc, { contact, holdings }, options);
 
@@ -453,13 +460,13 @@ export function portfolioReport(
 // entries: [{ contact, holdings }], one page per investor, then the shared
 // fund-performance pages once at the end (same NAV data for everyone, so
 // there's no reason to repeat it per investor like portfolioReport() does).
-export function portfolioReportBatch(
+export async function portfolioReportBatch(
   entries: { contact?: Contact; holdings: Record<string, unknown>[] }[],
   performanceSheets: PerfSheet[],
   options: { columns?: string[]; username?: string } = {},
 ): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
-  const doc: any = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc: any = await newDoc({ size: 'A4', margin: 40 });
   if (options.username) doc.info.Author = options.username;
   entries.forEach((entry, i) => {
     if (i > 0) doc.addPage({ size: 'A4', margin: 40 });
@@ -484,13 +491,13 @@ export const TX_COLS = (width: number): Column[] => [
 
 // contact: { name, sid, ifua, address, ... }
 // transactions: rows from queries.ts userTransactions(), one calendar month
-export function transactionStatement(
+export async function transactionStatement(
   { contact, transactions }: { contact?: Contact; transactions: Record<string, unknown>[] },
   monthLabel: string,
   options: { username?: string; password?: string } = {},
 ): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
-  const doc: any = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
+  const doc: any = await newDoc({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
   if (options.username) doc.info.Author = options.username;
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
@@ -527,12 +534,12 @@ export const USERS_TX_COLS = (width: number): Column[] => [
   { key: 'amount', label: 'Amount', width: width * 0.09, align: 'right', format: idNum },
 ];
 
-export function usersTransactionsReport(
+export async function usersTransactionsReport(
   rows: Record<string, unknown>[],
   options: { username?: string; query?: string } = {},
 ): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
-  const doc: any = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 });
+  const doc: any = await newDoc({ size: 'A4', layout: 'landscape', margin: 40 });
   if (options.username) doc.info.Author = options.username;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   perfReportHeader(doc, 'Users transactions', options.query ? `Search: ${options.query}` : formatDateID());

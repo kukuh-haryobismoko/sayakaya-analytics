@@ -17,6 +17,7 @@ const MAX_BYTES_BILLED = String(Deno.env.get('MAX_BYTES_BILLED') || 2_000_000_00
 interface ServiceAccount {
   client_email: string;
   private_key: string;
+  private_key_id?: string;
   project_id?: string;
 }
 
@@ -47,8 +48,10 @@ async function importPrivateKey(pem: string): Promise<CryptoKey> {
   );
 }
 
-// Cached across requests within the same isolate — a fresh JWT/token exchange
-// on every single query would be wasteful; tokens are valid for 1 hour.
+// A self-signed JWT goes straight to BigQuery as the bearer token (Google's
+// "service account authorization without OAuth"), so a cold worker skips the
+// oauth2.googleapis.com round trip (~230ms) before its first query. Cached per
+// isolate for its 1-hour lifetime.
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getAccessToken(): Promise<string> {
@@ -57,11 +60,11 @@ async function getAccessToken(): Promise<string> {
   const sa = loadServiceAccount();
   const key = await importPrivateKey(sa.private_key);
   const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'RS256', typ: 'JWT' };
+  const header = { alg: 'RS256', typ: 'JWT', ...(sa.private_key_id ? { kid: sa.private_key_id } : {}) };
   const claims = {
     iss: sa.client_email,
+    sub: sa.client_email,
     scope: 'https://www.googleapis.com/auth/bigquery',
-    aud: 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: now + 3600,
   };
@@ -69,20 +72,7 @@ async function getAccessToken(): Promise<string> {
   const signature = await crypto.subtle.sign(
     'RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(unsigned),
   );
-  const jwt = `${unsigned}.${base64url(signature)}`;
-
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`Google OAuth token exchange failed: ${data.error_description || data.error || res.status}`);
-
-  cachedToken = { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
+  cachedToken = { token: `${unsigned}.${base64url(signature)}`, expiresAt: (now + 3600) * 1000 };
   return cachedToken.token;
 }
 
@@ -211,7 +201,11 @@ export async function runQuery(
     useLegacySql: false,
     location: LOCATION,
     maximumBytesBilled: String(maxBytes),
-    useQueryCache: false, // every report must reflect live table state, not a cached job result
+    // BigQuery's result cache is left on: it's dropped the moment a referenced
+    // table changes, and never used for streaming-buffer tables, external
+    // tables, or CURRENT_DATE()-style queries, so it can't serve stale numbers.
+    // A repeat load (refresh, tab revisit) then returns in well under a second
+    // and bills 0 bytes instead of rescanning, e.g. 5.6GB of portfolio_with_code.
     ...(queryParameters.length ? { parameterMode: 'NAMED', queryParameters } : {}),
   });
 
