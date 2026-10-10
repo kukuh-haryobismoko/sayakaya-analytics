@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `ac99f9c (2026-10-10)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `36667d1 (2026-10-10)`.
 
 ## Cara membaca dokumen ini
 
@@ -458,9 +458,9 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 #### Overview
 
 - **Untuk apa**: Snapshot bisnis: total AUM, jumlah user, volume buy/sell, tren transaksi, breakdown per fund, dan peta sebaran investor. Bisa difilter per produk dan per pengguna (sertakan atau kecualikan berdasarkan kode referrer, kode sales, SID, email, atau akun institusi).
-- **Penjelasan sederhana**: Ringkasan satu halaman untuk seluruh bisnis: total dana kelolaan (AUM), jumlah pengguna, volume beli/jual, grafik tren transaksi, rincian per produk, dan peta sebaran investor di seluruh Indonesia. Kartu AUM platform punya tanggal acuannya sendiri (terpisah dari rentang tanggal beli/jual di bagian atas halaman) dan hanya menghitung produk yang masih berstatus aktif, karena saldo produk yang sudah dilikuidasi seharusnya tidak lagi dihitung setelah produk itu tidak aktif. Filter produk di atas KPI membatasi AUM, transaksi, dan grafik produk ke satu atau beberapa produk pilihan. Tabel "Produk terbesar berdasarkan AUM" menampilkan semua produk/MI per tanggal pilihan (bukan hanya 10 teratas) beserta porsinya dari total, dan Anda bisa memilih produk mana saja yang ikut dihitung. Membatalkan pilihan sebuah produk juga mengurangi AUM-nya dari total MI-nya. Setiap grafik donat menampilkan porsi tiap bagian dari total di samping namanya. Di sebelah filter produk, filter pengguna menyertakan atau mengecualikan pengguna berdasarkan kode referrer, kode sales, SID, email, atau akun institusi (misalnya, keluarkan semua pengguna dengan referrer RAIZKAYA). Filter ini berlaku untuk semua angka di tab ini, termasuk jumlah pengguna dan tabel Produk terbesar.
+- **Penjelasan sederhana**: Ringkasan satu halaman untuk seluruh bisnis: total dana kelolaan (AUM), jumlah pengguna, volume beli/jual, grafik tren transaksi, rincian per produk, dan peta sebaran investor di seluruh Indonesia. Kartu AUM platform punya tanggal acuannya sendiri (terpisah dari rentang tanggal beli/jual di bagian atas halaman) dan hanya menghitung produk yang masih berstatus aktif, karena saldo produk yang sudah dilikuidasi seharusnya tidak lagi dihitung setelah produk itu tidak aktif. Filter produk di atas KPI membatasi AUM, transaksi, dan grafik produk ke satu atau beberapa produk pilihan. Tabel "Produk terbesar berdasarkan AUM" menampilkan semua produk/MI per tanggal pilihan (bukan hanya 10 teratas) beserta porsinya dari total, dan Anda bisa memilih produk mana saja yang ikut dihitung. Membatalkan pilihan sebuah produk juga mengurangi AUM-nya dari total MI-nya. Setiap grafik donat menampilkan porsi tiap bagian dari total di samping namanya. AUM per jenis produk hanya menghitung dana yang dipegang nasabah Sayakaya, bukan total AUM tiap produk di pasar. Di sebelah filter produk, filter pengguna menyertakan atau mengecualikan pengguna berdasarkan kode referrer, kode sales, SID, email, atau akun institusi (misalnya, keluarkan semua pengguna dengan referrer RAIZKAYA). Filter ini berlaku untuk semua angka di tab ini, termasuk jumlah pengguna dan tabel Produk terbesar.
 - **Data yang dibaca**: main.users, main.user_profiles, main.funds, main.portfolios, main.bonus_portfolios, main.transactions, mi_fee_logs.portfolio_with_code, main.geo
-- **Cara hitung**: KPI buy/sell dan transaksi dari main.transactions pada rentang tanggal terpilih. Platform AUM dan tabel Largest funds dari snapshot portfolio_with_code pada tanggal as-of (koreksi -1 hari, hanya fund ACTIVE untuk Platform AUM). Donat AUM per jenis produk memakai funds.latest_aum_value (total AUM tiap produk). Peta dan top kota memakai holding live (unit x latest_nav_value), provinsi dan kota dari main.geo. Filter pengguna: aturan digabung AND, nilai dalam satu aturan OR, tidak peka huruf besar/kecil, * sebagai wildcard, maksimal 300 nilai. Berlaku ke semua angka di tab (dicocokkan lewat users.id, atau sid_code untuk snapshot portfolio_with_code), termasuk export Largest funds. Selama filter aktif, AUM per jenis produk dihitung dari holding live pengguna tersebut, bukan funds.latest_aum_value.
+- **Cara hitung**: KPI buy/sell dan transaksi dari main.transactions pada rentang tanggal terpilih. Platform AUM dan tabel Largest funds dari snapshot portfolio_with_code pada tanggal as-of (koreksi -1 hari, hanya fund ACTIVE untuk Platform AUM). Donat AUM per jenis produk menjumlahkan holding live nasabah Sayakaya (unit x latest_nav_value, termasuk unit kampanye yang masih terkunci), bukan funds.latest_aum_value yang merupakan total AUM produk di seluruh pasar. Peta dan top kota memakai holding live (unit x latest_nav_value), provinsi dan kota dari main.geo. Filter pengguna: aturan digabung AND, nilai dalam satu aturan OR, tidak peka huruf besar/kecil, * sebagai wildcard, maksimal 300 nilai. Berlaku ke semua angka di tab (dicocokkan lewat users.id, atau sid_code untuk snapshot portfolio_with_code), termasuk export Largest funds. Selama filter aktif, donat itu hanya menjumlahkan holding pengguna tersebut.
 - **Isi tab**:
   - *Kartu ringkasan di atas tab*:
     - **Platform AUM / AUM platform**: Total nilai kepemilikan semua investor pada tanggal "Platform AUM as of" (snapshot harian portfolio_with_code, hanya fund yang masih ACTIVE). Baris kecil di bawahnya: jumlah investor yang memegang unit pada tanggal itu.
@@ -472,7 +472,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *By transaction type* (Berdasarkan jenis transaksi): Jumlah transaksi per tipe dalam rentang: buy, sell, SWITCH_IN, SWITCH_OUT, reinvestment. Semua status ikut dihitung.
   - *By status* (Berdasarkan status): Jumlah transaksi per status dalam rentang: completed, expired, cancelled, completed_payment, verified, dan lainnya.
   - *User verification* (Verifikasi pengguna): Semua akun per status KYC (unverified, verified, failed, pending_verification). Tidak mengikuti rentang tanggal.
-  - *AUM by fund type* (AUM berdasarkan jenis produk): AUM per jenis fund dari funds.latest_aum_value, yaitu AUM produk di seluruh pasar, bukan hanya dana nasabah Sayakaya.
+  - *AUM by fund type* (AUM berdasarkan jenis produk): Dana nasabah Sayakaya per jenis fund: unit yang dipegang hari ini (termasuk unit kampanye yang masih terkunci) dikali NAV terbaru. Totalnya seharusnya sama dengan kartu Platform AUM pada tanggal data terbaru; selisih kecil bisa muncul karena kartu itu memakai snapshot harian.
   - *Investor distribution by province* (Sebaran investor per provinsi): Peta per provinsi berdasarkan kota di KTP (user_profiles.id_address_city dicocokkan ke main.geo). Arahkan kursor untuk jumlah orang dan AUM live.
   - *Top cities by investors* (Kota teratas berdasarkan jumlah investor): 15 kota dengan pengguna terbanyak menurut alamat KTP.
     - **Investors**: Jumlah orang dengan alamat KTP di kota itu. Tanpa filter fund, ini mencakup semua pengguna yang sudah mengisi alamat, termasuk yang belum memegang unit.
@@ -481,7 +481,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Largest funds by AUM* (Produk terbesar berdasarkan AUM): Semua fund (atau manajer investasi) yang dipegang nasabah pada tanggal terpilih, dari yang terbesar. Fund bisa dikeluarkan dari hitungan lewat pilihan fund.
     - **AUM**: Jumlah nilai kepemilikan nasabah Sayakaya di fund itu pada tanggal AUM (portfolio_with_code).
 - **Catatan penting**:
-  - Tab ini memakai tiga sumber AUM: snapshot portfolio_with_code (kartu Platform AUM, Largest funds), kepemilikan live (peta, tabel kota), dan AUM produk di pasar (AUM by fund type). Wajar bila angkanya berbeda.
+  - Tab ini memakai dua sumber AUM: snapshot portfolio_with_code (kartu Platform AUM, Largest funds) dan kepemilikan live (AUM by fund type, peta, tabel kota). Keduanya hanya dana nasabah Sayakaya; selisih kecil wajar karena snapshot dan NAV terbaru bisa berbeda hari.
   - Rentang tanggal di bagian atas hanya berlaku untuk angka transaksi (volume, pengguna aktif, grafik tren, tipe, status). Platform AUM punya tanggalnya sendiri.
   - Tanggal transaksi memakai tanggal created_at dalam UTC, jadi transaksi pukul 00:00 sampai 06:59 WIB tercatat di hari sebelumnya.
 - **Detail teknis** (otomatis dari kode):
@@ -564,9 +564,9 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 #### Growth
 
 - **Untuk apa**: Kinerja campaign promo, referrer teratas, dan alur switching antar fund.
-- **Penjelasan sederhana**: Angka pemasaran dan pertumbuhan: seberapa efektif kampanye promo, siapa yang paling banyak mereferensikan investor baru, dan produk apa yang paling sering dipindahkan (switching) investor.
-- **Data yang dibaca**: main.campaigns, main.users, main.transactions, main.switching_transactions, main.investment_managers
-- **Cara hitung**: Redemption % = used_quota / quota. Estimasi biaya = used_quota x bonus_amount. Leaderboard referrer = jumlah user dengan referrer_code yang sama plus total buy mereka. Switching = jumlah dan nilai per pasangan fund asal dan tujuan.
+- **Penjelasan sederhana**: Angka pemasaran dan pertumbuhan: seberapa efektif kampanye promo, siapa yang paling banyak mereferensikan investor baru, dan produk apa yang paling sering dipindahkan (switching) investor. Grafik AUM per manajer investasi dan per toleransi risiko hanya menghitung dana yang dipegang nasabah Sayakaya.
+- **Data yang dibaca**: main.campaigns, main.users, main.transactions, main.switching_transactions, main.portfolios, main.bonus_portfolios, main.funds, main.investment_managers, main.user_profiles
+- **Cara hitung**: Redemption % = used_quota / quota. Estimasi biaya = used_quota x bonus_amount. Leaderboard referrer = jumlah user dengan referrer_code yang sama plus total buy mereka. Switching = jumlah dan nilai per pasangan fund asal dan tujuan. AUM per manajer investasi dan per toleransi risiko = holding live nasabah Sayakaya (unit x latest_nav_value, termasuk unit kampanye yang masih terkunci), bukan funds.latest_aum_value yang merupakan total AUM produk di seluruh pasar.
 - **Isi tab**:
   - *Campaign performance* (Performa kampanye): Pemakaian dan perkiraan biaya setiap kampanye promo.
     - **Redemption**: Used dibagi Quota, dalam persen.
@@ -574,7 +574,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Top referrers* (Perekomendasi teratas): Pengajak yang membawa volume pembelian terbesar.
     - **Referred**: Jumlah akun yang mendaftar dengan kode itu (users.referrer_code), terverifikasi atau belum.
     - **Volume brought**: Total seluruh pembelian completed sepanjang masa dari akun-akun yang diajak.
-  - *AUM by investment manager* (AUM berdasarkan manajer investasi): Total AUM produk per manajer investasi dari funds.latest_aum_value (AUM pasar, bukan hanya nasabah Sayakaya).
+  - *AUM by investment manager* (AUM berdasarkan manajer investasi): Dana nasabah Sayakaya per manajer investasi (15 teratas): unit yang dipegang hari ini, termasuk unit kampanye yang masih terkunci, dikali NAV terbaru. Persentase tiap irisan dihitung dari total manajer yang tampil.
   - *Platform AUM by risk tolerance* (AUM platform berdasarkan toleransi risiko): Kepemilikan live nasabah Sayakaya dikelompokkan menurut user_profiles.investment_risk_tolerance.
 - **Catatan penting**:
   - Data penghasilan dan toleransi risiko di profil hampir semuanya kosong, jadi panel income bracket dan risk tolerance hampir seluruhnya berisi "(unknown)".
@@ -1585,7 +1585,7 @@ Endpoint yang tidak terikat pada satu tab: login dan akun, admin, ekspor, jadwal
 | `POST /api/auth/forgot-password` | - | `dashboard_audit_log`, `dashboard_password_resets`, `dashboard_users` |
 | `POST /api/auth/reset-password` | - | `dashboard_audit_log`, `dashboard_password_resets`, `dashboard_sessions`, `dashboard_users` |
 | `GET /api/health` | - | - |
-| `GET /api/funds/types` | `fundTypes`, `normalizeUserFilter` | `main.funds` |
+| `GET /api/funds/types` | `fundTypes`, `normalizeUserFilter` | `main.bonus_portfolios`, `main.funds`, `main.portfolios` |
 | `GET /api/funds/list` | `fundList` | `main.funds` |
 | `GET /api/users/search` | `userSearch` | `main.user_profiles`, `main.users` |
 | `GET /api/users/by-code` | `remisierUsers` | `main.user_profiles`, `main.users` |
