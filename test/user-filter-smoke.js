@@ -35,6 +35,10 @@ assert.ok(tx.sql.includes('AND NOT IFNULL(is_institution, FALSE))'));
 
 // Portfolio snapshots are keyed on SID, not user id.
 assert.ok(Q.platformAumAsOf('2026-10-07', [], rules).sql.includes('p.sid_code IN (SELECT sid_code FROM'));
+// AUM by fund type and by manager sum customer holdings, never the market-wide fund total, and
+// BigQuery rejects an IN subquery inside a join predicate.
+for (const ft of [Q.fundTypes([], []), Q.fundTypes([], rules), Q.aumByManager(15)]) assert.ok(!ft.sql.includes('latest_aum_value'));
+assert.ok(!/ON a\.fund_id = f\.id\s+AND/.test(Q.fundTypes([], rules).sql) && Q.fundTypes([], rules).sql.includes('FROM active WHERE user_id IN ('));
 
 // Untrusted input is rejected, never silently widened.
 for (const bad of ['{', '{"field":"sid"}', '[{"field":"password","mode":"include","values":["x"]}]', '[{"field":"sid","mode":"maybe","values":["x"]}]']) {

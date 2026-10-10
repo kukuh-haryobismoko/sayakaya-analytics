@@ -222,7 +222,7 @@ const saDrivers = [
 ];
 const saTimingSummary = { signed_up: 189, median_days_to_kyc: 0, median_days_kyc_to_buy: 1, median_days_to_buy: 2, median_sessions_before_buy: 3 };
 const saTiming = [{ bucket: '1_same_day', verified: 53, first_buy: 4, ...saTimingSummary }, { bucket: '6_not_yet', verified: 86, first_buy: 161, ...saTimingSummary }];
-const saHours = [{ dow: 1, hour: 9, sessions: 61, orders: 2, paid: 2 }];
+const saHours = [{ dow: 1, hour: 9, sessions: 61, orders: 2, paid: 2 }, { dow: 2, hour: 22, sessions: 20, orders: 3, paid: 3 }, { dow: 2, hour: 1, sessions: 5, orders: 3, paid: 3 }];
 const saProfile = [
   { dimension: 'age_band', value: '2_25_34', opened_form: 161, paid: 121, paid_pct: 75.2, paid_amount: 2118435831, median_paid_amount: 2238500 },
   { dimension: 'age_band', value: '4_45_54', opened_form: 47, paid: 30, paid_pct: 63.8, paid_amount: 321910000, median_paid_amount: 4000000 },
@@ -441,6 +441,7 @@ sandbox.api = async (path) => {
     [get('#saFunnelStory')._html.includes('401') && get('#saFunnelStory')._html.includes('69.1%'), '#saFunnelStory written from the funnel rows'],
     [get('#obFunnelStory')._html.includes('140') && get('#obFunnelStory')._html.includes('13 (9.3%)'), '#obFunnelStory written from the onboarding rows'],
     [get('#obOutcomeStory')._html.includes('69'), '#obOutcomeStory filled'],
+    [get('#saHoursStory')._html.includes('22:00 to 01:59') && get('#saHoursStory')._html.includes('75%'), '#saHoursStory picks the busiest 4 hours from the data, across midnight'],
     [get('#rdFunnelStory')._html.includes('162 (85.3%)'), '#rdFunnelStory written from the sell funnel'],
     [get('#rdProfileStory')._html.includes('345'), '#rdProfileStory filled'],
     [get('#rdSignalStory')._html.includes('16.9'), '#rdSignalStory names the top signal'],

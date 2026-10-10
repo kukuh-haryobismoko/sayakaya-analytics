@@ -2191,14 +2191,17 @@ function renderSaHours() {
       },
     },
   });
-  if (!rows.length) { story('#saHoursStory', []); return; }
   const hr = hourShares(rows, true), dw = hourShares(rows, false);
+  if (!hr.paid.some(Boolean)) { story('#saHoursStory', []); return; }
   const peak = (x) => x.paidShare.indexOf(Math.max(...x.paidShare));
   const ph = peak(hr), pd = peak(dw);
-  const morning = [9, 10, 11, 12].reduce((a, i) => ({ paid: a.paid + hr.paidShare[i], sessions: a.sessions + hr.sessionShare[i] }), { paid: 0, sessions: 0 });
+  // Busiest 4-hour stretch for payments, picked from the data and allowed to wrap past midnight.
+  const win = hr.keys
+    .map((start) => [0, 1, 2, 3].reduce((a, d) => ({ start, paid: a.paid + hr.paidShare[(start + d) % 24], sessions: a.sessions + hr.sessionShare[(start + d) % 24] }), { paid: 0, sessions: 0 }))
+    .reduce((a, b) => (b.paid > a.paid ? b : a));
   story('#saHoursStory', [
     tf('sa_story_hours', { hour: String(hr.keys[ph]).padStart(2, '0'), paid: `${hr.paidShare[ph].toFixed(1)}%`, sessions: `${hr.sessionShare[ph].toFixed(1)}%` }),
-    tf('sa_story_hours_window', { paid: `${morning.paid.toFixed(0)}%`, sessions: `${morning.sessions.toFixed(0)}%` }),
+    tf('sa_story_hours_window', { from: String(win.start).padStart(2, '0'), to: String((win.start + 3) % 24).padStart(2, '0'), paid: `${win.paid.toFixed(0)}%`, sessions: `${win.sessions.toFixed(0)}%` }),
     tf('sa_story_hours_day', { day: t(`sa_dow_${dw.keys[pd]}`), paid: `${dw.paidShare[pd].toFixed(1)}%` }),
   ]);
 }
@@ -2936,7 +2939,8 @@ function doughnut(id, rows, labelKey, valueKey, fmt) {
 const renderTypeChart = (rows) => doughnut('typeChart', rows, 'label', 'count', num);
 const renderStatusChart = (rows) => doughnut('statusChart', rows, 'label', 'count', num);
 const renderVerifyChart = (rows) => doughnut('verifyChart', rows, 'label', 'count', num);
-const renderFundTypeChart = (rows) => doughnut('fundTypeChart', rows, 'label', 'aum', idrFull);
+// Types nobody holds (possible under a user filter) come back as 0; leave them off the donut.
+const renderFundTypeChart = (rows) => doughnut('fundTypeChart', rows.filter((r) => nval(r.aum) > 0), 'label', 'aum', idrFull);
 
 let topFundsCache = [];
 let topFundsGroup = 'fund';

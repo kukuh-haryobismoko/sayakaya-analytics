@@ -17,7 +17,7 @@ const TABS = {
   "overview": {
     summary: "Snapshot bisnis: total AUM, jumlah user, volume buy/sell, tren transaksi, breakdown per fund, dan peta sebaran investor. Bisa difilter per produk dan per pengguna (sertakan atau kecualikan berdasarkan kode referrer, kode sales, SID, email, atau akun institusi).",
     datasets: "main.users, main.user_profiles, main.funds, main.portfolios, main.bonus_portfolios, main.transactions, mi_fee_logs.portfolio_with_code, main.geo",
-    computation: "KPI buy/sell dan transaksi dari main.transactions pada rentang tanggal terpilih. Platform AUM dan tabel Largest funds dari snapshot portfolio_with_code pada tanggal as-of (koreksi -1 hari, hanya fund ACTIVE untuk Platform AUM). Donat AUM per jenis produk memakai funds.latest_aum_value (total AUM tiap produk). Peta dan top kota memakai holding live (unit x latest_nav_value), provinsi dan kota dari main.geo. Filter pengguna: aturan digabung AND, nilai dalam satu aturan OR, tidak peka huruf besar/kecil, * sebagai wildcard, maksimal 300 nilai. Berlaku ke semua angka di tab (dicocokkan lewat users.id, atau sid_code untuk snapshot portfolio_with_code), termasuk export Largest funds. Selama filter aktif, AUM per jenis produk dihitung dari holding live pengguna tersebut, bukan funds.latest_aum_value.",
+    computation: "KPI buy/sell dan transaksi dari main.transactions pada rentang tanggal terpilih. Platform AUM dan tabel Largest funds dari snapshot portfolio_with_code pada tanggal as-of (koreksi -1 hari, hanya fund ACTIVE untuk Platform AUM). Donat AUM per jenis produk menjumlahkan holding live nasabah Sayakaya (unit x latest_nav_value, termasuk unit kampanye yang masih terkunci), bukan funds.latest_aum_value yang merupakan total AUM produk di seluruh pasar. Peta dan top kota memakai holding live (unit x latest_nav_value), provinsi dan kota dari main.geo. Filter pengguna: aturan digabung AND, nilai dalam satu aturan OR, tidak peka huruf besar/kecil, * sebagai wildcard, maksimal 300 nilai. Berlaku ke semua angka di tab (dicocokkan lewat users.id, atau sid_code untuk snapshot portfolio_with_code), termasuk export Largest funds. Selama filter aktif, donat itu hanya menjumlahkan holding pengguna tersebut.",
   },
   "aum": {
     summary: "Pergerakan total AUM dan revenue platform dari waktu ke waktu.",
@@ -36,8 +36,8 @@ const TABS = {
   },
   "growth": {
     summary: "Kinerja campaign promo, referrer teratas, dan alur switching antar fund.",
-    datasets: "main.campaigns, main.users, main.transactions, main.switching_transactions, main.investment_managers",
-    computation: "Redemption % = used_quota / quota. Estimasi biaya = used_quota x bonus_amount. Leaderboard referrer = jumlah user dengan referrer_code yang sama plus total buy mereka. Switching = jumlah dan nilai per pasangan fund asal dan tujuan.",
+    datasets: "main.campaigns, main.users, main.transactions, main.switching_transactions, main.portfolios, main.bonus_portfolios, main.funds, main.investment_managers, main.user_profiles",
+    computation: "Redemption % = used_quota / quota. Estimasi biaya = used_quota x bonus_amount. Leaderboard referrer = jumlah user dengan referrer_code yang sama plus total buy mereka. Switching = jumlah dan nilai per pasangan fund asal dan tujuan. AUM per manajer investasi dan per toleransi risiko = holding live nasabah Sayakaya (unit x latest_nav_value, termasuk unit kampanye yang masih terkunci), bukan funds.latest_aum_value yang merupakan total AUM produk di seluruh pasar.",
   },
   "predict": {
     summary: "Forecast AUM dan volume transaksi, risiko churn investor, dan tren retensi. Sebelumnya bernama Predict.",
@@ -424,7 +424,7 @@ const TAB_DETAILS = {
       'By transaction type': { note: 'Jumlah transaksi per tipe dalam rentang: buy, sell, SWITCH_IN, SWITCH_OUT, reinvestment. Semua status ikut dihitung.', },
       'By status': { note: 'Jumlah transaksi per status dalam rentang: completed, expired, cancelled, completed_payment, verified, dan lainnya.', },
       'User verification': { note: 'Semua akun per status KYC (unverified, verified, failed, pending_verification). Tidak mengikuti rentang tanggal.', },
-      'AUM by fund type': { note: 'AUM per jenis fund dari funds.latest_aum_value, yaitu AUM produk di seluruh pasar, bukan hanya dana nasabah Sayakaya.', },
+      'AUM by fund type': { note: 'Dana nasabah Sayakaya per jenis fund: unit yang dipegang hari ini (termasuk unit kampanye yang masih terkunci) dikali NAV terbaru. Totalnya seharusnya sama dengan kartu Platform AUM pada tanggal data terbaru; selisih kecil bisa muncul karena kartu itu memakai snapshot harian.', },
       'Investor distribution by province': { note: 'Peta per provinsi berdasarkan kota di KTP (user_profiles.id_address_city dicocokkan ke main.geo). Arahkan kursor untuk jumlah orang dan AUM live.', },
       'Top cities by investors': { note: '15 kota dengan pengguna terbanyak menurut alamat KTP.', columns: [
         ['Investors', 'Jumlah orang dengan alamat KTP di kota itu. Tanpa filter fund, ini mencakup semua pengguna yang sudah mengisi alamat, termasuk yang belum memegang unit.'],
@@ -440,7 +440,7 @@ const TAB_DETAILS = {
       },
     },
     notes: [
-      'Tab ini memakai tiga sumber AUM: snapshot portfolio_with_code (kartu Platform AUM, Largest funds), kepemilikan live (peta, tabel kota), dan AUM produk di pasar (AUM by fund type). Wajar bila angkanya berbeda.',
+      'Tab ini memakai dua sumber AUM: snapshot portfolio_with_code (kartu Platform AUM, Largest funds) dan kepemilikan live (AUM by fund type, peta, tabel kota). Keduanya hanya dana nasabah Sayakaya; selisih kecil wajar karena snapshot dan NAV terbaru bisa berbeda hari.',
       'Rentang tanggal di bagian atas hanya berlaku untuk angka transaksi (volume, pengguna aktif, grafik tren, tipe, status). Platform AUM punya tanggalnya sendiri.',
       'Tanggal transaksi memakai tanggal created_at dalam UTC, jadi transaksi pukul 00:00 sampai 06:59 WIB tercatat di hari sebelumnya.',
     ],
@@ -509,7 +509,7 @@ const TAB_DETAILS = {
         ['Volume brought', 'Total seluruh pembelian completed sepanjang masa dari akun-akun yang diajak.'],
       ],
       },
-      'AUM by investment manager': { note: 'Total AUM produk per manajer investasi dari funds.latest_aum_value (AUM pasar, bukan hanya nasabah Sayakaya).', },
+      'AUM by investment manager': { note: 'Dana nasabah Sayakaya per manajer investasi (15 teratas): unit yang dipegang hari ini, termasuk unit kampanye yang masih terkunci, dikali NAV terbaru. Persentase tiap irisan dihitung dari total manajer yang tampil.', },
       'Platform AUM by risk tolerance': { note: 'Kepemilikan live nasabah Sayakaya dikelompokkan menurut user_profiles.investment_risk_tolerance.', },
     },
     notes: [

@@ -193,29 +193,19 @@ export const breakdownBy = (column: string, from?: string, to?: string, fundIds:
 
 // ---- Funds ------------------------------------------------------------------
 
-// funds.latest_aum_value is a whole-fund total, so it can't be narrowed to a
-// set of users. With a user filter on, AUM is summed from those users' live
-// holdings instead (same definition as the Overview map, activeCte below).
+// AUM by fund type counts only what Sayakaya customers hold (live holdings plus
+// locked campaign units, same as the Overview map), never funds.latest_aum_value,
+// which is the fund's total across every distributor. The LEFT JOIN keeps every
+// active type listed because the Performance tab's type picker reads this too.
 export const fundTypes = (fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
-  const ids = normalizeFundIds(fundIds);
   const params: Record<string, unknown> = {};
-  if (userFilter.length) {
-    return {
-      sql: `WITH ${activeCte(params, ids)}
-      SELECT f.type AS label, COUNT(DISTINCT f.id) AS count, ROUND(SUM(a.unit * f.latest_nav_value)) AS aum
-      FROM active a
-      JOIN ${FUNDS} f ON f.id = a.fund_id
-      WHERE f.listing_status = 'ACTIVE'${userFilterClause(params, 'a.user_id', userFilter)}
-      GROUP BY f.type ORDER BY aum DESC`,
-      params,
-    };
-  }
-  const fundFilter = fundIdsClause(params, 'id', ids);
   return {
-    sql: `SELECT type AS label, COUNT(*) AS count, SUM(IFNULL(latest_aum_value,0)) AS aum
-      FROM ${FUNDS}
-      WHERE listing_status='ACTIVE'${fundFilter}
-      GROUP BY type ORDER BY aum DESC`,
+    sql: `WITH ${activeCte(params, [])}
+      SELECT f.type AS label, COUNT(DISTINCT f.id) AS count, IFNULL(ROUND(SUM(a.unit * f.latest_nav_value)), 0) AS aum
+      FROM ${FUNDS} f
+      LEFT JOIN (SELECT * FROM active${userFilterClause(params, 'user_id', userFilter, 'id', ' WHERE ')}) a ON a.fund_id = f.id
+      WHERE f.listing_status = 'ACTIVE'${fundIdsClause(params, 'f.id', normalizeFundIds(fundIds))}
+      GROUP BY f.type ORDER BY aum DESC`,
     params,
   };
 };
@@ -3162,17 +3152,23 @@ export const switchingTopPairs = (limit: number | string = 15): Query => ({
   params: { limit: parseInt(String(limit), 10) },
 });
 
-// Market AUM rolled up by investment manager (same source as the fund-type chart).
-export const aumByManager = (limit: number | string = 15): Query => ({
-  sql: `SELECT COALESCE(im.common_name, im.name) AS label,
-      COUNT(*) AS fund_count, SUM(IFNULL(f.latest_aum_value, 0)) AS aum
-    FROM ${FUNDS} f
+// Sayakaya customers' holdings rolled up by investment manager (same source as
+// the fund-type chart), not funds.latest_aum_value, the market-wide fund total.
+export const aumByManager = (limit: number | string = 15): Query => {
+  const params: Record<string, unknown> = { limit: parseInt(String(limit), 10) };
+  return {
+    sql: `WITH ${activeCte(params, [])}
+    SELECT COALESCE(im.common_name, im.name) AS label,
+      COUNT(DISTINCT f.id) AS fund_count, ROUND(SUM(a.unit * f.latest_nav_value)) AS aum
+    FROM active a
+    JOIN ${FUNDS} f ON f.id = a.fund_id
     LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
     WHERE f.listing_status = 'ACTIVE'
     GROUP BY label
     ORDER BY aum DESC LIMIT @limit`,
-  params: { limit: parseInt(String(limit), 10) },
-});
+    params,
+  };
+};
 
 // Overview "Largest funds by AUM": one daily batch from portfolio_with_code
 // (one row per sid_code+fund+day), not funds.latest_aum_value/snapshots —
