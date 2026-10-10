@@ -89,6 +89,80 @@ function callEnd(src, open) {
   return src.length;
 }
 
+// Top-level comma-separated arguments of the call whose '(' is at src[open].
+function callArgs(src, open) {
+  const end = callEnd(src, open);
+  const body = src.slice(open + 1, end);
+  const args = [];
+  let depth = 0, start = 0, quote = null, tplDepth = [];
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (quote) {
+      if (c === '\\') { i++; continue; }
+      if (quote === '`' && c === '$' && body[i + 1] === '{') { tplDepth.push(depth); depth++; quote = null; i++; continue; }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') { quote = c; continue; }
+    if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) {
+      depth--;
+      if (c === '}' && tplDepth.length && depth === tplDepth[tplDepth.length - 1]) { tplDepth.pop(); quote = '`'; }
+    } else if (c === ',' && depth === 0) { args.push(body.slice(start, i)); start = i + 1; }
+  }
+  args.push(body.slice(start));
+  return args.map((a) => a.trim());
+}
+
+// Column labels of every table the frontend draws, by its element id:
+// genTable('#id', rows, [{ key, label }]) and hand-built <th> headers.
+const frontJs = read('public/app.js');
+const labelOf = (expr) => {
+  let m = expr.match(/^t\('([a-z0-9_]+)'\)$/);
+  if (m) return { key: m[1], en: strip(I18N.en[m[1]] || m[1]) };
+  m = expr.match(/^'([^']*)'$/) || expr.match(/^`([^`$]*)`$/);
+  return m ? { en: m[1] } : null;
+};
+const tableColumns = {};
+for (const m of frontJs.matchAll(/genTable\(\s*'#([A-Za-z0-9]+)'/g)) {
+  const args = callArgs(frontJs, m.index + 'genTable'.length);
+  const cols = [...(args[2] || '').matchAll(/label:\s*(t\('[a-z0-9_]+'\)|'[^']*'|`[^`]*`)/g)].map((x) => labelOf(x[1])).filter((x) => x && x.en);
+  tableColumns[m[1]] = [...(tableColumns[m[1]] || []), ...cols];
+}
+for (const m of frontJs.matchAll(/\$\('#([A-Za-z0-9]+)'\)\.innerHTML = `<table><thead><tr>([\s\S]*?)<\/tr><\/thead>/g)) {
+  const cols = [...m[2].matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((x) => {
+    const k = x[1].match(/^\$\{t\('([a-z0-9_]+)'\)\}$/);
+    return k ? { key: k[1], en: strip(I18N.en[k[1]] || k[1]) } : x[1].includes('${') ? null : { en: strip(x[1]) };
+  }).filter((x) => x && x.en);
+  tableColumns[m[1]] = [...(tableColumns[m[1]] || []), ...cols];
+}
+// The ID label for an English one, when the dictionaries have it.
+const enToId = {};
+Object.entries(I18N.en).forEach(([k, v]) => { if (I18N.id[k] && !enToId[strip(v)]) enToId[strip(v)] = strip(I18N.id[k]); });
+const withId = (en) => (enToId[en] && enToId[en] !== en ? `${en} / ${enToId[en]}` : en);
+
+// Panels of a tab, from its <section>: title, hints, and the tables,
+// charts and KPI cards inside.
+function panelsOf(tabId) {
+  const open = html.indexOf(`<section id="${tabId}"`);
+  if (open < 0) return [];
+  const section = html.slice(open, html.indexOf('</section>', open));
+  return section.split(/<div class="panel(?:"| [^"]*")/).slice(1).map((chunk) => {
+    const h2 = chunk.match(/<h2(?: data-i18n="([a-z0-9_]+)")?[^>]*>([\s\S]*?)<\/h2>/);
+    const titleKey = h2 && h2[1];
+    const title = h2 ? strip(titleKey ? I18N.en[titleKey] || h2[2] : h2[2]) : '';
+    const hintKeys = [...chunk.matchAll(/<span class="hint" data-i18n(?:-html)?="([a-z0-9_]+)"/g), ...chunk.matchAll(/<span data-i18n(?:-html)?="([a-z0-9_]+)">[^<]*<\/span>\s*<\/div>/g)].map((x) => x[1]);
+    return {
+      title,
+      titleId: titleKey && I18N.id[titleKey] && I18N.id[titleKey] !== I18N.en[titleKey] ? strip(I18N.id[titleKey]) : '',
+      hints: [...new Set(hintKeys)].map((k) => clean(tr(k))).filter(Boolean),
+      tables: [...chunk.matchAll(/id="([A-Za-z0-9]+)" class="table-wrap/g)].map((x) => x[1]),
+      charts: [...chunk.matchAll(/<canvas id="([A-Za-z0-9]+)"/g)].map((x) => x[1]),
+      kpis: [...chunk.matchAll(/id="([A-Za-z0-9]+)" class="kpi-grid/g)].map((x) => x[1]),
+    };
+  }).filter((pn) => pn.title || pn.tables.length || pn.charts.length || pn.kpis.length);
+}
+
 const appJs = read('server/app.js');
 const aliases = Object.fromEntries([...appJs.matchAll(/const (\w+) = require\('\.\/([a-z0-9-]+)'\)/g)].map((m) => [m[1], `server/${m[2]}.js`]));
 const TABLE_RE = /`?(sayakaya\.[a-z0-9_]+\.[A-Za-z0-9_*]+)`?/g;
@@ -244,6 +318,18 @@ Object.keys(tableUse).sort().forEach((t) => {
 });
 const tabLabel = Object.fromEntries(allTabs.map((t) => [t.id, t.label]));
 
+// --inventory: what each tab shows, for writing docs/content.js entries.
+if (process.argv.includes('--inventory')) {
+  allTabs.forEach((t) => {
+    console.log(`\n## ${t.label} (${t.id})`);
+    panelsOf(t.id).forEach((pn) => {
+      console.log(`- ${pn.title || '(tanpa judul)'}${pn.kpis.length ? ' [KPI]' : ''}${pn.charts.length ? ` [grafik: ${pn.charts.join(', ')}]` : ''}`);
+      pn.tables.forEach((tb) => console.log(`    ${tb}: ${(tableColumns[tb] || []).map((c) => c.en).join(' | ') || '(kolom dinamis atau dibuat helper)'}`));
+    });
+  });
+  process.exit(0);
+}
+
 // ---------- gaps ----------
 
 allTabs.forEach((t) => {
@@ -254,6 +340,50 @@ Object.keys(C.TABS).filter((id) => !tabLabel[id]).forEach((id) => warn(`docs/con
 Object.keys(datasets).filter((d) => !C.DATASETS[d]).forEach((d) => warn(`Dataset BigQuery "${d}" belum punya deskripsi di docs/content.js DATASETS.`));
 migrationTables.filter((t) => !C.SUPABASE_TABLES[t]).forEach((t) => warn(`Tabel Supabase "${t}" belum punya deskripsi di docs/content.js SUPABASE_TABLES.`));
 C.REPO_MAP.filter(([p]) => !exists(p)).forEach(([p]) => warn(`Path "${p}" di docs/content.js REPO_MAP tidak ada lagi.`));
+
+// UI strings a documented label can refer to: every English dictionary
+// value and every quoted string or table header in the frontend.
+const uiStrings = new Set([
+  ...Object.values(I18N.en).map(strip),
+  ...[...frontJs.matchAll(/'([^'\\\n]{1,80})'/g)].map((m) => m[1]),
+  ...[...(frontJs + html).matchAll(/<th[^>]*>([^<$]{1,80})<\/th>/g)].map((m) => strip(m[1])),
+]);
+const knownLabel = (l) => uiStrings.has(l) || /,| sampai /.test(l);
+Object.entries(C.TAB_DETAILS || {}).forEach(([id, d]) => {
+  if (!tabLabel[id]) { warn(`docs/content.js TAB_DETAILS punya "${id}", tapi tab itu tidak ada di sidebar.`); return; }
+  const panels = panelsOf(id);
+  Object.keys(d.panels || {}).forEach((key) => {
+    const found = key.startsWith('#') ? panels.some((pn) => pn.tables.includes(key.slice(1))) : panels.some((pn) => pn.title === key);
+    if (!found) warn(`Tab "${tabLabel[id]}": panel "${key}" di TAB_DETAILS tidak ditemukan di halaman.`);
+  });
+  const labels = [...(d.kpis || []).map(([l]) => l), ...Object.values(d.panels || {}).flatMap((pn) => (pn.columns || []).map(([l]) => l))];
+  labels.filter((l) => !knownLabel(l)).forEach((l) => warn(`Tab "${tabLabel[id]}": label "${l}" di TAB_DETAILS tidak ditemukan di aplikasi.`));
+});
+
+// "Isi tab" and "Catatan penting" for one tab, panels in page order.
+function renderDetails(t) {
+  const d = C.TAB_DETAILS && C.TAB_DETAILS[t.id];
+  if (!d) return;
+  const items = [];
+  if (d.kpis && d.kpis.length) {
+    items.push('  - *Kartu ringkasan di atas tab*:');
+    d.kpis.forEach(([l, m]) => items.push(`    - **${withId(l)}**: ${m}`));
+  }
+  const used = new Set();
+  const panelLine = (title, titleId, pd) => {
+    items.push(`  - *${clean(title)}*${titleId ? ` (${clean(titleId)})` : ''}${pd.note ? `: ${pd.note}` : ''}`);
+    (pd.columns || []).forEach(([l, m]) => items.push(`    - **${withId(l)}**: ${m}`));
+  };
+  panelsOf(t.id).forEach((pn) => {
+    const key = (d.panels || {})[pn.title] && !used.has(pn.title) ? pn.title : Object.keys(d.panels || {}).find((k) => k.startsWith('#') && pn.tables.includes(k.slice(1)) && !used.has(k));
+    if (!key) return;
+    used.add(key);
+    const pd = d.panels[key];
+    panelLine(pd.title || pn.title, pd.title ? '' : pn.titleId, pd);
+  });
+  if (items.length) { p('- **Isi tab**:'); items.forEach((x) => p(x)); }
+  if (d.notes && d.notes.length) { p('- **Catatan penting**:'); d.notes.forEach((n) => p(`  - ${n}`)); }
+}
 
 // ---------- document ----------
 
@@ -407,7 +537,7 @@ p('- Pembelian dianggap berhasil bila statusnya completed, completed_payment, at
 p('- Setiap tab analisis menampilkan peta data yang mengukur kecocokan kedua sisi untuk periode yang dipilih: berapa persen `user_id` GA4 ditemukan di `main.users`, dan berapa persen transaksi di database punya event aplikasi yang cocok.', '');
 
 p('## 6. Tab demi tab', '');
-p('Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama dengan tab Documentation di aplikasi), **Data yang dibaca**, **Cara hitung**, dan **Detail teknis** yang dibaca otomatis dari kode (id tab untuk hak akses, endpoint API, fungsi query, dan tabel yang benar-benar disentuh query).', '');
+p('Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama dengan tab Documentation di aplikasi), **Data yang dibaca**, **Cara hitung**, **Isi tab** (narasi singkat per panel dan arti kolom yang tidak jelas dari namanya), **Catatan penting**, dan **Detail teknis** yang dibaca otomatis dari kode (id tab untuk hak akses, endpoint API, fungsi query, dan tabel yang benar-benar disentuh query). Label kolom ditulis seperti di aplikasi (Bahasa Inggris), dengan label Bahasa Indonesia di dalam kurung bila ada.', '');
 groups.forEach((g) => {
   p(`### ${g.label}`, '');
   g.tabs.forEach((t) => {
@@ -419,6 +549,7 @@ groups.forEach((g) => {
     if (docKey && tr(docKey)) p(`- **Penjelasan sederhana**: ${clean(tr(docKey))}`);
     p(`- **Data yang dibaca**: ${c ? c.datasets : '_(belum diisi)_'}`);
     p(`- **Cara hitung**: ${c ? c.computation : '_(belum diisi)_'}`);
+    renderDetails(t);
     const bq = [...new Set(rs.flatMap((r) => r.bq))].sort();
     const supa = [...new Set(rs.flatMap((r) => r.supa))].sort();
     const builders = [...new Set(rs.flatMap((r) => r.builders))].filter((b) => typeof Q[b] === 'function' && b !== 'normalizeUserFilter').sort();
@@ -449,7 +580,7 @@ p('6. Push `main` ke kedua repo GitHub (masing-masing dengan akun `gh` miliknya)
 p('### 7.3 Menambah atau mengubah tab', '');
 p('1. Tambah tombol di sidebar dan `<section>` di `public/index.html`, logika di `public/app.js`, teks EN dan ID di `public/i18n.js`.');
 p('2. Tambah query di `server/queries.js` dan endpoint di `server/app.js`, lalu salin ke `supabase/functions/api/queries.ts` dan `index.ts` (SQL harus identik).');
-p('3. Tambah entri tab di Documentation (`public/index.html`) dan di `docs/content.js` TABS. Generator memberi peringatan bila lupa.');
+p('3. Tambah entri tab di Documentation (`public/index.html`), di `docs/content.js` TABS (ringkasan, dataset, cara hitung), dan di TAB_DETAILS (narasi singkat per panel, kolom yang tidak jelas dari namanya, catatan penting). Generator memberi peringatan bila tab belum punya entri, atau bila judul panel dan label kolom di TAB_DETAILS sudah tidak ada di aplikasi. `node scripts/generate-docs.js --inventory` mencetak panel dan kolom setiap tab sebagai bahan.');
 p('4. Tambah kasus di `test/render-smoke.js`, jalankan `npm test`, lalu `npm run deploy:all`.', '');
 
 p('## 8. Lampiran: endpoint bersama', '');

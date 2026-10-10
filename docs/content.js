@@ -330,6 +330,7 @@ const GLOSSARY = [
   ['Switching', 'Memindahkan uang dari satu fund ke fund lain tanpa menariknya keluar.'],
   ['KYC', 'Verifikasi identitas (KTP, selfie, data diri, rekening bank) yang wajib sebelum bisa membeli.'],
   ['SID', 'Single Investor Identification dari KSEI, nomor unik setiap investor pasar modal.'],
+  ['IFUA', 'Investor Fund Unit Account: nomor rekening unit reksa dana investor di sistem kustodian (S-INVEST).'],
   ['AperD / MI', 'Agen Penjual Efek Reksa Dana (Sayakaya) dan Manajer Investasi. Fee manajemen dibagi di antara keduanya.'],
   ['Remisier', 'Mitra perujuk yang mendapat bagi hasil dari AUM nasabah yang dibawanya.'],
   ['PWC / GS', 'Dua sumber snapshot portofolio: mi_fee_logs.portfolio_with_code (PWC) dan main.goal_snapshots (GS). Beberapa tab punya versi dari keduanya untuk dibandingkan.'],
@@ -404,4 +405,791 @@ const ENV_NOTES = {
   SES_CONFIGURATION_SET: 'Configuration set SES untuk pelacakan email. Biarkan kosong sampai configuration set itu benar-benar ada di SES, karena SES menolak email yang menyebut configuration set yang tidak ada.',
 };
 
-module.exports = { TABS, DATASETS, TABLE_NOTES, SUPABASE_TABLES, GLOSSARY, REPO_MAP, ENV_NOTES };
+// Inside each tab, in plain words: a sentence or two per panel, the few
+// columns whose meaning is not obvious from their name, and caveats. Panel
+// keys are the panel title as shown in English (or #tableId for a panel
+// without a title). The generator adds the Indonesian label of each panel
+// and column, and warns when a key or label no longer exists in the app.
+const TAB_DETAILS = {
+  overview: {
+    kpis: [
+      ['Platform AUM', 'Total nilai kepemilikan semua investor pada tanggal "Platform AUM as of" (snapshot harian portfolio_with_code, hanya fund yang masih ACTIVE). Baris kecil di bawahnya: jumlah investor yang memegang unit pada tanggal itu.'],
+      ['Total investors', 'Jumlah SID unik yang memegang unit pada tanggal AUM tersebut. Di bawahnya: total akun terdaftar dan berapa yang sudah KYC verified (persen dari total akun).'],
+      ['Buy volume (range)', 'Jumlah final_amount pembelian berstatus completed yang dibuat dalam rentang tanggal di atas, beserta jumlah transaksinya.'],
+      ['Active users (range)', 'Pengguna unik yang punya minimal satu transaksi (tipe dan status apa pun) dalam rentang tanggal.'],
+      ['New users (30d)', 'Akun baru dalam 30 hari terakhir dihitung dari hari ini, tidak mengikuti rentang tanggal.'],
+    ],
+    panels: {
+      'Transaction volume': { note: 'Volume beli dan jual (completed) per hari, minggu, atau bulan, dengan garis jumlah pengguna aktif.', },
+      'By transaction type': { note: 'Jumlah transaksi per tipe dalam rentang: buy, sell, SWITCH_IN, SWITCH_OUT, reinvestment. Semua status ikut dihitung.', },
+      'By status': { note: 'Jumlah transaksi per status dalam rentang: completed, expired, cancelled, completed_payment, verified, dan lainnya.', },
+      'User verification': { note: 'Semua akun per status KYC (unverified, verified, failed, pending_verification). Tidak mengikuti rentang tanggal.', },
+      'AUM by fund type': { note: 'AUM per jenis fund dari funds.latest_aum_value, yaitu AUM produk di seluruh pasar, bukan hanya dana nasabah Sayakaya.', },
+      'Investor distribution by province': { note: 'Peta per provinsi berdasarkan kota di KTP (user_profiles.id_address_city dicocokkan ke main.geo). Arahkan kursor untuk jumlah orang dan AUM live.', },
+      'Top cities by investors': { note: '15 kota dengan pengguna terbanyak menurut alamat KTP.', columns: [
+        ['Investors', 'Jumlah orang dengan alamat KTP di kota itu. Tanpa filter fund, ini mencakup semua pengguna yang sudah mengisi alamat, termasuk yang belum memegang unit.'],
+      ],
+      },
+      'Top cities by AUM': { note: '15 kota dengan nilai kepemilikan terbesar.', columns: [
+        ['AUM', 'Nilai kepemilikan live orang-orang di kota itu: unit saat ini (main.portfolios) dikali NAV terbaru fund.'],
+      ],
+      },
+      'Largest funds by AUM': { note: 'Semua fund (atau manajer investasi) yang dipegang nasabah pada tanggal terpilih, dari yang terbesar. Fund bisa dikeluarkan dari hitungan lewat pilihan fund.', columns: [
+        ['AUM', 'Jumlah nilai kepemilikan nasabah Sayakaya di fund itu pada tanggal AUM (portfolio_with_code).'],
+      ],
+      },
+    },
+    notes: [
+      'Tab ini memakai tiga sumber AUM: snapshot portfolio_with_code (kartu Platform AUM, Largest funds), kepemilikan live (peta, tabel kota), dan AUM produk di pasar (AUM by fund type). Wajar bila angkanya berbeda.',
+      'Rentang tanggal di bagian atas hanya berlaku untuk angka transaksi (volume, pengguna aktif, grafik tren, tipe, status). Platform AUM punya tanggalnya sendiri.',
+      'Tanggal transaksi memakai tanggal created_at dalam UTC, jadi transaksi pukul 00:00 sampai 06:59 WIB tercatat di hari sebelumnya.',
+    ],
+  },
+  aum: {
+    panels: {
+      'AUM & revenue history': { note: 'Garis AUM platform per hari atau bulan dan batang revenue AperD per periode, dari mi_fee_logs.mi_fee (hanya fund ACTIVE).', },
+      'What moved AUM': { note: 'Memecah perubahan AUM tiap periode menjadi arus bersih (beli dikurangi jual) dan efek pasar (sisanya). Klik batang untuk rincian per fund.', },
+      Detail: { note: 'Angka per periode di balik grafik, dengan baris total di bawah.', columns: [
+        ['AUM', 'AUM platform pada hari terakhir periode itu (bukan jumlah harian).'],
+        ['Δ AUM', 'Perubahan AUM dibanding periode sebelumnya.'],
+        ['Net flow', 'Pembelian completed dikurangi penjualan completed pada periode itu. Tanggal transaksi digeser +1 hari karena baris mi_fee hari D sudah memuat transaksi hari D-1.'],
+        ['Market effect', 'Δ AUM dikurangi Net flow: pergerakan NAV, reinvestasi, dan unit bonus. Kosong di baris pertama karena tidak ada periode pembanding.'],
+        ['Revenue', 'Jumlah aperd_share_per_day: bagian fee manajemen yang menjadi hak Sayakaya sebagai agen penjual.'],
+      ],
+      },
+      '#aumDrillTable': { title: 'Rincian per fund (setelah klik batang)', note: 'Fund mana yang menggerakkan AUM pada periode yang diklik, diurutkan dari perubahan terbesar.', columns: [
+        ['Switch (net)', 'Switch masuk dikurangi switch keluar. Secara platform hampir nol, tetapi per fund bisa besar.'],
+        ['Market effect', 'Sisa perubahan setelah dikurangi beli, jual, dan switch: efek NAV.'],
+      ],
+      },
+    },
+  },
+  'revenue-trend': {
+    panels: {
+      'Revenue trend': { note: 'Revenue AperD per hari, minggu (mulai hari Minggu), atau bulan, dihitung sama persis dengan tab Revenue (PWC).', },
+      'What moved revenue': { note: 'Memecah perubahan revenue dibanding periode sebelumnya menjadi tiga efek. Klik baris atau batang untuk rincian per fund.', },
+      Detail: { note: 'Angka per periode di balik grafik. Klik baris untuk melihat fund penyebab perubahannya.', columns: [
+        ['vs previous', 'Persen perubahan revenue dibanding periode sebelumnya.'],
+        ['Days effect', 'Bagian perubahan yang datang dari beda jumlah hari (misalnya Februari lebih pendek, atau periode terpotong).'],
+        ['AUM effect', 'Bagian perubahan dari naik turunnya rata-rata AUM, dihitung dengan rate periode sebelumnya.'],
+        ['Rate & mix effect', 'Sisanya: perubahan rate fee dan pergeseran dana ke fund dengan fee lebih tinggi atau rendah.'],
+      ],
+      },
+    },
+    notes: [
+      'Ketiga efek selalu berjumlah persis sama dengan perubahan revenue, sehingga bisa dibaca sebagai "penyebab" perubahan.',
+    ],
+  },
+  performance: {
+    panels: {
+      'Fund performance trend': { note: 'Grafik NAV harian fund yang dipilih (main.snapshots tipe NAV).', },
+      'Fund performance by type': { note: 'Ringkasan imbal hasil NAV per jenis fund untuk delapan periode.', columns: [
+        ['1D, 1W, 1M, 3M, YTD, 1Y, 3Y, 5Y', 'Rata-rata persen perubahan NAV fund-fund jenis itu selama periode tersebut. Hijau naik, merah turun.'],
+      ],
+      },
+      'Fund detail': { note: 'Imbal hasil NAV setiap fund, bisa disaring per jenis dan dihitung per tanggal tertentu. Kalimat di atas tabel menyebut fund terbaik dan terburuk 1 bulan.', columns: [
+        ['Tanggal Emisi', 'Tanggal fund pertama kali diterbitkan (funds.ipo_date).'],
+        ['1D sampai 5Y', 'Persen perubahan NAV fund itu: (NAV terakhir dikurangi NAV pada awal periode) dibagi NAV awal periode.'],
+      ],
+      },
+    },
+    notes: [
+      'Periode dihitung mundur dari tanggal NAV terbaru masing-masing fund, bukan dari hari ini. Bila NAV awal periode tidak ada tepat di tanggalnya, dipakai NAV terdekat sebelumnya; fund yang lebih muda dari periodenya tampil n/a.',
+    ],
+  },
+  growth: {
+    panels: {
+      'Campaign performance': { note: 'Pemakaian dan perkiraan biaya setiap kampanye promo.', columns: [
+        ['Redemption', 'Used dibagi Quota, dalam persen.'],
+        ['Est. cost', 'Perkiraan biaya: Used dikali Bonus/redemption.'],
+      ],
+      },
+      'Top referrers': { note: 'Pengajak yang membawa volume pembelian terbesar.', columns: [
+        ['Referred', 'Jumlah akun yang mendaftar dengan kode itu (users.referrer_code), terverifikasi atau belum.'],
+        ['Volume brought', 'Total seluruh pembelian completed sepanjang masa dari akun-akun yang diajak.'],
+      ],
+      },
+      'AUM by investment manager': { note: 'Total AUM produk per manajer investasi dari funds.latest_aum_value (AUM pasar, bukan hanya nasabah Sayakaya).', },
+      'Platform AUM by risk tolerance': { note: 'Kepemilikan live nasabah Sayakaya dikelompokkan menurut user_profiles.investment_risk_tolerance.', },
+    },
+    notes: [
+      'Data penghasilan dan toleransi risiko di profil hampir semuanya kosong, jadi panel income bracket dan risk tolerance hampir seluruhnya berisi "(unknown)".',
+      'Panel kampanye, referrer, dan switching tidak mengikuti rentang tanggal: semuanya sepanjang masa.',
+    ],
+  },
+  predict: {
+    panels: {
+      'Model status': { note: 'Kapan model terakhir dilatih, dan tombol Retrain now untuk melatih ulang. Jadwal bulanannya ada di Netlify, jadi cek tanggal di panel ini untuk memastikan masih berjalan.', },
+      'AUM forecast': { note: 'AUM harian historis dan perkiraan ke depan dari model ARIMA_PLUS (sayakaya.ml.aum_forecast), dengan rentang ketidakpastian (batas bawah dan atas).', },
+      'Transaction (buy volume) forecast': { note: 'Volume pembelian completed harian dan perkiraannya (sayakaya.ml.tx_forecast), memperhitungkan hari libur Indonesia.', },
+      'Churn risk (current holders)': { note: 'Investor yang masih memegang unit, diurutkan dari risiko churn tertinggi.', columns: [
+        ['Churn prob', 'Peluang (0 sampai 100%) investor ini akan menjual habis semua unitnya, menurut model regresi logistik.'],
+        ['Risk', 'High = 50% ke atas, Medium = 20% sampai 50%, Low = di bawah 20%.'],
+        ['Recency', 'Hari sejak transaksi completed terakhir.'],
+      ],
+      },
+      'Churn rate by tenure': { note: 'Seberapa banyak investor yang sudah keluar, dikelompokkan menurut lama sejak pembelian pertama.', columns: [
+        ['Tenure', 'Lama sejak pembelian pertama: 0-3 bulan, 3-6 bulan, 6-12 bulan, lebih dari 12 bulan.'],
+        ['Churn rate', 'Churned dibagi Investors.'],
+      ],
+      },
+      'Churn overview': { note: 'Overall churn rate = orang yang pernah membeli tetapi sekarang tidak memegang apa pun, dibagi semua orang yang pernah membeli. Active holders = yang sekarang memegang minimal satu fund.', },
+      'Retention cohorts': { note: 'Setiap baris adalah cohort bulan transaksi completed pertama. Kolom M0, M1, M2, dan seterusnya: persen anggota cohort yang punya transaksi completed lagi pada bulan ke-n sesudahnya. Size = jumlah anggota cohort.', },
+      'AUM retention cohorts': { note: 'Cohort berdasarkan bulan pertama SID itu punya AUM (mi_fee_logs.portfolios). Bulan ke-n dihitung bertahan bila arus bersih kumulatif (beli dikurangi jual sejak bulan cohort) masih nol atau positif.', },
+    },
+    notes: [
+      '"Churn" di sini berarti pernah membeli tetapi sekarang sudah tidak memegang unit sama sekali. Model tidak memakai AUM saat ini sebagai fitur karena itu sama saja dengan membocorkan jawabannya.',
+    ],
+  },
+  portfolio: {
+    kpis: [
+      ['Total AUM', 'Jumlah Market Value semua kepemilikan investor ini, beserta jumlah fund yang dipegang.'],
+      ['Regular portfolio', 'Bagian dari unit hasil pembelian sendiri (main.portfolios). Tidak tersedia untuk tanggal lampau.'],
+      ['Bonus portfolio', 'Bagian dari unit bonus kampanye yang masih on_going (main.bonus_portfolios). Tidak tersedia untuk tanggal lampau.'],
+    ],
+    panels: {
+      'Bulk export': { note: 'Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.', },
+      'AUM over time': { note: 'AUM harian investor ini dari mi_fee_logs.portfolio_with_code (data mulai 14 Januari 2026).', },
+      Holdings: { note: 'Tanpa tanggal: kepemilikan live (unit bonus ikut) dengan harga beli dari portfolios.initial_price. Dengan tanggal: snapshot portfolio_with_code pada tanggal itu.', columns: [
+        ['Average NAV', 'Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).'],
+        ['Fund Value', 'Modal: Unit Balance dikali Average NAV.'],
+        ['Unrealized G/L', 'Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.'],
+        ['%', 'Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.'],
+      ],
+      },
+      'AUM performance': { note: 'Persen perubahan total AUM investor ini dibanding 1 hari, 1 minggu, 1, 3 bulan, awal tahun, 1, 3, dan 5 tahun sebelum data terakhirnya.', },
+    },
+    notes: [
+      'AUM performance adalah perubahan nilai total, sehingga setoran dan penarikan ikut terhitung. Investor yang menambah dana akan terlihat "naik" walau NAV turun. Untuk imbal hasil investasi, lihat kolom % di Holdings.',
+      'Harga beli rata-rata dari portfolios.initial_price bisa berbeda dari harga beli sebenarnya untuk sebagian investor. Untuk harga beli yang dikoreksi lihat Portfolio Explorer (Main), untuk yang dihitung dari ledger transaksi lihat Portfolio (TX).',
+    ],
+  },
+  'portfolio-fix': {
+    kpis: [
+      ['Total AUM', 'Jumlah Market Value semua kepemilikan investor ini, beserta jumlah fund yang dipegang.'],
+      ['Regular portfolio', 'Bagian dari unit hasil pembelian sendiri (main.portfolios). Tidak tersedia untuk tanggal lampau.'],
+      ['Bonus portfolio', 'Bagian dari unit bonus kampanye yang masih on_going (main.bonus_portfolios). Tidak tersedia untuk tanggal lampau.'],
+    ],
+    panels: {
+      'Bulk export': { note: 'Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.', },
+      'AUM over time': { note: 'AUM harian investor ini dari mi_fee_logs.portfolio_fix (data mulai awal Agustus 2026).', },
+      Holdings: { note: 'Dengan tanggal: snapshot portfolio_fix, yang harga beli rata-ratanya sudah dikoreksi. Tanpa tanggal: kepemilikan live. Centang Export memilih fund yang ikut file ekspor.', columns: [
+        ['Average NAV', 'Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).'],
+        ['Fund Value', 'Modal: Unit Balance dikali Average NAV.'],
+        ['Unrealized G/L', 'Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.'],
+        ['%', 'Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.'],
+      ],
+      },
+      'AUM performance': { note: 'Persen perubahan total AUM investor ini dibanding 1 hari, 1 minggu, 1, 3 bulan, awal tahun, 1, 3, dan 5 tahun sebelum data terakhirnya.', },
+    },
+    notes: [
+      'AUM performance adalah perubahan nilai total, sehingga setoran dan penarikan ikut terhitung. Investor yang menambah dana akan terlihat "naik" walau NAV turun. Untuk imbal hasil investasi, lihat kolom % di Holdings.',
+    ],
+  },
+  'portfolio-tx': {
+    kpis: [
+      ['Total AUM', 'Jumlah Market Value semua kepemilikan investor ini, beserta jumlah fund yang dipegang.'],
+      ['Regular portfolio', 'Bagian dari unit hasil pembelian sendiri (main.portfolios). Tidak tersedia untuk tanggal lampau.'],
+      ['Bonus portfolio', 'Bagian dari unit bonus kampanye yang masih on_going (main.bonus_portfolios). Tidak tersedia untuk tanggal lampau.'],
+    ],
+    panels: {
+      'Bulk export': { note: 'Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.', },
+      'AUM over time': { note: 'AUM harian investor ini dari mi_fee_logs.portfolio_fix.', },
+      Holdings: { note: 'Harga beli rata-rata dihitung ulang dari riwayat transaksi: hanya pembelian dan switch masuk yang mengubah rata-rata, penjualan hanya mengurangi unit. Centang Export memilih fund yang ikut file ekspor.', columns: [
+        ['Average NAV', 'Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).'],
+        ['Fund Value', 'Modal: Unit Balance dikali Average NAV.'],
+        ['Unrealized G/L', 'Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.'],
+        ['%', 'Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.'],
+      ],
+      },
+      'AUM performance': { note: 'Persen perubahan total AUM investor ini dibanding 1 hari, 1 minggu, 1, 3 bulan, awal tahun, 1, 3, dan 5 tahun sebelum data terakhirnya.', },
+    },
+    notes: [
+      'AUM performance adalah perubahan nilai total, sehingga setoran dan penarikan ikut terhitung. Investor yang menambah dana akan terlihat "naik" walau NAV turun. Untuk imbal hasil investasi, lihat kolom % di Holdings.',
+      'Unit bonus hanya tersedia live, tidak untuk tanggal lampau.',
+    ],
+  },
+  'portfolio-sinvest': {
+    kpis: [
+      ['Total AUM', 'Jumlah Market Value semua kepemilikan investor ini, beserta jumlah fund yang dipegang.'],
+      ['Regular portfolio', 'Bagian dari unit hasil pembelian sendiri (main.portfolios). Tidak tersedia untuk tanggal lampau.'],
+      ['Bonus portfolio', 'Bagian dari unit bonus kampanye yang masih on_going (main.bonus_portfolios). Tidak tersedia untuk tanggal lampau.'],
+    ],
+    panels: {
+      'Bulk export': { note: 'Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.', },
+      'AUM over time': { note: 'AUM harian investor ini dari mi_fee_logs.portfolio_fix.', },
+      Holdings: { note: 'Kepemilikan dihitung dari catatan kustodian (S-INVEST) dengan aturan yang sama seperti Portfolio (TX), untuk mengecek apakah catatan aplikasi cocok dengan kustodian.', columns: [
+        ['Average NAV', 'Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).'],
+        ['Fund Value', 'Modal: Unit Balance dikali Average NAV.'],
+        ['Unrealized G/L', 'Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.'],
+        ['%', 'Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.'],
+      ],
+      },
+      'AUM performance': { note: 'Persen perubahan total AUM investor ini dibanding 1 hari, 1 minggu, 1, 3 bulan, awal tahun, 1, 3, dan 5 tahun sebelum data terakhirnya.', },
+    },
+    notes: [
+      'AUM performance adalah perubahan nilai total, sehingga setoran dan penarikan ikut terhitung. Investor yang menambah dana akan terlihat "naik" walau NAV turun. Untuk imbal hasil investasi, lihat kolom % di Holdings.',
+      'Semua kolom di sinvest.trx_history bertipe teks; tanggal (YYYYMMDD) dan nominal di-parse dulu, jadi data yang formatnya rusak bisa terlewat.',
+    ],
+  },
+  'portfolio-explorer': {
+    kpis: [
+      ['Total AUM (as of date)', 'Jumlah Market Value semua kepemilikan investor ini pada tanggal snapshot (main.goal_snapshots), beserta jumlah fund.'],
+      ['Goals', 'Jumlah goal (tujuan investasi di aplikasi) yang punya kepemilikan pada tanggal itu.'],
+    ],
+    panels: {
+      'Bulk export': { note: 'Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.', },
+      'Holdings by fund': { note: 'Kepemilikan digabung per fund dari semua goal, pada tanggal snapshot terpilih (default: terbaru).', columns: [
+        ['Average NAV', 'Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).'],
+        ['Fund Value', 'Modal: Unit Balance dikali Average NAV.'],
+        ['Unrealized G/L', 'Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.'],
+        ['%', 'Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.'],
+      ],
+      },
+      'Holdings by goal': { note: 'Kepemilikan yang sama dipisah per goal (tujuan investasi yang dibuat investor di aplikasi). Hanya tampilan; ekspor tetap digabung.', },
+    },
+    notes: [
+      'Sumber "GS" (main.goal_snapshots) dan "PWC" (portfolio_with_code) dihitung oleh pipeline yang berbeda, jadi angkanya bisa sedikit berbeda untuk investor yang sama.',
+    ],
+  },
+  hnwi: {
+    panels: {
+      Filters: { note: 'Pilih tanggal AUM dan rentang AUM minimum dan maksimum. Panel per fund punya filter AUM per fund sendiri.', },
+      'AUM per investor (total)': { note: 'Investor dengan total AUM dalam rentang pilihan, dari yang terbesar (maksimal 500), lengkap dengan kontak dan profil risiko.', columns: [
+        ['Risk level', 'Hasil kuesioner profil risiko di aplikasi (user_profiles.risk_level, 1 sampai 6).'],
+        ['Investment risk tolerance', 'Toleransi risiko yang diisi saat KYC (sering kosong).'],
+      ],
+      },
+    },
+    notes: [
+      'Sumber AUM: mi_fee_logs.portfolio_with_code. Kolom kontak (nama sampai tanggal lahir) juga ada di tabel per fund.',
+    ],
+  },
+  'top-investors': {
+    panels: {
+      'Top investors': { note: 'Peringkat investor menurut pembelian, penjualan, atau net deposit dalam rentang tanggal.', columns: [
+        ['% of all subscriptions', 'Porsi investor ini dari total pembelian semua investor dalam rentang (bukan hanya baris yang tampil).'],
+        ['Net deposit', 'Subscriptions dikurangi Redemptions. Positif = uang masuk bersih, negatif = uang keluar bersih.'],
+      ],
+      },
+      'Short version': { note: 'Versi ringkas dari tabel di atas yang bisa diurutkan per kolom, untuk disalin ke laporan.', columns: [
+        ['Net increase', 'Buys dikurangi Sell.'],
+      ],
+      },
+    },
+    notes: [
+      'Mode Net deposit menurun hanya menampilkan net positif (penabung terbesar); menaik hanya net negatif (penarik terbesar).',
+    ],
+  },
+  'user-lifetime': {
+    panels: {
+      'Revenue & investors over time': { note: 'Revenue fee (mgmt fee, AperD, MI) dan jumlah investor per periode.', },
+      'Revenue & lifetime per investor': { note: 'Satu baris per investor (maksimal 200), diurutkan dari Total AperD terbesar. Klik baris untuk rincian per bulan dan fund.', columns: [
+        ['Transacting span (d)', 'Hari dari transaksi pertama sampai terakhir.'],
+        ['Holding lifetime (d)', 'Hari dari pembelian pertama sampai hari ini (bila masih memegang) atau sampai penjualan terakhir.'],
+        ['First hold (feed)', 'Hari pertama investor ini muncul di snapshot portfolio_with_code dalam rentang.'],
+        ['Total AperD', 'Bagian fee untuk Sayakaya (agen penjual).'],
+      ],
+      },
+      Investor: { note: 'Rincian investor yang diklik, per periode dan fund.', columns: [
+        ['Mgmt fee rate', 'Rate fee manajemen tahunan yang berlaku.'],
+      ],
+      },
+      'Period summary (all funds)': { note: 'Rekap revenue fee semua investor per periode.', columns: [
+        ['AperD per investor', 'Total AperD dibagi jumlah investor.'],
+      ],
+      },
+    },
+    notes: [
+      'Kolom uang memakai perhitungan yang sama dengan Revenue (PWC): AUM harian dikali rate fee. Tanggal daftar, beli pertama, dan transaksi diambil dari database utama karena snapshot portfolio_with_code baru mulai 14 Januari 2026.',
+    ],
+  },
+  dormant: {
+    kpis: [
+      ['Dormancy episodes', 'Jumlah jeda lebih dari 14 hari di antara dua pembelian berturut-turut seorang investor, semua panjang jeda, termasuk yang belum berakhir.'],
+      ['Episodes converted', 'Jeda yang ditutup oleh pembelian berikutnya.'],
+      ['Conversion rate', 'Episodes converted dibagi Dormancy episodes.'],
+      ['Reactivation revenue', 'Total nominal pembelian yang menutup setiap jeda.'],
+    ],
+    panels: {
+      'Conversion by dormancy length': { note: 'Berapa jeda pembelian yang akhirnya ditutup pembelian baru, per panjang jeda.', columns: [
+        ['Dormancy length', 'Kelompok panjang jeda: 2 Weeks, 1 Month, 2 Month, 3 Month. Jeda 180 hari ke atas dibuang karena dianggap churn.'],
+        ['Conversion', 'Converted dibagi Episodes.'],
+      ],
+      },
+      'Repeat buyers': { note: 'Investor yang pernah kembali membeli setelah jeda, beserta seberapa sering mereka membeli.', columns: [
+        ['Longest dormancy recovered', 'Kelompok jeda terpanjang yang pernah dia tutup dengan membeli lagi.'],
+        ['Buyer type', 'One-time (1 pembelian), Light (2 sampai 3), atau Power (4 ke atas), dihitung dari pembelian completed sepanjang masa.'],
+      ],
+      },
+    },
+    notes: [
+      'Tab ini tidak punya filter tanggal: dihitung dari seluruh riwayat pembelian completed. Tabel daftar maksimal 1.000 baris.',
+    ],
+  },
+  'users-tx': {
+    panels: {
+      'Users transactions': { note: 'Cari investor (SID, email, atau nama, sebagian kata cukup) dan saring menurut tipe, status, fund, dan tanggal. Ekspor CSV, Excel, atau PDF.', },
+      'Transaction detail': { note: 'Satu baris per transaksi, terbaru di atas, dengan kontak pembeli.', columns: [
+        ['Type', 'buy (pembelian), sell (penjualan), SWITCH_IN dan SWITCH_OUT (dua sisi switching), reinvestment (pembagian hasil yang diinvestasikan ulang).'],
+        ['Status', 'completed (selesai), expired (batas bayar habis), cancelled (dibatalkan), completed_payment (uang diterima, unit belum dialokasikan), verified, verified_by_operational, dan lainnya.'],
+        ['NAV', 'Harga per unit yang dipakai untuk transaksi itu (value_per_unit).'],
+        ['Final amount', 'Nominal akhir setelah fee dan promo. Untuk order yang tidak dibayar biasanya 0.'],
+      ],
+      },
+    },
+    notes: [
+      'Semua status ikut tampil kecuali disaring. Untuk angka bisnis (volume, revenue) biasanya hanya status completed yang dihitung.',
+    ],
+  },
+  'sinvest-tx': {
+    panels: {
+      'SInvest transactions': { note: 'Data mentah dari kustodian (sinvest.trx_history), bisa disaring per SID, kata kunci, tipe, dan tanggal.', },
+      'Transaction detail': { note: 'Satu baris per transaksi di feed kustodian.', columns: [
+        ['Type', 'Tipe transaksi kustodian: BUY, SELL, SWITCH_IN, SWITCH_OUT, REINVESTMENT, LIQUIDATION, TRANSFER_IN, TRANSFER_OUT, UNIT_ADJUSTMENT (kode 1 sampai 9 di data asli).'],
+        ['Input date', 'Tanggal transaksi diinput ke sistem kustodian (dipakai tab Reconciliation).'],
+      ],
+      },
+    },
+    notes: [
+      'Semua kolom di sumbernya bertipe teks; tanggal dan nominal diubah formatnya hanya untuk tampilan.',
+    ],
+  },
+  'remisier-tx': {
+    panels: {
+      'Remisier transactions': { note: 'Transaksi milik nasabah seorang remisier, dipilih lewat referrer_code atau sales_code, plus filter tipe, status, dan tanggal.', },
+      'Transaction detail': { note: 'Satu baris per transaksi nasabah remisier.', columns: [
+        ['Status', 'completed (selesai), expired (batas bayar habis), cancelled (dibatalkan), completed_payment (uang diterima, unit belum dialokasikan), verified, verified_by_operational, dan lainnya.'],
+        ['Final amount', 'Nominal akhir setelah fee dan promo. Untuk order yang tidak dibayar biasanya 0.'],
+        ['Realized G/L', 'Untung atau rugi yang terealisasi saat menjual (dari main.transactions.realized_gain_loss).'],
+      ],
+      },
+    },
+  },
+  reconciliation: {
+    panels: {
+      'App ledger vs custodian feed': { note: 'Perbandingan harian jumlah dan nominal transaksi antara aplikasi dan kustodian, per tipe.', columns: [
+        ['Date', 'Tanggal. Sisi aplikasi memakai tanggal transaksi selesai (completed_at); sisi kustodian memakai Input_Date.'],
+        ['Type', 'Tipe transaksi. Baris ALL menjumlah semua tipe di tanggal itu.'],
+        ['Diff', 'App amount dikurangi Custodian amount. Nol berarti cocok.'],
+      ],
+      },
+    },
+    notes: [
+      'Liquidation, transfer, dan unit adjustment belum dibukukan di aplikasi, jadi tipe-tipe itu hanya punya angka di sisi kustodian; selisihnya bukan berarti salah.',
+    ],
+  },
+  'send-statement': {
+    panels: {
+      'Portfolio preview': { note: 'Isi lampiran portofolio sebelum dikirim: tanpa tanggal memakai kepemilikan live (unit dikali NAV terbaru, harga beli dari portfolios.initial_price); dengan tanggal memakai snapshot portfolio_fix pada tanggal itu.', },
+      'Transaction e-statement preview': { note: 'Transaksi berstatus completed, verified, atau completed_payment pada bulan terpilih yang akan masuk e-statement.', },
+      'Batch send': { note: 'Kirim dokumen yang sama ke banyak investor sekaligus: cari per nama (* sebagai wildcard), SID, email, atau nomor HP, atau tempel daftar email/SID. Satu email per penerima.', },
+      'Automated sending': { note: 'Jadwal kirim berulang. Membuat jadwal meminta kode OTP lewat email. Jadwal selalu memakai portofolio live dan e-statement bulan lalu.', columns: [
+        ['Sends', 'Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.'],
+        ['Status', 'Active (berjalan), Paused (dijeda), Ended (melewati tanggal akhir).'],
+      ],
+      },
+    },
+    notes: [
+      'PDF dikunci dengan tanggal lahir investor (format DDMMYYYY).',
+      'Setiap pengiriman dicatat di tab Email recap (sampai, dibuka, diklik) dan di Activity log.',
+    ],
+  },
+  'send-fund-performance': {
+    panels: {
+      Recipients: { note: 'Daftar penerima: cari investor per nama, SID, email, atau nomor HP, atau tempel daftar email.', },
+      'Fund performance report': { note: 'PDF "Reksa Dana Update": persen perubahan NAV per periode (sama dengan tab Performance) untuk semua fund, kategori tertentu, atau fund pilihan, dengan NAV per tanggal terpilih.', },
+      'Automated sending': { note: 'Jadwal kirim laporan performa fund berulang.', columns: [
+        ['Sends', 'Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.'],
+        ['Status', 'Active (berjalan), Paused (dijeda), Ended (melewati tanggal akhir).'],
+      ],
+      },
+    },
+    notes: [
+      'Bila filter fund tidak cocok dengan fund mana pun, pengiriman gagal alih-alih mengirim PDF kosong.',
+    ],
+  },
+  'email-recap': {
+    kpis: [
+      ['Sent', 'Email yang diterima server SES untuk dikirim; di bawahnya yang gagal dikirim dan jumlah penerima unik.'],
+      ['Delivered', 'Email yang dilaporkan SES sampai ke server penerima (persen dari Sent).'],
+      ['Opened', 'Email yang dibuka minimal sekali (persen dari Delivered) dan total kali dibuka.'],
+      ['Clicked', 'Email yang tautannya diklik minimal sekali (persen dari Delivered dan dari yang membuka).'],
+      ['Bounced', 'Email yang ditolak server penerima (alamat salah atau penuh).'],
+      ['Marked as spam', 'Penerima menandai email sebagai spam.'],
+    ],
+    panels: {
+      'Emails per day': { note: 'Batang: email terkirim per hari (WIB). Garis: yang dibuka dan diklik, tetap dicatat di hari email dikirim.', },
+      'By category': { note: 'Hasil pengiriman per jenis email.', columns: [
+        ['Category', 'Jenis email: E-statement & portfolio, Fund performance, Account invite, Password reset, Schedule confirmation code, Other sender.'],
+        ['Open rate', 'Opened dibagi Delivered.'],
+        ['Click rate', 'Clicked dibagi Delivered.'],
+      ],
+      },
+      'By subject': { note: 'Satu baris per subjek dan kategori; jadwal berulang dengan subjek sama digabung.', },
+      'Every email': { note: 'Satu baris per email, bisa dicari dan disaring per hasil. Tombol di ujung baris membuka riwayat event email itu.', columns: [
+        ['Category', 'Jenis email.'],
+        ['Sent from', 'Asal kiriman: Manual send, Batch send, Schedule, Account emails, Script.'],
+        ['Outcome', 'Status terakhir: Sent (belum ada kabar), Delivered, Opened, Clicked, Bounced, Marked as spam, Rejected by SES, Failed to send.'],
+      ],
+      },
+    },
+    notes: [
+      'Data dari Supabase (dashboard_email_log dan dashboard_email_events), bukan BigQuery.',
+      'Sampai, dibuka, dan diklik hanya terisi setelah pelacakan Amazon SES disambungkan (lihat kalimat status di atas tab). "Dibuka" bergantung pada gambar pelacak yang bisa diblokir aplikasi email, jadi angka sebenarnya bisa lebih tinggi.',
+      'Kiriman sebelum 8 Oktober 2026 diisi ulang dari antrean jadwal dan activity log, tanpa data sampai atau dibuka.',
+    ],
+  },
+  revenue: {
+    panels: {
+      'Revenue trend': { note: 'Total fee manajemen, bagian AperD, dan bagian MI per periode.', },
+      'Management fee revenue (per fund, per period)': { note: 'Fee dihitung per hari: AUM fund hari itu (mi_fee_logs.portfolio_with_code, dengan koreksi -1 hari) dikali rate tahunan, dibagi jumlah hari dalam tahun itu, lalu dibagi menjadi bagian AperD dan MI.', columns: [
+        ['Mgmt fee rate', 'Rate fee manajemen per tahun yang dibebankan fund (misalnya 1,5%).'],
+        ['AperD share', 'Porsi fee manajemen yang menjadi hak Sayakaya sebagai agen penjual.'],
+        ['MI share', 'Porsi fee manajemen yang menjadi hak manajer investasi.'],
+        ['AUM EOM', 'AUM pada hari terakhir periode (end of month).'],
+        ['Total AperD', 'Revenue Sayakaya: jumlah fee harian bagian AperD selama periode.'],
+      ],
+      },
+      'Period summary (all funds)': { note: 'Rekap semua fund per periode; Total AUM (EOM) adalah AUM platform di hari terakhir periode.', },
+    },
+    notes: [
+      'Rate yang dipakai adalah rate terbaru setiap fund (baris terakhir di management_fee_logs) untuk seluruh periode. Bila rate fund pernah berubah, periode sebelum perubahan ikut dihitung dengan rate baru.',
+    ],
+  },
+  revenue2: {
+    panels: {
+      'Revenue trend': { note: 'Total fee manajemen, bagian AperD, dan bagian MI per periode.', },
+      'Management fee revenue (per fund, per period)': { note: 'Fee dihitung per hari: AUM fund hari itu (main.goal_snapshots, tanpa koreksi tanggal) dikali rate tahunan, dibagi jumlah hari dalam tahun itu, lalu dibagi menjadi bagian AperD dan MI.', columns: [
+        ['Mgmt fee rate', 'Rate fee manajemen per tahun yang dibebankan fund (misalnya 1,5%).'],
+        ['AperD share', 'Porsi fee manajemen yang menjadi hak Sayakaya sebagai agen penjual.'],
+        ['MI share', 'Porsi fee manajemen yang menjadi hak manajer investasi.'],
+        ['AUM EOM', 'AUM pada hari terakhir periode (end of month).'],
+        ['Total AperD', 'Revenue Sayakaya: jumlah fee harian bagian AperD selama periode.'],
+      ],
+      },
+      'Period summary (all funds)': { note: 'Rekap semua fund per periode; Total AUM (EOM) adalah AUM platform di hari terakhir periode.', },
+    },
+    notes: [
+      'Rate yang dipakai adalah rate terbaru setiap fund (baris terakhir di management_fee_logs) untuk seluruh periode. Bila rate fund pernah berubah, periode sebelum perubahan ikut dihitung dengan rate baru.',
+    ],
+  },
+  'campaign-revenue': {
+    panels: {
+      'Campaign revenue trend': { note: 'Fee yang dihasilkan unit-unit yang terkunci kampanye promo, per periode.', },
+      'Per campaign (whole range)': { note: 'Satu baris per kampanye untuk seluruh rentang.', columns: [
+        ['Participations', 'Jumlah pembelian yang ikut kampanye (baris bonus_portfolios).'],
+        ['Still locked', 'Partisipasi yang unitnya masih terkunci masa tahan (status on_going).'],
+        ['Total AperD (alt)', 'Total AperD bila penjualan dianggap memakai unit milik investor dulu, unit kampanye terakhir (atribusi optimis).'],
+        ['Est. cost', 'Biaya kampanye: bonus per pemakaian dikali kuota terpakai.'],
+        ['Net vs cost', 'Total AperD dikurangi Est. cost. Negatif berarti fee belum menutup biaya bonus.'],
+      ],
+      },
+      'Per campaign, per period': { note: 'Fee setiap kampanye dipecah per periode.', columns: [
+        ['Avg locked AUM', 'Rata-rata nilai unit kampanye per hari.'],
+      ],
+      },
+      'Period summary (all funds)': { note: 'Rekap semua kampanye per periode.', },
+    },
+    notes: [
+      'Unit kampanye menghasilkan fee selama masih dipegang. Kolom utama menganggap penjualan memakai unit kampanye dulu (konservatif); kolom "(alt)" menganggap unit kampanye dipakai terakhir (optimis).',
+    ],
+  },
+  remisier: {
+    panels: {
+      'Users under this remisier': { note: 'Daftar nasabah yang referrer_code atau sales_code-nya cocok dengan kode remisier (pencarian sebagian kata). Cek daftar ini dulu sebelum menghitung.', },
+      'Revenue detail (per fund)': { note: 'Fee AperD dari dana setiap nasabah remisier per fund (AUM dari main.goal_snapshots), lalu dibagi antara remisier dan Sayakaya.', columns: [
+        ['Remisier fee (gross)', 'Porsi remisier dari bagian AperD (porsinya diisi di form, misalnya 50%).'],
+        ['PPh 2.5%', 'Potongan pajak PPh 23 sebesar 2,5% dari fee remisier.'],
+        ['Remisier fee (net)', 'Fee remisier setelah dipotong PPh.'],
+        ['Sayakaya fee', 'Sisa bagian AperD untuk Sayakaya: AperD dikali (1 dikurangi porsi remisier).'],
+      ],
+      },
+      'Revenue summary (all funds)': { note: 'Rekap per periode dari tabel detail.', },
+    },
+    notes: [
+      'Fee remisier selalu dihitung dari bagian AperD, bukan dari fee manajemen kotor.',
+    ],
+  },
+  'remisier-pwc': {
+    panels: {
+      'Users under this remisier': { note: 'Daftar nasabah yang referrer_code atau sales_code-nya cocok dengan kode remisier (pencarian sebagian kata). Cek daftar ini dulu sebelum menghitung.', },
+      'Revenue detail (per fund)': { note: 'Fee AperD dari dana setiap nasabah remisier per fund (AUM dari mi_fee_logs.portfolio_with_code, dengan koreksi -1 hari), lalu dibagi antara remisier dan Sayakaya.', columns: [
+        ['Remisier fee (gross)', 'Porsi remisier dari bagian AperD (porsinya diisi di form, misalnya 50%).'],
+        ['PPh 2.5%', 'Potongan pajak PPh 23 sebesar 2,5% dari fee remisier.'],
+        ['Remisier fee (net)', 'Fee remisier setelah dipotong PPh.'],
+        ['Sayakaya fee', 'Sisa bagian AperD untuk Sayakaya: AperD dikali (1 dikurangi porsi remisier).'],
+      ],
+      },
+      'Revenue summary (all funds)': { note: 'Rekap per periode dari tabel detail.', },
+    },
+    notes: [
+      'Fee remisier selalu dihitung dari bagian AperD, bukan dari fee manajemen kotor.',
+    ],
+  },
+  marketing: {
+    kpis: [
+      ['Total installs', 'Install aplikasi dari semua channel iklan menurut Adjust.'],
+      ['Revenue', 'Jumlah nominal pembayaran yang dilaporkan aplikasi ke Adjust (event payment_completed).'],
+    ],
+    panels: {
+      'Funnel by channel': { note: 'Satu baris per channel atau tracker iklan Adjust, dari klik sampai pembayaran.', columns: [
+        ['Channel', 'Nama tracker Adjust (sumber iklan atau kampanye).'],
+        ['OTP verified', 'Pengguna yang memverifikasi nomor HP lewat OTP.'],
+      ],
+      },
+    },
+    notes: [
+      'Hanya nama event polos yang dihitung; varian seperti payment_completed_1M_plus dibuang supaya satu pembayaran tidak terhitung dua atau tiga kali. Angka Adjust bisa berbeda dengan database utama karena atribusi iklan punya aturannya sendiri.',
+    ],
+  },
+  'referral-program': {
+    kpis: [
+      ['Eligible', 'Referral yang memenuhi semua syarat dan sudah lewat masa tahan 30 hari.'],
+      ['Pending', 'Memenuhi syarat pembelian tetapi masa tahan 30 harinya belum selesai.'],
+      ['Est. bonus payable', 'Perkiraan bonus yang harus dibayar: Rp25.000 untuk pengajak dan Rp25.000 untuk yang diajak, per referral Eligible.'],
+    ],
+    panels: {
+      'Inviter leaderboard': { note: 'Satu baris per pengajak. "Invited" dihitung dari tanggal invitee mendaftar di periode program.', columns: [
+        ['Transacted ≥ Rp1jt', 'Yang transaksi pertamanya memenuhi syarat program: beli fund Sucor Asset Management minimal Rp1.000.000.'],
+        ['Not eligible', 'Bertransaksi tetapi gagal salah satu syarat; alasannya ada di tabel Referral detail.'],
+      ],
+      },
+      'Invited users': { note: 'Semua orang yang diajak, beserta tanggal daftar dan verifikasi.', },
+      'Referral detail': { note: 'Satu baris per referral yang transaksi pertamanya masuk periode program.', columns: [
+        ['Baseline units', 'Saldo unit fund itu tepat setelah pembelian selesai.'],
+        ['Min units seen', 'Saldo unit terendah selama 30 hari setelahnya. Bila lebih kecil dari Baseline units, investor sudah menjual sebagian dan bonus gugur.'],
+        ['Reason', 'Alasan bila tidak eligible (misalnya transaksi pertama bukan fund Sucor, nominal di bawah Rp1 juta, unit dijual sebelum 30 hari).'],
+      ],
+      },
+    },
+    notes: [
+      'Syarat bonus Rp25.000 per pihak: transaksi pertama si invitee adalah pembelian fund Sucor Asset Management minimal Rp1.000.000 dengan kode referral, dan unitnya ditahan 30 hari.',
+    ],
+  },
+  'referral-program-alt': {
+    kpis: [
+      ['Eligible', 'Referral yang memenuhi semua syarat dan sudah lewat masa tahan 30 hari.'],
+      ['Pending', 'Memenuhi syarat pembelian tetapi masa tahan 30 harinya belum selesai.'],
+      ['Est. bonus payable', 'Perkiraan bonus yang harus dibayar: Rp25.000 untuk pengajak dan Rp25.000 untuk yang diajak, per referral Eligible.'],
+    ],
+    panels: {
+      'Inviter leaderboard': { note: 'Satu baris per pengajak. "Invited" dihitung dari tanggal KYC invitee terverifikasi (dengan kelonggaran 1 hari), bukan tanggal daftar.', columns: [
+        ['Transacted ≥ Rp1jt', 'Yang transaksi pertamanya memenuhi syarat program: beli fund Sucor Asset Management minimal Rp1.000.000.'],
+        ['Not eligible', 'Bertransaksi tetapi gagal salah satu syarat; alasannya ada di tabel Referral detail.'],
+      ],
+      },
+      'Invited users': { note: 'Semua orang yang diajak, beserta tanggal daftar dan verifikasi.', },
+      'Referral detail': { note: 'Satu baris per referral yang transaksi pertamanya masuk periode program.', columns: [
+        ['Baseline units', 'Saldo unit fund itu tepat setelah pembelian selesai.'],
+        ['Min units seen', 'Saldo unit terendah selama 30 hari setelahnya. Bila lebih kecil dari Baseline units, investor sudah menjual sebagian dan bonus gugur.'],
+        ['Reason', 'Alasan bila tidak eligible (misalnya transaksi pertama bukan fund Sucor, nominal di bawah Rp1 juta, unit dijual sebelum 30 hari).'],
+      ],
+      },
+    },
+    notes: [
+      'Syarat bonus Rp25.000 per pihak: transaksi pertama si invitee adalah pembelian fund Sucor Asset Management minimal Rp1.000.000 dengan kode referral, dan unitnya ditahan 30 hari.',
+    ],
+  },
+  kalcer: {
+    kpis: [
+      ['Referrers', 'Pengguna yang pernah mengajak minimal satu orang.'],
+      ['AUM referred', 'Total AUM semua orang yang diajak pada tanggal di atas.'],
+    ],
+    panels: {
+      Referrers: { note: 'Satu baris per pengajak, beserta jumlah dan nilai orang yang dia ajak.', columns: [
+        ['AUM referred', 'Total AUM orang-orang yang dia ajak pada tanggal terpilih.'],
+      ],
+      },
+      Referrals: { note: 'Satu baris per hubungan pengajak dan yang diajak.', columns: [
+        ['Investor AUM', 'AUM orang yang diajak pada tanggal terpilih (snapshot portfolio_with_code, koreksi -1 hari).'],
+      ],
+      },
+    },
+    notes: [
+      'Tab ini mencakup semua referral antar pengguna, bukan hanya ambassador satu program, dan tidak menghitung bonus.',
+    ],
+  },
+  push: {
+    kpis: [
+      ['Delivery rate', 'Pesan yang diterima server Firebase untuk dikirim dibagi semua pesan.'],
+    ],
+    panels: {
+      'Send volume': { note: 'Jumlah pesan push per hari.', },
+      'By campaign': { note: 'Keberhasilan pengiriman per nama kampanye push.', columns: [
+        ['Accepted', 'Pesan dengan status MESSAGE_ACCEPTED.'],
+        ['Missing registrations', 'Gagal karena token perangkat sudah tidak berlaku (aplikasi dihapus atau token kedaluwarsa).'],
+      ],
+      },
+    },
+    notes: [
+      'Data ini hanya kesehatan pengiriman, bukan dibuka atau diklik, dan tidak punya user_id. Untuk push yang dibuka lalu membeli, lihat tab User behavior.',
+    ],
+  },
+  'app-health': {
+    panels: {
+      'Crash & error issues': { note: 'Satu baris per masalah, platform, dan jenis (fatal atau tidak).', columns: [
+        ['Fatal', 'Ya bila aplikasi tertutup paksa (crash), tidak bila hanya error yang tercatat.'],
+        ['Affected devices', 'Jumlah perangkat berbeda yang mengalaminya (installation_uuid).'],
+      ],
+      },
+      'Slowest operations': { note: 'Pemanggilan API GraphQL dan pemuatan layar, minimal 20 sampel.', columns: [
+        ['Median (ms)', 'Durasi tengah dalam milidetik; lebih mewakili pengalaman pengguna daripada rata-rata.'],
+      ],
+      },
+    },
+    notes: [
+      'Crashlytics tidak menyimpan jumlah pengguna aktif, jadi tab ini tidak bisa menghitung persentase crash-free.',
+    ],
+  },
+  'product-funnel': {
+    panels: {
+      'Funnel by platform': { note: 'Perangkat yang klik Register pada periode ini, lalu dicek tanpa batas tanggal apakah perangkat yang sama pernah mencapai setiap langkah.', },
+    },
+    notes: [
+      'Dihitung per perangkat (user_pseudo_id), bukan per akun, karena orang belum login saat mendaftar. Untuk funnel per akun yang dicocokkan ke database, lihat Onboarding analysis.',
+    ],
+  },
+  'user-behavior': {
+    panels: {
+      'By investor status': { note: 'Status adalah kondisi hari ini: Holding (memegang unit), Redeemed (pernah beli, sekarang kosong), Verified, never bought, dan Not verified.', columns: [
+        ['Minutes in app (median)', 'Median total menit aktif di aplikasi (engagement_time_msec).'],
+      ],
+      },
+      'In-app actions that come before a purchase': { note: 'Aksi di aplikasi yang paling sering mendahului pembelian dalam 7 hari.', columns: [
+        ['Baseline', 'Persen semua pengguna aplikasi yang membeli dalam 7 hari sejak aktivitas pertamanya.'],
+        ['Lift', 'Rate dibagi Baseline. 2.0 berarti dua kali lebih sering membeli dibanding pengguna rata-rata.'],
+      ],
+      },
+      'Push campaigns: opened, then bought': { note: 'Per kampanye push: penerima, pembuka, dan pembeli dalam 72 jam.', columns: [
+        ['Bought within 72h', 'Semua penerima yang membeli dalam 72 jam, dibuka atau tidak (termasuk yang memang akan membeli).'],
+      ],
+      },
+      'Fund pages: viewed, then bought': { note: 'Halaman fund yang dibuka dibandingkan dengan pembelian fund yang sama.', columns: [
+        ['Viewer to buyer', 'Persen yang membuka halaman fund lalu membeli fund yang sama dalam 7 hari.'],
+      ],
+      },
+      'Started buying, never paid': { note: 'Daftar tindak lanjut: membuka form beli atau membuat order, tanpa pembayaran sampai 3 hari setelah percobaan terakhir.', columns: [
+        ['What happened to the order', '"No order created" berarti berhenti di form; "expired" berarti order dibuat tapi tidak dibayar.'],
+      ],
+      },
+      'One investor\'s journey': { note: 'Aktivitas aplikasi dan transaksi satu investor pada satu linimasa. Setiap pencarian dicatat di Activity log.', },
+    },
+  },
+  'subscription-analysis': {
+    panels: {
+      'Buy flow, step by step': { note: 'Berapa orang yang lanjut dari form beli sampai membayar, bisa dipisah per platform, pembeli pertama atau ulang, dan versi aplikasi.', columns: [
+        ['Minutes to pay (median)', 'Median menit dari order dibuat sampai dibayar (paid_at).'],
+      ],
+      },
+      'Where people open the buy form from': { note: 'Layar asal pembukaan form beli dan seberapa sering berakhir dibayar.', columns: [
+        ['Screen before', 'Layar terakhir sebelum form beli terbuka, di sesi yang sama.'],
+        ['Paid %', 'Persen orang yang membayar dalam 3 hari setelah membuka form dari layar itu.'],
+      ],
+      },
+      'Where people leave the buy flow': { note: 'Sesi yang berhenti sebelum membuat order, per langkah terjauh, dan ke mana orang pergi.', columns: [
+        ['Next screen', 'Tujuan setelah layar alur beli terakhir; "(left the app)" berarti tidak ada aktivitas lagi di sesi itu.'],
+      ],
+      },
+      'Orders by payment method': { note: 'Semua order beli per metode pembayaran: dibayar, kedaluwarsa, atau dibatalkan.', columns: [
+        ['Waiting', 'Belum dibayar dan belum kedaluwarsa.'],
+        ['Paid another order within 7 days', 'Orang yang ordernya tidak dibayar lalu membayar order lain dalam seminggu.'],
+      ],
+      },
+      'What people did before subscribing': { note: 'Layar dan aksi yang membedakan pembeli dari yang tidak membeli.', columns: [
+        ['Rate without it', 'Persen membeli di antara orang yang tidak melakukan layar atau aksi itu.'],
+        ['Lift', 'Rate dibagi Rate without it.'],
+        ['Share of subscribers', 'Persen dari semua pembeli yang melakukannya sebelum membeli.'],
+      ],
+      },
+      'Preset amount buttons': { note: 'Tombol nominal di form beli dan apakah orang tetap di nominal itu saat membayar.', columns: [
+        ['Kept that amount', 'Yang membayar dengan nominal persis sama dengan tombol yang diketuk.'],
+      ],
+      },
+    },
+  },
+  'onboarding-analysis': {
+    panels: {
+      'Where KYC ended up': { note: 'Hasil KYC setiap pendaftar baru, dengan waktu mengisi, waktu review, dan pembelian pertama.', columns: [
+        ['Review hours (median)', 'Jam dari KYC dikirim sampai keputusan review di user_status_logs.'],
+        ['Sessions to submit (median)', 'Berapa kali membuka aplikasi sampai KYC terkirim.'],
+      ],
+      },
+    },
+  },
+  'redemption-analysis': {
+    panels: {
+      'Who sells, and what happens after': { note: 'Semua penjualan selesai pada periode ini, bisa dipisah menurut lama memegang, jenis fund, atau penuh dan sebagian.', columns: [
+        ['Full %', 'Persen penjualan yang menghabiskan semua unit fund itu (is_all_unit).'],
+        ['Days held (median)', 'Median hari sejak pertama membeli atau switch masuk ke fund itu.'],
+        ['Holding nothing now', 'Penjual yang hari ini tidak memegang unit apa pun.'],
+        ['Confirmed in app', 'Penjualan yang punya event konfirmasi di aplikasi; sisanya lewat jalur lain.'],
+      ],
+      },
+    },
+  },
+  'engagement-analysis': {
+    panels: {
+      'Features and the people who use them': { note: 'Setiap kelompok fitur dibandingkan dengan semua pengguna aplikasi.', columns: [
+        ['Median portfolio', 'Median nilai portofolio hari ini, di antara pemakai fitur yang memegang unit.'],
+      ],
+      },
+      'What people search for': { note: 'Kata kunci pencarian fund dan apakah berujung pada pembelian.', columns: [
+        ['Bought what they tapped', 'Membeli fund yang mereka ketuk dari hasil pencarian dalam 7 hari.'],
+      ],
+      },
+    },
+  },
+  'event-code': {
+    kpis: [
+      ['Repeat transacted', 'Orang bertanda kode yang punya lebih dari satu transaksi.'],
+    ],
+    panels: {
+      'Cohort retention — by registration date': { note: 'Setiap baris: kelompok orang bertanda kode yang mendaftar pada hari, minggu, atau bulan yang sama; kolom berikutnya persen yang bertransaksi pada periode ke-n sesudahnya.', },
+      'Cohort retention — by first transaction date': { note: 'Sama, tetapi kelompok berdasarkan tanggal transaksi pertama.', },
+    },
+    notes: [
+      'Tab generik yang disiapkan sebelum event-nya ada; aturan funnel dan cohort perlu disesuaikan saat event sebenarnya berjalan.',
+    ],
+  },
+  ask: {
+    panels: {
+      'Talk with Data': { note: 'Ketik pertanyaan dalam bahasa biasa; jawaban berupa tabel dan grafik, beserta SQL yang dipakai (bisa disalin, diedit, dan dijalankan ulang). Kolom hasil mengikuti pertanyaan.', },
+    },
+    notes: [
+      'Jawaban dibuat oleh model AI, jadi periksa SQL-nya untuk angka penting. Kolom sensitif (password, data KYC) selalu disaring kecuali superuser mengonfirmasi password.',
+    ],
+  },
+  explorer: {
+    panels: {
+      Explorer: { note: 'Pilih tabel, saring, dan lihat baris aslinya tanpa agregasi. Kolom mengikuti tabel yang dipilih.', },
+    },
+  },
+  sql: {
+    panels: {
+      'SQL lab': { note: 'Tulis query SELECT atau WITH sendiri. Tombol perkiraan menampilkan berapa byte yang akan dibaca sebelum query dijalankan.', },
+    },
+    notes: [
+      'Hanya bisa membaca: satu statement, tanpa perubahan data, dan kolom sensitif disaring dari hasil.',
+    ],
+  },
+  admin: {
+    panels: {
+      Users: { note: 'Daftar akun dashboard (superuser). Tambah akun, pilih tab yang boleh dibuka, kirim undangan, atau reset password.', columns: [
+        ['Access', 'Tab yang boleh dibuka akun itu. Superuser bisa membuka semuanya.'],
+      ],
+      },
+    },
+  },
+  'activity-log': {
+    panels: {
+      'Activity log': { note: 'Riwayat aktivitas semua akun (superuser), bisa disaring per akun, jenis aktivitas, dan tanggal.', columns: [
+        ['Action', 'Jenis aktivitas: login, ekspor, Ask, SQL, lihat portofolio, lihat linimasa investor, perubahan akun, dan lainnya.'],
+        ['Detail', 'Rincian aktivitas, misalnya SID yang dilihat atau nama file yang diekspor.'],
+      ],
+      },
+    },
+  },
+};
+
+module.exports = { TABS, TAB_DETAILS, DATASETS, TABLE_NOTES, SUPABASE_TABLES, GLOSSARY, REPO_MAP, ENV_NOTES };
