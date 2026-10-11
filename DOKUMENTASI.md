@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `9ad80b2 (2026-10-11)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `eafbf37 (2026-10-11)`.
 
 ## Cara membaca dokumen ini
 
@@ -862,9 +862,9 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 #### Users transactions
 
 - **Untuk apa**: Telusuri transaksi investor mana pun lewat SID, email, atau nama.
-- **Penjelasan sederhana**: Telusuri transaksi investor mana pun berdasarkan kode SID, email, atau nama (kecocokan sebagian, wajib diisi), lengkap dengan info kontak pembeli dan nama produk di setiap barisnya: join yang sama dengan Remisier transactions, tapi dicari berdasarkan identitas investor, bukan kode referrer/sales. Persempit lebih lanjut dengan jenis transaksi, status, produk, atau rentang tanggal. Bisa diekspor ke CSV, Excel, atau PDF.
+- **Penjelasan sederhana**: Telusuri transaksi investor mana pun berdasarkan kode SID, email, atau nama (kecocokan sebagian, wajib diisi), lengkap dengan info kontak pembeli dan nama produk di setiap barisnya: join yang sama dengan Remisier transactions, tapi dicari berdasarkan identitas investor, bukan kode referrer/sales. Persempit lebih lanjut dengan jenis transaksi, status, produk, atau rentang tanggal. Bisa diekspor ke CSV, Excel, atau PDF. Klik judul kolom mana pun untuk mengurutkan semua transaksi yang cocok, bukan hanya halaman yang terlihat; unduhan mengikuti urutan yang sama.
 - **Data yang dibaca**: main.transactions, main.users, main.user_profiles, main.funds
-- **Cara hitung**: Pencarian parsial. Filter tipe, status, fund, dan tanggal. Tiap baris memuat kontak pembeli dan nama fund. Export CSV, Excel, PDF.
+- **Cara hitung**: Pencarian parsial. Filter tipe, status, fund, dan tanggal. Tiap baris memuat kontak pembeli dan nama fund. Export CSV, Excel, PDF. Semua kolom bisa diurutkan dengan klik judul kolom; pengurutan dijalankan di BigQuery (pagedOrder, hanya nama kolom output yang diizinkan, teks tanpa membedakan huruf besar/kecil, NULL di akhir) sehingga berlaku untuk semua baris dan ikut ke export. Di tab lain, export server dari tabel yang diurutkan di layar dikirim beserta kolom urutannya (sortExportRows di report-helpers): diurutkan menurut field kolom itu, atau mengikuti urutan kolom pertama di layar untuk pivot dan kolom yang dihitung di halaman.
 - **Isi tab**:
   - *Users transactions* (Transaksi pengguna): Cari investor (SID, email, atau nama, sebagian kata cukup) dan saring menurut tipe, status, fund, dan tanggal. Ekspor CSV, Excel, atau PDF.
   - *Transaction detail* (Detail transaksi): Satu baris per transaksi, terbaru di atas, dengan kontak pembeli.
