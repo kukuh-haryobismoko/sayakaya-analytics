@@ -172,6 +172,32 @@ const kalcerDetail = [
     referral_date: D('2026-05-18'), invitee_aum: '2.07e8' },
 ];
 
+// Event code daily recap: one row per day plus per-code rows. The second day
+// is below both targets set further down, so the delta columns go negative.
+const evcRecap = {
+  days: [
+    { day: D('2026-10-01'), registrations: 5, kyc_verified: 4, tx_total: 4, tx_completed: 2, tx_ongoing: 1, tx_failed: 1,
+      amount_completed: 2000000, amount_ongoing: 500000, transacting_users: 3, new_transactors: 2 },
+    { day: D('2026-10-02'), registrations: 0, kyc_verified: 0, tx_total: 0, tx_completed: 0, tx_ongoing: 0, tx_failed: 0,
+      amount_completed: 0, amount_ongoing: 0, transacting_users: 0, new_transactors: 0 },
+  ],
+  byCode: [{ code: 'EVT01', registrations: 5, kyc_verified: 4, tx_total: 4, tx_completed: 2, tx_ongoing: 1, tx_failed: 1,
+    amount_completed: 2000000, amount_ongoing: 500000, transacting_users: 3, new_transactors: 2 }],
+  transacting_users: 3,
+};
+const evcPortfolio = {
+  summary: [{ portfolio_status: 'invested', investors: 3, aum: '5e6', as_of: D('2026-10-10') },
+    { portfolio_status: 'never', investors: 2, aum: '0', as_of: D('2026-10-10') }],
+  retention: [
+    { cohort: D('2026-09-01'), period: D('2026-09-01'), period_end: D('2026-09-30'), cohort_size: 4, holders: 4, aum: '4e6' },
+    { cohort: D('2026-09-01'), period: D('2026-10-01'), period_end: D('2026-10-10'), cohort_size: 4, holders: 2, aum: '2e6' },
+  ],
+};
+const evcUsersPage = { total: 1, rows: [{ sid: 'IDD1', name: 'A', email: 'a@b.c', referrer_code: 'EVT01', sales_code: null,
+  created_at: D('2026-10-01T01:00:00'), verified_at: null, verification_status: 'verified', portfolio_status: 'redeemed',
+  aum_now: '0', first_buy_at: D('2026-10-02T01:00:00'), last_tx_at: D('2026-10-05T01:00:00'), completed_buys: 1, bought: 1000000, sold: 1000000 }] };
+const evcCohortRows = [{ cohort: D('2026-09-27'), period_offset: 0, users: 2, cohort_size: 2 }, { cohort: D('2026-09-27'), period_offset: 10, users: 1, cohort_size: 2 }];
+
 // Email recap (Supabase RPC/PostgREST, plain JSON, no BigQuery wrappers).
 // The subject is an HTML payload on purpose: it must come out escaped.
 const XSS = '<img src=x onerror=alert(1)>';
@@ -350,6 +376,13 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/engagement/activity'))         return egActivity;
   if (path.startsWith('/api/engagement/search'))           return egSearch;
   if (path.startsWith('/api/engagement/discovery'))        return egDiscovery;
+  if (path.startsWith('/api/event-code/recap')) {
+    if (!path.includes('codes=EVT*') || !path.includes('type=buy')) throw new Error('recap missing codes/type: ' + path);
+    return evcRecap;
+  }
+  if (path.startsWith('/api/event-code/portfolio')) return evcPortfolio;
+  if (path.startsWith('/api/event-code/users'))     return evcUsersPage;
+  if (path.startsWith('/api/event-code/cohort'))    return evcCohortRows;
   throw new Error('unexpected path ' + path);
 };
 
@@ -359,9 +392,22 @@ sandbox.api = async (path) => {
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   try { await sandbox.loadAumDrill('2026-08'); } catch (e) { errors.push(`loadAumDrill: ${e.message}`); }
+  get('#evcCodes').value = 'EVT*'; get('#evcRecapType').value = 'buy';
+  get('#evcTargetReg').value = '3'; get('#evcTargetTx').value = '2';
+  try { await sandbox.loadEvcRecap(); } catch (e) { errors.push(`loadEvcRecap: ${e.message}`); }
+  const evcDaily = get('#evcDailyTable')._html;
+  if (!evcDaily.includes('class="num pos">+2<') || !evcDaily.includes('class="num neg">-3<')) errors.push('#evcDailyTable: target deltas missing');
+  if (!get('#evcRecapKpis')._html.includes('50.0%')) errors.push('#evcRecapKpis: days on target missing');
+  for (const fn of ['loadEvcPortfolio', 'loadEvcUsers', 'loadEvcCohort']) {
+    try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
+  }
+  // Calendar columns for portfolio (50% in October), offsets sorted numerically for cohorts (W10 after W0).
+  if (!/2026-09<\/th><th>2026-10<\/th>/.test(get('#evcPfHeatmap')._html) || !get('#evcPfHeatmap')._html.includes('>50%<')) errors.push('#evcPfHeatmap: calendar columns missing');
+  if (!/W0<\/th><th>W10<\/th>/.test(get('#evcCohortRegHeatmap')._html)) errors.push('#evcCohortRegHeatmap: offsets out of order');
+  if (!get('#evcUsersTable')._html.includes('Sold everything')) errors.push('#evcUsersTable: portfolio status label missing');
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';

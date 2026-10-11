@@ -393,6 +393,8 @@ tbody tr.clickable { cursor: pointer; }
 td .link-btn { color: var(--ink); font-size: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
 td .link-btn:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; border-radius: 2px; }
 td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-numeric: tabular-nums; }
+td.pos { color: var(--pos-text); }
+td.neg { color: var(--neg-text); }
 .tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .tag.buy { background: var(--teal-tint); color: var(--teal); }
 .tag.sell { background: var(--rose-tint); color: var(--rose); }

@@ -179,10 +179,12 @@ function downloadBlob(blob, filename) {
 function tableToAoa(table) {
   return [...table.querySelectorAll('tr')].map((tr) => [...tr.children].map((c) => c.textContent.trim()));
 }
+function aoaToCsv(aoa) {
+  const esc = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  return '﻿' + aoa.map((r) => r.map(esc).join(',')).join('\n');
+}
 function exportTableCsv(table, name) {
-  const esc = (v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const csv = '﻿' + tableToAoa(table).map((r) => r.map(esc).join(',')).join('\n');
-  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${name}.csv`);
+  downloadBlob(new Blob([aoaToCsv(tableToAoa(table))], { type: 'text/csv;charset=utf-8' }), `${name}.csv`);
 }
 // Export-only libraries load on first use instead of render-blocking every
 // page from <head>: ~470KB gzipped (~1.5MB of JS to parse) that most visits
@@ -3737,7 +3739,7 @@ let growthLoaded = false;
 // averages, rates, dates, or investor counts that overlap between rows.
 function genTable(sel, rows, cols, emptyMsg, sortState) {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
-  const numTypes = ['idr', 'idrx', 'num', 'pct'];
+  const numTypes = ['idr', 'idrx', 'num', 'pct', 'delta'];
   const td = (c, v) => {
     let out = v == null ? 'n/a' : v;
     if (c.type === 'idr') out = idrFull(v);
@@ -3745,7 +3747,10 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
     if (c.type === 'num') out = num(v);
     if (c.type === 'pct') out = v == null ? 'n/a' : `${Number(v).toFixed(1)}%`;
     if (c.type === 'date') out = v == null ? 'n/a' : String(v).slice(0, 10);
-    return `<td class="${numTypes.includes(c.type) ? 'num' : ''}">${out}</td>`;
+    // delta: signed difference from a target, green at or above it, red below.
+    if (c.type === 'delta') out = v == null ? '' : (v > 0 ? '+' : '') + num(v);
+    const tone = c.type === 'delta' && v != null ? (v < 0 ? ' neg' : ' pos') : '';
+    return `<td class="${numTypes.includes(c.type) ? 'num' : ''}${tone}">${out}</td>`;
   };
   // c.sort makes the header a keyboard-focusable sort control; the arrow is
   // drawn by CSS from aria-sort so it never lands in copied or exported text.
@@ -4704,19 +4709,44 @@ function renderTiCompact() {
 // EVENT CODE TRACKING (generic — no event/code table exists yet, see
 // queries.js:eventCodeWhere; field still picks referrer_code/sales_code like
 // Remisier does, since that's where a code would live today). No tab-switch
-// auto-load, same as Remisier — needs a code typed in first.
+// auto-load, same as Remisier: needs a code typed in first. Every count in
+// this tab uses completed transactions only; ongoing and failed show as their
+// own columns and never feed a total, a target or a retention cell.
 let evcGranularity = 'week';
-const evcUsers = { limit: 100, offset: 0, total: 0 };
+const evcUsers = { limit: 100, offset: 0, total: 0, rows: null };
 const evcTx = { limit: 100, offset: 0, total: 0 };
+let evcCohortRows = { reg: null, tx: null };
+// ponytail: exports fetch in one request; page through if an event ever passes this.
+const EVC_EXPORT_MAX = 50000;
 
 function evcCodesArr() {
   return $('#evcCodes').value.split(',').map((s) => s.trim()).filter(Boolean);
 }
-function evcBaseQs() {
-  const qs = new URLSearchParams({ field: $('#evcField').value, from: $('#evcFrom').value, to: $('#evcTo').value });
+function evcBaseQs(extra = {}) {
+  const qs = new URLSearchParams({ field: $('#evcField').value, from: $('#evcFrom').value, to: $('#evcTo').value, ...extra });
   evcCodesArr().forEach((c) => qs.append('codes', c));
   return qs;
 }
+const fillT = (key, vars) => Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, v), t(key));
+
+// Export cells keep raw values (numbers stay numbers) instead of the
+// formatted text the on-screen tables show.
+const EVC_NUM_TYPES = ['num', 'idr', 'pct', 'delta'];
+const evcCell = (c, r) => {
+  const v = val(r[c.key]);
+  if (v == null || v === '') return '';
+  if (EVC_NUM_TYPES.includes(c.type)) return Number(v);
+  return c.type === 'date' ? String(v).slice(0, 10) : v;
+};
+const evcAoa = (rows, cols) => [cols.map((c) => c.label), ...rows.map((r) => cols.map((c) => evcCell(c, r)))];
+async function downloadAoa(aoa, name, fmt) {
+  if (fmt === 'csv') { downloadBlob(new Blob([aoaToCsv(aoa)], { type: 'text/csv;charset=utf-8' }), `${name}.csv`); return; }
+  await loadExportLib('xlsx');
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name.slice(0, 31));
+  XLSX.writeFile(wb, `${name}.xlsx`);
+}
+const evcFileSlug = () => `${evcCodesArr().join('_').replace(/[^A-Za-z0-9]+/g, '-')}_${$('#evcFrom').value}_${$('#evcTo').value}`;
 
 function renderEvcFunnel(f) {
   const tagged = Number(val(f.tagged)) || 0;
@@ -4731,79 +4761,375 @@ function renderEvcFunnel(f) {
   ].join('');
 }
 
+// Tagged users plus their portfolio (queries.js:eventCodePortfolioCtes).
+const evcPfLabel = (s) => t(`evc_pf_${s}`);
+const evcUserRows = (rows) => rows.map((r) => ({ ...r, portfolio_status_label: evcPfLabel(val(r.portfolio_status)) }));
+const evcUserCols = () => [
+  { key: 'sid', label: 'SID' }, { key: 'name', label: t('evc_col_name') }, { key: 'email', label: 'Email' },
+  { key: 'referrer_code', label: t('evc_col_referrer') }, { key: 'sales_code', label: t('evc_col_sales') },
+  { key: 'created_at', label: t('evc_col_registered'), type: 'date' }, { key: 'verified_at', label: t('evc_col_verified_at'), type: 'date' },
+  { key: 'verification_status', label: t('evc_col_kyc_status') },
+  { key: 'portfolio_status_label', label: t('evc_col_pf_status') },
+  { key: 'aum_now', label: t('evc_col_aum_now'), type: 'idr' },
+  { key: 'first_buy_at', label: t('evc_col_first_buy'), type: 'date' },
+  { key: 'last_tx_at', label: t('evc_col_last_tx'), type: 'date' },
+  { key: 'completed_buys', label: t('evc_col_buys'), type: 'num' },
+  { key: 'bought', label: t('evc_col_bought'), type: 'idr' },
+  { key: 'sold', label: t('evc_col_sold'), type: 'idr' },
+];
+function renderEvcUsers() {
+  if (!evcUsers.rows) return;
+  genTable('#evcUsersTable', evcUserRows(evcUsers.rows), evcUserCols(), t('evc_users_empty'));
+}
 async function loadEvcUsers() {
-  const qs = evcBaseQs();
-  qs.set('limit', evcUsers.limit); qs.set('offset', evcUsers.offset);
+  const qs = evcBaseQs({ limit: evcUsers.limit, offset: evcUsers.offset });
   $('#evcUsersTable').innerHTML = '<div class="loading">Loading…</div>';
   try {
     const { rows, total } = await api(`/api/event-code/users?${qs}`);
-    evcUsers.total = total;
-    genTable('#evcUsersTable', rows, [
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
-      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
-      { key: 'created_at', label: 'Registered at', type: 'date' }, { key: 'verified_at', label: 'Verified at', type: 'date' },
-      { key: 'verification_status', label: 'KYC status' },
-    ], 'No users tagged with this code in this range.');
+    evcUsers.total = total; evcUsers.rows = rows;
+    renderEvcUsers();
     const start = total ? evcUsers.offset + 1 : 0;
     const end = Math.min(evcUsers.offset + evcUsers.limit, total);
     $('#evcUsersPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
     $('#evcUsersPrev').disabled = evcUsers.offset === 0;
     $('#evcUsersNext').disabled = end >= total;
-  } catch (e) { $('#evcUsersTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { evcUsers.rows = null; $('#evcUsersTable').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+}
+const evcFetchAllUsers = () => api(`/api/event-code/users?${evcBaseQs({ limit: EVC_EXPORT_MAX, offset: 0 })}`);
+async function exportEvcUsers(fmt) {
+  if (!evcCodesArr().length) { toast(t('evc_enter_code')); return; }
+  try {
+    const { rows, total } = await evcFetchAllUsers();
+    await downloadAoa(evcAoa(evcUserRows(rows), evcUserCols()), `event_code_users_${evcFileSlug()}`, fmt);
+    if (total > rows.length) toast(fillT('evc_export_truncated', { n: num(rows.length), total: num(total) }));
+  } catch (e) { toast(e.message); }
 }
 
 async function loadEventCode() {
-  if (!evcCodesArr().length) { toast('Enter at least one event code.'); return; }
-  const qs = evcBaseQs();
-  $('#evcFunnel').innerHTML = '<div class="loading">Loading…</div>';
-  try {
-    renderEvcFunnel(await api(`/api/event-code/funnel?${qs}`));
-  } catch (e) { $('#evcFunnel').innerHTML = ''; toast(e.message); }
+  if (!evcCodesArr().length) { toast(t('evc_enter_code')); return; }
   evcUsers.offset = 0;
+  loadEvcRecap();
   loadEvcUsers();
   loadEvcCohort();
+  loadEvcPortfolio();
+  $('#evcFunnel').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    renderEvcFunnel(await api(`/api/event-code/funnel?${evcBaseQs()}`));
+  } catch (e) { $('#evcFunnel').innerHTML = ''; toast(e.message); }
 }
 
-const EVC_GRAIN_LABEL = { day: 'D', week: 'W', month: 'M' };
-function renderEvcCohort(sel, rows) {
-  if (!rows.length) { $(sel).innerHTML = '<div class="empty">Not enough tagged/transacting users yet to build cohorts.</div>'; return; }
-  const prefix = EVC_GRAIN_LABEL[evcGranularity] || 'P';
-  const cohorts = {};
-  let maxOffset = 0;
-  rows.forEach((r) => {
-    const c = val(r.cohort), o = Number(val(r.period_offset)), u = Number(val(r.users));
-    (cohorts[c] = cohorts[c] || { size: Number(val(r.cohort_size)) || 0, cells: {} }).cells[o] = u;
-    if (o > maxOffset) maxOffset = o;
+// Daily recap + per-code breakdown (queries.js:eventCodeRecap). Transaction
+// type and "only new sign-ups" refetch; targets, the day filter and the
+// per-code sort only re-render the rows already fetched.
+let evcRecap = null;
+let evcRecapSeq = 0;
+let evcDayFilter = 'all';
+let evcCodeSort = null;
+const EVC_NUM_KEYS = ['registrations', 'kyc_verified', 'tx_total', 'tx_completed', 'tx_ongoing', 'tx_failed',
+  'amount_completed', 'amount_ongoing', 'transacting_users', 'new_transactors'];
+
+function evcNums(r) {
+  const o = {};
+  EVC_NUM_KEYS.forEach((k) => { o[k] = Number(val(r[k])) || 0; });
+  return o;
+}
+function evcTargets() {
+  const read = (sel) => {
+    const v = $(sel).value.trim();
+    const n = v === '' ? NaN : Number(v);
+    return Number.isFinite(n) ? Math.max(0, n) : null;
+  };
+  return { reg: read('#evcTargetReg'), tx: read('#evcTargetTx') };
+}
+function evcRecapQs() {
+  const qs = evcBaseQs();
+  if ($('#evcRecapType').value) qs.set('type', $('#evcRecapType').value);
+  if ($('#evcNewOnly').checked) qs.set('newOnly', '1');
+  return qs;
+}
+
+async function loadEvcRecap() {
+  if (!evcCodesArr().length) return;
+  const seq = ++evcRecapSeq;
+  $('#evcRecapKpis').innerHTML = '';
+  $('#evcDailyChartWrap').style.display = 'none';
+  $('#evcDailyTable').innerHTML = `<div class="loading">${t('evc_loading')}</div>`;
+  $('#evcCodeTable').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const data = await api(`/api/event-code/recap?${evcRecapQs()}`);
+    if (seq !== evcRecapSeq) return; // a newer request (type/checkbox changed) owns the panel now
+    evcRecap = data;
+    renderEvcRecap();
+  } catch (e) {
+    if (seq !== evcRecapSeq) return;
+    evcRecap = null;
+    $('#evcDailyTable').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+    $('#evcCodeTable').innerHTML = '';
+  }
+}
+
+// Targets compare against completed transactions only.
+function evcDayRows(recap, targets) {
+  return recap.days.map((r) => {
+    const d = { day: val(r.day), ...evcNums(r) };
+    d.reg_vs = targets.reg == null ? null : d.registrations - targets.reg;
+    d.tx_vs = targets.tx == null ? null : d.tx_completed - targets.tx;
+    d.hit = (d.reg_vs == null || d.reg_vs >= 0) && (d.tx_vs == null || d.tx_vs >= 0);
+    return d;
   });
-  const heads = ['<th class="coh">Cohort</th>', '<th class="num">Size</th>'];
-  for (let o = 0; o <= maxOffset; o++) heads.push(`<th>${prefix}${o}</th>`);
+}
+const evcDailyCols = (targets) => [
+  { key: 'day', label: t('evc_col_date') },
+  { key: 'registrations', label: t('evc_col_regs'), type: 'num', sum: true },
+  ...(targets.reg == null ? [] : [{ key: 'reg_vs', label: t('evc_col_reg_vs'), type: 'delta' }]),
+  { key: 'kyc_verified', label: t('evc_col_kyc'), type: 'num', sum: true },
+  { key: 'tx_completed', label: t('evc_col_completed'), type: 'num', sum: true },
+  ...(targets.tx == null ? [] : [{ key: 'tx_vs', label: t('evc_col_tx_vs'), type: 'delta' }]),
+  { key: 'tx_ongoing', label: t('evc_col_ongoing'), type: 'num', sum: true },
+  { key: 'tx_failed', label: t('evc_col_failed'), type: 'num', sum: true },
+  { key: 'tx_total', label: t('evc_col_tx_total'), type: 'num', sum: true },
+  { key: 'amount_completed', label: t('evc_col_amt_completed'), type: 'idr', sum: true },
+  { key: 'amount_ongoing', label: t('evc_col_amt_ongoing'), type: 'idr', sum: true },
+  // Distinct per day, so the column has no total: the KPI above has the window's distinct count.
+  { key: 'transacting_users', label: t('evc_col_users'), type: 'num' },
+  { key: 'new_transactors', label: t('evc_col_new'), type: 'num', sum: true },
+];
+
+function renderEvcRecap() {
+  if (!evcRecap) return;
+  const targets = evcTargets();
+  const hasTarget = targets.reg != null || targets.tx != null;
+  const days = evcDayRows(evcRecap, targets);
+  const sum = (k) => days.reduce((a, d) => a + d[k], 0);
+  const n = days.length;
+  const hit = days.filter((d) => d.hit).length;
+  const any = sum('registrations') + sum('tx_total') > 0;
+
+  if (!hasTarget) evcDayFilter = 'all';
+  $('#evcDayFilter').style.display = hasTarget && any ? '' : 'none';
+  $$('#evcDayFilter button').forEach((b) => b.classList.toggle('on', b.dataset.f === evcDayFilter));
+
+  $('#evcRecapKpis').innerHTML = [
+    kpi(t('evc_kpi_regs'), num(sum('registrations')),
+      fillT('evc_kpi_regs_sub', { avg: n ? (sum('registrations') / n).toFixed(1) : '0', kyc: num(sum('kyc_verified')) }), 'accent', ICONS.userPlus),
+    kpi(t('evc_kpi_tx'), num(sum('tx_completed')),
+      fillT('evc_kpi_tx_sub', { o: num(sum('tx_ongoing')), f: num(sum('tx_failed')) }), 'accent', ICONS.receipt),
+    kpi(t('evc_kpi_amount'), idr(sum('amount_completed')), fillT('evc_kpi_amount_sub', { o: idr(sum('amount_ongoing')) }), '', ICONS.coin),
+    kpi(t('evc_kpi_users'), num(evcRecap.transacting_users), fillT('evc_kpi_users_sub', { n: num(sum('new_transactors')) }), '', ICONS.users),
+    hasTarget ? kpi(t('evc_kpi_days'), pct(hit, n), fillT('evc_kpi_days_sub', { h: num(hit), n: num(n) }), '', ICONS.check) : '',
+  ].join('');
+
+  $('#evcDailyChartWrap').style.display = any ? '' : 'none';
+  if (any) renderEvcDailyChart(days, targets);
+
+  const rows = evcDayFilter === 'all' ? days : days.filter((d) => (evcDayFilter === 'hit' ? d.hit : !d.hit));
+  if (!any) $('#evcDailyTable').innerHTML = `<div class="empty">${t('evc_daily_empty')}</div>`;
+  else genTable('#evcDailyTable', rows, evcDailyCols(targets), t('evc_days_none'));
+  renderEvcCodes();
+}
+
+// Completed transactions as bars (what the transaction target is measured
+// against), registrations as a line, targets as dashed lines. Ongoing stays
+// in the table only, since it never counts. No animation: typing a target
+// repaints on every keystroke.
+function renderEvcDailyChart(days, targets) {
+  const dot = days.length > 45 ? 0 : 3;
+  const flat = (v) => days.map(() => v);
+  const datasets = [
+    { type: 'bar', label: t('evc_series_completed'), data: days.map((d) => d.tx_completed), backgroundColor: C.chartGreen, order: 3 },
+    { type: 'line', label: t('evc_series_regs'), data: days.map((d) => d.registrations), borderColor: C.indigo, backgroundColor: C.indigo, borderWidth: 2, pointRadius: dot, order: 1 },
+  ];
+  if (targets.reg != null) datasets.push({ type: 'line', label: t('evc_series_target_reg'), data: flat(targets.reg), borderColor: C.indigo, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, order: 0 });
+  if (targets.tx != null) datasets.push({ type: 'line', label: t('evc_series_target_tx'), data: flat(targets.tx), borderColor: C.ink, borderDash: [2, 3], borderWidth: 1.5, pointRadius: 0, order: 0 });
+  paint('evcDailyChart', {
+    type: 'bar',
+    data: { labels: days.map((d) => d.day), datasets },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, grid: { color: C.grid }, ticks: { precision: 0, callback: (v) => num(v) } },
+      },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${num(c.raw)}` } },
+      },
+    },
+  });
+}
+
+function evcCodeRows(recap) {
+  const n = recap.days.length || 1;
+  const perDay = (v) => Math.round((v / n) * 10) / 10;
+  return recap.byCode.map((r) => {
+    const o = { code: val(r.code), ...evcNums(r) };
+    o.reg_day = perDay(o.registrations);
+    o.tx_day = perDay(o.tx_completed);
+    return o;
+  });
+}
+const evcCodeCols = () => [
+  { key: 'code', label: t('evc_col_code'), sort: true },
+  { key: 'registrations', label: t('evc_col_regs'), type: 'num', sum: true, sort: true },
+  { key: 'reg_day', label: t('evc_col_reg_day'), type: 'num', sort: true },
+  { key: 'kyc_verified', label: t('evc_col_kyc'), type: 'num', sum: true, sort: true },
+  { key: 'tx_completed', label: t('evc_col_completed'), type: 'num', sum: true, sort: true },
+  { key: 'tx_day', label: t('evc_col_tx_day'), type: 'num', sort: true },
+  { key: 'tx_ongoing', label: t('evc_col_ongoing'), type: 'num', sum: true, sort: true },
+  { key: 'tx_failed', label: t('evc_col_failed'), type: 'num', sum: true, sort: true },
+  { key: 'amount_completed', label: t('evc_col_amt_completed'), type: 'idr', sum: true, sort: true },
+  { key: 'amount_ongoing', label: t('evc_col_amt_ongoing'), type: 'idr', sum: true, sort: true },
+  // A user carries one code, so per-code distinct users do add up.
+  { key: 'transacting_users', label: t('evc_col_users'), type: 'num', sum: true, sort: true },
+  { key: 'new_transactors', label: t('evc_col_new'), type: 'num', sum: true, sort: true },
+];
+function renderEvcCodes() {
+  const rows = evcCodeRows(evcRecap);
+  if (evcCodeSort) {
+    const { key, dir } = evcCodeSort, m = dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => m * (key === 'code' ? String(a.code).localeCompare(String(b.code)) : a[key] - b[key]));
+  }
+  genTable('#evcCodeTable', rows, evcCodeCols(), t('evc_bycode_empty'), evcCodeSort);
+}
+
+// One heatmap for every retention table in this tab: rows are cohorts,
+// columns whatever `colOf(row)` returns (a period offset for the transaction
+// cohorts, a calendar period for portfolio), headed by `label(col)`.
+// `cell(row, cells)` gives { text, ratio, title } for a filled cell (ratio
+// 0..1 sets the shade).
+const EVC_GRAIN_LABEL = { day: 'D', week: 'W', month: 'M' };
+function evcHeatmap(sel, rows, colOf, label, cell) {
+  const cohorts = {};
+  const cols = new Set();
+  rows.forEach((r) => {
+    const c = val(r.cohort), k = colOf(r);
+    (cohorts[c] = cohorts[c] || { size: Number(val(r.cohort_size)) || 0, cells: {} }).cells[k] = r;
+    cols.add(k);
+  });
+  const keys = [...cols].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const heads = [`<th class="coh">${t('evc_col_cohort')}</th>`, `<th class="num">${t('evc_col_size')}</th>`, ...keys.map((k) => `<th>${label(k)}</th>`)];
   const body = Object.keys(cohorts).sort().map((c) => {
     const { size, cells } = cohorts[c];
     let tds = `<td class="coh">${c}</td><td class="num">${num(size)}</td>`;
-    for (let o = 0; o <= maxOffset; o++) {
-      const u = cells[o];
-      if (u == null || !size) { tds += '<td>·</td>'; continue; }
-      const pctv = u / size;
-      const bg = `rgba(${C.heatRgb},${(0.12 + pctv * 0.8).toFixed(2)})`;
-      tds += `<td class="heat" style="background:${bg}">${Math.round(pctv * 100)}%</td>`;
+    for (const k of keys) {
+      const r = cells[k];
+      if (!r || !size) { tds += '<td>·</td>'; continue; }
+      const { text, ratio, title } = cell(r, cells);
+      const bg = `rgba(${C.heatRgb},${(0.12 + Math.min(1, Math.max(0, ratio)) * 0.8).toFixed(2)})`;
+      tds += `<td class="heat" style="background:${bg}"${title ? ` title="${escapeHtml(title)}"` : ''}>${text}</td>`;
     }
     return `<tr>${tds}</tr>`;
   }).join('');
   $(sel).innerHTML = `<table><thead><tr>${heads.join('')}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+function renderEvcCohort(sel, rows) {
+  if (!rows) return;
+  if (!rows.length) { $(sel).innerHTML = `<div class="empty">${t('evc_cohort_empty')}</div>`; return; }
+  // Zero-padded so the string sort in evcHeatmap keeps W2 before W10.
+  const prefix = EVC_GRAIN_LABEL[evcGranularity] || 'P';
+  evcHeatmap(sel, rows, (r) => String(val(r.period_offset)).padStart(3, '0'), (k) => `${prefix}${Number(k)}`, (r) => {
+    const u = Number(val(r.users)), size = Number(val(r.cohort_size));
+    return { text: `${Math.round((u / size) * 100)}%`, ratio: u / size, title: `${num(u)} / ${num(size)}` };
+  });
+}
+
 // Two separate cohorts, same grain, fetched side by side — see
 // queries.js:eventCodeCohort for why "cohort" needs both a registration and
 // a first-transaction basis for an acquisition code.
+const evcCohortQs = (basis) => evcBaseQs({ grain: evcGranularity, basis });
 async function loadEvcCohort() {
   if (!evcCodesArr().length) return;
   $('#evcCohortRegHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
   $('#evcCohortTxHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
-  const regQs = evcBaseQs(); regQs.set('grain', evcGranularity); regQs.set('basis', 'registration');
-  const txQs = evcBaseQs(); txQs.set('grain', evcGranularity); txQs.set('basis', 'first_tx');
   // Both cohorts at once: they're independent queries.
-  await Promise.all([[regQs, '#evcCohortRegHeatmap'], [txQs, '#evcCohortTxHeatmap']].map(([qs, el]) =>
-    api(`/api/event-code/cohort?${qs}`).then((rows) => renderEvcCohort(el, rows), (e) => { $(el).innerHTML = `<div class="empty">${e.message}</div>`; })));
+  await Promise.all([['registration', 'reg', '#evcCohortRegHeatmap'], ['first_tx', 'tx', '#evcCohortTxHeatmap']].map(([basis, k, el]) =>
+    api(`/api/event-code/cohort?${evcCohortQs(basis)}`).then(
+      (rows) => { evcCohortRows[k] = rows; renderEvcCohort(el, rows); },
+      (e) => { evcCohortRows[k] = null; $(el).innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; })));
+}
+
+// Portfolio retention (queries.js:eventCodePortfolio): status summary now,
+// plus a cohort heatmap read three ways from the same rows.
+let evcPf = null;
+let evcPfSeq = 0;
+let evcPfGrain = 'month';
+let evcPfMode = 'holders';
+const EVC_PF_ORDER = ['invested', 'redeemed', 'never'];
+const evcPfQs = () => evcBaseQs({ grain: evcPfGrain });
+async function loadEvcPortfolio() {
+  if (!evcCodesArr().length) return;
+  const seq = ++evcPfSeq;
+  $('#evcPfSummary').innerHTML = '<div class="loading">Loading…</div>';
+  $('#evcPfHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
+  try {
+    const data = await api(`/api/event-code/portfolio?${evcPfQs()}`);
+    if (seq !== evcPfSeq) return;
+    evcPf = data;
+    renderEvcPortfolio();
+  } catch (e) {
+    if (seq !== evcPfSeq) return;
+    evcPf = null;
+    $('#evcPfSummary').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+    $('#evcPfHeatmap').innerHTML = '';
+  }
+}
+function evcPfSummaryRows(pf) {
+  const by = Object.fromEntries(pf.summary.map((r) => [val(r.portfolio_status), r]));
+  const total = pf.summary.reduce((a, r) => a + (Number(val(r.investors)) || 0), 0);
+  return EVC_PF_ORDER.map((s) => {
+    const investors = Number(val(by[s]?.investors)) || 0;
+    const aum = Number(val(by[s]?.aum)) || 0;
+    return { status: evcPfLabel(s), investors, share: total ? (investors / total) * 100 : 0, aum, avg_aum: investors && aum ? aum / investors : null };
+  });
+}
+const evcPfSummaryCols = () => [
+  { key: 'status', label: t('evc_col_pf_status') },
+  { key: 'investors', label: t('evc_col_investors'), type: 'num', sum: true },
+  { key: 'share', label: t('evc_col_share'), type: 'pct', sum: true },
+  { key: 'aum', label: t('evc_col_aum_now'), type: 'idr', sum: true },
+  { key: 'avg_aum', label: t('evc_col_avg_aum'), type: 'idr' },
+];
+// AUM vs first reading: each cohort's AUM against its own first column with
+// data (rows arrive sorted by cohort, then period), so a top-up shows above 100%.
+function evcPfRetentionRows(pf) {
+  const first = {};
+  pf.retention.forEach((r) => { if (!(val(r.cohort) in first)) first[val(r.cohort)] = Number(val(r.aum)) || 0; });
+  return pf.retention.map((r) => {
+    const size = Number(val(r.cohort_size)) || 0, holders = Number(val(r.holders)) || 0, aum = Number(val(r.aum)) || 0;
+    const base = first[val(r.cohort)];
+    return { cohort: val(r.cohort), period: val(r.period), period_end: val(r.period_end), cohort_size: size,
+      holders, holders_pct: size ? (holders / size) * 100 : 0, aum, aum_vs_first: base ? (aum / base) * 100 : null };
+  });
+}
+const evcPfRetentionCols = () => [
+  { key: 'cohort', label: t('evc_col_cohort') }, { key: 'period', label: t('evc_col_period') },
+  { key: 'period_end', label: t('evc_col_period_end') }, { key: 'cohort_size', label: t('evc_col_size'), type: 'num' },
+  { key: 'holders', label: t('evc_col_holders'), type: 'num' }, { key: 'holders_pct', label: t('evc_pf_mode_holders'), type: 'pct' },
+  { key: 'aum', label: t('evc_col_aum'), type: 'idr' }, { key: 'aum_vs_first', label: t('evc_pf_mode_aum_pct'), type: 'pct' },
+];
+function renderEvcPortfolio() {
+  if (!evcPf) return;
+  $$('#evcPfGran button').forEach((b) => b.classList.toggle('on', b.dataset.g === evcPfGrain));
+  $$('#evcPfMode button').forEach((b) => b.classList.toggle('on', b.dataset.m === evcPfMode));
+  const summary = evcPfSummaryRows(evcPf);
+  if (!summary.some((r) => r.investors)) $('#evcPfSummary').innerHTML = `<div class="empty">${t('evc_users_empty')}</div>`;
+  else genTable('#evcPfSummary', summary, evcPfSummaryCols(), '');
+  const rows = evcPfRetentionRows(evcPf);
+  if (!rows.length) { $('#evcPfHeatmap').innerHTML = `<div class="empty">${t('evc_pf_empty')}</div>`; return; }
+  const cellFor = {
+    holders: (r) => ({ text: `${Math.round(r.holders_pct)}%`, ratio: r.holders_pct / 100 }),
+    aum: (r) => ({ text: idr(r.aum), ratio: (r.aum_vs_first || 0) / 100 }),
+    aum_pct: (r) => ({ text: r.aum_vs_first == null ? 'n/a' : `${Math.round(r.aum_vs_first)}%`, ratio: (r.aum_vs_first || 0) / 100 }),
+  }[evcPfMode];
+  // Columns are calendar periods: a month shows as 2026-09, a week by its first day.
+  const label = (k) => (evcPfGrain === 'month' ? k.slice(0, 7) : k);
+  evcHeatmap('#evcPfHeatmap', rows, (r) => r.period, label, (r) => ({
+    ...cellFor(r),
+    title: fillT('evc_pf_cell_title', { d: r.period_end, h: num(r.holders), n: num(r.cohort_size), a: idrFull(r.aum) }),
+  }));
 }
 
 function evcTxParams() {
@@ -4816,37 +5142,119 @@ function evcTxParams() {
     to: $('#evcTxTo').value,
   };
 }
-
-async function loadEvcTx() {
+function evcTxQs(limit, offset) {
   const p = evcTxParams();
-  if (!p.codes.length) { toast('Enter at least one event code.'); return; }
-  $('#evcTxTable').innerHTML = '<div class="loading">Loading…</div>';
   const qs = new URLSearchParams({ field: p.field });
   p.codes.forEach((c) => qs.append('codes', c));
-  if (p.type) qs.set('type', p.type);
-  if (p.status) qs.set('status', p.status);
-  if (p.from) qs.set('from', p.from);
-  if (p.to) qs.set('to', p.to);
-  qs.set('limit', evcTx.limit); qs.set('offset', evcTx.offset);
+  ['type', 'status', 'from', 'to'].forEach((k) => { if (p[k]) qs.set(k, p[k]); });
+  qs.set('limit', limit); qs.set('offset', offset);
+  return qs;
+}
+const EVC_TX_COLS = [
+  { key: 'created_at', label: 'Date', type: 'date' },
+  { key: 'transaction_number', label: 'Trx #' },
+  { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
+  { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
+  { key: 'fund_name', label: 'Fund' }, { key: 'fund_type', label: 'Fund type' },
+  { key: 'unit', label: 'Unit', type: 'num' },
+  { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
+  { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+];
+
+async function loadEvcTx() {
+  if (!evcCodesArr().length) { toast(t('evc_enter_code')); return; }
+  $('#evcTxTable').innerHTML = '<div class="loading">Loading…</div>';
   try {
-    const { rows, total } = await api(`/api/event-code/transactions?${qs}`);
+    const { rows, total } = await api(`/api/event-code/transactions?${evcTxQs(evcTx.limit, evcTx.offset)}`);
     evcTx.total = total;
-    genTable('#evcTxTable', rows, [
-      { key: 'created_at', label: 'Date', type: 'date' },
-      { key: 'transaction_number', label: 'Trx #' },
-      { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
-      { key: 'fund_name', label: 'Fund' }, { key: 'fund_type', label: 'Fund type' },
-      { key: 'unit', label: 'Unit', type: 'num' },
-      { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
-      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
-    ], 'No transactions match these filters.');
+    genTable('#evcTxTable', rows, EVC_TX_COLS, 'No transactions match these filters.');
     const start = total ? evcTx.offset + 1 : 0;
     const end = Math.min(evcTx.offset + evcTx.limit, total);
     $('#evcTxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
     $('#evcTxPrev').disabled = evcTx.offset === 0;
     $('#evcTxNext').disabled = end >= total;
-  } catch (e) { $('#evcTxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#evcTxTable').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+}
+
+// One workbook with every panel of the tab, fetched fresh with the current
+// filters: summary (filters, funnel, recap totals, portfolio status), daily
+// recap, per code, users with portfolio, transactions (Transaction detail's
+// own filters), both transaction cohorts and portfolio retention.
+async function exportEvcWorkbook() {
+  if (!evcCodesArr().length) { toast(t('evc_enter_code')); return; }
+  const btn = $('#evcExportAll');
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = t('evc_export_building');
+  try {
+    const [funnel, recap, users, pf, cohReg, cohTx, tx] = await Promise.all([
+      api(`/api/event-code/funnel?${evcBaseQs()}`),
+      api(`/api/event-code/recap?${evcRecapQs()}`),
+      evcFetchAllUsers(),
+      api(`/api/event-code/portfolio?${evcPfQs()}`),
+      api(`/api/event-code/cohort?${evcCohortQs('registration')}`),
+      api(`/api/event-code/cohort?${evcCohortQs('first_tx')}`),
+      api(`/api/event-code/transactions?${evcTxQs(EVC_EXPORT_MAX, 0)}`),
+      loadExportLib('xlsx'),
+    ]);
+    const targets = evcTargets();
+    const days = evcDayRows(recap, targets);
+    const sum = (k) => days.reduce((a, d) => a + d[k], 0);
+    const pfSummary = evcPfSummaryRows(pf);
+    const yes = (b) => (b ? t('evc_yes') : t('evc_no'));
+    const summary = [
+      [t('evc_sheet_summary'), `${$('#evcFrom').value} – ${$('#evcTo').value}`],
+      ['Field', $('#evcField').value],
+      [t('evc_filters_title'), evcCodesArr().join(', ')],
+      [t('evc_recap_type'), $('#evcRecapType').value || t('common_all_types')],
+      [t('evc_new_only'), yes($('#evcNewOnly').checked)],
+      [t('evc_target_reg'), targets.reg ?? ''],
+      [t('evc_target_tx'), targets.tx ?? ''],
+      [],
+      [t('evc_funnel_title')],
+      [t('evc_kpi_tagged'), Number(val(funnel.tagged)) || 0],
+      [t('evc_kpi_verified'), Number(val(funnel.verified)) || 0],
+      [t('evc_kpi_transacted'), Number(val(funnel.transacted)) || 0],
+      [t('evc_kpi_repeat'), Number(val(funnel.repeat_transacted)) || 0],
+      [],
+      [t('evc_daily_title')],
+      [t('evc_col_regs'), sum('registrations')],
+      [t('evc_col_kyc'), sum('kyc_verified')],
+      [t('evc_col_completed'), sum('tx_completed')],
+      [t('evc_col_ongoing'), sum('tx_ongoing')],
+      [t('evc_col_failed'), sum('tx_failed')],
+      [t('evc_col_amt_completed'), sum('amount_completed')],
+      [t('evc_col_amt_ongoing'), sum('amount_ongoing')],
+      [t('evc_kpi_users'), Number(recap.transacting_users) || 0],
+      [t('evc_col_new'), sum('new_transactors')],
+      ...(targets.reg != null || targets.tx != null
+        ? [[t('evc_kpi_days'), days.filter((d) => d.hit).length, fillT('evc_kpi_days_sub', { h: days.filter((d) => d.hit).length, n: days.length })]] : []),
+      [],
+      [t('evc_pf_title')],
+      ...evcAoa(pfSummary, evcPfSummaryCols()),
+      [],
+      [t('evc_sheet_users'), fillT('evc_export_rows', { n: users.rows.length, total: users.total })],
+      [t('evc_sheet_tx'), fillT('evc_export_rows', { n: tx.rows.length, total: tx.total }),
+        fillT('evc_export_tx_filters', { from: $('#evcTxFrom').value || '…', to: $('#evcTxTo').value || '…',
+          status: $('#evcTxStatus').value || t('common_all_statuses'), type: $('#evcTxType').value || t('common_all_types') })],
+    ];
+    const cohortAoa = (rows) => evcAoa(rows.map((r) => ({ ...r, pct: Number(val(r.cohort_size)) ? (Number(val(r.users)) / Number(val(r.cohort_size))) * 100 : 0 })), [
+      { key: 'cohort', label: t('evc_col_cohort') }, { key: 'period_offset', label: t('evc_col_offset'), type: 'num' },
+      { key: 'cohort_size', label: t('evc_col_size'), type: 'num' }, { key: 'users', label: t('evc_col_users'), type: 'num' },
+      { key: 'pct', label: t('evc_col_pct'), type: 'pct' },
+    ]);
+    const wb = XLSX.utils.book_new();
+    const add = (name, aoa) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name.slice(0, 31));
+    add(t('evc_sheet_summary'), summary);
+    add(t('evc_sheet_daily'), evcAoa(days, evcDailyCols(targets)));
+    add(t('evc_sheet_codes'), evcAoa(evcCodeRows(recap), evcCodeCols()));
+    add(t('evc_sheet_users'), evcAoa(evcUserRows(users.rows), evcUserCols()));
+    add(t('evc_sheet_tx'), evcAoa(tx.rows, EVC_TX_COLS));
+    add(t('evc_sheet_cohort_reg'), cohortAoa(cohReg));
+    add(t('evc_sheet_cohort_tx'), cohortAoa(cohTx));
+    add(t('evc_sheet_pf'), evcAoa(evcPfRetentionRows(pf), evcPfRetentionCols()));
+    XLSX.writeFile(wb, `event_code_${evcFileSlug()}.xlsx`);
+    if (users.total > users.rows.length || tx.total > tx.rows.length) toast(t('evc_export_truncated_any'));
+  } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = label; }
 }
 
 // EXPLORER (multi-table)
@@ -6712,6 +7120,10 @@ function repaintActiveTab() {
     case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
     case 'portfolio-tx': if (ptxSelected) loadPtxUser(); break;
     case 'portfolio-sinvest': if (psiSelected) loadPsiUser(); break;
+    case 'event-code':
+      renderEvcRecap(); renderEvcPortfolio(); renderEvcUsers();
+      renderEvcCohort('#evcCohortRegHeatmap', evcCohortRows.reg); renderEvcCohort('#evcCohortTxHeatmap', evcCohortRows.tx);
+      break;
   }
 }
 
@@ -7421,6 +7833,37 @@ function wire() {
 
   // event code tracking
   $('#evcApply').addEventListener('click', loadEventCode);
+  $('#evcExportAll').addEventListener('click', exportEvcWorkbook);
+  $('#evcUsersCsv').addEventListener('click', () => exportEvcUsers('csv'));
+  $('#evcUsersXlsx').addEventListener('click', () => exportEvcUsers('xlsx'));
+  $('#evcPfGran').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    evcPfGrain = b.dataset.g; loadEvcPortfolio();
+  });
+  $('#evcPfMode').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    evcPfMode = b.dataset.m; renderEvcPortfolio();
+  });
+  $('#evcCodes').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadEventCode(); });
+  $('#evcRecapType').addEventListener('change', loadEvcRecap);
+  $('#evcNewOnly').addEventListener('change', loadEvcRecap);
+  $('#evcTargetReg').addEventListener('input', renderEvcRecap);
+  $('#evcTargetTx').addEventListener('input', renderEvcRecap);
+  $('#evcDayFilter').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    evcDayFilter = b.dataset.f; renderEvcRecap();
+  });
+  const evcSortBy = (th) => {
+    if (!th) return;
+    const key = th.dataset.sort;
+    const same = evcCodeSort && evcCodeSort.key === key;
+    evcCodeSort = { key, dir: same ? (evcCodeSort.dir === 'asc' ? 'desc' : 'asc') : (key === 'code' ? 'asc' : 'desc') };
+    renderEvcCodes();
+  };
+  $('#evcCodeTable').addEventListener('click', (e) => evcSortBy(e.target.closest('th[data-sort]')));
+  $('#evcCodeTable').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { const th = e.target.closest('th[data-sort]'); if (th) { e.preventDefault(); evcSortBy(th); } }
+  });
   $('#evcUsersPrev').addEventListener('click', () => { evcUsers.offset = Math.max(0, evcUsers.offset - evcUsers.limit); loadEvcUsers(); });
   $('#evcUsersNext').addEventListener('click', () => { evcUsers.offset += evcUsers.limit; loadEvcUsers(); });
   $('#evcGran').addEventListener('click', (e) => {
@@ -7645,6 +8088,9 @@ async function init() {
   ANALYSIS_TABS.forEach((tab) => { $(`#${tab.prefix}From`).value = bh30.from; $(`#${tab.prefix}To`).value = bh30.to; });
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
+  // The event window drives a one-row-per-day recap, so it starts bounded.
+  const evc30 = daysAgoRange(30); $('#evcFrom').value = evc30.from; $('#evcTo').value = evc30.to;
+  $('#evcTxFrom').value = evc30.from; $('#evcTxTo').value = evc30.to;
   $('#sitxFrom').value = r.from; $('#sitxTo').value = r.to;
   syncThemeSeg(getThemeChoice());
   translatePage();

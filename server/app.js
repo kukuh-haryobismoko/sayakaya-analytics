@@ -566,6 +566,26 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.eventCodeCohort(field, codes, from, to, grain, periods, basis);
     res.json(await runQuery(q.sql, q.params));
   }));
+  app.get('/api/event-code/recap', requireTab('event-code'), handler(async (req, res) => {
+    const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
+    if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
+    const { field, from, to, type, newOnly } = req.query;
+    const q = Q.eventCodeRecap(field, codes, from, to, type, newOnly === '1');
+    const [days, byCode, totals] = await Promise.all([
+      runQuery(q.sql, q.params),
+      runQuery(q.codesSql, q.params),
+      runQuery(q.totalsSql, q.params),
+    ]);
+    res.json({ days, byCode, transacting_users: Number(totals[0]?.transacting_users || 0) });
+  }));
+  app.get('/api/event-code/portfolio', requireTab('event-code'), handler(async (req, res) => {
+    const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
+    if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
+    const { field, from, to, grain, periods } = req.query;
+    const q = Q.eventCodePortfolio(field, codes, from, to, grain, periods);
+    const [retention, summary] = await Promise.all([runQuery(q.sql, q.params), runQuery(q.summarySql, q.params)]);
+    res.json({ retention, summary });
+  }));
   app.get('/api/event-code/transactions', requireTab('event-code'), handler(async (req, res) => {
     const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
     if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });

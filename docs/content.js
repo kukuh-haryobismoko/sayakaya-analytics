@@ -214,10 +214,11 @@ const TABS = {
     computation: "Fitur = event dan layar GA4 dikelompokkan (pencarian, urutkan dan filter, watchlist, perbandingan, rekomendasi ahli, perencanaan tujuan, kalkulator, berita dan edukasi, promo, referral, notifikasi, bantuan, halaman manajer dan grup fund, e-statement dan pajak; daftar di ENG_FEATURES). Per fitur: pengguna login, yang memegang portofolio hari ini (unit x latest_nav_value, termasuk bonus), median AUM, membeli dan menjual di periode (buy dibayar, sell selesai), dibandingkan baris semua pengguna aplikasi. Aktivitas: investor yang memegang unit hasil beli di main.portfolios (bukan hanya bonus, bukan institusi), tier AUM (di bawah 1 jt, 1 sampai 10 jt, 10 sampai 100 jt, 100 jt sampai 1 M, 1 M ke atas) x hari aktif GA4 di periode (0, 1 sampai 2, 3 sampai 9, 10 ke atas; event pasif tidak dihitung). Pencarian: search_trigger param name (huruf kecil), search_result_click di sesi yang sama dalam 30 menit, buy dibayar dalam 7 hari, dan buy fund yang diketuk (product_name dicocokkan ke funds.name); kata kunci yang dipakai kurang dari 2 orang disembunyikan karena bisa berisi nomor referensi atau nama. Pilihan: sort_filter_apply (sort_by, sort_return_period), mutual_fund_by_expert_click (goal_name), risk_profile_gate_completed (level), lalu buy dibayar dalam 7 hari.",
   },
   "event-code": {
-    summary: "Tab generik untuk melacak kode referral/sales sebuah event, dibangun sebelum event-nya ada.",
-    datasets: "main.users, main.transactions",
-    computation: "Pilih users.sales_code atau users.referrer_code, lalu isi kode. Funnel: ditandai kode, KYC verified, transaksi, transaksi lagi. Ada daftar user, detail transaksi, dan tabel retensi cohort per Day/Week/Month. Perlu diperbarui saat aturan event aslinya ada.",
+    summary: "Lacak kode referral/sales sebuah event: rekap harian registrasi dan transaksi completed terhadap target harian, performa per kode (termasuk keluarga kode lewat wildcard), funnel, daftar pengguna beserta portofolionya, detail transaksi, retensi transaksi, dan retensi portofolio. Semua panel bisa diunduh, termasuk satu workbook Excel berisi semuanya.",
+    datasets: "main.users, main.transactions, main.user_profiles, main.funds, mi_fee_logs.portfolio_fix",
+    computation: "Pilih users.sales_code atau users.referrer_code, lalu isi kode (dipisah koma). Kode tanpa * dicocokkan sebagian (CE cocok dengan CELIA), * mengunci posisi (EVT* = diawali EVT, *JKT = diakhiri JKT); huruf besar/kecil diabaikan, _ dan % dibaca apa adanya (codePatterns, dipakai juga oleh Remisier transactions). Semua hitungan transaksi hanya status completed: total, target, pengguna bertransaksi, transaktor baru, funnel, dan kohort; berjalan (pending_payment, completed_payment, verified, verified_by_operational) dan gagal (expired, cancelled) hanya ditampilkan sebagai kolom informasi. Rekap harian (eventCodeRecap): satu baris per hari dari Dari sampai Sampai (paling lambat hari ini), termasuk hari kosong. Registrasi = user bertanda kode dengan DATE(created_at) hari itu; KYC = yang verification_status-nya verified saat ini. Transaksi = main.transactions milik semua user bertanda kode (atau hanya yang mendaftar di periode bila dicentang) per DATE(created_at), difilter jenis (bawaan buy). Nominal completed = final_amount (amount bila kosong); nominal berjalan = amount, karena final_amount masih NULL sampai transaksi selesai. Transaktor baru = user yang transaksi completed pertamanya (jenis yang sama, sepanjang masa) jatuh di hari itu. Target dihitung di browser: registrasi >= target registrasi dan transaksi completed >= target transaksi; hari capai target bila memenuhi semua target yang diisi. Performa per kode: angka yang sama per UPPER(kode), maksimal 500 kode, kolom per hari = total dibagi jumlah hari periode. Funnel, daftar pengguna, kohort, dan portofolio memakai user yang mendaftar di periode: funnel = ditandai kode, KYC verified, beli completed, beli completed 2 kali atau lebih; retensi transaksi = persen kohort (tanggal daftar atau beli completed pertama) yang beli completed di periode ke-n. Portofolio (eventCodePortfolio, eventCodePortfolioCtes) dari mi_fee_logs.portfolio_fix, holding harian per SID sejak Agustus 2026: tanggal = DATE(created_at) - 1 hari, AUM = SUM(amount) baris total_unit > 0, dicocokkan lewat users.sid_code. Status: masih berinvestasi = AUM > 0 di hari portfolio_fix terbaru, sudah jual semua = pernah beli completed tapi AUM 0, belum pernah beli = tidak ada beli completed. Retensi portofolio: baris = minggu atau bulan beli completed pertama, kolom = 12 minggu atau bulan terakhir yang ada datanya, dibaca pada hari terakhir yang ada datanya; mode % masih berinvestasi, AUM, dan AUM dibanding pembacaan pertama kohort. portfolio_fix tidak dipartisi, jadi tiap query portofolio memindai sekitar 1 GB. Export: setiap tabel punya tombol CSV/Excel/PDF/PNG/Copy; daftar pengguna punya CSV dan Excel semua baris; tombol Unduh semua panel membuat satu workbook (Ringkasan, Rekap harian, Per kode, Pengguna, Transaksi dengan filter Detail transaksi, dua retensi transaksi, Retensi portofolio) berisi angka mentah, maksimal 50.000 baris per sheet. Periode bawaan 30 hari terakhir, juga untuk Detail transaksi.",
   },
+
   "ask": {
     summary: "Tanya dalam bahasa biasa (mis. \"top 10 funds by AUM\") dan dapatkan jawaban dengan chart.",
     datasets: "Dataset BigQuery utama, lewat server/ask.js",
@@ -1142,16 +1143,48 @@ const TAB_DETAILS = {
   },
   'event-code': {
     kpis: [
-      ['Repeat transacted', 'Orang bertanda kode yang punya lebih dari satu transaksi.'],
+      ['Completed transactions', 'Transaksi berstatus completed; yang berjalan dan gagal disebut di bawahnya tetapi tidak dihitung ke total atau target.'],
+      ['Transacting users', 'Orang berbeda yang punya transaksi completed di periode; di bawahnya jumlah transaktor baru.'],
+      ['Days on target', 'Persen hari di periode yang memenuhi semua target harian yang diisi. Hanya muncul bila ada target.'],
+      ['Completed 2+ buys', 'Orang bertanda kode yang punya dua beli completed atau lebih.'],
     ],
     panels: {
-      'Cohort retention — by registration date': { note: 'Setiap baris: kelompok orang bertanda kode yang mendaftar pada hari, minggu, atau bulan yang sama; kolom berikutnya persen yang bertransaksi pada periode ke-n sesudahnya.', },
-      'Cohort retention — by first transaction date': { note: 'Sama, tetapi kelompok berdasarkan tanggal transaksi pertama.', },
+      'Daily recap': { note: 'Satu baris per hari: registrasi, KYC, transaksi completed, berjalan, dan gagal, nominal, serta transaktor baru, dengan grafik dan garis target. Isi target untuk menyaring hari yang capai atau di bawah target.', columns: [
+        ['Ongoing', 'Transaksi yang sudah dibuat tapi belum selesai: pending_payment, completed_payment, verified, verified_by_operational. Hanya informasi, tidak dihitung.'],
+        ['Reg vs target', 'Registrasi hari itu dikurangi target; minus berarti di bawah target.'],
+        ['Tx vs target', 'Transaksi completed hari itu dikurangi target.'],
+        ['All tx', 'Semua transaksi hari itu, termasuk yang berjalan dan gagal.'],
+        ['New transactors', 'Orang yang transaksi completed pertamanya (jenis yang sama, sepanjang masa) terjadi hari itu.'],
+      ],
+      },
+      'Performance per code': { note: 'Angka rekap yang sama dipecah per kode yang cocok, berguna untuk keluarga kode seperti EVT*. Bisa diurutkan per kolom.', columns: [
+        ['Reg/day', 'Registrasi kode itu dibagi jumlah hari di periode.'],
+        ['Tx/day', 'Transaksi completed kode itu dibagi jumlah hari di periode.'],
+      ],
+      },
+      'Users tagged with this code': { note: 'Pengguna yang mendaftar di periode dengan kode tersebut, beserta portofolionya. Tabel 100 per halaman; tombol CSV dan Excel mengunduh semua pengguna.', columns: [
+        ['Portfolio status', 'Masih berinvestasi (AUM > 0 di portfolio_fix terbaru), sudah jual semua (pernah beli completed, AUM 0), atau belum pernah beli.'],
+        ['AUM now', 'Jumlah amount di mi_fee_logs.portfolio_fix pada hari terbaru.'],
+        ['Bought (completed)', 'Total final_amount beli completed sepanjang masa.'],
+        ['Sold (completed)', 'Total final_amount jual completed sepanjang masa.'],
+      ],
+      },
+      'Cohort retention by registration date': { note: 'Retensi transaksi. Setiap baris: kelompok orang bertanda kode yang mendaftar pada hari, minggu, atau bulan yang sama; kolom berikutnya persen yang beli completed pada periode ke-n sesudahnya.', },
+      'Cohort retention by first transaction date': { note: 'Sama, tetapi kelompok berdasarkan tanggal beli completed pertama.', },
+      'Portfolio retention': { note: 'Tabel status (masih berinvestasi, sudah jual semua, belum pernah beli) dan heatmap per kohort beli completed pertama, dengan kolom bulan atau minggu kalender dari portfolio_fix. Tiga tampilan: persen masih berinvestasi, AUM, dan AUM dibanding pembacaan pertama.', columns: [
+        ['AUM vs first reading', 'AUM kohort pada periode itu dibagi AUM-nya pada kolom pertama yang ada datanya; di atas 100% berarti menambah investasi.'],
+      ],
+      },
     },
     notes: [
-      'Tab generik yang disiapkan sebelum event-nya ada; aturan funnel dan cohort perlu disesuaikan saat event sebenarnya berjalan.',
+      'Kode tanpa * dicocokkan sebagian, jadi CE juga cocok dengan CELIA dan KACE. Pakai * (EVT*) untuk keluarga kode event agar kode lain tidak ikut terhitung.',
+      'Rekap harian menghitung transaksi dari semua orang bertanda kode, termasuk yang mendaftar sebelum event. Centang "Only users who signed up in this window" untuk hanya melihat pengguna baru dari event.',
+      'portfolio_fix baru tersedia sejak Agustus 2026, jadi retensi portofolio hanya menampilkan periode sejak itu. Unit muncul beberapa hari setelah pembelian settle dan hilang setelah penjualan settle, jadi beli-jual jangka pendek bisa tampil 0 di akhir periode.',
+      'Workbook dan export pengguna maksimal 50.000 baris per sheet; sheet Ringkasan mencatat jumlah baris dan filter Detail transaksi yang dipakai.',
+      'Funnel dan cohort masih langkah generik; sesuaikan bila event punya aturan sendiri.',
     ],
   },
+
   ask: {
     panels: {
       'Talk with Data': { note: 'Ketik pertanyaan dalam bahasa biasa; jawaban berupa tabel dan grafik, beserta SQL yang dipakai (bisa disalin, diedit, dan dijalankan ulang). Kolom hasil mengikuti pertanyaan.', },

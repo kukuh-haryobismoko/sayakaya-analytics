@@ -4347,6 +4347,19 @@ export interface RemisierTransactionsArgs {
   from?: string; to?: string; limit?: number | string; offset?: number | string;
 }
 
+// Code list -> uppercase LIKE patterns, shared by Remisier transactions and
+// Event code tracking. A code without `*` keeps the partial match those tabs
+// always had (CE matches CELIA); `*` anchors it instead (EVT* = starts with
+// EVT, *EVT = ends with EVT). LIKE metacharacters are escaped first, so
+// EVT_01 matches a literal underscore.
+export const codePatterns = (codes: string[] | string): string[] =>
+  (Array.isArray(codes) ? codes : [codes])
+    .map((c) => String(c).trim().toUpperCase()).filter(Boolean)
+    .map((c) => {
+      const p = c.replace(/[\\%_]/g, '\\$&');
+      return p.includes('*') ? p.replace(/\*/g, '%') : `%${p}%`;
+    });
+
 export function remisierTransactions(
   { referrerCodes = [], salesCodes = [], type, status, from, to, limit = 100, offset = 0 }: RemisierTransactionsArgs,
 ): Query {
@@ -4357,12 +4370,12 @@ export function remisierTransactions(
   };
   const codeConds: string[] = [];
   if (referrerCodes.length) {
-    codeConds.push("EXISTS (SELECT 1 FROM UNNEST(@referrerCodes) rc WHERE UPPER(u.referrer_code) LIKE CONCAT('%', rc, '%'))");
-    params.referrerCodes = referrerCodes.map((c) => c.toUpperCase());
+    codeConds.push('EXISTS (SELECT 1 FROM UNNEST(@referrerCodes) rc WHERE UPPER(u.referrer_code) LIKE rc)');
+    params.referrerCodes = codePatterns(referrerCodes);
   }
   if (salesCodes.length) {
-    codeConds.push("EXISTS (SELECT 1 FROM UNNEST(@salesCodes) sc WHERE UPPER(u.sales_code) LIKE CONCAT('%', sc, '%'))");
-    params.salesCodes = salesCodes.map((c) => c.toUpperCase());
+    codeConds.push('EXISTS (SELECT 1 FROM UNNEST(@salesCodes) sc WHERE UPPER(u.sales_code) LIKE sc)');
+    params.salesCodes = codePatterns(salesCodes);
   }
   const codeWhere = codeConds.length ? `(${codeConds.join(' OR ')})` : 'FALSE';
   let where = `${codeWhere} AND DATE(t.created_at) BETWEEN @from AND @to`;
@@ -4489,13 +4502,62 @@ export const topInvestors = (
 // which users column they'll land in are decided yet. So, like the Remisier
 // tabs above, `field` picks referrer_code or sales_code at query time
 // instead of hardcoding one, and `codes` is whatever wildcard list the
-// caller types in — swap in a real field/column once the event defines one.
-const normalizeCodes = (codes: string[] | string): string[] =>
-  (Array.isArray(codes) ? codes : [codes]).map((c) => String(c).trim().toUpperCase()).filter(Boolean);
+// caller types in (see codePatterns). Swap in a real field/column once the
+// event defines one.
 const eventCodeWhere = (field?: string): string => {
   const col = remisierFieldColumn(field);
-  return `u.${col} IS NOT NULL AND EXISTS (SELECT 1 FROM UNNEST(@codes) c WHERE UPPER(u.${col}) LIKE CONCAT('%', c, '%'))`;
+  return `u.${col} IS NOT NULL AND EXISTS (SELECT 1 FROM UNNEST(@codes) c WHERE UPPER(u.${col}) LIKE c)`;
 };
+
+// Tagged users who signed up in the window, each with completed-only
+// transaction totals and their holdings from mi_fee_logs.portfolio_fix (one
+// row per SID + fund per day, AUM = amount; created_at is a day ahead of the
+// holding date, same -1 day as allInvestorsWithAum). It only starts in
+// August 2026, which is enough here: this tab tracks events from now on.
+// ponytail: portfolio_fix is not partitioned, so each query scans all of it
+// (about 1 GB in Oct 2026); partition it on created_at if that grows.
+// Status: invested = AUM > 0 on the latest portfolio_fix day; redeemed = had
+// a completed buy but holds nothing then; never = no completed buy at all.
+const eventCodePortfolioCtes = (field?: string): string => `WITH tagged AS (
+        SELECT u.id AS user_id, u.sid_code, u.email, u.referrer_code, u.sales_code,
+          u.created_at, u.verified_at, u.verification_status
+        FROM ${USERS} u
+        WHERE ${eventCodeWhere(field)} AND DATE(u.created_at) BETWEEN @from AND @to
+      ),
+      done AS (
+        SELECT t.user_id,
+          MIN(IF(t.type = 'buy', t.created_at, NULL)) AS first_buy_at,
+          MAX(t.created_at) AS last_tx_at,
+          COUNTIF(t.type = 'buy') AS completed_buys,
+          SUM(IF(t.type = 'buy', t.final_amount, 0)) AS bought,
+          SUM(IF(t.type = 'sell', t.final_amount, 0)) AS sold
+        FROM ${TX} t
+        JOIN tagged tg ON tg.user_id = t.user_id
+        WHERE t.status = 'completed'
+        GROUP BY t.user_id
+      ),
+      snap AS (SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS d FROM ${PORT_FIX}),
+      pf AS (
+        SELECT DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY) AS date, p.sid_code, SUM(p.amount) AS aum
+        FROM ${PORT_FIX} p
+        JOIN tagged tg ON tg.sid_code = p.sid_code
+        WHERE p.total_unit > 0
+        GROUP BY date, p.sid_code
+      ),
+      aum AS (
+        SELECT tg.user_id, pf.aum
+        FROM pf JOIN tagged tg ON tg.sid_code = pf.sid_code
+        WHERE pf.date = (SELECT d FROM snap)
+      ),
+      portfolio AS (
+        SELECT tg.*, IFNULL(a.aum, 0) AS aum_now, d.first_buy_at, d.last_tx_at,
+          IFNULL(d.completed_buys, 0) AS completed_buys, IFNULL(d.bought, 0) AS bought, IFNULL(d.sold, 0) AS sold,
+          CASE WHEN IFNULL(a.aum, 0) > 0 THEN 'invested'
+            WHEN d.first_buy_at IS NOT NULL THEN 'redeemed' ELSE 'never' END AS portfolio_status
+        FROM tagged tg
+        LEFT JOIN done d ON d.user_id = tg.user_id
+        LEFT JOIN aum a ON a.user_id = tg.user_id
+      )`;
 
 // Users tagged with the code, registered in the window — the population the
 // funnel and cohort below are computed over. Paginated: a real code can be a
@@ -4509,14 +4571,15 @@ export const eventCodeUsers = (
   const r = range(from, to);
   const where = `${eventCodeWhere(field)} AND DATE(u.created_at) BETWEEN @from AND @to`;
   return {
-    sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name, u.email,
-        u.referrer_code, u.sales_code, u.created_at, u.verified_at, u.verification_status
-      FROM ${USERS} u
-      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-      WHERE ${where}
-      ORDER BY u.created_at
+    sql: `${eventCodePortfolioCtes(field)}
+      SELECT p.user_id, p.sid_code AS sid, up.name, p.email, p.referrer_code, p.sales_code,
+        p.created_at, p.verified_at, p.verification_status, p.portfolio_status, p.aum_now,
+        p.first_buy_at, p.last_tx_at, p.completed_buys, p.bought, p.sold
+      FROM portfolio p
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = p.user_id
+      ORDER BY p.created_at
       LIMIT @limit OFFSET @offset`,
-    params: { ...r, codes: normalizeCodes(codes), limit: parseInt(String(limit), 10), offset: parseInt(String(offset), 10) },
+    params: { ...r, codes: codePatterns(codes), limit: parseInt(String(limit), 10), offset: parseInt(String(offset), 10) },
     countSql: `SELECT COUNT(*) AS total
       FROM ${USERS} u
       WHERE ${where}`,
@@ -4525,9 +4588,8 @@ export const eventCodeUsers = (
 
 // Generic 4-step acquisition funnel (tagged -> KYC verified -> transacted ->
 // repeat transacted) since the event's own rules don't exist yet — swap or
-// extend the steps once they're defined. "Transacted" mirrors the referral
-// program's own convention: a completed-or-in-flight buy (type='buy', not
-// expired/cancelled), not necessarily settled yet.
+// extend the steps once they're defined. "Transacted" = at least one
+// completed buy; in-flight and failed buys never count anywhere in this tab.
 export const eventCodeFunnel = (field: string | undefined, codes: string[] | string, from?: string, to?: string): Query => {
   const r = range(from, to);
   return {
@@ -4541,7 +4603,7 @@ export const eventCodeFunnel = (field: string | undefined, codes: string[] | str
         SELECT t.user_id, COUNT(*) AS tx_count
         FROM ${TX} t
         JOIN tagged tg ON tg.user_id = t.user_id
-        WHERE t.type = 'buy' AND t.status NOT IN ('expired', 'cancelled')
+        WHERE t.type = 'buy' AND t.status = 'completed'
         GROUP BY t.user_id
       )
       SELECT
@@ -4551,7 +4613,7 @@ export const eventCodeFunnel = (field: string | undefined, codes: string[] | str
         COUNTIF(COALESCE(tc.tx_count, 0) >= 2) AS repeat_transacted
       FROM tagged tg
       LEFT JOIN tx_counts tc ON tc.user_id = tg.user_id`,
-    params: { ...r, codes: normalizeCodes(codes) },
+    params: { ...r, codes: codePatterns(codes) },
   };
 };
 
@@ -4560,12 +4622,11 @@ export const eventCodeFunnel = (field: string | undefined, codes: string[] | str
 //   - 'registration' (default): cohort = the period a tagged user registered
 //     in. Includes every tagged user, even ones who never transacted — an
 //     acquisition-funnel view (of everyone tagged, how many converted when).
-//   - 'first_tx': cohort = the period a tagged user's first buy transaction
+//   - 'first_tx': cohort = the period a tagged user's first completed buy
 //     landed in, same basis as ml.ts:retentionCohorts. Excludes tagged users
 //     with no qualifying transaction at all (they have no first_tx to anchor
 //     on) — a pure engagement/repeat-purchase view.
-// Either way, retained-in-a-later-period means "made a buy transaction in
-// it". `periods` caps how many offsets past cohort 0 to compute (capped at
+// Either way, retained-in-a-later-period means "made a completed buy in it". `periods` caps how many offsets past cohort 0 to compute (capped at
 // 52, same idea as ml.ts:retentionCohorts' month cap) so a day-grain cohort
 // from years ago doesn't blow up into thousands of columns.
 export const eventCodeCohort = (
@@ -4582,7 +4643,7 @@ export const eventCodeCohort = (
           SELECT u.id AS user_id,
             ARRAY_AGG(t.created_at ORDER BY t.created_at ASC LIMIT 1)[OFFSET(0)] AS first_tx_at
           FROM ${USERS} u
-          JOIN ${TX} t ON t.user_id = u.id AND t.type = 'buy' AND t.status NOT IN ('expired', 'cancelled')
+          JOIN ${TX} t ON t.user_id = u.id AND t.type = 'buy' AND t.status = 'completed'
           WHERE ${eventCodeWhere(field)}
             AND DATE(u.created_at) BETWEEN @from AND @to
           GROUP BY u.id
@@ -4603,7 +4664,7 @@ export const eventCodeCohort = (
         SELECT DISTINCT t.user_id, DATE_TRUNC(DATE(t.created_at), ${part}) AS p
         FROM ${TX} t
         JOIN tagged tg ON tg.user_id = t.user_id
-        WHERE t.type = 'buy' AND t.status NOT IN ('expired', 'cancelled')
+        WHERE t.type = 'buy' AND t.status = 'completed'
       )
       SELECT tg.cohort, DATE_DIFF(a.p, tg.cohort, ${part}) AS period_offset,
         COUNT(DISTINCT a.user_id) AS users,
@@ -4614,7 +4675,138 @@ export const eventCodeCohort = (
       WHERE DATE_DIFF(a.p, tg.cohort, ${part}) BETWEEN 0 AND ${n}
       GROUP BY tg.cohort, period_offset
       ORDER BY tg.cohort, period_offset`,
-    params: { ...r, codes: normalizeCodes(codes) },
+    params: { ...r, codes: codePatterns(codes) },
+  };
+};
+
+// Portfolio retention for tagged users who signed up in the window, laid out
+// by calendar period because portfolio_fix only starts in August 2026: rows =
+// the week or month of an investor's first completed buy (users who never
+// completed one are only in the summary), columns = the last `periods` weeks
+// or months with portfolio_fix data, each read on its last day with data.
+// holders = cohort members with AUM > 0 that day, aum = their total.
+// summarySql = investors and AUM per status on the latest portfolio_fix day.
+export const eventCodePortfolio = (
+  field: string | undefined, codes: string[] | string, from: string | undefined, to: string | undefined,
+  grain?: string, periods?: number | string,
+): Query & { summarySql: string } => {
+  const part = grain === 'week' ? 'WEEK' : 'MONTH';
+  const n = Math.min(parseInt(String(periods), 10) || 12, 52);
+  const ctes = eventCodePortfolioCtes(field);
+  return {
+    sql: `${ctes},
+      inv AS (
+        SELECT user_id, sid_code, DATE_TRUNC(DATE(first_buy_at), ${part}) AS cohort
+        FROM portfolio WHERE first_buy_at IS NOT NULL
+      ),
+      cohort_sizes AS (SELECT cohort, COUNT(*) AS cohort_size FROM inv GROUP BY cohort),
+      periods AS (
+        SELECT DATE_TRUNC(date, ${part}) AS p, MAX(date) AS e
+        FROM (SELECT DISTINCT DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS date FROM ${PORT_FIX})
+        WHERE date >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), ${part}), INTERVAL ${n - 1} ${part})
+        GROUP BY p
+      )
+      SELECT i.cohort, pr.p AS period, pr.e AS period_end, ANY_VALUE(cs.cohort_size) AS cohort_size,
+        COUNTIF(pf.aum > 0) AS holders, IFNULL(SUM(pf.aum), 0) AS aum
+      FROM inv i
+      JOIN periods pr ON pr.p >= i.cohort
+      JOIN cohort_sizes cs ON cs.cohort = i.cohort
+      LEFT JOIN pf ON pf.sid_code = i.sid_code AND pf.date = pr.e
+      GROUP BY i.cohort, period, period_end
+      ORDER BY i.cohort, period`,
+    summarySql: `${ctes}
+      SELECT portfolio_status, COUNT(*) AS investors, SUM(aum_now) AS aum, (SELECT d FROM snap) AS as_of
+      FROM portfolio
+      GROUP BY portfolio_status`,
+    params: { ...range(from, to), codes: codePatterns(codes) },
+  };
+};
+
+// Daily recap: one row per day of the window (days with nothing still show,
+// so a missed daily target is visible), the same counts per matched code, and
+// distinct transacting users for the whole window (not summable from days).
+// Only completed transactions count toward transacting users, new transactors
+// and targets; ongoing and failed are reported next to them, never counted.
+// Registrations count on registration date, transactions on transaction date
+// from every user carrying the code, or only users who registered in the
+// window when `newOnly`. Status buckets: completed; failed = expired or
+// cancelled; ongoing = everything else (pending_payment, completed_payment,
+// verified, verified_by_operational: placed, not settled yet). New
+// transactors = users whose first completed transaction of `type` ever
+// lands on that day. Ongoing rows keep final_amount NULL until they settle,
+// so their nominal is the requested amount.
+export const eventCodeRecap = (
+  field: string | undefined, codes: string[] | string, from: string | undefined, to: string | undefined,
+  type?: string, newOnly = false,
+): Query & { codesSql: string; totalsSql: string } => {
+  const params: Record<string, unknown> = { ...range(from, to), codes: codePatterns(codes) };
+  let typeCond = '';
+  if (type) { typeCond = ' AND t.type = @type'; params.type = type; }
+  const cte = `WITH tagged AS (
+        SELECT u.id AS user_id, UPPER(u.${remisierFieldColumn(field)}) AS code,
+          DATE(u.created_at) AS reg_day, u.verification_status
+        FROM ${USERS} u
+        WHERE ${eventCodeWhere(field)}${newOnly ? ' AND DATE(u.created_at) BETWEEN @from AND @to' : ''}
+      ),
+      tx AS (
+        SELECT tg.code, t.user_id, DATE(t.created_at) AS day,
+          IF(t.status = 'completed', COALESCE(t.final_amount, t.amount), t.amount) AS nominal,
+          t.status = 'completed' AS done,
+          t.status IN ('expired', 'cancelled') AS failed,
+          t.status NOT IN ('completed', 'expired', 'cancelled') AS ongoing
+        FROM ${TX} t
+        JOIN tagged tg ON tg.user_id = t.user_id
+        WHERE DATE(t.created_at) BETWEEN @from AND @to${typeCond}
+      ),
+      firsts AS (
+        SELECT tg.code, MIN(DATE(t.created_at)) AS day
+        FROM ${TX} t
+        JOIN tagged tg ON tg.user_id = t.user_id
+        WHERE t.status = 'completed'${typeCond}
+        GROUP BY tg.user_id, tg.code
+      )`;
+  const txAggs = `COUNT(*) AS tx_total, COUNTIF(done) AS tx_completed, COUNTIF(ongoing) AS tx_ongoing,
+          COUNTIF(failed) AS tx_failed,
+          SUM(IF(done, nominal, 0)) AS amount_completed,
+          SUM(IF(ongoing, nominal, 0)) AS amount_ongoing,
+          COUNT(DISTINCT IF(done, user_id, NULL)) AS transacting_users`;
+  const cols = `IFNULL(r.registrations, 0) AS registrations, IFNULL(r.kyc_verified, 0) AS kyc_verified,
+        IFNULL(x.tx_total, 0) AS tx_total, IFNULL(x.tx_completed, 0) AS tx_completed,
+        IFNULL(x.tx_ongoing, 0) AS tx_ongoing, IFNULL(x.tx_failed, 0) AS tx_failed,
+        IFNULL(x.amount_completed, 0) AS amount_completed, IFNULL(x.amount_ongoing, 0) AS amount_ongoing,
+        IFNULL(x.transacting_users, 0) AS transacting_users, IFNULL(n.new_transactors, 0) AS new_transactors`;
+  return {
+    sql: `${cte},
+      regs AS (
+        SELECT reg_day AS day, COUNT(*) AS registrations, COUNTIF(verification_status = 'verified') AS kyc_verified
+        FROM tagged WHERE reg_day BETWEEN @from AND @to GROUP BY day
+      ),
+      txd AS (SELECT day, ${txAggs} FROM tx GROUP BY day),
+      newd AS (SELECT day, COUNT(*) AS new_transactors FROM firsts WHERE day BETWEEN @from AND @to GROUP BY day)
+      SELECT d AS day, ${cols}
+      FROM UNNEST(GENERATE_DATE_ARRAY(DATE(@from), LEAST(DATE(@to), CURRENT_DATE()))) AS d
+      LEFT JOIN regs r ON r.day = d
+      LEFT JOIN txd x ON x.day = d
+      LEFT JOIN newd n ON n.day = d
+      ORDER BY d`,
+    codesSql: `${cte},
+      regs AS (
+        SELECT code, COUNTIF(reg_day BETWEEN @from AND @to) AS registrations,
+          COUNTIF(reg_day BETWEEN @from AND @to AND verification_status = 'verified') AS kyc_verified
+        FROM tagged GROUP BY code
+      ),
+      txd AS (SELECT code, ${txAggs} FROM tx GROUP BY code),
+      newd AS (SELECT code, COUNT(*) AS new_transactors FROM firsts WHERE day BETWEEN @from AND @to GROUP BY code)
+      SELECT r.code, ${cols}
+      FROM regs r
+      LEFT JOIN txd x ON x.code = r.code
+      LEFT JOIN newd n ON n.code = r.code
+      WHERE r.registrations > 0 OR x.tx_total > 0
+      ORDER BY registrations DESC, tx_completed DESC, r.code
+      LIMIT 500`,
+    totalsSql: `${cte}
+      SELECT COUNT(DISTINCT IF(done, user_id, NULL)) AS transacting_users FROM tx`,
+    params,
   };
 };
 

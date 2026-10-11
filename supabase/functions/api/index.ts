@@ -666,6 +666,24 @@ on('GET', '/api/event-code/cohort', requireTab('event-code', async (_req, _param
   const q = Q.eventCodeCohort(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'), qp(url, 'grain'), qp(url, 'periods'), qp(url, 'basis'));
   return json(await runQuery(q.sql, q.params));
 }));
+on('GET', '/api/event-code/recap', requireTab('event-code', async (_req, _params, url) => {
+  const codes = qpAll(url, 'codes');
+  if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
+  const q = Q.eventCodeRecap(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'), qp(url, 'type'), qp(url, 'newOnly') === '1');
+  const [days, byCode, totals] = await Promise.all([
+    runQuery(q.sql, q.params),
+    runQuery(q.codesSql, q.params),
+    runQuery(q.totalsSql, q.params),
+  ]);
+  return json({ days, byCode, transacting_users: Number(totals[0]?.transacting_users || 0) });
+}));
+on('GET', '/api/event-code/portfolio', requireTab('event-code', async (_req, _params, url) => {
+  const codes = qpAll(url, 'codes');
+  if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
+  const q = Q.eventCodePortfolio(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'), qp(url, 'grain'), qp(url, 'periods'));
+  const [retention, summary] = await Promise.all([runQuery(q.sql, q.params), runQuery(q.summarySql, q.params)]);
+  return json({ retention, summary });
+}));
 on('GET', '/api/event-code/transactions', requireTab('event-code', async (_req, _params, url) => {
   const codes = qpAll(url, 'codes');
   if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
