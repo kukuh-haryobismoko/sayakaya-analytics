@@ -4994,46 +4994,97 @@ function renderEvcCodes() {
   genTable('#evcCodeTable', rows, evcCodeCols(), t('evc_bycode_empty'), evcCodeSort);
 }
 
-// One heatmap for every retention table in this tab: rows are cohorts,
-// columns whatever `colOf(row)` returns (a period offset for the transaction
-// cohorts, a calendar period for portfolio), headed by `label(col)`.
-// `cell(row, cells)` gives { text, ratio, title } for a filled cell (ratio
-// 0..1 sets the shade).
+// Period arithmetic for the cohort grids, in UTC like BigQuery's DATE_TRUNC
+// (weeks start on Sunday there too).
+const evcIso = (d) => d.toISOString().slice(0, 10);
+const evcDate = (iso) => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+function evcPeriodStart(iso, grain) {
+  const d = evcDate(iso);
+  if (grain === 'week') d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+  if (grain === 'month') d.setUTCDate(1);
+  return evcIso(d);
+}
+function evcNextPeriod(iso, grain) {
+  const d = evcDate(iso);
+  if (grain === 'month') d.setUTCMonth(d.getUTCMonth() + 1);
+  else d.setUTCDate(d.getUTCDate() + (grain === 'week' ? 7 : 1));
+  return evcIso(d);
+}
+function evcPeriodsBetween(a, b, grain) {
+  const x = evcDate(a), y = evcDate(b);
+  if (grain === 'month') return (y.getUTCFullYear() - x.getUTCFullYear()) * 12 + y.getUTCMonth() - x.getUTCMonth();
+  return Math.round((y - x) / 86400000 / (grain === 'week' ? 7 : 1));
+}
+// Every period of the event window, oldest first, To capped at today.
+// ponytail: capped at 1,000 rows (a day grain over ~3 years); page it if that ever matters.
+function evcWindowPeriods(grain) {
+  const today = evcIso(new Date());
+  const to = $('#evcTo').value && $('#evcTo').value < today ? $('#evcTo').value : today;
+  const out = [];
+  for (let p = evcPeriodStart($('#evcFrom').value || to, grain); p <= to && out.length < 1000; p = evcNextPeriod(p, grain)) out.push(p);
+  return out;
+}
+// Rows for a cohort heatmap: every period of the window (size 0 when nobody
+// started then) plus any cohort that started before the window, oldest first.
+function evcGridRows(grain, fromData) {
+  const by = new Map(evcWindowPeriods(grain).map((k) => [k, { cohort: k, size: 0, cells: {} }]));
+  fromData.forEach(({ cohort, size }) => { if (!by.has(cohort)) by.set(cohort, { cohort, size: 0, cells: {} }); by.get(cohort).size = size; });
+  return [...by.values()].sort((a, b) => (a.cohort < b.cohort ? -1 : 1));
+}
+
+// One heatmap for every retention table in this tab. `cell(cohort, col)`
+// returns { text, ratio, title } (ratio 0..1 sets the shade) or null for a
+// period the cohort has not reached yet, drawn as ·.
 const EVC_GRAIN_LABEL = { day: 'D', week: 'W', month: 'M' };
-function evcHeatmap(sel, rows, colOf, label, cell) {
-  const cohorts = {};
-  const cols = new Set();
-  rows.forEach((r) => {
-    const c = val(r.cohort), k = colOf(r);
-    (cohorts[c] = cohorts[c] || { size: Number(val(r.cohort_size)) || 0, cells: {} }).cells[k] = r;
-    cols.add(k);
-  });
-  const keys = [...cols].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  const heads = [`<th class="coh">${t('evc_col_cohort')}</th>`, `<th class="num">${t('evc_col_size')}</th>`, ...keys.map((k) => `<th>${label(k)}</th>`)];
-  const body = Object.keys(cohorts).sort().map((c) => {
-    const { size, cells } = cohorts[c];
-    let tds = `<td class="coh">${c}</td><td class="num">${num(size)}</td>`;
-    for (const k of keys) {
-      const r = cells[k];
-      if (!r || !size) { tds += '<td>·</td>'; continue; }
-      const { text, ratio, title } = cell(r, cells);
-      const bg = `rgba(${C.heatRgb},${(0.12 + Math.min(1, Math.max(0, ratio)) * 0.8).toFixed(2)})`;
-      tds += `<td class="heat" style="background:${bg}"${title ? ` title="${escapeHtml(title)}"` : ''}>${text}</td>`;
+function evcHeatmap(sel, cohorts, cols, label, cell) {
+  const heads = [`<th class="coh">${t('evc_col_cohort')}</th>`, `<th class="num">${t('evc_col_size')}</th>`, ...cols.map((k) => `<th>${label(k)}</th>`)];
+  const body = cohorts.map((c) => {
+    let tds = `<td class="coh">${c.cohort}</td><td class="num">${num(c.size)}</td>`;
+    for (const k of cols) {
+      const v = cell(c, k);
+      if (!v) { tds += '<td>·</td>'; continue; }
+      const bg = `rgba(${C.heatRgb},${(0.12 + Math.min(1, Math.max(0, v.ratio)) * 0.8).toFixed(2)})`;
+      tds += `<td class="heat" style="background:${bg}"${v.title ? ` title="${escapeHtml(v.title)}"` : ''}>${v.text}</td>`;
     }
     return `<tr>${tds}</tr>`;
   }).join('');
   $(sel).innerHTML = `<table><thead><tr>${heads.join('')}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+// Transaction cohorts as a full grid: every reached offset (up to 12) gets a
+// value, 0 when nobody bought; offsets after today stay empty.
+function evcTxCohortGrid(rows) {
+  const n = 12, grain = evcGranularity;
+  const today = evcPeriodStart(evcIso(new Date()), grain);
+  const sizes = new Map();
+  rows.forEach((r) => sizes.set(val(r.cohort), Number(val(r.cohort_size)) || 0));
+  const cohorts = evcGridRows(grain, [...sizes].map(([cohort, size]) => ({ cohort, size })));
+  const byKey = new Map(cohorts.map((c) => [c.cohort, c]));
+  rows.forEach((r) => { if (r.period_offset != null) byKey.get(val(r.cohort)).cells[Number(val(r.period_offset))] = Number(val(r.users)) || 0; });
+  cohorts.forEach((c) => { c.reach = Math.max(0, Math.min(n, evcPeriodsBetween(c.cohort, today, grain))); });
+  const cols = Array.from({ length: Math.max(0, ...cohorts.map((c) => c.reach)) + 1 }, (_, o) => o);
+  return { cohorts, cols };
+}
+const evcTxCohortCell = (c, o) => {
+  if (o > c.reach) return null;
+  const users = c.cells[o] || 0;
+  return { users, pct: c.size ? (users / c.size) * 100 : 0 };
+};
 function renderEvcCohort(sel, rows) {
   if (!rows) return;
-  if (!rows.length) { $(sel).innerHTML = `<div class="empty">${t('evc_cohort_empty')}</div>`; return; }
-  // Zero-padded so the string sort in evcHeatmap keeps W2 before W10.
+  const { cohorts, cols } = evcTxCohortGrid(rows);
+  if (!cohorts.length) { $(sel).innerHTML = `<div class="empty">${t('evc_cohort_empty')}</div>`; return; }
   const prefix = EVC_GRAIN_LABEL[evcGranularity] || 'P';
-  evcHeatmap(sel, rows, (r) => String(val(r.period_offset)).padStart(3, '0'), (k) => `${prefix}${Number(k)}`, (r) => {
-    const u = Number(val(r.users)), size = Number(val(r.cohort_size));
-    return { text: `${Math.round((u / size) * 100)}%`, ratio: u / size, title: `${num(u)} / ${num(size)}` };
+  evcHeatmap(sel, cohorts, cols, (o) => `${prefix}${o}`, (c, o) => {
+    const v = evcTxCohortCell(c, o);
+    return v && { text: `${Math.round(v.pct)}%`, ratio: v.pct / 100, title: `${num(v.users)} / ${num(c.size)}` };
   });
+}
+// Long format of the same grid for the workbook.
+function evcTxCohortExportRows(rows) {
+  const { cohorts, cols } = evcTxCohortGrid(rows);
+  return cohorts.flatMap((c) => cols.map((o) => [o, evcTxCohortCell(c, o)]).filter(([, v]) => v)
+    .map(([o, v]) => ({ cohort: c.cohort, period_offset: o, cohort_size: c.size, users: v.users, pct: v.pct })));
 }
 
 // Two separate cohorts, same grain, fetched side by side — see
@@ -5093,16 +5144,32 @@ const evcPfSummaryCols = () => [
   { key: 'avg_aum', label: t('evc_col_avg_aum'), type: 'idr' },
 ];
 // AUM vs first reading: each cohort's AUM against its own first column with
-// data (rows arrive sorted by cohort, then period), so a top-up shows above 100%.
+// data (rows arrive sorted by cohort, then period), so a top-up shows above
+// 100%. Rows without a cohort only carry the period columns (see the query).
 function evcPfRetentionRows(pf) {
+  const rows = pf.retention.filter((r) => r.cohort != null);
   const first = {};
-  pf.retention.forEach((r) => { if (!(val(r.cohort) in first)) first[val(r.cohort)] = Number(val(r.aum)) || 0; });
-  return pf.retention.map((r) => {
+  rows.forEach((r) => { if (!(val(r.cohort) in first)) first[val(r.cohort)] = Number(val(r.aum)) || 0; });
+  return rows.map((r) => {
     const size = Number(val(r.cohort_size)) || 0, holders = Number(val(r.holders)) || 0, aum = Number(val(r.aum)) || 0;
     const base = first[val(r.cohort)];
     return { cohort: val(r.cohort), period: val(r.period), period_end: val(r.period_end), cohort_size: size,
       holders, holders_pct: size ? (holders / size) * 100 : 0, aum, aum_vs_first: base ? (aum / base) * 100 : null };
   });
+}
+// Full grid: every period of the window as a row, every portfolio_fix period
+// from the cohort's own period onward as a cell (0 when nobody holds).
+function evcPfGrid(pf) {
+  const rows = evcPfRetentionRows(pf);
+  const ends = Object.fromEntries(pf.retention.map((r) => [val(r.period), val(r.period_end)]));
+  const cols = Object.keys(ends).sort();
+  const sizes = new Map(rows.map((r) => [r.cohort, r.cohort_size]));
+  const cohorts = evcGridRows(evcPfGrain, [...sizes].map(([cohort, size]) => ({ cohort, size })));
+  const byKey = new Map(cohorts.map((c) => [c.cohort, c]));
+  rows.forEach((r) => { byKey.get(r.cohort).cells[r.period] = r; });
+  const cell = (c, k) => (k < c.cohort ? null : c.cells[k] || { cohort: c.cohort, period: k, period_end: ends[k], cohort_size: c.size,
+    holders: 0, holders_pct: 0, aum: 0, aum_vs_first: null });
+  return { cohorts, cols, cell };
 }
 const evcPfRetentionCols = () => [
   { key: 'cohort', label: t('evc_col_cohort') }, { key: 'period', label: t('evc_col_period') },
@@ -5110,6 +5177,7 @@ const evcPfRetentionCols = () => [
   { key: 'holders', label: t('evc_col_holders'), type: 'num' }, { key: 'holders_pct', label: t('evc_pf_mode_holders'), type: 'pct' },
   { key: 'aum', label: t('evc_col_aum'), type: 'idr' }, { key: 'aum_vs_first', label: t('evc_pf_mode_aum_pct'), type: 'pct' },
 ];
+const evcPfExportRows = (pf) => { const g = evcPfGrid(pf); return g.cohorts.flatMap((c) => g.cols.map((k) => g.cell(c, k)).filter(Boolean)); };
 function renderEvcPortfolio() {
   if (!evcPf) return;
   $$('#evcPfGran button').forEach((b) => b.classList.toggle('on', b.dataset.g === evcPfGrain));
@@ -5117,8 +5185,8 @@ function renderEvcPortfolio() {
   const summary = evcPfSummaryRows(evcPf);
   if (!summary.some((r) => r.investors)) $('#evcPfSummary').innerHTML = `<div class="empty">${t('evc_users_empty')}</div>`;
   else genTable('#evcPfSummary', summary, evcPfSummaryCols(), '');
-  const rows = evcPfRetentionRows(evcPf);
-  if (!rows.length) { $('#evcPfHeatmap').innerHTML = `<div class="empty">${t('evc_pf_empty')}</div>`; return; }
+  const { cohorts, cols, cell } = evcPfGrid(evcPf);
+  if (!cohorts.length || !cols.length) { $('#evcPfHeatmap').innerHTML = `<div class="empty">${t('evc_pf_empty')}</div>`; return; }
   const cellFor = {
     holders: (r) => ({ text: `${Math.round(r.holders_pct)}%`, ratio: r.holders_pct / 100 }),
     aum: (r) => ({ text: idr(r.aum), ratio: (r.aum_vs_first || 0) / 100 }),
@@ -5126,10 +5194,10 @@ function renderEvcPortfolio() {
   }[evcPfMode];
   // Columns are calendar periods: a month shows as 2026-09, a week by its first day.
   const label = (k) => (evcPfGrain === 'month' ? k.slice(0, 7) : k);
-  evcHeatmap('#evcPfHeatmap', rows, (r) => r.period, label, (r) => ({
-    ...cellFor(r),
-    title: fillT('evc_pf_cell_title', { d: r.period_end, h: num(r.holders), n: num(r.cohort_size), a: idrFull(r.aum) }),
-  }));
+  evcHeatmap('#evcPfHeatmap', cohorts, cols, label, (c, k) => {
+    const r = cell(c, k);
+    return r && { ...cellFor(r), title: fillT('evc_pf_cell_title', { d: r.period_end, h: num(r.holders), n: num(r.cohort_size), a: idrFull(r.aum) }) };
+  });
 }
 
 function evcTxParams() {
@@ -5237,7 +5305,7 @@ async function exportEvcWorkbook() {
         fillT('evc_export_tx_filters', { from: $('#evcTxFrom').value || '…', to: $('#evcTxTo').value || '…',
           status: $('#evcTxStatus').value || t('common_all_statuses'), type: $('#evcTxType').value || t('common_all_types') })],
     ];
-    const cohortAoa = (rows) => evcAoa(rows.map((r) => ({ ...r, pct: Number(val(r.cohort_size)) ? (Number(val(r.users)) / Number(val(r.cohort_size))) * 100 : 0 })), [
+    const cohortAoa = (rows) => evcAoa(evcTxCohortExportRows(rows), [
       { key: 'cohort', label: t('evc_col_cohort') }, { key: 'period_offset', label: t('evc_col_offset'), type: 'num' },
       { key: 'cohort_size', label: t('evc_col_size'), type: 'num' }, { key: 'users', label: t('evc_col_users'), type: 'num' },
       { key: 'pct', label: t('evc_col_pct'), type: 'pct' },
@@ -5251,7 +5319,7 @@ async function exportEvcWorkbook() {
     add(t('evc_sheet_tx'), evcAoa(tx.rows, EVC_TX_COLS));
     add(t('evc_sheet_cohort_reg'), cohortAoa(cohReg));
     add(t('evc_sheet_cohort_tx'), cohortAoa(cohTx));
-    add(t('evc_sheet_pf'), evcAoa(evcPfRetentionRows(pf), evcPfRetentionCols()));
+    add(t('evc_sheet_pf'), evcAoa(evcPfExportRows(pf), evcPfRetentionCols()));
     XLSX.writeFile(wb, `event_code_${evcFileSlug()}.xlsx`);
     if (users.total > users.rows.length || tx.total > tx.rows.length) toast(t('evc_export_truncated_any'));
   } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = label; }

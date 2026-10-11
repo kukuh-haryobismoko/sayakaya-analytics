@@ -2217,7 +2217,7 @@
           </select>
           <input id="evcCodes" type="text" autocomplete="off" data-i18n-placeholder="evc_codes_ph" placeholder="Event code(s), comma separated. EVT* = starts with EVT" style="min-width:300px" />
         </div>
-        <span class="hint" data-i18n="evc_hint">Matches users.sales_code or users.referrer_code, whichever the event uses. A code without * matches anywhere in the code (CE finds CELIA). Add * to pin the position: EVT* starts with EVT, *JKT ends with JKT. From/To is the event window: the daily recap counts registrations on sign-up day and transactions on the day they were made; the funnel, user list and cohorts cover users who signed up in the window. Transaction detail further down has its own dates.</span>
+        <span class="hint" data-i18n="evc_hint">Matches users.sales_code or users.referrer_code, whichever the event uses. A code without * matches anywhere in the code (CE finds CELIA). Add * to pin the position: EVT* starts with EVT, *JKT ends with JKT. From/To is the event window: the daily recap counts registrations on sign-up day and transactions on the day they were made; the funnel, user list, cohorts and portfolio cover code holders who signed up or made a completed buy in the window, so a referral code older than the window still counts the people it brought who bought during it. Transaction detail further down has its own dates.</span>
       </div>
 
       <div class="panel">
@@ -2271,7 +2271,7 @@
             <button class="btn-ghost" id="evcUsersXlsx" data-i18n="evc_users_xlsx">Excel (all users)</button>
           </div>
         </div>
-        <span class="hint" data-i18n="evc_users_hint">Users who signed up in the window with the code, with their portfolio: status, AUM now, first completed buy, last completed transaction, and completed buy and sell totals. The table pages 100 at a time; the CSV and Excel buttons download every user (up to 50,000).</span>
+        <span class="hint" data-i18n="evc_users_hint">Code holders who signed up or made a completed buy in the window, with their portfolio: status, AUM now, first completed buy, last completed transaction, and completed buy and sell totals. The table pages 100 at a time; the CSV and Excel buttons download every user (up to 50,000).</span>
         <div id="evcUsersTable" class="table-wrap tall" style="margin-top:14px"></div>
         <div class="pager">
           <button id="evcUsersPrev" class="btn-ghost" data-i18n="common_prev">← Prev</button>
@@ -2330,13 +2330,13 @@
             <button data-g="month" data-i18n="common_month">Month</button>
           </div>
         </div>
-        <span class="hint" data-i18n="evc_cohort_reg_hint">Transaction retention. Cohort = the period a tagged user registered in (Day/Week/Month, picked above; it also applies to the first-transaction cohort below). Includes every tagged user, even ones who never transacted. % retained = users from that cohort who made a completed buy in each later period, up to 12 periods out.</span>
+        <span class="hint" data-i18n="evc_cohort_reg_hint">Transaction retention. Cohort = the period a tagged user registered in (Day/Week/Month, picked above; it also applies to the first-transaction cohort below). Includes every code holder in the window, even ones who never transacted; someone who signed up before the window sits in the cohort of their own sign-up date. % retained = users from that cohort who made a completed buy in each later period, up to 12 periods out. Every day, week or month of the window is a row, even with nobody in it, and every period that has passed shows a value, 0% included; · marks a period that has not happened yet.</span>
         <div id="evcCohortRegHeatmap" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="evc_cohort_tx_title">Cohort retention by first transaction date</h2></div>
-        <span class="hint" data-i18n="evc_cohort_tx_hint">Cohort = the period a tagged user's first completed buy landed in, the same basis as the Forecast &amp; churn tab's retention cohorts. Only includes tagged users with at least one completed buy. % retained = users from that cohort who made another completed buy in each later period, up to 12 periods out.</span>
+        <span class="hint" data-i18n="evc_cohort_tx_hint">Cohort = the period a tagged user's first completed buy landed in, the same basis as the Forecast &amp; churn tab's retention cohorts. Only includes tagged users with at least one completed buy. % retained = users from that cohort who made another completed buy in each later period, up to 12 periods out. Every day, week or month of the window is a row, even with nobody in it, and every period that has passed shows a value, 0% included; · marks a period that has not happened yet.</span>
         <div id="evcCohortTxHeatmap" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2355,7 +2355,7 @@
             </div>
           </div>
         </div>
-        <span class="hint" data-i18n="evc_pf_hint">Users who signed up in the window with the code, read from mi_fee_logs.portfolio_fix (daily holdings per SID, available from August 2026). Still invested = AUM above zero that day. Status table: the latest portfolio_fix day. Heatmap: rows = the week or month of an investor's first completed buy; columns = the last 12 weeks or months with data, each read on its last day with data. Units appear a few days after a buy settles and leave after a sale settles, so short buy-and-sell trades can show as 0. Hover a cell for the date, investor count and AUM.</span>
+        <span class="hint" data-i18n="evc_pf_hint">Code holders who signed up or made a completed buy in the window, read from mi_fee_logs.portfolio_fix (daily holdings per SID, available from August 2026). Still invested = AUM above zero that day. Status table: the latest portfolio_fix day. Heatmap: rows = the week or month of an investor's first completed buy; columns = the last 12 weeks or months with data, each read on its last day with data. Units appear a few days after a buy settles and leave after a sale settles, so short buy-and-sell trades can show as 0. Hover a cell for the date, investor count and AUM. Every week or month of the window is a row, even with no first buy in it; cells show 0% when nobody holds, and · before the cohort starts.</span>
         <div id="evcPfSummary" class="table-wrap" style="margin-top:14px"></div>
         <div id="evcPfHeatmap" class="table-wrap tall" style="margin-top:14px"></div>
       </div>

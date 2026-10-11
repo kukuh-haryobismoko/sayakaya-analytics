@@ -196,7 +196,10 @@ const evcPortfolio = {
 const evcUsersPage = { total: 1, rows: [{ sid: 'IDD1', name: 'A', email: 'a@b.c', referrer_code: 'EVT01', sales_code: null,
   created_at: D('2026-10-01T01:00:00'), verified_at: null, verification_status: 'verified', portfolio_status: 'redeemed',
   aum_now: '0', first_buy_at: D('2026-10-02T01:00:00'), last_tx_at: D('2026-10-05T01:00:00'), completed_buys: 1, bought: 1000000, sold: 1000000 }] };
-const evcCohortRows = [{ cohort: D('2026-09-27'), period_offset: 0, users: 2, cohort_size: 2 }, { cohort: D('2026-09-27'), period_offset: 10, users: 1, cohort_size: 2 }];
+// Weekly cohort that started long enough ago to reach every offset, plus a
+// cohort with nobody active (period_offset null): both must render full rows.
+const evcCohortRows = [{ cohort: D('2026-01-04'), period_offset: 0, users: 2, cohort_size: 2 }, { cohort: D('2026-01-04'), period_offset: 10, users: 1, cohort_size: 2 },
+  { cohort: D('2026-01-11'), period_offset: null, users: 0, cohort_size: 3 }];
 
 // Email recap (Supabase RPC/PostgREST, plain JSON, no BigQuery wrappers).
 // The subject is an HTML payload on purpose: it must come out escaped.
@@ -398,12 +401,18 @@ sandbox.api = async (path) => {
   const evcDaily = get('#evcDailyTable')._html;
   if (!evcDaily.includes('class="num pos">+2<') || !evcDaily.includes('class="num neg">-3<')) errors.push('#evcDailyTable: target deltas missing');
   if (!get('#evcRecapKpis')._html.includes('50.0%')) errors.push('#evcRecapKpis: days on target missing');
+  get('#evcFrom').value = '2026-01-01'; get('#evcTo').value = '2026-01-31';
   for (const fn of ['loadEvcPortfolio', 'loadEvcUsers', 'loadEvcCohort']) {
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
   // Calendar columns for portfolio (50% in October), offsets sorted numerically for cohorts (W10 after W0).
   if (!/2026-09<\/th><th>2026-10<\/th>/.test(get('#evcPfHeatmap')._html) || !get('#evcPfHeatmap')._html.includes('>50%<')) errors.push('#evcPfHeatmap: calendar columns missing');
-  if (!/W0<\/th><th>W10<\/th>/.test(get('#evcCohortRegHeatmap')._html)) errors.push('#evcCohortRegHeatmap: offsets out of order');
+  // Full grid: every week of January is a row (2025-12-28 .. 2026-01-25), offsets W0..W12 contiguous, 0% where nobody bought.
+  const coh = get('#evcCohortRegHeatmap')._html;
+  if (!/W9<\/th><th>W10<\/th><th>W11<\/th><th>W12<\/th>/.test(coh)) errors.push('#evcCohortRegHeatmap: offsets not contiguous');
+  if ((coh.match(/<tr><td class="coh">/g) || []).length !== 5 || !coh.includes('>2025-12-28<')) errors.push('#evcCohortRegHeatmap: window weeks missing');
+  if (!/2026-01-11<\/td><td class="num">3<\/td><td class="heat"[^>]*>0%</.test(coh)) errors.push('#evcCohortRegHeatmap: inactive cohort not filled with 0%');
+  if (!/2026-01-01<\/td><td class="num">0<\/td><td class="heat"[^>]*>0%</.test(get('#evcPfHeatmap')._html)) errors.push('#evcPfHeatmap: empty window month not filled');
   if (!get('#evcUsersTable')._html.includes('Sold everything')) errors.push('#evcUsersTable: portfolio status label missing');
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.

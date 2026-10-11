@@ -41,4 +41,13 @@ assert.ok(pf.summarySql.includes('GROUP BY portfolio_status'));
 assert.ok(Q.eventCodeUsers('referrer_code', ['EVT*'], '', '').sql.includes('p.portfolio_status, p.aum_now'));
 assert.ok(buys.totalsSql.includes('UPPER(u.sales_code) LIKE c) AND DATE(u.created_at) BETWEEN @from AND @to'));
 
+// Population: signed up in the window OR made a completed buy in it, for every
+// panel except the recap (which counts every code holder's transactions).
+const inWindow = "w.type = 'buy'\n            AND w.status = 'completed' AND DATE(w.created_at) BETWEEN @from AND @to";
+for (const sql of [Q.eventCodeFunnel('sales_code', ['EVT*']).sql, Q.eventCodeUsers('sales_code', ['EVT*']).countSql, pf.summarySql,
+  Q.eventCodeCohort('sales_code', ['EVT*'], '', '', 'week', 12, 'registration').sql, Q.eventCodeCohort('sales_code', ['EVT*'], '', '', 'week', 12, 'first_tx').sql]) {
+  assert.ok(sql.includes('DATE(u.created_at) BETWEEN @from AND @to\n          OR EXISTS') && sql.includes(inWindow), sql.slice(0, 80));
+}
+assert.ok(!all.sql.includes('OR EXISTS (SELECT 1 FROM'));
+
 console.log('event-code smoke test passed');

@@ -5055,7 +5055,15 @@ const eventCodeWhere = (field) => {
   return `u.${col} IS NOT NULL AND EXISTS (SELECT 1 FROM UNNEST(@codes) c WHERE UPPER(u.${col}) LIKE c)`;
 };
 
-// Tagged users who signed up in the window, each with completed-only
+// Who the funnel, user list, cohorts and portfolio count: code holders who
+// signed up in the window or made a completed buy in it. A referral code that
+// predates the window (KJU5JW8 has invitees from 2022) still counts the people
+// it brought who bought during the window.
+const EVC_IN_WINDOW = `(DATE(u.created_at) BETWEEN @from AND @to
+          OR EXISTS (SELECT 1 FROM ${TX} w WHERE w.user_id = u.id AND w.type = 'buy'
+            AND w.status = 'completed' AND DATE(w.created_at) BETWEEN @from AND @to))`;
+
+// Tagged users in the window (EVC_IN_WINDOW), each with completed-only
 // transaction totals and their holdings from mi_fee_logs.portfolio_fix (one
 // row per SID + fund per day, AUM = amount; created_at is a day ahead of the
 // holding date, same -1 day as allInvestorsWithAum). It only starts in
@@ -5068,7 +5076,7 @@ const eventCodePortfolioCtes = (field) => `WITH tagged AS (
         SELECT u.id AS user_id, u.sid_code, u.email, u.referrer_code, u.sales_code,
           u.created_at, u.verified_at, u.verification_status
         FROM ${USERS} u
-        WHERE ${eventCodeWhere(field)} AND DATE(u.created_at) BETWEEN @from AND @to
+        WHERE ${eventCodeWhere(field)} AND ${EVC_IN_WINDOW}
       ),
       done AS (
         SELECT t.user_id,
@@ -5105,14 +5113,14 @@ const eventCodePortfolioCtes = (field) => `WITH tagged AS (
         LEFT JOIN aum a ON a.user_id = tg.user_id
       )`;
 
-// Users tagged with the code, registered in the window — the population the
-// funnel and cohort below are computed over. Paginated: a real code can be a
+// Users tagged with the code, in the window (EVC_IN_WINDOW): the population
+// the funnel and cohort below are computed over. Paginated: a real code can be a
 // platform-wide default/organic value shared by hundreds of thousands of
 // users (confirmed in production — not just a hypothetical), so this list
 // can't assume "one code = a small cohort" the way remisierUsers does.
 const eventCodeUsers = (field, codes, from, to, limit = 100, offset = 0) => {
   const r = range(from, to);
-  const where = `${eventCodeWhere(field)} AND DATE(u.created_at) BETWEEN @from AND @to`;
+  const where = `${eventCodeWhere(field)} AND ${EVC_IN_WINDOW}`;
   return {
     sql: `${eventCodePortfolioCtes(field)}
       SELECT p.user_id, p.sid_code AS sid, up.name, p.email, p.referrer_code, p.sales_code,
@@ -5140,7 +5148,7 @@ const eventCodeFunnel = (field, codes, from, to) => {
         SELECT u.id AS user_id, u.verification_status
         FROM ${USERS} u
         WHERE ${eventCodeWhere(field)}
-          AND DATE(u.created_at) BETWEEN @from AND @to
+          AND ${EVC_IN_WINDOW}
       ),
       tx_counts AS (
         SELECT t.user_id, COUNT(*) AS tx_count
@@ -5169,7 +5177,9 @@ const eventCodeFunnel = (field, codes, from, to) => {
 //     landed in, same basis as ml.js:retentionCohorts. Excludes tagged users
 //     with no qualifying transaction at all (they have no first_tx to anchor
 //     on) — a pure engagement/repeat-purchase view.
-// Either way, retained-in-a-later-period means "made a completed buy in it". `periods` caps how many offsets past cohort 0 to compute (capped at
+// Either way, retained-in-a-later-period means "made a completed buy in it".
+// A cohort with nobody active still comes back once (period_offset NULL) so
+// its size is known; the page fills every reached offset, 0 included. `periods` caps how many offsets past cohort 0 to compute (capped at
 // 52, same idea as ml.js:retentionCohorts' month cap) so a day-grain cohort
 // from years ago doesn't blow up into thousands of columns.
 const eventCodeCohort = (field, codes, from, to, grain, periods, basis) => {
@@ -5185,7 +5195,7 @@ const eventCodeCohort = (field, codes, from, to, grain, periods, basis) => {
           FROM ${USERS} u
           JOIN ${TX} t ON t.user_id = u.id AND t.type = 'buy' AND t.status = 'completed'
           WHERE ${eventCodeWhere(field)}
-            AND DATE(u.created_at) BETWEEN @from AND @to
+            AND ${EVC_IN_WINDOW}
           GROUP BY u.id
         ) ft
       )`
@@ -5193,7 +5203,7 @@ const eventCodeCohort = (field, codes, from, to, grain, periods, basis) => {
         SELECT u.id AS user_id, DATE_TRUNC(DATE(u.created_at), ${part}) AS cohort
         FROM ${USERS} u
         WHERE ${eventCodeWhere(field)}
-          AND DATE(u.created_at) BETWEEN @from AND @to
+          AND ${EVC_IN_WINDOW}
       )`;
   return {
     sql: `WITH ${taggedCte},
@@ -5206,20 +5216,21 @@ const eventCodeCohort = (field, codes, from, to, grain, periods, basis) => {
         JOIN tagged tg ON tg.user_id = t.user_id
         WHERE t.type = 'buy' AND t.status = 'completed'
       )
-      SELECT tg.cohort, DATE_DIFF(a.p, tg.cohort, ${part}) AS period_offset,
-        COUNT(DISTINCT a.user_id) AS users,
-        ANY_VALUE(cs.cohort_size) AS cohort_size
-      FROM tagged tg
-      JOIN act a ON a.user_id = tg.user_id
-      JOIN cohort_sizes cs ON cs.cohort = tg.cohort
-      WHERE DATE_DIFF(a.p, tg.cohort, ${part}) BETWEEN 0 AND ${n}
-      GROUP BY tg.cohort, period_offset
-      ORDER BY tg.cohort, period_offset`,
+      SELECT cs.cohort, x.period_offset, IFNULL(x.users, 0) AS users, cs.cohort_size
+      FROM cohort_sizes cs
+      LEFT JOIN (
+        SELECT tg.cohort, DATE_DIFF(a.p, tg.cohort, ${part}) AS period_offset, COUNT(DISTINCT a.user_id) AS users
+        FROM tagged tg
+        JOIN act a ON a.user_id = tg.user_id
+        WHERE DATE_DIFF(a.p, tg.cohort, ${part}) BETWEEN 0 AND ${n}
+        GROUP BY tg.cohort, period_offset
+      ) x ON x.cohort = cs.cohort
+      ORDER BY cs.cohort, x.period_offset`,
     params: { ...r, codes: codePatterns(codes) },
   };
 };
 
-// Portfolio retention for tagged users who signed up in the window, laid out
+// Portfolio retention for tagged users in the window (EVC_IN_WINDOW), laid out
 // by calendar period because portfolio_fix only starts in August 2026: rows =
 // the week or month of an investor's first completed buy (users who never
 // completed one are only in the summary), columns = the last `periods` weeks
@@ -5250,7 +5261,10 @@ const eventCodePortfolio = (field, codes, from, to, grain, periods) => {
       JOIN cohort_sizes cs ON cs.cohort = i.cohort
       LEFT JOIN pf ON pf.sid_code = i.sid_code AND pf.date = pr.e
       GROUP BY i.cohort, period, period_end
-      ORDER BY i.cohort, period`,
+      -- One cohort-less row per period, so the columns exist even with no investors.
+      UNION ALL
+      SELECT NULL, p, e, 0, 0, CAST(0 AS NUMERIC) FROM periods
+      ORDER BY cohort, period`,
     summarySql: `${ctes}
       SELECT portfolio_status, COUNT(*) AS investors, SUM(aum_now) AS aum, (SELECT d FROM snap) AS as_of
       FROM portfolio
