@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `36667d1 (2026-10-10)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `3a516e8 (2026-10-11)`.
 
 ## Cara membaca dokumen ini
 
@@ -135,7 +135,7 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 | [Onboarding analysis](#tab-onboarding-analysis) | Dari akun dibuat sampai pembelian pertama: layar KYC yang dicapai di aplikasi, hasil review KYC, profil risiko, pembelian dibayar pertama, waktu mengisi KYC, jam review, dan bagian KYC yang dikembalikan. |
 | [Redemption analysis](#tab-redemption-analysis) | Alur jual dan switching di aplikasi dicocokkan dengan database, profil penjualan (lama memegang, jenis fund, penuh atau sebagian, membeli lagi, tidak memegang apa pun), dan perilaku di aplikasi sebelum menjual. |
 | [Engagement analysis](#tab-engagement-analysis) | Fitur aplikasi yang dipakai dibandingkan dengan kepemilikan dan transaksi, investor menurut besar portofolio dan hari aktif di aplikasi (termasuk uang yang dipegang investor yang tidak membuka aplikasi), kata kunci pencarian sampai fund yang dibeli, dan pilihan urutan, rekomendasi ahli, serta level risiko. |
-| [Event code tracking](#tab-event-code) | Tab generik untuk melacak kode referral/sales sebuah event, dibangun sebelum event-nya ada. |
+| [Event code tracking](#tab-event-code) | Lacak kode referral/sales sebuah event: rekap harian registrasi dan transaksi completed terhadap target harian, performa per kode (termasuk keluarga kode lewat wildcard), funnel, daftar pengguna beserta portofolionya, detail transaksi, retensi transaksi, dan retensi portofolio. Semua panel bisa diunduh, termasuk satu workbook Excel berisi semuanya. |
 
 **Tools**
 
@@ -395,7 +395,7 @@ Hasil pipeline perhitungan fee: fee harian per manajer investasi dan snapshot po
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
 | `mi_fee` | Fee harian per fund dan AUM harian platform. | AUM history, Forecast & churn |
-| `portfolio_fix` | Versi portfolio_with_code dengan harga beli rata-rata yang sudah dikoreksi. | Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Referral program, Referral program (KYC based), Send e-statement & portfolio |
+| `portfolio_fix` | Versi portfolio_with_code dengan harga beli rata-rata yang sudah dikoreksi. | Event code tracking, Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Referral program, Referral program (KYC based), Send e-statement & portfolio |
 | `portfolio_with_code` | Snapshot portofolio harian per investor (sumber "PWC"), mulai 14 Januari 2026. | HNWI, Overview, Portfolio (PWC), Portfolio Explorer (GS), Referral activity, Remisier sharing (PWC), Revenue (PWC), Revenue trend, User lifetime |
 | `portfolios` |  | Forecast & churn |
 
@@ -475,7 +475,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *AUM by fund type* (AUM berdasarkan jenis produk): Dana nasabah Sayakaya per jenis fund: unit yang dipegang hari ini (termasuk unit kampanye yang masih terkunci) dikali NAV terbaru. Totalnya seharusnya sama dengan kartu Platform AUM pada tanggal data terbaru; selisih kecil bisa muncul karena kartu itu memakai snapshot harian.
   - *Investor distribution by province* (Sebaran investor per provinsi): Peta per provinsi berdasarkan kota di KTP (user_profiles.id_address_city dicocokkan ke main.geo). Arahkan kursor untuk jumlah orang dan AUM live.
   - *Top cities by investors* (Kota teratas berdasarkan jumlah investor): 15 kota dengan pengguna terbanyak menurut alamat KTP.
-    - **Investors**: Jumlah orang dengan alamat KTP di kota itu. Tanpa filter fund, ini mencakup semua pengguna yang sudah mengisi alamat, termasuk yang belum memegang unit.
+    - **Investors / Investor**: Jumlah orang dengan alamat KTP di kota itu. Tanpa filter fund, ini mencakup semua pengguna yang sudah mengisi alamat, termasuk yang belum memegang unit.
   - *Top cities by AUM* (Kota teratas berdasarkan AUM): 15 kota dengan nilai kepemilikan terbesar.
     - **AUM**: Nilai kepemilikan live orang-orang di kota itu: unit saat ini (main.portfolios) dikali NAV terbaru fund.
   - *Largest funds by AUM* (Produk terbesar berdasarkan AUM): Semua fund (atau manajer investasi) yang dipegang nasabah pada tanggal terpilih, dari yang terbesar. Fund bisa dikeluarkan dari hitungan lewat pilihan fund.
@@ -1418,22 +1418,45 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 <a id="tab-event-code"></a>
 #### Event code tracking
 
-- **Untuk apa**: Tab generik untuk melacak kode referral/sales sebuah event, dibangun sebelum event-nya ada.
-- **Penjelasan sederhana**: Tab generik yang siap pakai untuk melacak kode referral/sales milik sebuah event, dibuat sebelum ada event sungguhan, belum ada kode atau kampanye yang diatur, jadi pilih salah satu dari users.sales_code atau users.referrer_code yang nanti dipakai event tersebut, lalu ketik kodenya. Menampilkan funnel (ditandai dengan kode → terverifikasi KYC → bertransaksi → bertransaksi lagi), daftar pengguna yang ditandai, detail transaksinya (rentang tanggal sendiri, bisa diekspor), dan tabel retensi kohort dengan satuan, Hari/Minggu/Bulan, yang dipilih saat dijalankan. Perbarui tulisan ini begitu aturan event sungguhan menggantikan langkah funnel/kohort generik ini.
-- **Data yang dibaca**: main.users, main.transactions
-- **Cara hitung**: Pilih users.sales_code atau users.referrer_code, lalu isi kode. Funnel: ditandai kode, KYC verified, transaksi, transaksi lagi. Ada daftar user, detail transaksi, dan tabel retensi cohort per Day/Week/Month. Perlu diperbarui saat aturan event aslinya ada.
+- **Untuk apa**: Lacak kode referral/sales sebuah event: rekap harian registrasi dan transaksi completed terhadap target harian, performa per kode (termasuk keluarga kode lewat wildcard), funnel, daftar pengguna beserta portofolionya, detail transaksi, retensi transaksi, dan retensi portofolio. Semua panel bisa diunduh, termasuk satu workbook Excel berisi semuanya.
+- **Penjelasan sederhana**: Melacak kode referral atau sales sebuah event. Pilih users.sales_code atau users.referrer_code, ketik kodenya, dan atur periode event. Kode tanpa * cocok di bagian mana pun; EVT* cocok dengan semua kode yang diawali EVT, jadi satu keluarga kode event bisa dibaca sekaligus. Di seluruh tab ini hanya transaksi completed yang dihitung; yang berjalan dan gagal ditampilkan di sebelahnya sebagai informasi. Rekap harian menampilkan registrasi, KYC terverifikasi, transaksi dan nominal completed, serta transaktor baru untuk setiap hari, lengkap dengan grafik. Isi target registrasi atau transaksi per hari untuk melihat hari mana yang mencapainya dan menyaring hari-hari itu. Performa per kode memecah angka yang sama per kode yang cocok. Di bawahnya: funnel, daftar pengguna yang ditandai beserta portofolionya (masih berinvestasi, sudah jual semua, belum pernah beli, AUM sekarang), detail transaksinya, kohort retensi transaksi, dan retensi portofolio dari portfolio_fix (tersedia sejak Agustus 2026) sebagai persen masih berinvestasi, AUM, atau AUM dibanding pembacaan pertama. Setiap tabel bisa diekspor ke CSV atau Excel, daftar pengguna bisa diekspor semua barisnya, dan Unduh semua panel (Excel) menyatukan semuanya dalam satu workbook.
+- **Data yang dibaca**: main.users, main.transactions, main.user_profiles, main.funds, mi_fee_logs.portfolio_fix
+- **Cara hitung**: Pilih users.sales_code atau users.referrer_code, lalu isi kode (dipisah koma). Kode tanpa * dicocokkan sebagian (CE cocok dengan CELIA), * mengunci posisi (EVT* = diawali EVT, *JKT = diakhiri JKT); huruf besar/kecil diabaikan, _ dan % dibaca apa adanya (codePatterns, dipakai juga oleh Remisier transactions). Semua hitungan transaksi hanya status completed: total, target, pengguna bertransaksi, transaktor baru, funnel, dan kohort; berjalan (pending_payment, completed_payment, verified, verified_by_operational) dan gagal (expired, cancelled) hanya ditampilkan sebagai kolom informasi. Rekap harian (eventCodeRecap): satu baris per hari dari Dari sampai Sampai (paling lambat hari ini), termasuk hari kosong. Registrasi = user bertanda kode dengan DATE(created_at) hari itu; KYC = yang verification_status-nya verified saat ini. Transaksi = main.transactions milik semua user bertanda kode (atau hanya yang mendaftar di periode bila dicentang) per DATE(created_at), difilter jenis (bawaan buy). Nominal completed = final_amount (amount bila kosong); nominal berjalan = amount, karena final_amount masih NULL sampai transaksi selesai. Transaktor baru = user yang transaksi completed pertamanya (jenis yang sama, sepanjang masa) jatuh di hari itu. Target dihitung di browser: registrasi >= target registrasi dan transaksi completed >= target transaksi; hari capai target bila memenuhi semua target yang diisi. Performa per kode: angka yang sama per UPPER(kode), maksimal 500 kode, kolom per hari = total dibagi jumlah hari periode. Funnel, daftar pengguna, kohort, dan portofolio memakai user yang mendaftar di periode: funnel = ditandai kode, KYC verified, beli completed, beli completed 2 kali atau lebih; retensi transaksi = persen kohort (tanggal daftar atau beli completed pertama) yang beli completed di periode ke-n. Portofolio (eventCodePortfolio, eventCodePortfolioCtes) dari mi_fee_logs.portfolio_fix, holding harian per SID sejak Agustus 2026: tanggal = DATE(created_at) - 1 hari, AUM = SUM(amount) baris total_unit > 0, dicocokkan lewat users.sid_code. Status: masih berinvestasi = AUM > 0 di hari portfolio_fix terbaru, sudah jual semua = pernah beli completed tapi AUM 0, belum pernah beli = tidak ada beli completed. Retensi portofolio: baris = minggu atau bulan beli completed pertama, kolom = 12 minggu atau bulan terakhir yang ada datanya, dibaca pada hari terakhir yang ada datanya; mode % masih berinvestasi, AUM, dan AUM dibanding pembacaan pertama kohort. portfolio_fix tidak dipartisi, jadi tiap query portofolio memindai sekitar 1 GB. Export: setiap tabel punya tombol CSV/Excel/PDF/PNG/Copy; daftar pengguna punya CSV dan Excel semua baris; tombol Unduh semua panel membuat satu workbook (Ringkasan, Rekap harian, Per kode, Pengguna, Transaksi dengan filter Detail transaksi, dua retensi transaksi, Retensi portofolio) berisi angka mentah, maksimal 50.000 baris per sheet. Periode bawaan 30 hari terakhir, juga untuk Detail transaksi.
 - **Isi tab**:
   - *Kartu ringkasan di atas tab*:
-    - **Repeat transacted / Transaksi ulang**: Orang bertanda kode yang punya lebih dari satu transaksi.
-  - *Cohort retention, by registration date* (Retensi kohort, berdasarkan tanggal registrasi): Setiap baris: kelompok orang bertanda kode yang mendaftar pada hari, minggu, atau bulan yang sama; kolom berikutnya persen yang bertransaksi pada periode ke-n sesudahnya.
-  - *Cohort retention, by first transaction date* (Retensi kohort, berdasarkan tanggal transaksi pertama): Sama, tetapi kelompok berdasarkan tanggal transaksi pertama.
+    - **Completed transactions / Transaksi completed**: Transaksi berstatus completed; yang berjalan dan gagal disebut di bawahnya tetapi tidak dihitung ke total atau target.
+    - **Transacting users / Pengguna bertransaksi**: Orang berbeda yang punya transaksi completed di periode; di bawahnya jumlah transaktor baru.
+    - **Days on target / Hari capai target**: Persen hari di periode yang memenuhi semua target harian yang diisi. Hanya muncul bila ada target.
+    - **Completed 2+ buys / Beli completed 2 kali atau lebih**: Orang bertanda kode yang punya dua beli completed atau lebih.
+  - *Daily recap* (Rekap harian): Satu baris per hari: registrasi, KYC, transaksi completed, berjalan, dan gagal, nominal, serta transaktor baru, dengan grafik dan garis target. Isi target untuk menyaring hari yang capai atau di bawah target.
+    - **Ongoing / Berjalan**: Transaksi yang sudah dibuat tapi belum selesai: pending_payment, completed_payment, verified, verified_by_operational. Hanya informasi, tidak dihitung.
+    - **Reg vs target / Registrasi vs target**: Registrasi hari itu dikurangi target; minus berarti di bawah target.
+    - **Tx vs target / Transaksi vs target**: Transaksi completed hari itu dikurangi target.
+    - **All tx / Semua transaksi**: Semua transaksi hari itu, termasuk yang berjalan dan gagal.
+    - **New transactors / Transaktor baru**: Orang yang transaksi completed pertamanya (jenis yang sama, sepanjang masa) terjadi hari itu.
+  - *Performance per code* (Performa per kode): Angka rekap yang sama dipecah per kode yang cocok, berguna untuk keluarga kode seperti EVT*. Bisa diurutkan per kolom.
+    - **Reg/day / Registrasi/hari**: Registrasi kode itu dibagi jumlah hari di periode.
+    - **Tx/day / Transaksi/hari**: Transaksi completed kode itu dibagi jumlah hari di periode.
+  - *Users tagged with this code* (Pengguna yang ditandai dengan kode ini): Pengguna yang mendaftar di periode dengan kode tersebut, beserta portofolionya. Tabel 100 per halaman; tombol CSV dan Excel mengunduh semua pengguna.
+    - **Portfolio status / Status portofolio**: Masih berinvestasi (AUM > 0 di portfolio_fix terbaru), sudah jual semua (pernah beli completed, AUM 0), atau belum pernah beli.
+    - **AUM now / AUM sekarang**: Jumlah amount di mi_fee_logs.portfolio_fix pada hari terbaru.
+    - **Bought (completed) / Total beli (completed)**: Total final_amount beli completed sepanjang masa.
+    - **Sold (completed) / Total jual (completed)**: Total final_amount jual completed sepanjang masa.
+  - *Cohort retention by registration date* (Retensi kohort berdasarkan tanggal registrasi): Retensi transaksi. Setiap baris: kelompok orang bertanda kode yang mendaftar pada hari, minggu, atau bulan yang sama; kolom berikutnya persen yang beli completed pada periode ke-n sesudahnya.
+  - *Cohort retention by first transaction date* (Retensi kohort berdasarkan tanggal transaksi pertama): Sama, tetapi kelompok berdasarkan tanggal beli completed pertama.
+  - *Portfolio retention* (Retensi portofolio): Tabel status (masih berinvestasi, sudah jual semua, belum pernah beli) dan heatmap per kohort beli completed pertama, dengan kolom bulan atau minggu kalender dari portfolio_fix. Tiga tampilan: persen masih berinvestasi, AUM, dan AUM dibanding pembacaan pertama.
+    - **AUM vs first reading / AUM vs pembacaan pertama**: AUM kohort pada periode itu dibagi AUM-nya pada kolom pertama yang ada datanya; di atas 100% berarti menambah investasi.
 - **Catatan penting**:
-  - Tab generik yang disiapkan sebelum event-nya ada; aturan funnel dan cohort perlu disesuaikan saat event sebenarnya berjalan.
+  - Kode tanpa * dicocokkan sebagian, jadi CE juga cocok dengan CELIA dan KACE. Pakai * (EVT*) untuk keluarga kode event agar kode lain tidak ikut terhitung.
+  - Rekap harian menghitung transaksi dari semua orang bertanda kode, termasuk yang mendaftar sebelum event. Centang "Only users who signed up in this window" untuk hanya melihat pengguna baru dari event.
+  - portfolio_fix baru tersedia sejak Agustus 2026, jadi retensi portofolio hanya menampilkan periode sejak itu. Unit muncul beberapa hari setelah pembelian settle dan hilang setelah penjualan settle, jadi beli-jual jangka pendek bisa tampil 0 di akhir periode.
+  - Workbook dan export pengguna maksimal 50.000 baris per sheet; sheet Ringkasan mencatat jumlah baris dan filter Detail transaksi yang dipakai.
+  - Funnel dan cohort masih langkah generik; sesuaikan bila event punya aturan sendiri.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `event-code`
-  - Endpoint: `GET /api/event-code/users`, `GET /api/event-code/funnel`, `GET /api/event-code/cohort`, `GET /api/event-code/transactions`
-  - Fungsi query (`server/queries.js`): `eventCodeCohort`, `eventCodeFunnel`, `eventCodeUsers`, `remisierTransactions`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.transactions`, `main.user_profiles`, `main.users`
+  - Endpoint: `GET /api/event-code/users`, `GET /api/event-code/funnel`, `GET /api/event-code/cohort`, `GET /api/event-code/recap`, `GET /api/event-code/portfolio`, `GET /api/event-code/transactions`
+  - Fungsi query (`server/queries.js`): `eventCodeCohort`, `eventCodeFunnel`, `eventCodePortfolio`, `eventCodeRecap`, `eventCodeUsers`, `remisierTransactions`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_fix`
 
 ### Tools
 
