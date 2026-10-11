@@ -16,6 +16,7 @@ import * as Mail from './mail.ts';
 import * as Sched from './schedules.ts';
 import {
   pivotPerformanceByType, normalizeFundFilter, fundScopeLabel, statementDocsLabel, buildFundPerformancePdf, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM,
+  sortExportRows,
 } from './report-helpers.ts';
 import * as EmailLog from './email-log.ts';
 
@@ -615,6 +616,7 @@ on('GET', '/api/sinvest-transactions', requireTab('sinvest-tx', async (_req, _pa
     from: qp(url, 'from'), to: qp(url, 'to'),
     type: qp(url, 'type'), sid: qp(url, 'sid'), search: qp(url, 'search'),
     limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
+    sort: qp(url, 'sort'), dir: qp(url, 'dir'),
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -631,6 +633,7 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
     q: q2, type: qp(url, 'type'), status: qp(url, 'status'), fundId: qp(url, 'fundId'),
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
+    sort: qp(url, 'sort'), dir: qp(url, 'dir'),
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -646,7 +649,7 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
 on('GET', '/api/event-code/users', requireTab('event-code', async (_req, _params, url) => {
   const codes = qpAll(url, 'codes');
   if (!codes.length) return json({ error: 'At least one code is required.' }, 400);
-  const q = Q.eventCodeUsers(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'), qp(url, 'limit') || 100, qp(url, 'offset') || 0);
+  const q = Q.eventCodeUsers(qp(url, 'field'), codes, qp(url, 'from'), qp(url, 'to'), qp(url, 'limit') || 100, qp(url, 'offset') || 0, qp(url, 'sort'), qp(url, 'dir'));
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
     runQuery(q.countSql!, q.params),
@@ -695,6 +698,7 @@ on('GET', '/api/event-code/transactions', requireTab('event-code', async (_req, 
     type: qp(url, 'type'), status: qp(url, 'status'),
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 100, offset: qp(url, 'offset') || 0,
+    sort: qp(url, 'sort'), dir: qp(url, 'dir'),
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -1235,6 +1239,7 @@ on('GET', '/api/remisier/transactions', requireTab('remisier-tx', async (_req, _
     type: qp(url, 'type'), status: qp(url, 'status'),
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 100, offset: qp(url, 'offset') || 0,
+    sort: qp(url, 'sort'), dir: qp(url, 'dir'),
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -1419,7 +1424,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     pctCols = ['pct_change'];
   } else if (source === 'product_performance_detail') {
     const q = Q.productPerformanceDetail(body.asOf as string | undefined);
-    const detail = await runQuery(q.sql, q.params);
+    const detail = sortExportRows(await runQuery(q.sql, q.params), body);
     if (format === 'xlsx') return xlsxMultiResponse(pivotPerformanceByType(detail), filename, username);
     if (format === 'pdf') {
       const buf = await fundPerformanceReport(pivotPerformanceByType(detail), { username });
@@ -1655,7 +1660,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const detail = await runQuery(q.sql, q.params);
     const splitBy = body.splitBy as string | undefined; // 'fund' | 'mi' | undefined — xlsx only, one sheet per value
     if (format === 'xlsx' && (splitBy === 'fund' || splitBy === 'mi')) {
-      return xlsxMultiResponse(splitRowsBySheet(detail, splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename, username);
+      return xlsxMultiResponse(splitRowsBySheet(sortExportRows(detail, body), splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename, username);
     }
     rows = detail;
   } else if (source === 'revenue_summary') {
@@ -1679,7 +1684,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const q = Q.campaignRevenueDetail(body.from as string, body.to as string, body.granularity as string, body.promo as string);
     const detail = await runQuery(q.sql, q.params);
     if (format === 'xlsx' && body.splitBy === 'promo') {
-      return xlsxMultiResponse(splitRowsBySheet(detail, 'promo_code'), filename, username);
+      return xlsxMultiResponse(splitRowsBySheet(sortExportRows(detail, body), 'promo_code'), filename, username);
     }
     rows = detail;
   } else if (source === 'campaign_revenue_campaigns') {
@@ -1706,15 +1711,15 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const referrerCodes = (body.referrerCodes as string[]) || [];
     const salesCodes = (body.salesCodes as string[]) || [];
     if (!referrerCodes.length && !salesCodes.length) return json({ error: 'At least one referrer_code or sales_code is required.' }, 400);
-    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'sinvest_transactions') {
-    const q = Q.sinvestTransactions({ from: body.from as string, to: body.to as string, type: body.type as string, sid: body.sid as string, search: body.search as string, limit: limit || 100000, offset: 0 });
+    const q = Q.sinvestTransactions({ from: body.from as string, to: body.to as string, type: body.type as string, sid: body.sid as string, search: body.search as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'users_transactions') {
     const searchQ = body.q as string;
     if (!searchQ) return json({ error: 'A SID, email, or name search is required.' }, 400);
-    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
+    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
     rows = await runQuery(q.sql, q.params);
     if (format === 'pdf') {
       const buf = await usersTransactionsReport(rows, { username, query: searchQ });
@@ -1731,7 +1736,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const field = body.field as string;
     const referrerCodes = field === 'referrer_code' ? codes : [];
     const salesCodes = field === 'referrer_code' ? [] : codes;
-    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0 });
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'hnwi_total') {
     if (!body.date) return json({ error: 'date is required.' }, 400);
@@ -1786,6 +1791,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     return json({ error: 'Unknown export source.' }, 400);
   }
 
+  rows = sortExportRows(rows, body); // the table's on-screen sort, if any
   if (format === 'xlsx') return xlsxResponse(rows, filename, username, pctCols);
   if (format === 'txt') return txtResponse(rows, filename, username);
   return csvResponse(rows, filename, username);

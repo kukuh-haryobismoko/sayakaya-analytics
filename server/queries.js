@@ -23,6 +23,18 @@ function range(from, to) {
   };
 }
 
+// ORDER BY for a paged list sorted from a column header. `sort` must be one
+// of the query's own output column names (a whitelist, so raw input never
+// reaches the SQL); NULLs go last either way, then `tie` keeps pages from
+// overlapping. Anything else falls back to the list's default order.
+// Text columns sort case-insensitively, so "Afif" doesn't land after "AGUS".
+const TEXT_SORT = new Set(['transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone', 'fund_name', 'fund_type',
+  'referrer_code', 'sales_code', 'investor_name', 'fund_code', 'reference_no', 'verification_status', 'portfolio_status']);
+function pagedOrder(sort, dir, allowed, fallback, tie) {
+  if (!allowed.includes(sort)) return fallback;
+  return `${TEXT_SORT.has(sort) ? `LOWER(${sort})` : sort} ${dir === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${tie}`;
+}
+
 // Shared day/week/month/quarter -> DATE_TRUNC part mapping, used everywhere a
 // query lets the caller pick the bucket size (revenue, remisier revenue, ...).
 const granularityPart = (granularity, fallback = 'MONTH') =>
@@ -3737,7 +3749,9 @@ const sinvestTxColumns = `
       FORMAT_DATE('%Y-%m-%d', SAFE.PARSE_DATE('%Y%m%d', Input_Date)) AS input_date,
       Reference_No AS reference_no`;
 
-function sinvestTransactions({ from, to, type, sid, search, limit = 50, offset = 0 }) {
+const SINVEST_TX_SORT = ['transaction_date', 'type', 'sid', 'investor_name', 'fund_code', 'fund_name', 'unit',
+  'nav_per_unit', 'gross_amount', 'fee', 'net_amount', 'input_date', 'reference_no'];
+function sinvestTransactions({ from, to, type, sid, search, limit = 50, offset = 0, sort, dir }) {
   const r = range(from, to);
   const params = { fromYmd: r.from.replace(/-/g, ''), toYmd: r.to.replace(/-/g, ''), limit: parseInt(limit, 10), offset: parseInt(offset, 10) };
   let where = 'Transaction_Date BETWEEN @fromYmd AND @toYmd';
@@ -3750,7 +3764,7 @@ function sinvestTransactions({ from, to, type, sid, search, limit = 50, offset =
   }
   return {
     sql: `SELECT ${sinvestTxColumns} FROM ${SINVEST} WHERE ${where}
-          ORDER BY Transaction_Date DESC, Reference_No DESC LIMIT @limit OFFSET @offset`,
+          ORDER BY ${pagedOrder(sort, dir, SINVEST_TX_SORT, 'Transaction_Date DESC, Reference_No DESC', 'reference_no')} LIMIT @limit OFFSET @offset`,
     params,
     countSql: `SELECT COUNT(*) AS total FROM ${SINVEST} WHERE ${where}`,
   };
@@ -4923,7 +4937,9 @@ const codePatterns = (codes) => (Array.isArray(codes) ? codes : [codes])
 // referrer_code/sales_code values, with the buyer's contact info and fund
 // name attached — a due-diligence/audit list next to the revenue rollups
 // above, filtered by transaction date rather than snapshot date.
-function remisierTransactions({ referrerCodes = [], salesCodes = [], type, status, from, to, limit = 100, offset = 0 }) {
+const REMISIER_TX_SORT = ['created_at', 'transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone',
+  'fund_name', 'fund_type', 'unit', 'value_per_unit', 'amount', 'final_amount', 'realized_gain_loss', 'referrer_code', 'sales_code'];
+function remisierTransactions({ referrerCodes = [], salesCodes = [], type, status, from, to, limit = 100, offset = 0, sort, dir }) {
   const params = {
     ...range(from, to),
     limit: parseInt(limit, 10),
@@ -4949,7 +4965,7 @@ function remisierTransactions({ referrerCodes = [], salesCodes = [], type, statu
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
       LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
       WHERE ${where}
-      ORDER BY t.created_at DESC
+      ORDER BY ${pagedOrder(sort, dir, REMISIER_TX_SORT, 't.created_at DESC', 'id')}
       LIMIT @limit OFFSET @offset`,
     params,
     countSql: `SELECT COUNT(*) AS total
@@ -4963,7 +4979,9 @@ function remisierTransactions({ referrerCodes = [], salesCodes = [], type, statu
 // thousands of rows), with type/status/fund/date refinements on top. Same
 // users/user_profiles/funds join as remisierTransactions above, just keyed
 // by investor identity instead of referrer/sales code.
-function usersTransactions({ q, type, status, fundId, from, to, limit = 100, offset = 0 }) {
+const USERS_TX_SORT = ['created_at', 'transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone',
+  'fund_name', 'unit', 'value_per_unit', 'amount', 'final_amount'];
+function usersTransactions({ q, type, status, fundId, from, to, limit = 100, offset = 0, sort, dir }) {
   const params = {
     ...range(from, to),
     limit: parseInt(limit, 10),
@@ -4989,7 +5007,7 @@ function usersTransactions({ q, type, status, fundId, from, to, limit = 100, off
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
       LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
       WHERE ${where}
-      ORDER BY t.created_at DESC
+      ORDER BY ${pagedOrder(sort, dir, USERS_TX_SORT, 't.created_at DESC', 'id')}
       LIMIT @limit OFFSET @offset`,
     params,
     countSql: `SELECT COUNT(*) AS total
@@ -5118,7 +5136,9 @@ const eventCodePortfolioCtes = (field) => `WITH tagged AS (
 // platform-wide default/organic value shared by hundreds of thousands of
 // users (confirmed in production — not just a hypothetical), so this list
 // can't assume "one code = a small cohort" the way remisierUsers does.
-const eventCodeUsers = (field, codes, from, to, limit = 100, offset = 0) => {
+const EVC_USERS_SORT = ['sid', 'name', 'email', 'referrer_code', 'sales_code', 'created_at', 'verified_at', 'verification_status',
+  'portfolio_status', 'aum_now', 'first_buy_at', 'last_tx_at', 'completed_buys', 'bought', 'sold'];
+const eventCodeUsers = (field, codes, from, to, limit = 100, offset = 0, sort, dir) => {
   const r = range(from, to);
   const where = `${eventCodeWhere(field)} AND ${EVC_IN_WINDOW}`;
   return {
@@ -5128,7 +5148,7 @@ const eventCodeUsers = (field, codes, from, to, limit = 100, offset = 0) => {
         p.first_buy_at, p.last_tx_at, p.completed_buys, p.bought, p.sold
       FROM portfolio p
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = p.user_id
-      ORDER BY p.created_at
+      ORDER BY ${pagedOrder(sort, dir, EVC_USERS_SORT, 'p.created_at', 'user_id')}
       LIMIT @limit OFFSET @offset`,
     params: { ...r, codes: codePatterns(codes), limit: parseInt(limit, 10), offset: parseInt(offset, 10) },
     countSql: `SELECT COUNT(*) AS total

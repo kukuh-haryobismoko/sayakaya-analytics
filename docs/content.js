@@ -92,7 +92,7 @@ const TABS = {
   "users-tx": {
     summary: "Telusuri transaksi investor mana pun lewat SID, email, atau nama.",
     datasets: "main.transactions, main.users, main.user_profiles, main.funds",
-    computation: "Pencarian parsial. Filter tipe, status, fund, dan tanggal. Tiap baris memuat kontak pembeli dan nama fund. Export CSV, Excel, PDF.",
+    computation: "Pencarian parsial. Filter tipe, status, fund, dan tanggal. Tiap baris memuat kontak pembeli dan nama fund. Export CSV, Excel, PDF. Semua kolom bisa diurutkan dengan klik judul kolom; pengurutan dijalankan di BigQuery (pagedOrder, hanya nama kolom output yang diizinkan, teks tanpa membedakan huruf besar/kecil, NULL di akhir) sehingga berlaku untuk semua baris dan ikut ke export. Di tab lain, export server dari tabel yang diurutkan di layar dikirim beserta kolom urutannya (sortExportRows di report-helpers): diurutkan menurut field kolom itu, atau mengikuti urutan kolom pertama di layar untuk pivot dan kolom yang dihitung di halaman.",
   },
   "sinvest-tx": {
     summary: "Browse mentah feed KSEI/SInvest, per baris, bisa difilter dan di-export.",

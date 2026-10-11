@@ -105,4 +105,58 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8'
   assert.strictEqual(chartWrap.querySelectorAll('.chart-export-bar').length, 1, 're-painting the same chart should not duplicate its export bar');
 
   console.log('ok    app.js table/chart export bars auto-inject, toggle, and export real DOM data (jsdom)');
+
+  // Every table sorts from its header. Page-side sort: id-ID money (compact
+  // and full), blanks last both ways, tfoot pinned, kept across a re-render.
+  const order = () => [...wrap.querySelectorAll('tbody tr td:first-child')].map((td) => td.textContent);
+  const render = () => {
+    wrap.innerHTML = '<table><thead><tr><th>Name</th><th class="num">AUM</th></tr></thead><tbody>'
+      + '<tr><td>Bea</td><td>Rp 1.500.000</td></tr><tr><td>al</td><td>n/a</td></tr><tr><td>Cy</td><td>Rp 2,5 jt</td></tr>'
+      + '</tbody><tfoot><tr><td>Total</td><td>Rp 4.000.000</td></tr></tfoot></table>';
+  };
+  render();
+  await new Promise((r) => setTimeout(r, 50));
+  const ths = () => wrap.querySelectorAll('th');
+  assert.ok([...ths()].every((th) => th.classList.contains('sortable') && th.tabIndex === 0), 'every header becomes a focusable sort control');
+  ths()[1].click();
+  assert.deepStrictEqual(order(), ['Cy', 'Bea', 'al'], 'first click on a money column: biggest first, n/a last');
+  assert.strictEqual(ths()[1].getAttribute('aria-sort'), 'descending');
+  ths()[1].dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.deepStrictEqual(order(), ['Bea', 'Cy', 'al'], 'Enter flips to ascending, n/a still last');
+  assert.strictEqual(wrap.querySelector('tfoot td').textContent, 'Total', 'the total row stays in tfoot');
+  render();
+  await new Promise((r) => setTimeout(r, 50));
+  assert.deepStrictEqual(order(), ['Bea', 'Cy', 'al'], 're-rendering the same table keeps the chosen order');
+  ths()[0].click();
+  assert.deepStrictEqual(order(), ['al', 'Bea', 'Cy'], 'text columns start A to Z, case-insensitive');
+
+  // Server-side sort: headers with data-sort call the registered loader instead.
+  const calls = [];
+  vm.runInContext('SERVER_SORT', sandbox).pfResults = (s) => calls.push(s);
+  wrap.innerHTML = '<table><thead><tr>' + vm.runInContext("sortTh('Amount', 'final_amount', null, 'num', 'desc')", sandbox)
+    + '</tr></thead><tbody><tr><td>1</td></tr></tbody></table>';
+  await new Promise((r) => setTimeout(r, 50));
+  wrap.querySelector('th').click();
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(calls)), [{ key: 'final_amount', dir: 'desc' }], 'a server-sorted header asks the server, biggest first');
+  console.log('ok    app.js sorts every table from its header, paged lists on the server (jsdom)');
+
+  // An export button sends the on-screen sort of the first table after it in its tab.
+  const view = window.document.createElement('section');
+  view.className = 'view';
+  view.innerHTML = '<button id="xCsv">CSV</button><div class="panel"></div><div id="xTable" class="table-wrap"></div>';
+  window.document.body.appendChild(view);
+  const xw = window.document.getElementById('xTable');
+  xw.innerHTML = '<table><thead><tr><th data-key="bucket">Period</th><th class="num">Δ AUM</th><th class="num" data-key="aum">AUM</th></tr></thead><tbody>'
+    + '<tr><td>2026-08</td><td>+1.0%</td><td>Rp 100</td></tr><tr><td>2026-09</td><td>-2.0%</td><td>Rp 300</td></tr></tbody></table>';
+  await new Promise((r) => setTimeout(r, 50));
+  const screenSortFor = vm.runInContext('screenSortFor', sandbox);
+  const btn = window.document.getElementById('xCsv');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(screenSortFor(btn))), {}, 'unsorted table: export keeps its own order');
+  xw.querySelectorAll('th')[2].click();
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(screenSortFor(btn))),
+    { sortDir: 'desc', sortKey: 'aum', orderKey: 'bucket', order: ['2026-09', '2026-08'] }, 'sorted by a field the export has');
+  xw.querySelectorAll('th')[1].click();
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(screenSortFor(btn))),
+    { sortDir: 'desc', orderKey: 'bucket', order: ['2026-08', '2026-09'] }, 'computed column: export follows the on-screen row order');
+  console.log('ok    app.js exports carry the on-screen table sort (jsdom)');
 })();

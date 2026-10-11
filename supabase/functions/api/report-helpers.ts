@@ -11,6 +11,42 @@ import { portfolioReport, transactionStatement, fundPerformanceReport, val } fro
 
 const PERF_PERIODS = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '3Y', '5Y', '10Y'];
 
+// Export rows in the order their table was sorted on screen. sortKey: the
+// sorted column's own field, compared the way the page compares (numbers as
+// numbers, text case-insensitively, blanks last). Without it (a pivot, or a
+// column computed on the page), order + orderKey: the on-screen order of the
+// first column's values. A key the rows don't have leaves them as queried.
+const exportCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const plainValue = (v: unknown): unknown => (v && typeof v === 'object' && 'value' in v ? (v as { value: unknown }).value : v);
+export function sortExportRows<T extends Record<string, unknown>>(
+  rows: T[], { sortKey, sortDir, orderKey, order }: { sortKey?: unknown; sortDir?: unknown; orderKey?: unknown; order?: unknown } = {},
+): T[] {
+  if (!Array.isArray(rows) || rows.length < 2) return rows;
+  if (typeof sortKey === 'string' && sortKey in rows[0]) {
+    const sortable = (r: T): number | string | null => {
+      const v = plainValue(r[sortKey]);
+      if (v == null || v === '') return null;
+      const s = String(v), n = Number(s);
+      return typeof v === 'number' ? v : (s.trim() !== '' && Number.isFinite(n) ? n : s);
+    };
+    const items = rows.map((r, i) => ({ r, i, v: sortable(r) }));
+    const nums = items.every((x) => x.v == null || typeof x.v === 'number');
+    const m = sortDir === 'asc' ? 1 : -1;
+    items.sort((a, b) => {
+      if (a.v == null || b.v == null) return Number(a.v == null) - Number(b.v == null) || a.i - b.i;
+      return m * (nums ? (a.v as number) - (b.v as number) : exportCollator.compare(String(a.v), String(b.v))) || a.i - b.i;
+    });
+    return items.map((x) => x.r);
+  }
+  if (typeof orderKey === 'string' && orderKey in rows[0] && Array.isArray(order) && order.length) {
+    const pos = new Map<string, number>();
+    order.slice(0, 100000).forEach((t, i) => { const k = String(t).trim(); if (!pos.has(k)) pos.set(k, i); });
+    const at = (r: T) => pos.get(String(plainValue(r[orderKey]) ?? '').trim()) ?? Infinity;
+    return rows.map((r, i) => ({ r, i, p: at(r) })).sort((a, b) => a.p - b.p || a.i - b.i).map((x) => x.r);
+  }
+  return rows;
+}
+
 export function pivotPerformanceByType(rows: Record<string, unknown>[]) {
   const byType: Record<string, { byFund: Record<string, Record<string, unknown>>; asOf: string | null }> = {};
   for (const r of rows) {

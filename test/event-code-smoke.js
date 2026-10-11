@@ -50,4 +50,27 @@ for (const sql of [Q.eventCodeFunnel('sales_code', ['EVT*']).sql, Q.eventCodeUse
 }
 assert.ok(!all.sql.includes('OR EXISTS (SELECT 1 FROM'));
 
+// Paged lists sort only by their own output columns; anything else falls back.
+const EX = require('../server/explore');
+assert.ok(Q.usersTransactions({ q: 'a', sort: 'final_amount', dir: 'asc' }).sql.includes('ORDER BY final_amount ASC NULLS LAST, id'));
+assert.ok(Q.usersTransactions({ q: 'a', sort: 'id; DROP TABLE x', dir: 'asc' }).sql.includes('ORDER BY t.created_at DESC'));
+assert.ok(Q.remisierTransactions({ salesCodes: ['A'], sort: 'fund_type' }).sql.includes('ORDER BY LOWER(fund_type) DESC NULLS LAST, id'));
+assert.ok(Q.sinvestTransactions({ sort: 'net_amount', dir: 'asc' }).sql.includes('ORDER BY net_amount ASC NULLS LAST, reference_no'));
+assert.ok(Q.eventCodeUsers('sales_code', ['A'], '', '', 10, 0, 'aum_now', 'desc').sql.includes('ORDER BY aum_now DESC NULLS LAST, user_id'));
+assert.ok(EX.buildExplore('transactions', { sort: 'final_amount', dir: 'asc' }).sql.includes('ORDER BY final_amount ASC NULLS LAST, t.created_at DESC'));
+assert.ok(EX.buildExplore('transactions', { sort: 'email', dir: 'asc' }).sql.includes('ORDER BY LOWER(email) ASC NULLS LAST'));
+assert.ok(EX.buildExplore('transactions', { sort: 'password' }).sql.includes('ORDER BY t.created_at DESC LIMIT'));
+
+// Exports keep the table's on-screen sort (report-helpers sortExportRows).
+const { sortExportRows } = require('../server/report-helpers');
+const xr = [{ name: 'bea', aum: '1500000', d: { value: '2026-10-02' } }, { name: 'Al', aum: null, d: { value: '2026-10-01' } },
+  { name: 'cy', aum: '2500000', d: { value: '2026-10-03' } }];
+const names = (rows) => rows.map((r) => r.name);
+assert.deepStrictEqual(names(sortExportRows(xr, { sortKey: 'aum', sortDir: 'desc' })), ['cy', 'bea', 'Al'], 'numbers high to low, blanks last');
+assert.deepStrictEqual(names(sortExportRows(xr, { sortKey: 'aum', sortDir: 'asc' })), ['bea', 'cy', 'Al'], 'blanks last ascending too');
+assert.deepStrictEqual(names(sortExportRows(xr, { sortKey: 'name', sortDir: 'asc' })), ['Al', 'bea', 'cy'], 'text ignores case');
+assert.deepStrictEqual(names(sortExportRows(xr, { sortKey: 'd', sortDir: 'desc' })), ['cy', 'bea', 'Al'], 'BigQuery {value} dates unwrap');
+assert.deepStrictEqual(names(sortExportRows(xr, { sortKey: 'nope', orderKey: 'name', order: ['cy', 'Al'] })), ['cy', 'Al', 'bea'], 'unknown column: on-screen first-column order, others after');
+assert.strictEqual(sortExportRows(xr, {}), xr, 'no sort: rows untouched');
+
 console.log('event-code smoke test passed');

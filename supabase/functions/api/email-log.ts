@@ -221,9 +221,13 @@ export function recap({ from, to, category, source }: { from: string; to: string
 
 const cleanSearch = (s?: string) => String(s || '').replace(/[,()"\\]/g, ' ').trim();
 
-export function list({ from, to, category, source, outcome, search, limit, offset }: Record<string, string | undefined> = {}) {
+const LOG_SORT: (string | undefined)[] = ['created_at', 'recipient', 'subject', 'category', 'source', 'description', 'sent_by', 'outcome',
+  'delivered_at', 'opened_at', 'open_count', 'clicked_at', 'click_count', 'error'];
+export function list({ from, to, category, source, outcome, search, limit, offset, sort, dir }: Record<string, string | undefined> = {}) {
   const n = Math.min(Math.max(Number(limit) || 50, 1), 500);
-  const params = ['select=*', 'order=created_at.desc', `limit=${n}`, `offset=${Math.max(Number(offset) || 0, 0)}`];
+  // Header sort: a whitelisted column of the overview view, newest first as the tie-breaker.
+  const order = LOG_SORT.includes(sort) ? `${sort}.${dir === 'asc' ? 'asc' : 'desc'}.nullslast,created_at.desc` : 'created_at.desc';
+  const params = ['select=*', `order=${order}`, `limit=${n}`, `offset=${Math.max(Number(offset) || 0, 0)}`];
   if (from) params.push(`created_at=gte.${encodeURIComponent(from + 'T00:00:00+07:00')}`);
   if (to) params.push(`created_at=lte.${encodeURIComponent(to + 'T23:59:59.999+07:00')}`);
   if (category) params.push(`category=eq.${encodeURIComponent(category)}`);

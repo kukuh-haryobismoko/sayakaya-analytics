@@ -22,6 +22,7 @@ const Auth = require('./auth');
 const Sched = require('./schedules');
 const {
   pivotPerformanceByType, normalizeFundFilter, fundScopeLabel, statementDocsLabel, buildFundPerformancePdf, buildStatementAttachments, aggregateBulkHoldings, previousMonthYYYYMM,
+  sortExportRows,
 } = require('./report-helpers');
 const EmailLog = require('./email-log');
 
@@ -515,8 +516,8 @@ function createApp({ serveStatic = true } = {}) {
 
   // ---- SInvest transactions (raw KSEI/SInvest custodian feed, paged) --------
   app.get('/api/sinvest-transactions', requireTab('sinvest-tx'), handler(async (req, res) => {
-    const { from, to, type, sid, search, limit, offset } = req.query;
-    const q = Q.sinvestTransactions({ from, to, type, sid, search, limit: limit || 50, offset: offset || 0 });
+    const { from, to, type, sid, search, limit, offset, sort, dir } = req.query;
+    const q = Q.sinvestTransactions({ from, to, type, sid, search, limit: limit || 50, offset: offset || 0, sort, dir });
     const [rows, countRows] = await Promise.all([
       runQuery(q.sql, q.params),
       runQuery(q.countSql, q.params),
@@ -526,9 +527,9 @@ function createApp({ serveStatic = true } = {}) {
 
   // ---- Users transactions (any investor, by SID/email/name) -----------------
   app.get('/api/users-transactions', requireTab('users-tx'), handler(async (req, res) => {
-    const { q, type, status, fundId, from, to, limit, offset } = req.query;
+    const { q, type, status, fundId, from, to, limit, offset, sort, dir } = req.query;
     if (!q) return res.status(400).json({ error: 'A SID, email, or name search is required.' });
-    const query = Q.usersTransactions({ q, type, status, fundId, from, to, limit: limit || 50, offset: offset || 0 });
+    const query = Q.usersTransactions({ q, type, status, fundId, from, to, limit: limit || 50, offset: offset || 0, sort, dir });
     const [rows, countRows] = await Promise.all([
       runQuery(query.sql, query.params),
       runQuery(query.countSql, query.params),
@@ -543,8 +544,8 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/event-code/users', requireTab('event-code'), handler(async (req, res) => {
     const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
     if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
-    const { field, from, to, limit, offset } = req.query;
-    const q = Q.eventCodeUsers(field, codes, from, to, limit || 100, offset || 0);
+    const { field, from, to, limit, offset, sort, dir } = req.query;
+    const q = Q.eventCodeUsers(field, codes, from, to, limit || 100, offset || 0, sort, dir);
     const [rows, countRows] = await Promise.all([
       runQuery(q.sql, q.params),
       runQuery(q.countSql, q.params),
@@ -589,10 +590,10 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/event-code/transactions', requireTab('event-code'), handler(async (req, res) => {
     const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
     if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
-    const { field, from, to, type, status, limit, offset } = req.query;
+    const { field, from, to, type, status, limit, offset, sort, dir } = req.query;
     const referrerCodes = field === 'referrer_code' ? codes : [];
     const salesCodes = field === 'referrer_code' ? [] : codes;
-    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100, offset: offset || 0 });
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100, offset: offset || 0, sort, dir });
     const [rows, countRows] = await Promise.all([
       runQuery(q.sql, q.params),
       runQuery(q.countSql, q.params),
@@ -1133,8 +1134,8 @@ function createApp({ serveStatic = true } = {}) {
     const referrerCodes = req.query.referrerCodes == null ? [] : [].concat(req.query.referrerCodes);
     const salesCodes = req.query.salesCodes == null ? [] : [].concat(req.query.salesCodes);
     if (!referrerCodes.length && !salesCodes.length) return res.status(400).json({ error: 'At least one referrer_code or sales_code is required.' });
-    const { from, to, type, status, limit, offset } = req.query;
-    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100, offset: offset || 0 });
+    const { from, to, type, status, limit, offset, sort, dir } = req.query;
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100, offset: offset || 0, sort, dir });
     const [rows, countRows] = await Promise.all([
       runQuery(q.sql, q.params),
       runQuery(q.countSql, q.params),
@@ -1310,6 +1311,7 @@ function createApp({ serveStatic = true } = {}) {
     if (!Auth.userCan(req.user, tab)) return res.status(403).json({ error: 'You do not have access to this export.' });
     const username = req.user.username;
     await Auth.logEvent(req.user.id, username, 'export', `${source} (${format}) as "${filename}"`);
+    const screenOrder = (r) => sortExportRows(r, req.body); // the table's on-screen sort, if any
     let rows;
     let pctCols = [];
     if (source === 'sql' || source === 'ask_result') {
@@ -1346,7 +1348,7 @@ function createApp({ serveStatic = true } = {}) {
       pctCols = ['pct_change'];
     } else if (source === 'product_performance_detail') {
       const q = Q.productPerformanceDetail(req.body.asOf);
-      const detail = await runQuery(q.sql, q.params);
+      const detail = screenOrder(await runQuery(q.sql, q.params));
       if (format === 'xlsx') return sendXlsxMulti(res, pivotPerformanceByType(detail), filename, username);
       if (format === 'pdf') {
         const buf = await PDF.fundPerformanceReport(pivotPerformanceByType(detail), { username });
@@ -1537,7 +1539,7 @@ function createApp({ serveStatic = true } = {}) {
       const detail = await runQuery(q.sql, q.params);
       const { splitBy } = req.body; // 'fund' | 'mi' | undefined — xlsx only, one sheet per value
       if (format === 'xlsx' && (splitBy === 'fund' || splitBy === 'mi')) {
-        return sendXlsxMulti(res, splitRowsBySheet(detail, splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename, username);
+        return sendXlsxMulti(res, splitRowsBySheet(screenOrder(detail), splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename, username);
       }
       rows = detail;
     } else if (source === 'revenue_summary') {
@@ -1560,7 +1562,7 @@ function createApp({ serveStatic = true } = {}) {
       const q = Q.campaignRevenueDetail(req.body.from, req.body.to, req.body.granularity, req.body.promo);
       const detail = await runQuery(q.sql, q.params);
       if (format === 'xlsx' && req.body.splitBy === 'promo') {
-        return sendXlsxMulti(res, splitRowsBySheet(detail, 'promo_code'), filename, username);
+        return sendXlsxMulti(res, splitRowsBySheet(screenOrder(detail), 'promo_code'), filename, username);
       }
       rows = detail;
     } else if (source === 'campaign_revenue_campaigns') {
@@ -1585,15 +1587,15 @@ function createApp({ serveStatic = true } = {}) {
       const referrerCodes = req.body.referrerCodes || [];
       const salesCodes = req.body.salesCodes || [];
       if (!referrerCodes.length && !salesCodes.length) return res.status(400).json({ error: 'At least one referrer_code or sales_code is required.' });
-      const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: req.body.type, status: req.body.status, from: req.body.from, to: req.body.to, limit: limit || 100000, offset: 0 });
+      const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: req.body.type, status: req.body.status, from: req.body.from, to: req.body.to, limit: limit || 100000, offset: 0, sort: req.body.sort, dir: req.body.dir });
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'sinvest_transactions') {
-      const q = Q.sinvestTransactions({ from: req.body.from, to: req.body.to, type: req.body.type, sid: req.body.sid, search: req.body.search, limit: limit || 100000, offset: 0 });
+      const q = Q.sinvestTransactions({ from: req.body.from, to: req.body.to, type: req.body.type, sid: req.body.sid, search: req.body.search, limit: limit || 100000, offset: 0, sort: req.body.sort, dir: req.body.dir });
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'users_transactions') {
-      const { q: searchQ, type, status, fundId, from, to } = req.body;
+      const { q: searchQ, type, status, fundId, from, to, sort, dir } = req.body;
       if (!searchQ) return res.status(400).json({ error: 'A SID, email, or name search is required.' });
-      const q = Q.usersTransactions({ q: searchQ, type, status, fundId, from, to, limit: limit || 100000, offset: 0 });
+      const q = Q.usersTransactions({ q: searchQ, type, status, fundId, from, to, limit: limit || 100000, offset: 0, sort, dir });
       rows = await runQuery(q.sql, q.params);
       if (format === 'pdf') {
         const buf = await PDF.usersTransactionsReport(rows, { username, query: searchQ });
@@ -1602,10 +1604,10 @@ function createApp({ serveStatic = true } = {}) {
     } else if (source === 'event_code_transactions') {
       const codes = req.body.codes || [];
       if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });
-      const { field, type, status, from, to } = req.body;
+      const { field, type, status, from, to, sort, dir } = req.body;
       const referrerCodes = field === 'referrer_code' ? codes : [];
       const salesCodes = field === 'referrer_code' ? [] : codes;
-      const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100000, offset: 0 });
+      const q = Q.remisierTransactions({ referrerCodes, salesCodes, type, status, from, to, limit: limit || 100000, offset: 0, sort, dir });
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'hnwi_total') {
       if (!req.body.date) return res.status(400).json({ error: 'date is required.' });
@@ -1659,6 +1661,7 @@ function createApp({ serveStatic = true } = {}) {
     } else {
       return res.status(400).json({ error: 'Unknown export source.' });
     }
+    rows = screenOrder(rows);
     if (format === 'xlsx') return sendXlsx(res, rows, filename, username, pctCols);
     if (format === 'txt') return sendTxt(res, rows, filename, username);
     return sendCsv(res, rows, filename, username);

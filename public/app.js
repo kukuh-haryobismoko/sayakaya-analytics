@@ -297,6 +297,7 @@ function wireTableExportBar(wrap) {
 function refreshTableToolbars(root) {
   [...root.querySelectorAll('.table-wrap')].forEach((wrap) => {
     wireTableExportBar(wrap);
+    markSortable(wrap);
     const bar = wrap.previousElementSibling;
     if (bar && bar.classList.contains('table-export-bar')) bar.classList.toggle('hidden', !wrap.querySelector('table'));
   });
@@ -308,6 +309,127 @@ function queueTableToolbarRefresh() {
   requestAnimationFrame(() => { tableToolbarQueued = false; refreshTableToolbars(document); });
 }
 new MutationObserver(queueTableToolbarRefresh).observe(document.body, { childList: true, subtree: true });
+
+// ---------- TABLE SORT (every table: click, Enter or Space on a header) ----------
+// Lists paged on the server register a reload in SERVER_SORT under their
+// .table-wrap id and render their headers with data-sort (the server's column
+// name): a click reloads page one in that order, so the whole result is
+// sorted, not only the rows on screen. Every other table sorts its rendered
+// rows in place, remembered per table so a re-render (new data, theme or
+// language switch) keeps the order. <tfoot> totals never move, blanks (n/a,
+// ·) stay last either way, and the first click on a number or date column
+// puts the biggest or newest first.
+const SERVER_SORT = {};
+const tableSorts = {};
+const sortCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const ID_COMPACT = { rb: 1e3, jt: 1e6, m: 1e9, t: 1e12 };
+function sortValue(text) {
+  const s = text.trim();
+  if (!s || s === 'n/a' || s === '·') return null;
+  let m = s.match(/^Rp\s*([-−]?)([\d.,]+)\s*(rb|jt|M|T)?$/);
+  if (m) { // id-ID money: dots group thousands, the comma is the decimal mark
+    const n = Number(m[2].replace(/\./g, '').replace(',', '.')) * (ID_COMPACT[(m[3] || '').toLowerCase()] || 1);
+    return m[1] ? -n : n;
+  }
+  m = s.match(/^([+-]?\d[\d,]*(?:\.\d+)?)%?$/); // counts, percentages and signed deltas
+  return m ? Number(m[1].replace(/,/g, '')) : s;
+}
+const sortTh = (label, key, state, cls, first) => `<th class="${cls} sortable" data-sort="${key}" data-first="${first}" tabindex="0" aria-sort="${
+  state && state.key === key ? (state.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${label}</th>`;
+const sortParams = (state) => (state ? { sort: state.key, dir: state.dir } : {});
+function columnRows(table, i) {
+  return [...table.tBodies[0].rows].map((r, k) => {
+    const text = r.cells[i] ? r.cells[i].textContent.trim() : '';
+    return { r, k, text, v: sortValue(text) };
+  });
+}
+const isDateLike = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v);
+function applyDomSort(table, i, dir) {
+  const rows = columnRows(table, i);
+  const nums = rows.every((x) => x.v == null || typeof x.v === 'number');
+  const m = dir === 'asc' ? 1 : -1;
+  rows.sort((a, b) => {
+    if (a.v == null || b.v == null) return (a.v == null) - (b.v == null) || a.k - b.k;
+    return m * (nums ? a.v - b.v : sortCollator.compare(a.text, b.text)) || a.k - b.k;
+  });
+  table.tBodies[0].append(...rows.map((x) => x.r));
+  [...table.tHead.rows[0].cells].forEach((th, j) => {
+    if (th.classList.contains('sortable')) th.setAttribute('aria-sort', j === i ? (dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
+}
+function markSortable(wrap) {
+  const table = wrap.querySelector('table');
+  if (!table || table.dataset.sortReady || !table.tHead || !table.tBodies[0]) return;
+  table.dataset.sortReady = '1';
+  if (table.tHead.rows.length !== 1 || table.querySelector('[colspan], [rowspan]')) return;
+  const heads = [...table.tHead.rows[0].cells];
+  if (heads.some((th) => th.dataset.sort)) return; // sorted on the server, headers come from the page
+  heads.forEach((th) => {
+    if (!th.textContent.trim() || th.querySelector('input, button, select, a')) return;
+    th.classList.add('sortable'); th.tabIndex = 0; th.setAttribute('aria-sort', 'none');
+  });
+  // The sorted column is found again by its header text (a new column can
+  // shift it), or by position when the text changed but the shape didn't
+  // (a language switch).
+  const saved = tableSorts[wrap.id];
+  if (!saved) return;
+  const byLabel = heads.findIndex((th) => th.textContent.trim() === saved.label);
+  const i = byLabel >= 0 ? byLabel : saved.n === heads.length ? saved.i : -1;
+  if (i >= 0 && heads[i].classList.contains('sortable')) applyDomSort(table, i, saved.dir);
+}
+function onTableSort(e) {
+  const th = e.target.closest && e.target.closest('.table-wrap th.sortable');
+  if (!th) return;
+  if (e.type === 'keydown') { if (e.key !== 'Enter' && e.key !== ' ') return; e.preventDefault(); }
+  const wrap = th.closest('.table-wrap');
+  const table = th.closest('table');
+  const i = [...th.parentNode.cells].indexOf(th);
+  const now = th.getAttribute('aria-sort');
+  let dir = now === 'ascending' ? 'desc' : now === 'descending' ? 'asc' : th.dataset.first;
+  if (!dir) {
+    const vals = columnRows(table, i).map((x) => x.v).filter((v) => v != null);
+    dir = vals.length && vals.every((v) => typeof v === 'number' || isDateLike(v)) ? 'desc' : 'asc';
+  }
+  if (th.dataset.sort) { if (SERVER_SORT[wrap.id]) SERVER_SORT[wrap.id]({ key: th.dataset.sort, dir }); return; }
+  applyDomSort(table, i, dir);
+  if (wrap.id) tableSorts[wrap.id] = { i, dir, n: th.parentNode.cells.length, label: th.textContent.trim() };
+}
+document.addEventListener('click', onTableSort);
+document.addEventListener('keydown', onTableSort);
+
+// Exports follow the on-screen sort. An export button belongs to the first
+// table after it in its tab (they sit above their table, sometimes in the
+// chart panel before it). The server orders by the sorted column's field
+// (data-key) when the export has it, else by the on-screen order of the
+// first column (pivots, columns computed on the page). See sortExportRows.
+let lastClickTarget = null;
+document.addEventListener('click', (e) => { lastClickTarget = e.target; }, true);
+function screenSortFor(el) {
+  const view = el && el.closest && el.closest('.view');
+  if (!view) return {};
+  const wrap = [...view.querySelectorAll('.table-wrap')].find((w) => el.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const table = wrap && tableSorts[wrap.id] && wrap.querySelector('table');
+  if (!table || !table.tHead) return {};
+  const heads = [...table.tHead.rows[0].cells];
+  const th = heads.find((h) => ['ascending', 'descending'].includes(h.getAttribute('aria-sort')));
+  if (!th) return {};
+  const out = { sortDir: th.getAttribute('aria-sort') === 'ascending' ? 'asc' : 'desc' };
+  if (th.dataset.key) out.sortKey = th.dataset.key;
+  if (heads[0].dataset.key) {
+    out.orderKey = heads[0].dataset.key;
+    out.order = [...table.tBodies[0].rows].map((r) => r.cells[0].textContent.trim());
+  }
+  return out;
+}
+// Client-built exports (the Event code workbook): rows in the order their
+// table shows them, matched on the first column; rows not on screen follow.
+function inScreenOrder(rows, wrapId, firstText) {
+  const table = tableSorts[wrapId] && $(`#${wrapId} table`);
+  if (!table) return rows;
+  const pos = new Map([...table.tBodies[0].rows].map((r, i) => [r.cells[0].textContent.trim(), i]));
+  return rows.map((r, i) => ({ r, i, p: pos.get(String(firstText(r))) ?? Infinity }))
+    .sort((a, b) => a.p - b.p || a.i - b.i).map((x) => x.r);
+}
 
 // USER PORTFOLIO (search by SID, print one investor's holdings)
 async function searchPortfolioUsers() {
@@ -1393,7 +1515,7 @@ function daysAgoRange(days) {
 // Amazon SES reports back for each one.
 let emailRecapLoaded = false;
 let erSummary = null;
-const er = { offset: 0, limit: 50, total: 0, rows: null };
+const er = { offset: 0, limit: 50, total: 0, rows: null, sort: null };
 const ER_CATEGORY_KEYS = {
   statement: 'er_cat_statement', fund_performance: 'er_cat_fund_performance', invite: 'er_cat_invite',
   password_reset: 'er_cat_password_reset', schedule_otp: 'er_cat_schedule_otp', other: 'er_cat_other',
@@ -1510,14 +1632,17 @@ function renderEmailLog() {
       <td>${cell(r.error || r.bounce_type)}</td>
       <td><button type="button" class="btn-ghost" data-er-events="${escapeHtml(r.id)}">${t('er_events_btn')}</button></td></tr>`;
   }).join('');
-  const head = ['er_col_sent_at', 'er_col_recipient', 'er_col_subject', 'er_col_category', 'er_col_source', 'er_col_description',
-    'er_col_sent_by', 'er_col_outcome', 'er_col_delivered_at', 'er_col_first_open', 'er_col_opens', 'er_col_first_click', 'er_col_clicks', 'er_col_error']
-    .map((k) => `<th class="${['er_col_opens', 'er_col_clicks'].includes(k) ? 'num' : ''}">${t(k)}</th>`).join('');
+  // [label key, column of dashboard_email_overview the server sorts by]
+  const head = [['er_col_sent_at', 'created_at'], ['er_col_recipient', 'recipient'], ['er_col_subject', 'subject'],
+    ['er_col_category', 'category'], ['er_col_source', 'source'], ['er_col_description', 'description'], ['er_col_sent_by', 'sent_by'],
+    ['er_col_outcome', 'outcome'], ['er_col_delivered_at', 'delivered_at'], ['er_col_first_open', 'opened_at'], ['er_col_opens', 'open_count'],
+    ['er_col_first_click', 'clicked_at'], ['er_col_clicks', 'click_count'], ['er_col_error', 'error']]
+    .map(([k, col]) => { const n = ['open_count', 'click_count'].includes(col); return sortTh(t(k), col, er.sort, n ? 'num' : '', n || col.endsWith('_at') ? 'desc' : 'asc'); }).join('');
   $('#erLogTable').innerHTML = `<table><thead><tr>${head}<th></th></tr></thead><tbody>${body}</tbody></table>`;
 }
 function loadEmailLog() {
   $('#erLogTable').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
-  const p = api(`/api/email-recap/log?${erQs({ ...erFilters(), outcome: $('#erOutcome').value, search: $('#erSearch').value.trim(), limit: er.limit, offset: er.offset })}`);
+  const p = api(`/api/email-recap/log?${erQs({ ...erFilters(), outcome: $('#erOutcome').value, search: $('#erSearch').value.trim(), ...sortParams(er.sort), limit: er.limit, offset: er.offset })}`);
   p.then((d) => { er.rows = d.rows || []; er.total = d.total || 0; renderEmailLog(); })
     .catch((e) => { $('#erLogTable').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; });
   return p;
@@ -2958,7 +3083,7 @@ function renderTopFunds(rows) {
       <td class="num">${val(f.pct_of_total) == null ? 'n/a' : `${Number(val(f.pct_of_total)).toFixed(1)}%`}</td>
       <td class="num">${num(val(f.investors))}</td>`;
   $('#topFunds').innerHTML = `<table><thead><tr>
-      <th>${nameCol}</th><th class="num">AUM</th><th class="num">% of total</th><th class="num">Investors</th>
+      <th data-key="label">${nameCol}</th><th class="num" data-key="aum">AUM</th><th class="num" data-key="pct_of_total">% of total</th><th class="num" data-key="investors">Investors</th>
     </tr></thead><tbody>${funds.map((f) => `<tr>${cells(f)}</tr>`).join('')}</tbody>${total ? `<tfoot><tr>${cells(total)}</tr></tfoot>` : ''}</table>`;
 }
 // Fund checklist for the "Select funds" dropdown — every fund starts
@@ -3135,8 +3260,8 @@ function renderChurnTable(rows) {
       <td class="num">${idrFull(val(r.total_buy_amount))}</td>
     </tr>`).join('');
   $('#churnTable').innerHTML = `<table><thead><tr>
-      <th>Investor</th><th>Email</th><th class="num">Churn prob</th><th>Risk</th>
-      <th class="num">Buys</th><th class="num">Sells</th><th class="num">Recency</th><th class="num">Invested</th>
+      <th data-key="name">Investor</th><th data-key="email">Email</th><th class="num" data-key="churn_prob">Churn prob</th><th data-key="churn_prob">Risk</th>
+      <th class="num" data-key="buys">Buys</th><th class="num" data-key="sells">Sells</th><th class="num" data-key="recency_days">Recency</th><th class="num" data-key="total_buy_amount">Invested</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }
 
@@ -3414,8 +3539,8 @@ function renderAumTable(data) {
       <td></td>
     </tr></tfoot>`;
   $('#aumTable').innerHTML = `<table><thead><tr>
-      <th>Period</th><th class="num">AUM</th><th class="num">Δ AUM</th><th class="num">Net flow</th><th class="num">Market effect</th>
-      <th class="num">Subscriptions</th><th class="num">Redemptions</th><th class="num">Revenue</th><th class="num">Funds</th>
+      <th data-key="bucket">Period</th><th class="num" data-key="aum">AUM</th><th class="num">Δ AUM</th><th class="num" data-key="net_flow">Net flow</th><th class="num" data-key="market_effect">Market effect</th>
+      <th class="num" data-key="subscriptions">Subscriptions</th><th class="num" data-key="redemptions">Redemptions</th><th class="num" data-key="revenue">Revenue</th><th class="num" data-key="funds">Funds</th>
     </tr></thead><tbody>${body}</tbody>${foot}</table>`;
 }
 
@@ -3469,8 +3594,8 @@ function renderRevTrendTable(data) {
       <td class="num">${revSigned(r.de)}</td><td class="num">${revSigned(r.ae)}</td><td class="num">${revSigned(r.re)}</td>
       <td class="num">${idrFull(r.avgAum)}</td><td class="num">${num(r.days)}</td></tr>`).join('');
   const sum = (k) => rows.reduce((a, r) => a + (r[k] || 0), 0);
-  $('#revTrendTable').innerHTML = `<table><thead><tr><th>Period</th><th class="num">Revenue</th><th class="num">vs previous</th>
-      <th class="num">Days effect</th><th class="num">AUM effect</th><th class="num">Rate &amp; mix effect</th><th class="num">Avg AUM</th><th class="num">Days</th></tr></thead>
+  $('#revTrendTable').innerHTML = `<table><thead><tr><th data-key="bucket">Period</th><th class="num" data-key="revenue">Revenue</th><th class="num" data-key="change_pct">vs previous</th>
+      <th class="num" data-key="days_effect">Days effect</th><th class="num" data-key="aum_effect">AUM effect</th><th class="num" data-key="rate_effect">Rate &amp; mix effect</th><th class="num" data-key="avg_aum">Avg AUM</th><th class="num" data-key="days">Days</th></tr></thead>
     <tbody>${body}</tbody><tfoot><tr><td>Total</td><td class="num">${idrFull(sum('revenue'))}</td><td></td>
       <td class="num">${revSigned(sum('de'))}</td><td class="num">${revSigned(sum('ae'))}</td><td class="num">${revSigned(sum('re'))}</td><td></td><td></td></tr></tfoot></table>`;
 }
@@ -3645,7 +3770,7 @@ function renderPerformance(rows) {
     }).join('');
     return `<tr><td>${type}</td>${cells}</tr>`;
   }).join('');
-  $('#perfTable').innerHTML = `<table><thead><tr><th>Fund type</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  $('#perfTable').innerHTML = `<table><thead><tr><th data-key="type">Fund type</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 let perfDetailCache = [];
@@ -3729,7 +3854,7 @@ function renderPerformanceDetail() {
     const ipoDate = f.ipoDate ? String(f.ipoDate).slice(0, 10) : 'n/a';
     return `<tr><td>${f.name}</td><td><span class="tag other">${f.type}</span></td><td>${ipoDate}</td><td class="num">${num(f.nav)}</td>${cells}</tr>`;
   }).join('');
-  $('#perfDetailTable').innerHTML = `<table><thead><tr><th>Fund</th><th>Type</th><th>Tanggal Emisi</th><th class="num">NAV</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  $('#perfDetailTable').innerHTML = `<table><thead><tr><th data-key="name">Fund</th><th>Type</th><th>Tanggal Emisi</th><th class="num">NAV</th>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 // GROWTH (campaigns, referrals, switching, manager/demographic AUM)
@@ -3752,13 +3877,14 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
     const tone = c.type === 'delta' && v != null ? (v < 0 ? ' neg' : ' pos') : '';
     return `<td class="${numTypes.includes(c.type) ? 'num' : ''}${tone}">${out}</td>`;
   };
-  // c.sort makes the header a keyboard-focusable sort control; the arrow is
-  // drawn by CSS from aria-sort so it never lands in copied or exported text.
+  // c.sort (true, or the server column name) makes the header a server sort
+  // control, see TABLE SORT; the arrow is drawn by CSS from aria-sort so it
+  // never lands in copied or exported text. Other headers sort on the page.
   const head = cols.map((c) => {
     const cls = numTypes.includes(c.type) ? 'num' : '';
-    if (!c.sort) return `<th class="${cls}">${c.label}</th>`;
-    const on = sortState && sortState.key === c.key;
-    return `<th class="${cls} sortable" data-sort="${c.key}" tabindex="0" aria-sort="${on ? (sortState.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">${c.label}</th>`;
+    if (!c.sort) return `<th class="${cls}" data-key="${c.key}">${c.label}</th>`;
+    const first = numTypes.includes(c.type) || c.type === 'date' ? 'desc' : 'asc';
+    return sortTh(c.label, typeof c.sort === 'string' ? c.sort : c.key, sortState, cls, first);
   }).join('');
   const body = rows.map((r) => '<tr>' + cols.map((c) => td(c, val(r[c.key]))).join('') + '</tr>').join('');
   const foot = cols.some((c) => c.sum)
@@ -4452,7 +4578,7 @@ async function loadRemisierPwc() {
 }
 
 // ---- nested: remisier transactions (per-transaction detail, own filters) --
-const remTx = { limit: 100, offset: 0, total: 0 };
+const remTx = { limit: 100, offset: 0, total: 0, sort: null };
 
 function remTxCodesArr(sel) {
   return $(sel).value.split(',').map((s) => s.trim()).filter(Boolean);
@@ -4466,6 +4592,7 @@ function remTxParams() {
     status: $('#remTxStatus').value,
     from: $('#remTxFrom').value,
     to: $('#remTxTo').value,
+    ...sortParams(remTx.sort),
   };
 }
 
@@ -4487,22 +4614,23 @@ async function loadRemTx() {
   if (p.type) qs.set('type', p.type);
   if (p.status) qs.set('status', p.status);
   qs.set('from', p.from); qs.set('to', p.to);
+  if (p.sort) { qs.set('sort', p.sort); qs.set('dir', p.dir); }
   qs.set('limit', remTx.limit); qs.set('offset', remTx.offset);
   try {
     const { rows, total } = await api(`/api/remisier/transactions?${qs}`);
     remTx.total = total;
     genTable('#remTxTable', rows, [
-      { key: 'created_at', label: 'Date', type: 'date' },
-      { key: 'transaction_number', label: 'Trx #' },
-      { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
-      { key: 'fund_name', label: 'Fund' }, { key: 'fund_type', label: 'Fund type' },
-      { key: 'unit', label: 'Unit', type: 'num' },
-      { key: 'value_per_unit', label: 'NAV', type: 'num' },
-      { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
-      { key: 'realized_gain_loss', label: 'Realized G/L', type: 'idr' },
-      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
-    ], 'No transactions match these filters.');
+      { key: 'created_at', label: 'Date', type: 'date', sort: true },
+      { key: 'transaction_number', label: 'Trx #', sort: true },
+      { key: 'type', label: 'Type', sort: true }, { key: 'status', label: 'Status', sort: true },
+      { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: 'Name', sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: 'Phone', sort: true },
+      { key: 'fund_name', label: 'Fund', sort: true }, { key: 'fund_type', label: 'Fund type', sort: true },
+      { key: 'unit', label: 'Unit', type: 'num', sort: true },
+      { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
+      { key: 'amount', label: 'Amount', type: 'idr', sort: true }, { key: 'final_amount', label: 'Final amount', type: 'idr', sort: true },
+      { key: 'realized_gain_loss', label: 'Realized G/L', type: 'idr', sort: true },
+      { key: 'referrer_code', label: 'Referrer code', sort: true }, { key: 'sales_code', label: 'Sales code', sort: true },
+    ], 'No transactions match these filters.', remTx.sort);
     const start = total ? remTx.offset + 1 : 0;
     const end = Math.min(remTx.offset + remTx.limit, total);
     $('#remTxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
@@ -4512,7 +4640,7 @@ async function loadRemTx() {
 }
 
 // ---- nested: SInvest transactions (raw KSEI/SInvest custodian feed) -------
-const sitx = { limit: 50, offset: 0, total: 0 };
+const sitx = { limit: 50, offset: 0, total: 0, sort: null };
 let sitxLoaded = false;
 
 function sitxParams() {
@@ -4522,6 +4650,7 @@ function sitxParams() {
     type: $('#sitxType').value,
     from: $('#sitxFrom').value,
     to: $('#sitxTo').value,
+    ...sortParams(sitx.sort),
   };
 }
 
@@ -4534,6 +4663,7 @@ async function loadSitx() {
   if (p.type) qs.set('type', p.type);
   if (p.from) qs.set('from', p.from);
   if (p.to) qs.set('to', p.to);
+  if (p.sort) { qs.set('sort', p.sort); qs.set('dir', p.dir); }
   qs.set('limit', sitx.limit); qs.set('offset', sitx.offset);
   const sitxFetch = api(`/api/sinvest-transactions?${qs}`);
   gateTabLoad((v) => { sitxLoaded = v; }, [sitxFetch]);
@@ -4541,18 +4671,18 @@ async function loadSitx() {
     const { rows, total } = await sitxFetch;
     sitx.total = total;
     genTable('#sitxTable', rows, [
-      { key: 'transaction_date', label: 'Date', type: 'date' },
-      { key: 'type', label: 'Type' },
-      { key: 'sid', label: 'SID' }, { key: 'investor_name', label: 'Investor' },
-      { key: 'fund_code', label: 'Fund code' }, { key: 'fund_name', label: 'Fund' },
-      { key: 'unit', label: 'Unit', type: 'num' },
-      { key: 'nav_per_unit', label: 'NAV', type: 'num' },
-      { key: 'gross_amount', label: 'Gross amount', type: 'idr' },
-      { key: 'fee', label: 'Fee', type: 'idr' },
-      { key: 'net_amount', label: 'Net amount', type: 'idr' },
-      { key: 'input_date', label: 'Input date', type: 'date' },
-      { key: 'reference_no', label: 'Reference #' },
-    ], 'No transactions match these filters.');
+      { key: 'transaction_date', label: 'Date', type: 'date', sort: true },
+      { key: 'type', label: 'Type', sort: true },
+      { key: 'sid', label: 'SID', sort: true }, { key: 'investor_name', label: 'Investor', sort: true },
+      { key: 'fund_code', label: 'Fund code', sort: true }, { key: 'fund_name', label: 'Fund', sort: true },
+      { key: 'unit', label: 'Unit', type: 'num', sort: true },
+      { key: 'nav_per_unit', label: 'NAV', type: 'num', sort: true },
+      { key: 'gross_amount', label: 'Gross amount', type: 'idr', sort: true },
+      { key: 'fee', label: 'Fee', type: 'idr', sort: true },
+      { key: 'net_amount', label: 'Net amount', type: 'idr', sort: true },
+      { key: 'input_date', label: 'Input date', type: 'date', sort: true },
+      { key: 'reference_no', label: 'Reference #', sort: true },
+    ], 'No transactions match these filters.', sitx.sort);
     const start = total ? sitx.offset + 1 : 0;
     const end = Math.min(sitx.offset + sitx.limit, total);
     $('#sitxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
@@ -4562,7 +4692,7 @@ async function loadSitx() {
 }
 
 // ---- nested: Users transactions (any investor, by SID/email/name) --------
-const utx = { limit: 50, offset: 0, total: 0 };
+const utx = { limit: 50, offset: 0, total: 0, sort: null };
 
 async function loadUtxFundOptions() {
   let funds = [];
@@ -4579,6 +4709,7 @@ function utxParams() {
     fundId: $('#utxFund').value,
     from: $('#utxFrom').value,
     to: $('#utxTo').value,
+    ...sortParams(utx.sort),
   };
 }
 
@@ -4592,20 +4723,21 @@ async function loadUtx() {
   if (p.fundId) qs.set('fundId', p.fundId);
   if (p.from) qs.set('from', p.from);
   if (p.to) qs.set('to', p.to);
+  if (p.sort) { qs.set('sort', p.sort); qs.set('dir', p.dir); }
   qs.set('limit', utx.limit); qs.set('offset', utx.offset);
   try {
     const { rows, total } = await api(`/api/users-transactions?${qs}`);
     utx.total = total;
     genTable('#utxTable', rows, [
-      { key: 'created_at', label: 'Date', type: 'date' },
-      { key: 'transaction_number', label: 'Trx #' },
-      { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
-      { key: 'fund_name', label: 'Fund' },
-      { key: 'unit', label: 'Unit', type: 'num' },
-      { key: 'value_per_unit', label: 'NAV', type: 'num' },
-      { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
-    ], 'No transactions match these filters.');
+      { key: 'created_at', label: 'Date', type: 'date', sort: true },
+      { key: 'transaction_number', label: 'Trx #', sort: true },
+      { key: 'type', label: 'Type', sort: true }, { key: 'status', label: 'Status', sort: true },
+      { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: 'Name', sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: 'Phone', sort: true },
+      { key: 'fund_name', label: 'Fund', sort: true },
+      { key: 'unit', label: 'Unit', type: 'num', sort: true },
+      { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
+      { key: 'amount', label: 'Amount', type: 'idr', sort: true }, { key: 'final_amount', label: 'Final amount', type: 'idr', sort: true },
+    ], 'No transactions match these filters.', utx.sort);
     const start = total ? utx.offset + 1 : 0;
     const end = Math.min(utx.offset + utx.limit, total);
     $('#utxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
@@ -4619,7 +4751,6 @@ async function loadUtx() {
 let tiMetric = 'subscriptions';
 let tiDir = 'desc';
 let tiRows = [];
-let tiCompactSort = null;
 let tiPeriod = 'month';
 let tiLoaded = false;
 
@@ -4666,7 +4797,6 @@ async function loadTopInvestors() {
   try {
     const rows = await tiFetch;
     tiRows = rows;
-    tiCompactSort = null;
     renderTiCompact();
     genTable('#tiTable', rows.map((r, i) => ({ ...r, rank: i + 1 })), [
       { key: 'rank', label: '#', type: 'num' },
@@ -4694,16 +4824,12 @@ async function loadTopInvestors() {
 function renderTiCompact() {
   const rows = tiRows.map((r) => ({ name: val(r.name) || val(r.sid), buys: Number(val(r.subscriptions)) || 0,
     sell: Number(val(r.redemptions)) || 0, net: Number(val(r.net_deposit)) || 0 }));
-  if (tiCompactSort) {
-    const { key, dir } = tiCompactSort, m = dir === 'asc' ? 1 : -1;
-    rows.sort((a, b) => m * (key === 'name' ? String(a.name).localeCompare(String(b.name)) : a[key] - b[key]));
-  }
   genTable('#tiCompactTable', rows, [
-    { key: 'name', label: 'Name', sort: true },
-    { key: 'buys', label: 'Buys', type: 'idr', sum: true, sort: true },
-    { key: 'sell', label: 'Sell', type: 'idr', sum: true, sort: true },
-    { key: 'net', label: 'Net increase', type: 'idr', sum: true, sort: true },
-  ], t('ti_empty'), tiCompactSort);
+    { key: 'name', label: 'Name' },
+    { key: 'buys', label: 'Buys', type: 'idr', sum: true },
+    { key: 'sell', label: 'Sell', type: 'idr', sum: true },
+    { key: 'net', label: 'Net increase', type: 'idr', sum: true },
+  ], t('ti_empty'));
 }
 
 // EVENT CODE TRACKING (generic — no event/code table exists yet, see
@@ -4713,8 +4839,8 @@ function renderTiCompact() {
 // this tab uses completed transactions only; ongoing and failed show as their
 // own columns and never feed a total, a target or a retention cell.
 let evcGranularity = 'week';
-const evcUsers = { limit: 100, offset: 0, total: 0, rows: null };
-const evcTx = { limit: 100, offset: 0, total: 0 };
+const evcUsers = { limit: 100, offset: 0, total: 0, rows: null, sort: null };
+const evcTx = { limit: 100, offset: 0, total: 0, sort: null };
 let evcCohortRows = { reg: null, tx: null };
 // ponytail: exports fetch in one request; page through if an event ever passes this.
 const EVC_EXPORT_MAX = 50000;
@@ -4765,24 +4891,24 @@ function renderEvcFunnel(f) {
 const evcPfLabel = (s) => t(`evc_pf_${s}`);
 const evcUserRows = (rows) => rows.map((r) => ({ ...r, portfolio_status_label: evcPfLabel(val(r.portfolio_status)) }));
 const evcUserCols = () => [
-  { key: 'sid', label: 'SID' }, { key: 'name', label: t('evc_col_name') }, { key: 'email', label: 'Email' },
-  { key: 'referrer_code', label: t('evc_col_referrer') }, { key: 'sales_code', label: t('evc_col_sales') },
-  { key: 'created_at', label: t('evc_col_registered'), type: 'date' }, { key: 'verified_at', label: t('evc_col_verified_at'), type: 'date' },
-  { key: 'verification_status', label: t('evc_col_kyc_status') },
-  { key: 'portfolio_status_label', label: t('evc_col_pf_status') },
-  { key: 'aum_now', label: t('evc_col_aum_now'), type: 'idr' },
-  { key: 'first_buy_at', label: t('evc_col_first_buy'), type: 'date' },
-  { key: 'last_tx_at', label: t('evc_col_last_tx'), type: 'date' },
-  { key: 'completed_buys', label: t('evc_col_buys'), type: 'num' },
-  { key: 'bought', label: t('evc_col_bought'), type: 'idr' },
-  { key: 'sold', label: t('evc_col_sold'), type: 'idr' },
+  { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: t('evc_col_name'), sort: true }, { key: 'email', label: 'Email', sort: true },
+  { key: 'referrer_code', label: t('evc_col_referrer'), sort: true }, { key: 'sales_code', label: t('evc_col_sales'), sort: true },
+  { key: 'created_at', label: t('evc_col_registered'), type: 'date', sort: true }, { key: 'verified_at', label: t('evc_col_verified_at'), type: 'date', sort: true },
+  { key: 'verification_status', label: t('evc_col_kyc_status'), sort: true },
+  { key: 'portfolio_status_label', label: t('evc_col_pf_status'), sort: 'portfolio_status' },
+  { key: 'aum_now', label: t('evc_col_aum_now'), type: 'idr', sort: true },
+  { key: 'first_buy_at', label: t('evc_col_first_buy'), type: 'date', sort: true },
+  { key: 'last_tx_at', label: t('evc_col_last_tx'), type: 'date', sort: true },
+  { key: 'completed_buys', label: t('evc_col_buys'), type: 'num', sort: true },
+  { key: 'bought', label: t('evc_col_bought'), type: 'idr', sort: true },
+  { key: 'sold', label: t('evc_col_sold'), type: 'idr', sort: true },
 ];
 function renderEvcUsers() {
   if (!evcUsers.rows) return;
-  genTable('#evcUsersTable', evcUserRows(evcUsers.rows), evcUserCols(), t('evc_users_empty'));
+  genTable('#evcUsersTable', evcUserRows(evcUsers.rows), evcUserCols(), t('evc_users_empty'), evcUsers.sort);
 }
 async function loadEvcUsers() {
-  const qs = evcBaseQs({ limit: evcUsers.limit, offset: evcUsers.offset });
+  const qs = evcBaseQs({ limit: evcUsers.limit, offset: evcUsers.offset, ...sortParams(evcUsers.sort) });
   $('#evcUsersTable').innerHTML = '<div class="loading">Loading…</div>';
   try {
     const { rows, total } = await api(`/api/event-code/users?${qs}`);
@@ -4795,7 +4921,7 @@ async function loadEvcUsers() {
     $('#evcUsersNext').disabled = end >= total;
   } catch (e) { evcUsers.rows = null; $('#evcUsersTable').innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }
-const evcFetchAllUsers = () => api(`/api/event-code/users?${evcBaseQs({ limit: EVC_EXPORT_MAX, offset: 0 })}`);
+const evcFetchAllUsers = () => api(`/api/event-code/users?${evcBaseQs({ limit: EVC_EXPORT_MAX, offset: 0, ...sortParams(evcUsers.sort) })}`);
 async function exportEvcUsers(fmt) {
   if (!evcCodesArr().length) { toast(t('evc_enter_code')); return; }
   try {
@@ -4824,7 +4950,6 @@ async function loadEventCode() {
 let evcRecap = null;
 let evcRecapSeq = 0;
 let evcDayFilter = 'all';
-let evcCodeSort = null;
 const EVC_NUM_KEYS = ['registrations', 'kyc_verified', 'tx_total', 'tx_completed', 'tx_ongoing', 'tx_failed',
   'amount_completed', 'amount_ongoing', 'transacting_users', 'new_transactors'];
 
@@ -4971,27 +5096,22 @@ function evcCodeRows(recap) {
   });
 }
 const evcCodeCols = () => [
-  { key: 'code', label: t('evc_col_code'), sort: true },
-  { key: 'registrations', label: t('evc_col_regs'), type: 'num', sum: true, sort: true },
-  { key: 'reg_day', label: t('evc_col_reg_day'), type: 'num', sort: true },
-  { key: 'kyc_verified', label: t('evc_col_kyc'), type: 'num', sum: true, sort: true },
-  { key: 'tx_completed', label: t('evc_col_completed'), type: 'num', sum: true, sort: true },
-  { key: 'tx_day', label: t('evc_col_tx_day'), type: 'num', sort: true },
-  { key: 'tx_ongoing', label: t('evc_col_ongoing'), type: 'num', sum: true, sort: true },
-  { key: 'tx_failed', label: t('evc_col_failed'), type: 'num', sum: true, sort: true },
-  { key: 'amount_completed', label: t('evc_col_amt_completed'), type: 'idr', sum: true, sort: true },
-  { key: 'amount_ongoing', label: t('evc_col_amt_ongoing'), type: 'idr', sum: true, sort: true },
+  { key: 'code', label: t('evc_col_code') },
+  { key: 'registrations', label: t('evc_col_regs'), type: 'num', sum: true },
+  { key: 'reg_day', label: t('evc_col_reg_day'), type: 'num' },
+  { key: 'kyc_verified', label: t('evc_col_kyc'), type: 'num', sum: true },
+  { key: 'tx_completed', label: t('evc_col_completed'), type: 'num', sum: true },
+  { key: 'tx_day', label: t('evc_col_tx_day'), type: 'num' },
+  { key: 'tx_ongoing', label: t('evc_col_ongoing'), type: 'num', sum: true },
+  { key: 'tx_failed', label: t('evc_col_failed'), type: 'num', sum: true },
+  { key: 'amount_completed', label: t('evc_col_amt_completed'), type: 'idr', sum: true },
+  { key: 'amount_ongoing', label: t('evc_col_amt_ongoing'), type: 'idr', sum: true },
   // A user carries one code, so per-code distinct users do add up.
-  { key: 'transacting_users', label: t('evc_col_users'), type: 'num', sum: true, sort: true },
-  { key: 'new_transactors', label: t('evc_col_new'), type: 'num', sum: true, sort: true },
+  { key: 'transacting_users', label: t('evc_col_users'), type: 'num', sum: true },
+  { key: 'new_transactors', label: t('evc_col_new'), type: 'num', sum: true },
 ];
 function renderEvcCodes() {
-  const rows = evcCodeRows(evcRecap);
-  if (evcCodeSort) {
-    const { key, dir } = evcCodeSort, m = dir === 'asc' ? 1 : -1;
-    rows.sort((a, b) => m * (key === 'code' ? String(a.code).localeCompare(String(b.code)) : a[key] - b[key]));
-  }
-  genTable('#evcCodeTable', rows, evcCodeCols(), t('evc_bycode_empty'), evcCodeSort);
+  genTable('#evcCodeTable', evcCodeRows(evcRecap), evcCodeCols(), t('evc_bycode_empty'));
 }
 
 // Period arithmetic for the cohort grids, in UTC like BigQuery's DATE_TRUNC
@@ -5208,25 +5328,26 @@ function evcTxParams() {
     status: $('#evcTxStatus').value,
     from: $('#evcTxFrom').value,
     to: $('#evcTxTo').value,
+    ...sortParams(evcTx.sort),
   };
 }
 function evcTxQs(limit, offset) {
   const p = evcTxParams();
   const qs = new URLSearchParams({ field: p.field });
   p.codes.forEach((c) => qs.append('codes', c));
-  ['type', 'status', 'from', 'to'].forEach((k) => { if (p[k]) qs.set(k, p[k]); });
+  ['type', 'status', 'from', 'to', 'sort', 'dir'].forEach((k) => { if (p[k]) qs.set(k, p[k]); });
   qs.set('limit', limit); qs.set('offset', offset);
   return qs;
 }
 const EVC_TX_COLS = [
-  { key: 'created_at', label: 'Date', type: 'date' },
-  { key: 'transaction_number', label: 'Trx #' },
-  { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' },
-  { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' }, { key: 'phone', label: 'Phone' },
-  { key: 'fund_name', label: 'Fund' }, { key: 'fund_type', label: 'Fund type' },
-  { key: 'unit', label: 'Unit', type: 'num' },
-  { key: 'amount', label: 'Amount', type: 'idr' }, { key: 'final_amount', label: 'Final amount', type: 'idr' },
-  { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+  { key: 'created_at', label: 'Date', type: 'date', sort: true },
+  { key: 'transaction_number', label: 'Trx #', sort: true },
+  { key: 'type', label: 'Type', sort: true }, { key: 'status', label: 'Status', sort: true },
+  { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: 'Name', sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: 'Phone', sort: true },
+  { key: 'fund_name', label: 'Fund', sort: true }, { key: 'fund_type', label: 'Fund type', sort: true },
+  { key: 'unit', label: 'Unit', type: 'num', sort: true },
+  { key: 'amount', label: 'Amount', type: 'idr', sort: true }, { key: 'final_amount', label: 'Final amount', type: 'idr', sort: true },
+  { key: 'referrer_code', label: 'Referrer code', sort: true }, { key: 'sales_code', label: 'Sales code', sort: true },
 ];
 
 async function loadEvcTx() {
@@ -5235,7 +5356,7 @@ async function loadEvcTx() {
   try {
     const { rows, total } = await api(`/api/event-code/transactions?${evcTxQs(evcTx.limit, evcTx.offset)}`);
     evcTx.total = total;
-    genTable('#evcTxTable', rows, EVC_TX_COLS, 'No transactions match these filters.');
+    genTable('#evcTxTable', rows, EVC_TX_COLS, 'No transactions match these filters.', evcTx.sort);
     const start = total ? evcTx.offset + 1 : 0;
     const end = Math.min(evcTx.offset + evcTx.limit, total);
     $('#evcTxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
@@ -5298,14 +5419,14 @@ async function exportEvcWorkbook() {
         ? [[t('evc_kpi_days'), days.filter((d) => d.hit).length, fillT('evc_kpi_days_sub', { h: days.filter((d) => d.hit).length, n: days.length })]] : []),
       [],
       [t('evc_pf_title')],
-      ...evcAoa(pfSummary, evcPfSummaryCols()),
+      ...evcAoa(inScreenOrder(pfSummary, 'evcPfSummary', (r) => r.status), evcPfSummaryCols()),
       [],
       [t('evc_sheet_users'), fillT('evc_export_rows', { n: users.rows.length, total: users.total })],
       [t('evc_sheet_tx'), fillT('evc_export_rows', { n: tx.rows.length, total: tx.total }),
         fillT('evc_export_tx_filters', { from: $('#evcTxFrom').value || '…', to: $('#evcTxTo').value || '…',
           status: $('#evcTxStatus').value || t('common_all_statuses'), type: $('#evcTxType').value || t('common_all_types') })],
     ];
-    const cohortAoa = (rows) => evcAoa(evcTxCohortExportRows(rows), [
+    const cohortAoa = (rows, wrapId) => evcAoa(inScreenOrder(evcTxCohortExportRows(rows), wrapId, (r) => r.cohort), [
       { key: 'cohort', label: t('evc_col_cohort') }, { key: 'period_offset', label: t('evc_col_offset'), type: 'num' },
       { key: 'cohort_size', label: t('evc_col_size'), type: 'num' }, { key: 'users', label: t('evc_col_users'), type: 'num' },
       { key: 'pct', label: t('evc_col_pct'), type: 'pct' },
@@ -5313,13 +5434,13 @@ async function exportEvcWorkbook() {
     const wb = XLSX.utils.book_new();
     const add = (name, aoa) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name.slice(0, 31));
     add(t('evc_sheet_summary'), summary);
-    add(t('evc_sheet_daily'), evcAoa(days, evcDailyCols(targets)));
-    add(t('evc_sheet_codes'), evcAoa(evcCodeRows(recap), evcCodeCols()));
+    add(t('evc_sheet_daily'), evcAoa(inScreenOrder(days, 'evcDailyTable', (d) => d.day), evcDailyCols(targets)));
+    add(t('evc_sheet_codes'), evcAoa(inScreenOrder(evcCodeRows(recap), 'evcCodeTable', (r) => r.code), evcCodeCols()));
     add(t('evc_sheet_users'), evcAoa(evcUserRows(users.rows), evcUserCols()));
     add(t('evc_sheet_tx'), evcAoa(tx.rows, EVC_TX_COLS));
-    add(t('evc_sheet_cohort_reg'), cohortAoa(cohReg));
-    add(t('evc_sheet_cohort_tx'), cohortAoa(cohTx));
-    add(t('evc_sheet_pf'), evcAoa(evcPfExportRows(pf), evcPfRetentionCols()));
+    add(t('evc_sheet_cohort_reg'), cohortAoa(cohReg, 'evcCohortRegHeatmap'));
+    add(t('evc_sheet_cohort_tx'), cohortAoa(cohTx, 'evcCohortTxHeatmap'));
+    add(t('evc_sheet_pf'), evcAoa(inScreenOrder(evcPfExportRows(pf), 'evcPfHeatmap', (r) => r.cohort), evcPfRetentionCols()));
     XLSX.writeFile(wb, `event_code_${evcFileSlug()}.xlsx`);
     if (users.total > users.rows.length || tx.total > tx.rows.length) toast(t('evc_export_truncated_any'));
   } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.textContent = label; }
@@ -5334,7 +5455,7 @@ function tagClass(v) {
   return 'other';
 }
 
-const ex = { meta: [], current: null, offset: 0, limit: 50, total: 0 };
+const ex = { meta: [], current: null, offset: 0, limit: 50, total: 0, sort: null };
 
 function fmtCell(v, type) {
   v = val(v);
@@ -5362,7 +5483,7 @@ async function loadExplorerMeta() {
 function currentDataset() { return ex.meta.find((d) => d.key === ex.current); }
 
 async function selectDataset(key) {
-  ex.current = key; ex.offset = 0;
+  ex.current = key; ex.offset = 0; ex.sort = null;
   $$('#exTabs .ex-tab').forEach((b) => b.classList.toggle('on', b.dataset.ds === key));
   const d = currentDataset();
   $('#exTitle').textContent = d.label;
@@ -5404,7 +5525,7 @@ function buildExFilters(d) {
     const b = document.createElement('button');
     b.className = 'btn-ghost'; b.textContent = label;
     b.addEventListener('click', () => download(
-      { source: 'explore', dataset: ex.current, format: fmt, filename: ex.current, filters: exFilterValues(), limit: 100000 },
+      { source: 'explore', dataset: ex.current, format: fmt, filename: ex.current, filters: { ...exFilterValues(), ...sortParams(ex.sort) }, limit: 100000 },
       `${ex.current}.${fmt}`));
     box.appendChild(b);
   });
@@ -5422,7 +5543,7 @@ function exFilterValues() {
 async function loadExplore() {
   $('#exTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
   const d = currentDataset();
-  const qs = new URLSearchParams({ ...exFilterValues(), limit: ex.limit, offset: ex.offset });
+  const qs = new URLSearchParams({ ...exFilterValues(), ...sortParams(ex.sort), limit: ex.limit, offset: ex.offset });
   try {
     const { rows, total } = await api(`/api/explore/${ex.current}?${qs}`);
     ex.total = total;
@@ -5438,7 +5559,8 @@ async function loadExplore() {
 function renderExTable(d, rows) {
   if (!rows.length) { $('#exTable').innerHTML = '<div class="empty">No rows match these filters.</div>'; return; }
   const numTypes = ['idr', 'num', 'num4'];
-  const head = d.columns.map((c) => `<th class="${numTypes.includes(c.type) ? 'num' : ''}">${c.label}</th>`).join('');
+  const head = d.columns.map((c) => sortTh(c.label, c.key, ex.sort, numTypes.includes(c.type) ? 'num' : '',
+    numTypes.includes(c.type) || c.type === 'datetime' ? 'desc' : 'asc')).join('');
   const body = rows.map((r) => '<tr>' + d.columns.map((c) =>
     `<td class="${numTypes.includes(c.type) ? 'num' : ''}">${fmtCell(r[c.key], c.type)}</td>`).join('') + '</tr>').join('');
   $('#exTable').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
@@ -5486,7 +5608,7 @@ function setSqlMsg(msg, cls) { const m = $('#sqlMsg'); m.textContent = msg; m.cl
 function renderGenericTable(sel, rows, emptyMsg = 'Query returned no rows.') {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
   const cols = Object.keys(rows[0]);
-  const head = cols.map((c) => `<th>${c}</th>`).join('');
+  const head = cols.map((c) => `<th data-key="${escapeHtml(c)}">${c}</th>`).join('');
   const body = rows.slice(0, 1000).map((r) => '<tr>' + cols.map((c) => {
     const v = val(r[c]);
     const isNum = typeof v === 'number';
@@ -5551,7 +5673,7 @@ async function download(body, filename) {
   const res = await fetch(API_BASE + '/api/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, ...screenSortFor(lastClickTarget) }),
   });
   if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.error || 'Export failed'); return; }
   const blob = await res.blob();
@@ -7877,17 +7999,6 @@ function wire() {
     $$('#tiOrder button').forEach((x) => x.classList.toggle('on', x === b));
     tiDir = b.dataset.d; loadTopInvestors();
   });
-  const tiSortBy = (th) => {
-    if (!th) return;
-    const key = th.dataset.sort;
-    const same = tiCompactSort && tiCompactSort.key === key;
-    tiCompactSort = { key, dir: same ? (tiCompactSort.dir === 'asc' ? 'desc' : 'asc') : (key === 'name' ? 'asc' : 'desc') };
-    renderTiCompact();
-  };
-  $('#tiCompactTable').addEventListener('click', (e) => tiSortBy(e.target.closest('th[data-sort]')));
-  $('#tiCompactTable').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { const th = e.target.closest('th[data-sort]'); if (th) { e.preventDefault(); tiSortBy(th); } }
-  });
   $('#tiCsv').addEventListener('click', () => download({ source: 'top_investors', format: 'csv', filename: 'top_investors', ...tiParams() }, 'top_investors.csv'));
   $('#tiXlsx').addEventListener('click', () => download({ source: 'top_investors', format: 'xlsx', filename: 'top_investors', ...tiParams() }, 'top_investors.xlsx'));
   $('#utxPrev').addEventListener('click', () => { utx.offset = Math.max(0, utx.offset - utx.limit); loadUtx(); });
@@ -7898,6 +8009,14 @@ function wire() {
     { source: 'users_transactions', format: 'xlsx', filename: 'users_transactions', ...utxParams() }, 'users_transactions.xlsx'));
   $('#utxPdf').addEventListener('click', () => download(
     { source: 'users_transactions', format: 'pdf', filename: 'users_transactions', ...utxParams() }, 'users_transactions.pdf'));
+
+  // Paged lists sort on the server (see TABLE SORT): page one in the new order.
+  const pagedSort = (state, load) => (sort) => { state.sort = sort; state.offset = 0; load(); };
+  Object.assign(SERVER_SORT, {
+    utxTable: pagedSort(utx, loadUtx), remTxTable: pagedSort(remTx, loadRemTx), sitxTable: pagedSort(sitx, loadSitx),
+    evcUsersTable: pagedSort(evcUsers, loadEvcUsers), evcTxTable: pagedSort(evcTx, loadEvcTx),
+    exTable: pagedSort(ex, loadExplore), erLogTable: pagedSort(er, loadEmailLog),
+  });
 
   // event code tracking
   $('#evcApply').addEventListener('click', loadEventCode);
@@ -7920,17 +8039,6 @@ function wire() {
   $('#evcDayFilter').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     evcDayFilter = b.dataset.f; renderEvcRecap();
-  });
-  const evcSortBy = (th) => {
-    if (!th) return;
-    const key = th.dataset.sort;
-    const same = evcCodeSort && evcCodeSort.key === key;
-    evcCodeSort = { key, dir: same ? (evcCodeSort.dir === 'asc' ? 'desc' : 'asc') : (key === 'code' ? 'asc' : 'desc') };
-    renderEvcCodes();
-  };
-  $('#evcCodeTable').addEventListener('click', (e) => evcSortBy(e.target.closest('th[data-sort]')));
-  $('#evcCodeTable').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { const th = e.target.closest('th[data-sort]'); if (th) { e.preventDefault(); evcSortBy(th); } }
   });
   $('#evcUsersPrev').addEventListener('click', () => { evcUsers.offset = Math.max(0, evcUsers.offset - evcUsers.limit); loadEvcUsers(); });
   $('#evcUsersNext').addEventListener('click', () => { evcUsers.offset += evcUsers.limit; loadEvcUsers(); });

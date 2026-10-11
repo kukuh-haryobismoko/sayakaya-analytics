@@ -173,7 +173,42 @@ function statementDocsLabel({ sendPortfolio, portfolioDate, sendStatement, state
   ].filter(Boolean).join(' + ');
 }
 
+// Export rows in the order their table was sorted on screen. sortKey: the
+// sorted column's own field, compared the way the page compares (numbers as
+// numbers, text case-insensitively, blanks last). Without it (a pivot, or a
+// column computed on the page), order + orderKey: the on-screen order of the
+// first column's values. A key the rows don't have leaves them as queried.
+const exportCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const plainValue = (v) => (v && typeof v === 'object' && 'value' in v ? v.value : v);
+function sortExportRows(rows, { sortKey, sortDir, orderKey, order } = {}) {
+  if (!Array.isArray(rows) || rows.length < 2) return rows;
+  if (sortKey && sortKey in rows[0]) {
+    const sortable = (r) => {
+      const v = plainValue(r[sortKey]);
+      if (v == null || v === '') return null;
+      const s = String(v), n = Number(s);
+      return typeof v === 'number' ? v : (s.trim() !== '' && Number.isFinite(n) ? n : s);
+    };
+    const items = rows.map((r, i) => ({ r, i, v: sortable(r) }));
+    const nums = items.every((x) => x.v == null || typeof x.v === 'number');
+    const m = sortDir === 'asc' ? 1 : -1;
+    items.sort((a, b) => {
+      if (a.v == null || b.v == null) return (a.v == null) - (b.v == null) || a.i - b.i;
+      return m * (nums ? a.v - b.v : exportCollator.compare(String(a.v), String(b.v))) || a.i - b.i;
+    });
+    return items.map((x) => x.r);
+  }
+  if (orderKey && orderKey in rows[0] && Array.isArray(order) && order.length) {
+    const pos = new Map();
+    order.slice(0, 100000).forEach((t, i) => { const k = String(t).trim(); if (!pos.has(k)) pos.set(k, i); });
+    const at = (r) => pos.get(String(plainValue(r[orderKey]) ?? '').trim()) ?? Infinity;
+    return rows.map((r, i) => ({ r, i, p: at(r) })).sort((a, b) => a.p - b.p || a.i - b.i).map((x) => x.r);
+  }
+  return rows;
+}
+
 module.exports = {
+  sortExportRows,
   pivotPerformanceByType,
   normalizeFundFilter,
   fundScopeLabel,

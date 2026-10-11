@@ -359,7 +359,13 @@ function buildExplore(datasetKey, q) {
   const limit = Math.min(parseInt(q.limit, 10) || 50, 100000);
   const offset = parseInt(q.offset, 10) || 0;
   params.limit = limit; params.offset = offset;
-  const sql = `SELECT ${d.select} FROM ${d.from} ${where} ORDER BY ${d.order} LIMIT @limit OFFSET @offset`;
+  // Header sort: only one of the dataset's own column keys (output aliases),
+  // then its default order as the tie-breaker so pages don't overlap.
+  // Untyped and tag columns are text and sort case-insensitively.
+  const col = d.columns.find((c) => c.key === q.sort);
+  const order = col
+    ? `${!col.type || col.type === 'tag' ? `LOWER(${col.key})` : col.key} ${q.dir === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${d.order}` : d.order;
+  const sql = `SELECT ${d.select} FROM ${d.from} ${where} ORDER BY ${order} LIMIT @limit OFFSET @offset`;
   const countSql = `SELECT COUNT(*) AS total FROM ${d.from} ${where}`;
   return { sql, countSql, params };
 }
