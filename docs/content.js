@@ -184,9 +184,9 @@ const TABS = {
     computation: "Crash: per platform, judul issue, dan fatal/non-fatal, dengan jumlah event, device terdampak (DISTINCT installation_uuid), dan versi app terbaru. Performance: hanya DURATION_TRACE, median dan rata-rata dalam ms, minimal 20 sampel. Dwell time layar dan app di background dikecualikan. Tidak ada total pengguna aktif, jadi tidak bisa menghitung crash-free %.",
   },
   "product-funnel": {
-    summary: "Dari device yang klik Register, berapa yang lanjut OTP, KYC, order, sampai bayar, per platform.",
-    datasets: "analytics_266759216.events_* (ekspor GA4)",
-    computation: "Berbasis cohort: device dengan register_click pertama di rentang tanggal, lalu dicek tanpa batas tanggal apakah pernah mencapai tiap milestone. Cohort dipilih agar funnel tidak naik di tengah, karena orang bisa daftar dan bayar di periode berbeda. Query selalu membaca seluruh histori GA4.",
+    summary: "Setiap ponsel yang mulai mendaftar: berapa yang membuat akun, lolos KYC, dan membayar pembelian pertama, di mana mereka berhenti, siapa yang paling banyak sampai, tren per minggu, berapa lama tiap langkah, dan install baru sebelum mendaftar.",
+    datasets: "analytics_266759216.events_* (ekspor GA4), main.users, main.transactions",
+    computation: "Cohort: ponsel (user_pseudo_id) yang pertama kali register_click atau SignupOauthScreen (setelah Continue with Google) di rentang tanggal, lalu diikuti tanpa batas akhir. Langkah sebelum akun dari GA4 per ponsel (otp_on_submit). user_id pertama yang muncul di ponsel itu menghubungkannya ke main.users: akun dibuat (created_at), KYC terverifikasi (verification_status, verified_at), order beli pertama dan pembelian dibayar pertama (main.transactions buy; dibayar = completed, completed_payment, verified; manual_bonus tidak dihitung). Membuka dan mengirim KYC dari GA4 per user_id (kyc_start/VerificationIntroScreen, kyc_success/VerificationSuccessScreen) atau hasil review di database. Ponsel yang login ke akun yang dibuat lebih dari sehari sebelum mulai mendaftar dihitung terpisah dan tidak masuk funnel. Pecahan: platform, cara mendaftar, sumber install (traffic_source), versi aplikasi, wilayah (geo.region), merek ponsel, kode di akun (referrer_code lalu sales_code), dan minggu mulai (WIB). Kolom dalam 7 hari hanya menghitung ponsel yang mulai paling sedikit 7 hari lalu. Titik berhenti: langkah terjauh, layar terakhir (screen_view), app_remove (hanya Android), dan aktivitas 7 hari terakhir. Install: first_open di rentang, lalu tamu, membuka fund sebelum login, mulai mendaftar, akun baru, atau login ke akun lama. GA4 dibaca dari awal rentang sampai hari ini; default 90 hari terakhir.",
   },
   "user-behavior": {
     summary: "Menghubungkan aktivitas aplikasi (Google Analytics) dengan database utama: pengguna harian, perilaku per status investor, aksi sebelum pembelian, dampak push, halaman fund dilihat vs dibeli, daftar yang mulai beli tapi tidak bayar, dan linimasa per investor.",
@@ -1044,11 +1044,38 @@ const TAB_DETAILS = {
     ],
   },
   'product-funnel': {
+    kpis: [
+      ['Started sign-up', 'Ponsel yang mulai mendaftar pada periode ini, tanpa yang ternyata sudah punya akun (jumlahnya di bawah angka).'],
+      ['Biggest drop-off', 'Langkah dengan porsi terbesar ponsel dari langkah sebelumnya yang tidak sampai.'],
+    ],
     panels: {
-      'Funnel by platform': { note: 'Perangkat yang klik Register pada periode ini, lalu dicek tanpa batas tanggal apakah perangkat yang sama pernah mencapai setiap langkah.', },
+      'From sign-up to first paid buy': { note: 'Funnel per ponsel, bisa dipilih untuk semua, per platform, atau per cara mendaftar.', columns: [
+        ['Sent KYC', 'Layar KYC berhasil di aplikasi, atau sudah ada hasil review KYC di database.'],
+      ],
+      },
+      'Where people stop': { note: 'Ponsel dikelompokkan menurut langkah terjauh, dengan layar terakhir yang mereka lihat.', columns: [
+        ['Uninstalled (Android)', 'Porsi dari ponsel Android di kelompok itu; iOS tidak melaporkan uninstall.'],
+        ['Used the app in the last 7 days', 'Ada event selain push masuk atau update dalam 7 hari terakhir; masih bisa dijangkau.'],
+      ],
+      },
+      'Who gets through': { note: 'Ponsel yang sama dipecah menurut satu ciri saat mulai mendaftar.', columns: [
+        ['Paid within 7 days', 'Hanya ponsel yang mulai paling sedikit 7 hari lalu, agar kelompok baru tidak terlihat lebih buruk.'],
+      ],
+      },
+      'Week by week': { note: 'Per minggu mulai mendaftar; grafik hanya menampilkan persentase, jumlah ada di tabel.' },
+      'How long each step takes': { note: 'Waktu dari mulai mendaftar sampai tiap langkah, dari ponsel yang mencapainya.', columns: [
+        ['75% within', 'Tiga dari empat ponsel sampai dalam waktu ini.'],
+      ],
+      },
+      'Before sign-up: new installs': { note: 'Ponsel yang membuka aplikasi pertama kali, dan apa yang dilakukan setelahnya.', columns: [
+        ['Signed in to an older account', 'Login ke akun yang dibuat sebelum install: nasabah lama di ponsel baru atau install ulang.'],
+      ],
+      },
     },
     notes: [
-      'Dihitung per perangkat (user_pseudo_id), bukan per akun, karena orang belum login saat mendaftar. Untuk funnel per akun yang dicocokkan ke database, lihat Onboarding analysis.',
+      'Dihitung per ponsel (user_pseudo_id), bukan per akun, karena orang belum login saat mendaftar. Satu orang dengan dua ponsel terhitung dua kali.',
+      'Sebelum Oktober 2026 tab ini hanya menghitung register_click, sehingga pendaftaran lewat Google tidak masuk dan kolom KYC verified sebenarnya menghitung KYC terkirim.',
+      'Untuk funnel per akun yang dimulai dari database dan rincian layar KYC, lihat Onboarding analysis.',
     ],
   },
   'user-behavior': {

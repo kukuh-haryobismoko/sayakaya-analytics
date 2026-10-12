@@ -1697,56 +1697,203 @@ const appPerfTraces = (from, to) => {
 
 // ---- Product funnel: GA4 export (own dataset, one physical table per day,
 // `events_*` + `_TABLE_SUFFIX` is BigQuery's standard way to query a date
-// range across them without naming all 239). Cohort-based, not a same-window
-// count per step: registering and paying can land in different calendar
-// periods (someone registers in July, pays in September), so naively
-// counting "registrants in range" vs "payers in range" separately produces a
-// funnel that goes UP between steps, not down: it would show more OTP
-// submissions than registrations, because otp_on_submit also fires on every
-// login, not just signup. Instead: find everyone whose register_click fell
-// in the range, then check, with no date bound, whether that SAME device
-// ever reached each later milestone. That join scans the full GA4 history
-// regardless of the chosen range (a few hundred MB), not just the window.
+// range across them). Cohort-based, not a same-window count per step:
+// people sign up in one period and pay in a later one, so every device whose
+// first sign-up screen fell in the period is followed, with no end date,
+// through each later step. Counting each step inside the period instead
+// makes the funnel go up partway (otp_on_submit also fires on every login).
+// Sign-up starts at register_click (email) or SignupOauthScreen (shown after
+// "Continue with Google" to someone with no phone number yet); register_click
+// alone missed the Google path. Before an account exists only the device
+// (user_pseudo_id) is known. The first user_id the device logs after the
+// start links it to main.users, and KYC verified, first buy order and first
+// paid buy come from the main database from there. A device whose account
+// was created more than a day before the start already had one (Sep 2026:
+// mostly older Google accounts adding a phone number), so it is counted
+// apart and kept out of every funnel number.
 const GA4_EVENTS = '`sayakaya.analytics_266759216.events_*`';
-
-const productFunnelByPlatform = (from, to) => {
-  const r = range(from, to);
-  const fromSuffix = String(r.from).replace(/-/g, '');
-  const toSuffix = String(r.to).replace(/-/g, '');
-  return {
-    sql: `WITH cohort AS (
-        SELECT user_pseudo_id, platform,
-          ROW_NUMBER() OVER (PARTITION BY user_pseudo_id ORDER BY event_timestamp) AS rn
+const pfnSource = (d) => `CONCAT(IFNULL(${d}.source, '(none)'), IF(IFNULL(${d}.medium, '(none)') = '(none)', '', CONCAT(' / ', ${d}.medium)))`;
+// One row per device that started sign-up in the period. GA4 is read from
+// the period start to today, so the scan grows with the range, not with
+// GA4's whole history.
+const pfnBase = () => `ev AS (
+        SELECT user_pseudo_id, user_id, platform, event_name, event_date, TIMESTAMP_MICROS(event_timestamp) AS ts,
+          IF(event_name = 'screen_view', ${GA4_SCREEN}, NULL) AS screen,
+          app_info.version AS app_version, traffic_source.source AS source, traffic_source.medium AS medium,
+          geo.region AS region, device.mobile_brand_name AS brand
         FROM ${GA4_EVENTS}
-        WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND event_name = 'register_click'
-        QUALIFY rn = 1
+        WHERE _TABLE_SUFFIX >= @fromSuffix
       ),
-      milestones AS (
-        SELECT c.user_pseudo_id,
-          MAX(e.event_name = 'otp_on_submit') AS did_otp,
-          MAX(e.event_name = 'kyc_start') AS did_kyc_start,
-          MAX(e.event_name = 'kyc_success') AS did_kyc_success,
-          MAX(e.event_name = 'order_created') AS did_order,
-          MAX(e.event_name = 'payment_complete') AS did_payment
-        FROM ${GA4_EVENTS} e
-        JOIN cohort c USING (user_pseudo_id)
-        WHERE e.event_name IN ('otp_on_submit', 'kyc_start', 'kyc_success', 'order_created', 'payment_complete')
-        GROUP BY c.user_pseudo_id
-      )
-      SELECT COALESCE(c.platform, '(unknown)') AS platform,
-        COUNT(DISTINCT c.user_pseudo_id) AS registered,
-        COUNTIF(m.did_otp) AS otp_submitted,
-        COUNTIF(m.did_kyc_start) AS kyc_started,
-        COUNTIF(m.did_kyc_success) AS kyc_verified,
-        COUNTIF(m.did_order) AS ordered,
-        COUNTIF(m.did_payment) AS paid
-      FROM cohort c
-      LEFT JOIN milestones m USING (user_pseudo_id)
-      GROUP BY platform
-      ORDER BY registered DESC`,
-    params: { fromSuffix, toSuffix },
+      start AS (
+        SELECT user_pseudo_id, MIN(ts) AS t0,
+          ARRAY_AGG(STRUCT(platform, IF(event_name = 'register_click', 'email', 'google') AS method, app_version, source, medium, region, brand)
+            ORDER BY ts LIMIT 1)[OFFSET(0)] AS dims
+        FROM ev
+        WHERE event_date BETWEEN @fromSuffix AND @toSuffix AND (event_name = 'register_click' OR screen = 'SignupOauthScreen')
+        GROUP BY user_pseudo_id
+      ),
+      dev AS (
+        SELECT s.user_pseudo_id, ANY_VALUE(s.t0) AS t0, ANY_VALUE(s.dims) AS dims,
+          MIN(IF(e.event_name = 'otp_on_submit', e.ts, NULL)) AS t_otp,
+          ARRAY_AGG(e.user_id IGNORE NULLS ORDER BY e.ts LIMIT 1)[SAFE_OFFSET(0)] AS uid,
+          ARRAY_AGG(e.screen IGNORE NULLS ORDER BY e.ts DESC LIMIT 1)[SAFE_OFFSET(0)] AS last_screen,
+          MAX(IF(e.event_name NOT IN (${GA4_PASSIVE_EVENTS}), e.ts, NULL)) AS last_active,
+          LOGICAL_OR(e.event_name = 'app_remove') AS removed
+        FROM start s JOIN ev e ON e.user_pseudo_id = s.user_pseudo_id AND e.ts >= s.t0
+        GROUP BY s.user_pseudo_id
+      ),
+      linked AS (
+        SELECT d.*, IFNULL(TIMESTAMP(u.created_at) < TIMESTAMP_SUB(d.t0, INTERVAL 1 DAY), FALSE) AS existing,
+          u.id AS user_id, TIMESTAMP(u.created_at) AS t_account, u.verification_status,
+          IF(u.verification_status = 'verified', TIMESTAMP(u.verified_at), NULL) AS t_verified,
+          CASE WHEN u.id IS NULL THEN 'no_account' WHEN u.referrer_code IS NOT NULL THEN 'referral'
+            WHEN u.sales_code IS NOT NULL THEN 'sales' ELSE 'none' END AS code
+        FROM dev d LEFT JOIN ${USERS} u ON u.id = d.uid
+      ),
+      app AS (
+        SELECT l.user_pseudo_id,
+          MIN(IF(e.event_name = 'kyc_start' OR e.screen = 'VerificationIntroScreen', e.ts, NULL)) AS t_kyc,
+          MIN(IF(e.event_name = 'kyc_success' OR e.screen = 'VerificationSuccessScreen', e.ts, NULL)) AS t_sent
+        FROM linked l JOIN ev e ON e.user_id = l.user_id AND e.ts >= l.t0
+        WHERE NOT l.existing
+        GROUP BY l.user_pseudo_id
+      ),
+      buys AS (
+        SELECT l.user_pseudo_id, MIN(t.created_at) AS t_order,
+          MIN(IF(t.status IN (${SUB_PAID_STATUSES}), t.created_at, NULL)) AS t_paid,
+          ARRAY_AGG(IF(t.status IN (${SUB_PAID_STATUSES}), t.final_amount, NULL) IGNORE NULLS ORDER BY t.created_at LIMIT 1)[SAFE_OFFSET(0)] AS first_amount
+        FROM linked l JOIN ${TX} t ON t.user_id = l.user_id AND t.type = 'buy' AND IFNULL(t.payment_method, '') != 'manual_bonus'
+        WHERE NOT l.existing
+        GROUP BY l.user_pseudo_id
+      ),
+      base AS (
+        SELECT l.*, a.t_kyc, a.t_sent, b.t_order, b.t_paid, b.first_amount,
+          a.t_sent IS NOT NULL OR l.verification_status IN ('verified', 'failed', 'pending_verification') AS sent
+        FROM linked l LEFT JOIN app a USING (user_pseudo_id) LEFT JOIN buys b USING (user_pseudo_id)
+      )`;
+
+// Steps per device, cut nine ways: everyone, platform, sign-up method,
+// first-touch acquisition source, app version, region and phone brand at the
+// sign-up start, the code on the new account, and the week sign-up started
+// (WIB, Monday weeks). The 7-day columns count only devices that started at
+// least 7 days ago, so a young week does not read as a worse one. Devices
+// that already had an account come back as one 'excluded' row.
+const productFunnelSteps = (from, to) => {
+  const weekAgo = 'TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)';
+  return {
+    sql: `WITH ${pfnBase()}
+      SELECT dm.dimension, dm.value,
+        COUNT(*) AS started, COUNT(t_otp) AS otp, COUNT(user_id) AS account, COUNT(t_kyc) AS kyc_started,
+        COUNTIF(sent) AS kyc_sent, COUNT(t_verified) AS verified, COUNT(t_order) AS ordered, COUNT(t_paid) AS paid,
+        COUNTIF(t0 <= ${weekAgo}) AS started_7d_ago,
+        COUNTIF(t0 <= ${weekAgo} AND t_verified <= TIMESTAMP_ADD(t0, INTERVAL 7 DAY)) AS verified_7d,
+        COUNTIF(t0 <= ${weekAgo} AND t_paid <= TIMESTAMP_ADD(t0, INTERVAL 7 DAY)) AS paid_7d,
+        ROUND(APPROX_QUANTILES(TIMESTAMP_DIFF(t_paid, t0, SECOND) / 86400, 2)[OFFSET(1)], 1) AS median_days_to_paid,
+        APPROX_QUANTILES(first_amount, 2)[OFFSET(1)] AS median_first_paid
+      FROM base, UNNEST(IF(existing, [STRUCT('excluded' AS dimension, 'existing_account' AS value)], [
+        STRUCT('all' AS dimension, 'all' AS value), ('platform', IFNULL(dims.platform, 'unknown')), ('method', dims.method),
+        ('source', ${pfnSource('dims')}), ('app_version', IFNULL(dims.app_version, 'unknown')),
+        ('region', IFNULL(NULLIF(dims.region, ''), 'unknown')), ('brand', IFNULL(dims.brand, 'unknown')), ('code', code),
+        ('week', CAST(DATE_TRUNC(DATE(t0, 'Asia/Jakarta'), WEEK(MONDAY)) AS STRING))])) dm
+      GROUP BY dm.dimension, dm.value
+      ORDER BY dm.dimension, started DESC`,
+    params: ga4Range(range(from, to)),
   };
 };
+
+// Time from starting sign-up to each later step, over the devices that
+// reached it: median and 75th percentile in hours, and how many got there
+// within an hour, a day, 7 days and 30 days.
+const productFunnelTiming = (from, to) => ({
+  sql: `WITH ${pfnBase()}
+      SELECT s.step, COUNT(s.ts) AS reached,
+        ROUND(APPROX_QUANTILES(TIMESTAMP_DIFF(s.ts, t0, SECOND) / 3600, 4)[OFFSET(2)], 2) AS median_hours,
+        ROUND(APPROX_QUANTILES(TIMESTAMP_DIFF(s.ts, t0, SECOND) / 3600, 4)[OFFSET(3)], 2) AS p75_hours,
+        COUNTIF(s.ts <= TIMESTAMP_ADD(t0, INTERVAL 1 HOUR)) AS within_1h,
+        COUNTIF(s.ts <= TIMESTAMP_ADD(t0, INTERVAL 1 DAY)) AS within_1d,
+        COUNTIF(s.ts <= TIMESTAMP_ADD(t0, INTERVAL 7 DAY)) AS within_7d,
+        COUNTIF(s.ts <= TIMESTAMP_ADD(t0, INTERVAL 30 DAY)) AS within_30d
+      FROM base, UNNEST([STRUCT(1 AS ord, 'otp' AS step, t_otp AS ts), (2, 'account', t_account), (3, 'kyc_started', t_kyc),
+        (4, 'kyc_sent', t_sent), (5, 'verified', t_verified), (6, 'ordered', t_order), (7, 'paid', t_paid)]) s
+      WHERE NOT existing
+      GROUP BY s.ord, s.step
+      ORDER BY s.ord`,
+  params: ga4Range(range(from, to)),
+});
+
+// Where devices stopped: grouped by the furthest step reached (1 started
+// ... 7 ordered; paid is not a stop), then by the last screen the device
+// showed after starting, top 5 per step. step_* columns are the whole step's
+// totals. app_remove only comes from Android; iOS does not report uninstalls.
+const productFunnelStops = (from, to) => ({
+  sql: `WITH ${pfnBase()},
+      furthest AS (
+        SELECT *, CASE WHEN t_paid IS NOT NULL THEN 8 WHEN t_order IS NOT NULL THEN 7 WHEN t_verified IS NOT NULL THEN 6 WHEN sent THEN 5
+          WHEN t_kyc IS NOT NULL THEN 4 WHEN user_id IS NOT NULL THEN 3 WHEN t_otp IS NOT NULL THEN 2 ELSE 1 END AS reached
+        FROM base WHERE NOT existing
+      ),
+      per_screen AS (
+        SELECT reached, IFNULL(last_screen, '(none)') AS last_screen, COUNT(*) AS devices,
+          COUNTIF(dims.platform = 'ANDROID') AS android, COUNTIF(removed) AS uninstalled,
+          COUNTIF(last_active >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)) AS active_7d,
+          COUNTIF(verification_status = 'failed') AS kyc_failed
+        FROM furthest WHERE reached < 8
+        GROUP BY reached, last_screen
+      )
+      SELECT *, SUM(devices) OVER w AS step_devices, SUM(android) OVER w AS step_android, SUM(uninstalled) OVER w AS step_uninstalled,
+        SUM(active_7d) OVER w AS step_active_7d, SUM(kyc_failed) OVER w AS step_kyc_failed
+      FROM per_screen
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY reached ORDER BY devices DESC, last_screen) <= 5
+      WINDOW w AS (PARTITION BY reached)
+      ORDER BY reached, devices DESC`,
+  params: ga4Range(range(from, to)),
+});
+
+// Before sign-up: devices that opened the app for the first time
+// (first_open) in the period, then with no end date: browsed as a guest,
+// opened a fund before logging in, started sign-up, created a new account,
+// or logged in to an account that existed before the install (a reinstall
+// or a new phone). Everyone, per platform and per first-touch source.
+const productFunnelInstalls = (from, to) => ({
+  sql: `WITH ev AS (
+        SELECT user_pseudo_id, user_id, platform, event_name, event_date, TIMESTAMP_MICROS(event_timestamp) AS ts,
+          IF(event_name = 'screen_view', ${GA4_SCREEN}, NULL) AS screen, traffic_source.source AS source, traffic_source.medium AS medium
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX >= @fromSuffix
+      ),
+      inst AS (
+        SELECT user_pseudo_id, MIN(ts) AS t_install, ARRAY_AGG(STRUCT(platform, source, medium) ORDER BY ts LIMIT 1)[OFFSET(0)] AS dims
+        FROM ev WHERE event_date BETWEEN @fromSuffix AND @toSuffix AND event_name = 'first_open'
+        GROUP BY user_pseudo_id
+      ),
+      act AS (
+        SELECT i.user_pseudo_id, ANY_VALUE(i.t_install) AS t_install, ANY_VALUE(i.dims) AS dims,
+          LOGICAL_OR(e.screen = 'HomeGuestScreen' OR e.event_name = 'hfg_view') AS guest,
+          LOGICAL_OR(e.user_id IS NULL AND e.screen IN ('ProductListScreen', 'ProductDetailScreen')) AS viewed_fund,
+          MIN(IF(e.event_name = 'register_click' OR e.screen = 'SignupOauthScreen', e.ts, NULL)) AS t_start,
+          ARRAY_AGG(e.user_id IGNORE NULLS ORDER BY e.ts LIMIT 1)[SAFE_OFFSET(0)] AS uid,
+          LOGICAL_OR(e.event_name = 'app_remove') AS removed
+        FROM inst i JOIN ev e ON e.user_pseudo_id = i.user_pseudo_id AND e.ts >= i.t_install
+        GROUP BY i.user_pseudo_id
+      ),
+      scored AS (
+        SELECT a.*, IFNULL(a.dims.platform, 'unknown') AS platform, ${pfnSource('a.dims')} AS source,
+          IFNULL(TIMESTAMP(u.created_at) < TIMESTAMP_SUB(a.t_install, INTERVAL 1 DAY), FALSE) AS existing,
+          IFNULL(TIMESTAMP(u.created_at) >= TIMESTAMP_SUB(a.t_install, INTERVAL 1 DAY), FALSE) AS new_account
+        FROM act a LEFT JOIN ${USERS} u ON u.id = a.uid
+      )
+      SELECT CASE WHEN GROUPING(platform) = 0 THEN 'platform' WHEN GROUPING(source) = 0 THEN 'source' ELSE 'all' END AS dimension,
+        COALESCE(platform, source, 'all') AS value,
+        COUNT(*) AS installs, COUNTIF(existing) AS existing_account, COUNTIF(NOT existing) AS new_device,
+        COUNTIF(NOT existing AND guest) AS guest, COUNTIF(NOT existing AND viewed_fund) AS viewed_fund,
+        COUNTIF(NOT existing AND t_start IS NOT NULL) AS started_signup, COUNTIF(new_account) AS new_account,
+        COUNTIF(platform = 'ANDROID') AS android, COUNTIF(removed) AS uninstalled,
+        ROUND(APPROX_QUANTILES(IF(existing, NULL, TIMESTAMP_DIFF(t_start, t_install, SECOND) / 60), 2)[OFFSET(1)], 1) AS median_min_to_start
+      FROM scored
+      GROUP BY GROUPING SETS ((), (platform), (source))
+      ORDER BY dimension, installs DESC`,
+  params: ga4Range(range(from, to)),
+});
 
 // ---- User behavior: GA4 app events joined to the main database. GA4's
 // user_id is main.users.id (the app sets it at login), so in-app actions can
@@ -5395,7 +5542,7 @@ module.exports = {
   pushTrend, pushByCampaign, pushByPlatform,
   marketingFunnelByChannel,
   appCrashIssues, appPerfTraces,
-  productFunnelByPlatform,
+  productFunnelSteps, productFunnelTiming, productFunnelStops, productFunnelInstalls,
   behaviorSegments, behaviorDaily, behaviorFeatureLift, behaviorPushImpact, behaviorProductInterest,
   behaviorIntentNoBuy, behaviorUserProfile, behaviorUserTimeline,
   subscriptionFunnel, subscriptionEntry, subscriptionDropoff, subscriptionPayment, subscriptionDrivers,

@@ -2794,10 +2794,9 @@
       </div>
     </section>
 
-    <!-- PRODUCT FUNNEL: GA4 export (own dataset, analytics_266759216). A
-         cohort funnel (who registered in this window, then did they ever
-         reach each later milestone), not a same-window count per step, see
-         the callout below for why. -->
+    <!-- PRODUCT FUNNEL: GA4 export (analytics_266759216). Phones that
+         started sign-up in the period, followed with no end date into the
+         main database once they log in. See queries.js productFunnel*. -->
     <section id="product-funnel" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -2810,21 +2809,70 @@
         </div>
         <div class="callout" style="margin-top:8px">
           <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
-          <span data-i18n="pfn_info">From Google Analytics. Finds everyone who clicked Register in the chosen period, then checks, with no date limit, whether that same device ever reached each later step (OTP, KYC start, KYC verified, order created, payment). Counting each step only within the chosen period instead would make the funnel look like it goes up partway through, since people can register in one period and pay in a later one.</span>
+          <span data-i18n="pfn_info">From Google Analytics and the main database.</span>
         </div>
         <div id="pfnKpis" class="kpi-grid" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
         <div class="panel-head wrap">
-          <h2 data-i18n="pfn_table_title">Funnel by platform</h2>
-          <div class="exp">
-            <button class="btn-ghost" id="pfnCsv" data-i18n="common_csv">CSV</button>
-            <button class="btn-ghost" id="pfnXlsx" data-i18n="common_excel">Excel</button>
+          <h2 data-i18n="pfn_funnel_title">From sign-up to first paid buy</h2>
+          <div class="seg" id="pfnSegment" role="group" data-i18n-aria-label="pfn_segment_label" aria-label="Show"></div>
+        </div>
+        <span class="hint" data-i18n="pfn_funnel_hint"></span>
+        <p class="lineage" data-i18n-html="pfn_lineage_funnel"></p>
+        <div id="pfnFunnelStory" class="story" aria-live="polite"></div>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="pfnFunnelChart" aria-label="Phones reaching each sign-up step"></canvas></div>
+        <div id="pfnFunnelTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="pfn_stops_title">Where people stop</h2></div>
+        <span class="hint" data-i18n="pfn_stops_hint"></span>
+        <p class="lineage" data-i18n-html="pfn_lineage_stops"></p>
+        <div id="pfnStopsStory" class="story" aria-live="polite"></div>
+        <div id="pfnStopsTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="pfn_split_title">Who gets through</h2>
+          <div class="seg" id="pfnDim" role="group" data-i18n-aria-label="pfn_dim_label" aria-label="Group by">
+            <button class="on" data-dim="method" aria-pressed="true" data-i18n="pfn_dim_method">Sign-up method</button>
+            <button data-dim="code" aria-pressed="false" data-i18n="pfn_dim_code">Referral code</button>
+            <button data-dim="platform" aria-pressed="false" data-i18n="pfn_dim_platform">Platform</button>
+            <button data-dim="source" aria-pressed="false" data-i18n="pfn_dim_source">Install source</button>
+            <button data-dim="region" aria-pressed="false" data-i18n="pfn_dim_region">Region</button>
+            <button data-dim="brand" aria-pressed="false" data-i18n="pfn_dim_brand">Phone brand</button>
+            <button data-dim="app_version" aria-pressed="false" data-i18n="pfn_dim_app_version">App version</button>
           </div>
         </div>
-        <span class="hint" data-i18n="pfn_table_hint">Each column counts devices that reached that step at any point, not just within the period above. Always decreasing left to right, within a platform.</span>
-        <div id="pfnTable" class="table-wrap" style="margin-top:14px"></div>
+        <span class="hint" data-i18n="pfn_split_hint"></span>
+        <div id="pfnSplitStory" class="story" aria-live="polite"></div>
+        <div id="pfnSplitTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="pfn_weeks_title">Week by week</h2></div>
+        <span class="hint" data-i18n="pfn_weeks_hint"></span>
+        <div id="pfnWeeksStory" class="story" aria-live="polite"></div>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="pfnWeeksChart" aria-label="Sign-up starts per week and the share reaching an account, KYC and a paid buy within 7 days"></canvas></div>
+        <div id="pfnWeeksTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="pfn_timing_title">How long each step takes</h2></div>
+        <span class="hint" data-i18n="pfn_timing_hint"></span>
+        <div id="pfnTimingStory" class="story" aria-live="polite"></div>
+        <div id="pfnTimingTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="pfn_installs_title">Before sign-up: new installs</h2></div>
+        <span class="hint" data-i18n="pfn_installs_hint"></span>
+        <p class="lineage" data-i18n-html="pfn_lineage_installs"></p>
+        <div id="pfnInstallsStory" class="story" aria-live="polite"></div>
+        <div id="pfnInstallsTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
     </section>
 
@@ -3515,7 +3563,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg> Product funnel</h3>
-          <p data-i18n="docs_pfn_desc">From Google Analytics (own dataset, analytics_266759216, one physical table per day, Feb 2026 onward). A cohort funnel, not a same-period count per step: it finds every device whose first Register click fell in the chosen date range, then checks, with no date limit on this half, whether that same device ever reached OTP submitted, KYC started, KYC verified, order created, and payment completed. Counting each milestone only within the chosen range independently would make the funnel look like it climbs partway through (otp_on_submit alone fires on every login, not just signup, so it would outnumber registrations), since a real person can register in one period and pay in a much later one. Split by platform (Android/iOS); each column only decreases moving right, within a platform. The milestone join scans GA4's full history regardless of the date range chosen, typically well under 1GB.</p>
+          <p data-i18n="docs_pfn_desc">Follows every phone that started signing up in the chosen period through account creation, KYC and the first paid buy.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg> User behavior</h3>

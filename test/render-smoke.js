@@ -156,11 +156,6 @@ const appPerfTraces = [
   { platform: 'ANDROID', event_name: 'gql_query_promotions', sample_count: 16675, median_duration_ms: 1851, avg_duration_ms: 3098.7 },
 ];
 
-const productFunnel = [
-  { platform: 'ANDROID', registered: 258, otp_submitted: 242, kyc_started: 142, kyc_verified: 90, ordered: 50, paid: 40 },
-  { platform: 'IOS', registered: 71, otp_submitted: 69, kyc_started: 45, kyc_verified: 37, ordered: 28, paid: 23 },
-];
-
 const kalcerSummary = [
   { referrer_sid: 'IDD1', referrer_name: 'Jessica Wijaya', referrer_email: 'jessica@sayakaya.id',
     referred_count: 435, first_referral_date: D('2022-01-27'), last_referral_date: D('2026-05-18'), total_aum_referred: '2.05e10' },
@@ -204,6 +199,42 @@ const evcCohortRows = [{ cohort: D('2026-01-04'), period_offset: 0, users: 2, co
 // Email recap (Supabase RPC/PostgREST, plain JSON, no BigQuery wrappers).
 // The subject is an HTML payload on purpose: it must come out escaped.
 const XSS = '<img src=x onerror=alert(1)>';
+
+// Product funnel: one steps row per (dimension, value); a week younger than
+// 7 days has started_7d_ago 0. Stops carry their step totals on every row.
+const pfnStep = (dimension, value, n) => {
+  const [started, otp, account, kyc_started, kyc_sent, verified, ordered, paid, started_7d_ago, verified_7d, paid_7d] = n;
+  return { dimension, value, started, otp, account, kyc_started, kyc_sent, verified, ordered, paid, started_7d_ago, verified_7d, paid_7d, median_days_to_paid: 2.3, median_first_paid: 1000000 };
+};
+const pfnSteps = [
+  pfnStep('all', 'all', [317, 251, 199, 193, 124, 111, 44, 41, 307, 100, 32]),
+  pfnStep('excluded', 'existing_account', [197, 182, 197, 0, 103, 84, 0, 0, 197, 82, 0]),
+  pfnStep('method', 'email', [156, 147, 108, 105, 79, 76, 34, 33, 150, 69, 26]),
+  pfnStep('method', 'google', [161, 104, 91, 88, 45, 35, 10, 8, 157, 31, 6]),
+  pfnStep('platform', 'ANDROID', [250, 188, 145, 145, 86, 75, 26, 25, 242, 69, 19]),
+  pfnStep('platform', 'IOS', [67, 63, 54, 48, 38, 36, 18, 16, 65, 31, 13]),
+  pfnStep('brand', XSS, [3, 1, 1, 1, 0, 0, 0, 0, 3, 0, 0]),
+  pfnStep('week', '2026-09-14', [37, 35, 29, 29, 15, 12, 3, 2, 37, 9, 2]),
+  pfnStep('week', '2026-09-07', [31, 28, 22, 20, 15, 15, 8, 8, 31, 14, 4]),
+  pfnStep('week', '2026-10-05', [10, 9, 9, 9, 5, 4, 1, 1, 0, 0, 0]),
+];
+const pfnStopRow = (reached, last_screen, devices, totals) => ({ reached, last_screen, devices, ...totals });
+const pfnStops = [
+  pfnStopRow(1, 'SignupOauthScreen', 34, { step_devices: 66, step_android: 60, step_uninstalled: 52, step_active_7d: 1, step_kyc_failed: 0 }),
+  pfnStopRow(1, XSS, 2, { step_devices: 66, step_android: 60, step_uninstalled: 52, step_active_7d: 1, step_kyc_failed: 0 }),
+  pfnStopRow(5, 'ProfileScreen', 3, { step_devices: 13, step_android: 9, step_uninstalled: 7, step_active_7d: 3, step_kyc_failed: 10 }),
+  pfnStopRow(6, 'ProductDetailScreen', 11, { step_devices: 60, step_android: 50, step_uninstalled: 23, step_active_7d: 4, step_kyc_failed: 0 }),
+];
+const pfnTiming = [
+  { step: 'otp', reached: 251, median_hours: 0.01, p75_hours: 0.01, within_1h: 249, within_1d: 250, within_7d: 251, within_30d: 251 },
+  { step: 'account', reached: 199, median_hours: 0.02, p75_hours: 0.04, within_1h: 196, within_1d: 198, within_7d: 199, within_30d: 199 },
+  { step: 'verified', reached: 111, median_hours: 14.38, p75_hours: 48.84, within_1h: 17, within_1d: 71, within_7d: 100, within_30d: 109 },
+  { step: 'paid', reached: 41, median_hours: 55.18, p75_hours: 152.54, within_1h: 0, within_1d: 14, within_7d: 32, within_30d: 40 },
+];
+const pfnInstalls = [
+  { dimension: 'all', value: 'all', installs: 900, existing_account: 310, new_device: 590, guest: 480, viewed_fund: 70, started_signup: 260, new_account: 190, android: 712, uninstalled: 395, median_min_to_start: 0.6 },
+  { dimension: 'platform', value: 'ANDROID', installs: 712, existing_account: 230, new_device: 482, guest: 380, viewed_fund: 55, started_signup: 210, new_account: 139, android: 712, uninstalled: 395, median_min_to_start: 0.6 },
+];
 const emailSummary = {
   totals: { sent: 12, failed: 1, recipients: 10, delivered: 11, opened: 6, clicked: 2, bounced: 1, complained: 0, opens: 9, clicks: 3 },
   by_category: [{ category: 'statement', sent: 10, failed: 1, delivered: 9, opened: 5, clicked: 0, bounced: 1, complained: 0 },
@@ -350,7 +381,10 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/marketing/funnel'))            return marketingFunnel;
   if (path.startsWith('/api/app-health/crashes'))          return appCrashIssues;
   if (path.startsWith('/api/app-health/performance'))      return appPerfTraces;
-  if (path.startsWith('/api/product-funnel'))              return productFunnel;
+  if (path.startsWith('/api/product-funnel/steps'))        return pfnSteps;
+  if (path.startsWith('/api/product-funnel/stops'))        return pfnStops;
+  if (path.startsWith('/api/product-funnel/timing'))       return pfnTiming;
+  if (path.startsWith('/api/product-funnel/installs'))     return pfnInstalls;
   if (path.startsWith('/api/email-recap/summary'))         return emailSummary;
   if (path.startsWith('/api/email-recap/log'))             return emailLog;
   if (path.startsWith('/api/behavior/segments'))           return bhSegments;
@@ -416,7 +450,7 @@ sandbox.api = async (path) => {
   if (!get('#evcUsersTable')._html.includes('Sold everything')) errors.push('#evcUsersTable: portfolio status label missing');
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnFunnelTable', '#pfnStopsTable', '#pfnSplitTable', '#pfnWeeksTable', '#pfnTimingTable', '#pfnInstallsTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -480,7 +514,7 @@ sandbox.api = async (path) => {
   // Email subjects and push campaign names are typed by people; genTable
   // writes raw HTML, so the new tabs escape them first.
   for (const sel of ['#erSubjectTable', '#erLogTable', '#bhPushTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saProfileTable',
-    '#rdSignalTable', '#egSearchTable', '#egDiscoveryTable', '#saEntryStory', '#saDropStory', '#saPayStory', '#saDriverStory', '#saProfileStory', '#rdSignalStory', '#egSearchStory', '#egDiscoveryStory']) {
+    '#rdSignalTable', '#egSearchTable', '#egDiscoveryTable', '#pfnStopsTable', '#saEntryStory', '#saDropStory', '#saPayStory', '#saDriverStory', '#saProfileStory', '#rdSignalStory', '#egSearchStory', '#egDiscoveryStory']) {
     if (get(sel)._html.includes(XSS)) errors.push(`${sel} rendered unescaped HTML`);
     else console.log(`ok    ${sel} escapes HTML`);
   }
@@ -504,6 +538,16 @@ sandbox.api = async (path) => {
     [get('#egActivityStory')._html.includes('38'), '#egActivityStory filled'],
     [get('#egActivityTable')._html.includes('231,273'), '#egActivityTable pivots tiers by app use'],
     [get('#egFeatureStory')._html.includes('1,171'), '#egFeatureStory written from the feature rows'],
+    [(get('#pfnKpis')._html.match(/kpi-value/g) || []).length === 4 && get('#pfnKpis')._html.includes('197'), '#pfnKpis has 4 cards and the existing-account count'],
+    [get('#pfnFunnelStory')._html.includes('317') && get('#pfnFunnelStory')._html.includes('41 (12.9%)') && get('#pfnFunnelStory')._html.includes('197'), '#pfnFunnelStory written from the steps rows'],
+    [get('#pfnFunnelTable')._html.includes('<code>otp_on_submit</code>') && get('#pfnFunnelTable')._html.includes('SignupOauthScreen'), '#pfnFunnelTable names the event or screen behind each step'],
+    [get('#pfnSegment')._html.includes('data-segment="method:google"'), '#pfnSegment has a button per platform and method'],
+    [get('#pfnStopsTable')._html.includes('86.7%') && get('#pfnStopsTable')._html.includes('>10<'), '#pfnStopsTable folds screens into one row per step'],
+    [get('#pfnStopsStory')._html.includes('66 phones') && get('#pfnStopsStory')._html.includes('60 phones'), '#pfnStopsStory names the largest stop and the verified non-buyers'],
+    [get('#pfnSplitStory')._html.includes('Register form') && get('#pfnSplitStory')._html.includes('5.0%'), '#pfnSplitStory compares sign-up methods'],
+    [get('#pfnWeeksTable')._html.includes('2026-10-05') && get('#pfnWeeksStory')._html.includes('2026-09-14'), '#pfnWeeksStory uses the latest week with 7 full days'],
+    [get('#pfnTimingTable')._html.includes('14.4 h') && get('#pfnTimingStory')._html.includes('2.3 days'), '#pfnTimingTable formats durations'],
+    [get('#pfnInstallsStory')._html.includes('900') && get('#pfnInstallsStory')._html.includes('395'), '#pfnInstallsStory written from the install rows'],
   ]) {
     if (ok) console.log(`ok    ${label}`);
     else { console.log(`FAIL  ${label}`); errors.push(label); }

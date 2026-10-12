@@ -1445,59 +1445,6 @@ function loadAppHealth() {
   return Promise.allSettled([pCrash, pPerf]);
 }
 
-// PRODUCT FUNNEL: GA4 cohort funnel (own dataset). See queries.js for why
-// this is cohort-based rather than a same-period count per step.
-let productFunnelLoaded = false;
-function pfnRange() {
-  return { from: $('#pfnFrom').value, to: $('#pfnTo').value };
-}
-function renderProductFunnelKpis(rows) {
-  const steps = [
-    { key: 'registered', label: 'Registered' },
-    { key: 'otp_submitted', label: 'OTP submitted' },
-    { key: 'kyc_started', label: 'KYC started' },
-    { key: 'kyc_verified', label: 'KYC verified' },
-    { key: 'ordered', label: 'Ordered' },
-    { key: 'paid', label: 'Paid' },
-  ];
-  const totals = {};
-  steps.forEach((s) => { totals[s.key] = rows.reduce((sum, r) => sum + (Number(val(r[s.key])) || 0), 0); });
-  let biggestDrop = null;
-  for (let i = 1; i < steps.length; i++) {
-    const prev = totals[steps[i - 1].key], cur = totals[steps[i].key];
-    const dropPct = prev ? ((prev - cur) / prev) * 100 : 0;
-    if (!biggestDrop || dropPct > biggestDrop.dropPct) biggestDrop = { label: steps[i].label, dropPct };
-  }
-  $('#pfnKpis').innerHTML = [
-    kpi(t('pfn_kpi_registered'), num(totals.registered), t('pfn_kpi_registered_sub'), '', ICONS.userPlus),
-    kpi(t('pfn_kpi_kyc'), pct(totals.kyc_verified, totals.registered), t('pfn_kpi_kyc_sub'), '', ICONS.check),
-    kpi(t('pfn_kpi_paid'), pct(totals.paid, totals.registered), t('pfn_kpi_paid_sub'), 'accent', ICONS.coin),
-    kpi(t('pfn_kpi_dropoff'), biggestDrop ? `${biggestDrop.dropPct.toFixed(0)}%` : 'n/a',
-      biggestDrop ? `${biggestDrop.label} ${t('pfn_kpi_dropoff_sub')}` : '', 'warn', ICONS.trendDown),
-  ].join('');
-}
-function loadProductFunnel() {
-  $('#pfnTable').innerHTML = '<div class="loading">Loading…</div>';
-  const r = pfnRange();
-  const p = api(`/api/product-funnel?from=${r.from}&to=${r.to}`);
-  gateTabLoad((v) => { productFunnelLoaded = v; }, [p]);
-  return p.then((rows) => {
-    renderProductFunnelKpis(rows);
-    genTable('#pfnTable', rows, [
-      { key: 'platform', label: 'Platform' },
-      { key: 'registered', label: 'Registered', type: 'num', sum: true },
-      { key: 'otp_submitted', label: 'OTP submitted', type: 'num', sum: true },
-      { key: 'kyc_started', label: 'KYC started', type: 'num', sum: true },
-      { key: 'kyc_verified', label: 'KYC verified', type: 'num', sum: true },
-      { key: 'ordered', label: 'Ordered', type: 'num', sum: true },
-      { key: 'paid', label: 'Paid', type: 'num', sum: true },
-    ], 'No registrations in this period.');
-  }).catch((e) => {
-    $('#pfnKpis').innerHTML = '';
-    $('#pfnTable').innerHTML = `<div class="empty">${e.message}</div>`;
-  });
-}
-
 // genTable writes cell values as raw HTML; text that comes from people
 // (email subjects, campaign names, investor names) is escaped first.
 const escRows = (rows, keys) => rows.map((r) => ({ ...r, ...Object.fromEntries(keys.map((k) => [k, val(r[k]) == null ? null : escapeHtml(val(r[k]))])) }));
@@ -1908,22 +1855,25 @@ function renderCoverage(sel, rows) {
     line('an_cov_signups', 'db_signups_in_app', 'db_signups'),
   ].join('');
 }
-// Every section of one tab: [endpoint, where loading and errors show,
-// renderer]. Rows land in tab.cache under the endpoint's last segment, so a
-// language or theme switch repaints from the cache.
+// Every section of one tab: [endpoint, where loading and errors show (one
+// selector or several), renderer]. Rows land in tab.cache under the
+// endpoint's last segment, so a language or theme switch repaints from the
+// cache. A tab with coverage: false has no data map.
 function loadAnalysis(tab) {
   const r = { from: $(`#${tab.prefix}From`).value, to: $(`#${tab.prefix}To`).value };
   tab.charts.forEach((id) => { if (charts[id]) { charts[id].destroy(); delete charts[id]; } });
   $(`#${tab.prefix}Kpis`).innerHTML = '';
   $$(`#${tab.id} .story`).forEach((el) => { el.innerHTML = ''; });
   if (tab.reset) tab.reset();
-  const promises = [['analysis/coverage', `#${tab.prefix}Coverage`, () => renderCoverage(`#${tab.prefix}Coverage`, tab.cache.coverage)], ...tab.sections]
+  const coverage = tab.coverage === false ? [] : [['analysis/coverage', `#${tab.prefix}Coverage`, () => renderCoverage(`#${tab.prefix}Coverage`, tab.cache.coverage)]];
+  const promises = [...coverage, ...tab.sections]
     .map(([path, sel, render]) => {
       const key = path.split('/').pop();
+      const status = (cls, text) => [].concat(sel).forEach((s) => anStatus(s, cls, text));
       delete tab.cache[key];
-      anStatus(sel, 'loading', t('common_loading'));
+      status('loading', t('common_loading'));
       const p = api(`/api/${path}?from=${r.from}&to=${r.to}`);
-      p.then((rows) => { tab.cache[key] = rows; render(); }).catch((e) => anStatus(sel, 'empty', e.message));
+      p.then((rows) => { tab.cache[key] = rows; render(); }).catch((e) => status('empty', e.message));
       return p;
     });
   gateTabLoad((v) => { tab.loaded = v; }, promises);
@@ -1959,14 +1909,15 @@ function biggestDrop(steps, counts, from = 1) {
 }
 // One segment's steps: horizontal bars as a share of the first step, and
 // optionally a table with each step against the first and the one before.
-function renderSteps({ chartId, tableSel, steps, row, color }) {
+// A step's optional third element is an i18n key naming where it comes from.
+function renderSteps({ chartId, tableSel, steps, row, color, unit = 'an_people' }) {
   const counts = steps.map(([k]) => nval(row && row[k]));
   const first = counts[0];
   paint(chartId, {
     type: 'bar',
     data: {
       labels: steps.map(([, l]) => t(l)),
-      datasets: [{ label: t('an_people'), data: counts.map((c) => pctOf(c, first)), counts, backgroundColor: color || C.indigo, borderRadius: 4 }],
+      datasets: [{ label: t(unit), data: counts.map((c) => pctOf(c, first)), counts, backgroundColor: color || C.indigo, borderRadius: 4 }],
     },
     options: {
       indexAxis: 'y', maintainAspectRatio: false,
@@ -1975,10 +1926,11 @@ function renderSteps({ chartId, tableSel, steps, row, color }) {
     },
   });
   if (tableSel) {
-    genTable(tableSel, steps.map(([, l], i) => ({
-      step: t(l), people: counts[i], of_first: first ? pctOf(counts[i], first) : null, of_prev: i && counts[i - 1] ? pctOf(counts[i], counts[i - 1]) : null,
+    genTable(tableSel, steps.map(([, l, src], i) => ({
+      step: t(l), source: src ? t(src) : '', people: counts[i], of_first: first ? pctOf(counts[i], first) : null, of_prev: i && counts[i - 1] ? pctOf(counts[i], counts[i - 1]) : null,
     })), [
-      { key: 'step', label: t('an_col_step') }, { key: 'people', label: t('an_people'), type: 'num' },
+      { key: 'step', label: t('an_col_step') }, ...(steps.some((x) => x[2]) ? [{ key: 'source', label: t('an_col_source') }] : []),
+      { key: 'people', label: t(unit), type: 'num' },
       { key: 'of_first', label: t('an_col_of_first'), type: 'pct' }, { key: 'of_prev', label: t('an_col_of_prev'), type: 'pct' },
     ], t('an_empty'));
   }
@@ -2723,11 +2675,252 @@ EG_TAB.sections = [
   ['engagement/search', '#egSearchTable', renderEgSearch],
   ['engagement/discovery', '#egDiscoveryTable', renderEgDiscovery],
 ];
-const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB];
+// ---------- Product funnel ----------
+// Phones that started sign-up in the period (GA4), followed into the main
+// database once they log in. The funnel, the groups and the weeks all come
+// from one query (steps); see queries.js productFunnel*.
+const PFN_TAB = { id: 'product-funnel', prefix: 'pfn', cache: {}, loaded: false, coverage: false, charts: ['pfnFunnelChart', 'pfnWeeksChart'] };
+const pfnView = { segment: 'all:all', dim: 'method' };
+const PFN_STEPS = ['started', 'otp', 'account', 'kyc_started', 'kyc_sent', 'verified', 'ordered', 'paid'].map((k) => [k, `pfn_step_${k}`, `pfn_src_${k}`]);
+const pfnRows = (dim) => (PFN_TAB.cache.steps || []).filter((r) => val(r.dimension) === dim);
+const pfnRow = (dim, v) => pfnRows(dim).find((r) => val(r.value) === v);
+const pfnRate = (r, k) => pctOf(nval(r[k]), nval(r.started));
+function pfnLabel(dim, v) {
+  if (dim === 'all') return t('sa_split_all');
+  if (v === 'unknown') return t('an_unknown');
+  if (dim === 'method' || dim === 'code') return t(`pfn_${dim}_${v}`);
+  return segLabel(v);
+}
+function pfnDur(h) {
+  if (h == null) return 'n/a';
+  const n = Number(h);
+  if (n < 1) return tf('pfn_dur_min', { n: Math.max(1, Math.round(n * 60)) });
+  if (n < 48) return tf('pfn_dur_h', { n: n.toFixed(1) });
+  return tf('pfn_dur_d', { n: (n / 24).toFixed(1) });
+}
+
+function renderPfnKpis() {
+  const all = pfnRow('all', 'all');
+  if (!all) { $('#pfnKpis').innerHTML = ''; return; }
+  const n = (k) => nval(all[k]);
+  const drop = biggestDrop(PFN_STEPS, PFN_STEPS.map(([k]) => n(k)));
+  const existing = nval(pfnRow('excluded', 'existing_account')?.started);
+  $('#pfnKpis').innerHTML = [
+    kpi(t('pfn_kpi_started'), num(n('started')), tf('pfn_kpi_started_sub', { n: num(existing) }), '', ICONS.userPlus),
+    kpi(t('pfn_kpi_verified'), pct(n('verified'), n('started')), tf('pfn_kpi_verified_sub', { n: num(n('verified')) }), '', ICONS.check),
+    kpi(t('pfn_kpi_paid'), pct(n('paid'), n('started')), n('paid') ? tf('pfn_kpi_paid_sub', { n: num(n('paid')), days: val(all.median_days_to_paid) }) : '', 'accent', ICONS.coin),
+    kpi(t('pfn_kpi_drop'), `${drop.pct.toFixed(0)}%`, tf('pfn_kpi_drop_sub', { step: t(drop.key) }), 'warn', ICONS.trendDown),
+  ].join('');
+}
+
+function renderPfnFunnel() {
+  if (!PFN_TAB.cache.steps) return;
+  renderPfnKpis();
+  const segs = ['all', 'platform', 'method'].flatMap((d) => pfnRows(d).map((r) => `${d}:${val(r.value)}`));
+  if (!segs.includes(pfnView.segment)) pfnView.segment = 'all:all';
+  segButtons('#pfnSegment', 'segment', segs, pfnView.segment, (k) => pfnLabel(...k.split(':')));
+  if (!pfnRow('all', 'all')) {
+    $('#pfnFunnelTable').innerHTML = `<div class="empty">${t('pfn_empty')}</div>`;
+    story('#pfnFunnelStory', []);
+    return;
+  }
+  const row = pfnRow(...pfnView.segment.split(':'));
+  const counts = renderSteps({ chartId: 'pfnFunnelChart', tableSel: '#pfnFunnelTable', steps: PFN_STEPS, row, unit: 'pfn_col_phones' });
+  const at = (k) => counts[PFN_STEPS.findIndex(([key]) => key === k)];
+  const drop = biggestDrop(PFN_STEPS, counts);
+  const everyone = pfnView.segment === 'all:all';
+  const email = pfnRow('method', 'email'), google = pfnRow('method', 'google');
+  const existing = pfnRow('excluded', 'existing_account');
+  const share = (r, k) => pct(nval(r[k]), nval(r.started));
+  story('#pfnFunnelStory', [
+    tf('pfn_story_funnel', {
+      started: num(at('started')), account: num(at('account')), accountPct: pct(at('account'), at('started')),
+      verified: num(at('verified')), verifiedPct: pct(at('verified'), at('started')), paid: num(at('paid')), paidPct: pct(at('paid'), at('started')),
+    }),
+    at('started') ? tf('pfn_story_drop', { step: t(drop.key), drop: drop.pct.toFixed(0) }) : '',
+    everyone && email && google ? tf('pfn_story_method', { ea: share(email, 'account'), ep: share(email, 'paid'), ga: share(google, 'account'), gp: share(google, 'paid') }) : '',
+    everyone && existing ? tf('pfn_story_existing', { n: num(nval(existing.started)) }) : '',
+  ]);
+}
+
+// Server rows are one per (furthest step, last screen), top 5 screens per
+// step, each carrying its step's totals; folded here into one row per step.
+function renderPfnStops() {
+  const rows = PFN_TAB.cache.stops;
+  if (!rows) return;
+  const started = nval(pfnRow('all', 'all')?.started);
+  const groups = [];
+  rows.forEach((r) => {
+    const i = nval(r.reached) - 1;
+    let g = groups.find((x) => x.i === i);
+    if (!g) groups.push(g = { i, r, screens: [] });
+    g.screens.push(`${escapeHtml(val(r.last_screen))} (${num(nval(r.devices))})`);
+  });
+  genTable('#pfnStopsTable', groups.map(({ i, r, screens }) => ({
+    step: t(PFN_STEPS[i][1]), phones: nval(r.step_devices), of_started: started ? pctOf(nval(r.step_devices), started) : null,
+    uninstalled: nval(r.step_android) ? pctOf(nval(r.step_uninstalled), nval(r.step_android)) : null,
+    active: nval(r.step_active_7d), failed: PFN_STEPS[i][0] === 'kyc_sent' ? num(nval(r.step_kyc_failed)) : '',
+    screens: screens.join(' · '),
+  })), [
+    { key: 'step', label: t('pfn_col_furthest') }, { key: 'phones', label: t('pfn_col_phones'), type: 'num' },
+    { key: 'of_started', label: t('pfn_col_of_started'), type: 'pct' }, { key: 'uninstalled', label: t('pfn_col_uninstalled'), type: 'pct' },
+    { key: 'active', label: t('pfn_col_active_7d'), type: 'num' }, { key: 'failed', label: t('pfn_col_kyc_failed') },
+    { key: 'screens', label: t('pfn_col_last_screens') },
+  ], t('pfn_empty'));
+  if (!groups.length) { story('#pfnStopsStory', []); return; }
+  const big = [...groups].sort((a, b) => nval(b.r.step_devices) - nval(a.r.step_devices))[0];
+  const verified = groups.find((g) => PFN_STEPS[g.i][0] === 'verified');
+  story('#pfnStopsStory', [
+    tf('pfn_story_stops', {
+      n: num(nval(big.r.step_devices)), pct: pct(nval(big.r.step_devices), started), step: t(PFN_STEPS[big.i][1]),
+      screen: escapeHtml(val(big.r.last_screen)), un: pct(nval(big.r.step_uninstalled), nval(big.r.step_android)),
+    }),
+    verified ? tf('pfn_story_stops_verified', { n: num(nval(verified.r.step_devices)), active: num(nval(verified.r.step_active_7d)) }) : '',
+  ]);
+}
+
+function renderPfnSplit() {
+  if (!PFN_TAB.cache.steps) return;
+  const dim = pfnView.dim;
+  const rows = pfnRows(dim);
+  genTable('#pfnSplitTable', rows.map((r) => ({
+    ...r, value: pfnLabel(dim, val(r.value)),
+    account_pct: pfnRate(r, 'account'), verified_pct: pfnRate(r, 'verified'), paid_pct: pfnRate(r, 'paid'),
+    paid_7d_pct: nval(r.started_7d_ago) ? pctOf(nval(r.paid_7d), nval(r.started_7d_ago)) : null,
+  })), [
+    { key: 'value', label: t(`pfn_dim_${dim}`) },
+    ...['started', 'account', 'verified', 'paid'].map((k) => ({ key: k, label: t(`pfn_step_${k}`), type: 'num', sum: true })),
+    { key: 'account_pct', label: t('pfn_col_account_pct'), type: 'pct' },
+    { key: 'verified_pct', label: t('pfn_col_verified_pct'), type: 'pct' },
+    { key: 'paid_pct', label: t('pfn_col_paid_pct'), type: 'pct' },
+    { key: 'paid_7d_pct', label: t('pfn_col_paid_7d'), type: 'pct' },
+    { key: 'median_days_to_paid', label: t('pfn_col_days_to_paid') },
+    { key: 'median_first_paid', label: t('pfn_col_first_paid'), type: 'idr' },
+  ], t('pfn_empty'));
+  const solid = rows.filter((r) => nval(r.started) >= 20 && !['unknown', 'no_account'].includes(val(r.value)))
+    .sort((a, b) => pfnRate(b, 'paid') - pfnRate(a, 'paid'));
+  if (solid.length < 2) { story('#pfnSplitStory', []); return; }
+  const best = solid[0], worst = solid[solid.length - 1];
+  story('#pfnSplitStory', [tf('pfn_story_split', {
+    dim: t(`pfn_dim_${dim}`).toLowerCase(),
+    best: pfnLabel(dim, val(best.value)), bestPct: pct(nval(best.paid), nval(best.started)), bestN: num(nval(best.started)),
+    worst: pfnLabel(dim, val(worst.value)), worstPct: pct(nval(worst.paid), nval(worst.started)), worstN: num(nval(worst.started)),
+  })]);
+}
+
+// Rates only on the chart (one % axis); weekly volume is in the table.
+// Indigo, chart amber and chart green pass the colour-blind checks in both
+// themes. A 7-day rate shows only once every phone in the week is 7 days old.
+function renderPfnWeeks() {
+  if (!PFN_TAB.cache.steps) return;
+  const r7 = (r, k) => (nval(r.started_7d_ago) && nval(r.started_7d_ago) === nval(r.started) ? pctOf(nval(r[k]), nval(r.started)) : null);
+  const weeks = pfnRows('week').sort((a, b) => String(val(a.value)).localeCompare(String(val(b.value)))).map((r) => ({
+    week: val(r.value), started: nval(r.started), account_pct: pfnRate(r, 'account'), verified_pct: pfnRate(r, 'verified'),
+    verified_7d_pct: r7(r, 'verified_7d'), paid_pct: pfnRate(r, 'paid'), paid_7d_pct: r7(r, 'paid_7d'),
+  }));
+  const line = (key, label, color) => ({
+    label: t(label), data: weeks.map((w) => w[key]), borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 4, tension: .3,
+  });
+  paint('pfnWeeksChart', {
+    type: 'line',
+    data: {
+      labels: weeks.map((w) => w.week),
+      datasets: [line('account_pct', 'pfn_chart_account', C.indigo), line('verified_7d_pct', 'pfn_chart_verified_7d', C.chartGreen), line('paid_7d_pct', 'pfn_chart_paid_7d', C.chartAmber)],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { y: { beginAtZero: true, max: 100, grid: { color: C.grid }, ticks: { callback: (v) => `${v}%` } }, x: { grid: { display: false } } },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw == null ? 'n/a' : `${c.raw.toFixed(1)}%`}` } },
+      },
+    },
+  });
+  genTable('#pfnWeeksTable', weeks, [
+    { key: 'week', label: t('pfn_col_week'), type: 'date' },
+    { key: 'started', label: t('pfn_step_started'), type: 'num', sum: true },
+    { key: 'account_pct', label: t('pfn_col_account_pct'), type: 'pct' },
+    { key: 'verified_pct', label: t('pfn_col_verified_pct'), type: 'pct' },
+    { key: 'verified_7d_pct', label: t('pfn_col_verified_7d'), type: 'pct' },
+    { key: 'paid_pct', label: t('pfn_col_paid_pct'), type: 'pct' },
+    { key: 'paid_7d_pct', label: t('pfn_col_paid_7d'), type: 'pct' },
+  ], t('pfn_empty'));
+  const all = pfnRow('all', 'all');
+  const last = [...weeks].reverse().find((w) => w.paid_7d_pct != null);
+  if (!all || !last || !nval(all.started_7d_ago)) { story('#pfnWeeksStory', []); return; }
+  const fmt = (v) => `${v.toFixed(1)}%`;
+  story('#pfnWeeksStory', [tf('pfn_story_weeks', {
+    week: last.week, verified: fmt(last.verified_7d_pct), paid: fmt(last.paid_7d_pct),
+    avgVerified: pct(nval(all.verified_7d), nval(all.started_7d_ago)), avgPaid: pct(nval(all.paid_7d), nval(all.started_7d_ago)),
+  })]);
+}
+
+function renderPfnTiming() {
+  const rows = PFN_TAB.cache.timing;
+  if (!rows) return;
+  const share = (r, k) => pctOf(nval(r[k]), nval(r.reached));
+  genTable('#pfnTimingTable', rows.map((r) => ({
+    step: t(`pfn_step_${val(r.step)}`), reached: nval(r.reached), median: pfnDur(val(r.median_hours)), p75: pfnDur(val(r.p75_hours)),
+    h1: share(r, 'within_1h'), d1: share(r, 'within_1d'), d7: share(r, 'within_7d'), d30: share(r, 'within_30d'),
+  })), [
+    { key: 'step', label: t('an_col_step') }, { key: 'reached', label: t('pfn_col_reached'), type: 'num' },
+    { key: 'median', label: t('pfn_col_median') }, { key: 'p75', label: t('pfn_col_p75') },
+    { key: 'h1', label: t('pfn_col_within_1h'), type: 'pct' }, { key: 'd1', label: t('pfn_col_within_1d'), type: 'pct' },
+    { key: 'd7', label: t('pfn_col_within_7d'), type: 'pct' }, { key: 'd30', label: t('pfn_col_within_30d'), type: 'pct' },
+  ], t('pfn_empty'));
+  const step = (k) => rows.find((r) => val(r.step) === k);
+  const account = step('account'), verified = step('verified'), paid = step('paid');
+  if (!account || !verified || !paid || !nval(paid.reached)) { story('#pfnTimingStory', []); return; }
+  story('#pfnTimingStory', [tf('pfn_story_timing', {
+    account: pfnDur(val(account.median_hours)), verified: pfnDur(val(verified.median_hours)), paid: pfnDur(val(paid.median_hours)), paid7: pct(nval(paid.within_7d), nval(paid.reached)),
+  })]);
+}
+
+function renderPfnInstalls() {
+  const rows = PFN_TAB.cache.installs;
+  if (!rows) return;
+  genTable('#pfnInstallsTable', rows.map((r) => ({
+    ...r, value: val(r.dimension) === 'all' ? `<strong>${t('sa_split_all')}</strong>` : pfnLabel(val(r.dimension), val(r.value)),
+    new_account_pct: nval(r.new_device) ? pctOf(nval(r.new_account), nval(r.new_device)) : null,
+    uninstalled_pct: nval(r.android) ? pctOf(nval(r.uninstalled), nval(r.android)) : null,
+  })), [
+    { key: 'value', label: t('pfn_col_group') },
+    { key: 'installs', label: t('pfn_col_installs'), type: 'num' },
+    { key: 'existing_account', label: t('pfn_col_existing'), type: 'num' },
+    { key: 'new_device', label: t('pfn_col_new_device'), type: 'num' },
+    { key: 'guest', label: t('pfn_col_guest'), type: 'num' },
+    { key: 'viewed_fund', label: t('pfn_col_viewed_fund'), type: 'num' },
+    { key: 'started_signup', label: t('pfn_col_started'), type: 'num' },
+    { key: 'new_account', label: t('pfn_col_new_account'), type: 'num' },
+    { key: 'new_account_pct', label: t('pfn_col_new_account_pct'), type: 'pct' },
+    { key: 'uninstalled_pct', label: t('pfn_col_uninstalled'), type: 'pct' },
+    { key: 'median_min_to_start', label: t('pfn_col_min_to_start') },
+  ], t('pfn_installs_empty'));
+  const all = rows.find((r) => val(r.dimension) === 'all');
+  if (!all) { story('#pfnInstallsStory', []); return; }
+  const n = (k) => nval(all[k]);
+  story('#pfnInstallsStory', [
+    tf('pfn_story_installs', {
+      installs: num(n('installs')), existing: num(n('existing_account')), existingPct: pct(n('existing_account'), n('installs')),
+      fresh: num(n('new_device')), started: num(n('started_signup')), startedPct: pct(n('started_signup'), n('new_device')),
+      newAcc: num(n('new_account')), newPct: pct(n('new_account'), n('new_device')),
+    }),
+    n('android') ? tf('pfn_story_installs_removed', { un: num(n('uninstalled')), android: num(n('android')), pct: pct(n('uninstalled'), n('android')) }) : '',
+  ]);
+}
+
+PFN_TAB.sections = [
+  ['product-funnel/steps', ['#pfnFunnelTable', '#pfnSplitTable', '#pfnWeeksTable'], () => { renderPfnFunnel(); renderPfnSplit(); renderPfnWeeks(); renderPfnStops(); }],
+  ['product-funnel/stops', '#pfnStopsTable', renderPfnStops],
+  ['product-funnel/timing', '#pfnTimingTable', renderPfnTiming],
+  ['product-funnel/installs', '#pfnInstallsTable', renderPfnInstalls],
+];
+const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB];
 function loadSubscription() { return loadAnalysis(SA_TAB); }
 function loadOnboarding() { return loadAnalysis(OB_TAB); }
 function loadRedemption() { return loadAnalysis(RD_TAB); }
 function loadEngagement() { return loadAnalysis(EG_TAB); }
+function loadProductFunnel() { return loadAnalysis(PFN_TAB); }
 
 // Marks a tab's "loaded" gate true right away (so a fast repeat tab-switch
 // doesn't double-fire its fetches) but un-latches it if any of its fetches
@@ -7173,7 +7366,6 @@ function switchTab(name) {
   if (name === 'push' && !pushLoaded) loadPush();
   if (name === 'marketing' && !marketingLoaded) loadMarketing();
   if (name === 'app-health' && !appHealthLoaded) loadAppHealth();
-  if (name === 'product-funnel' && !productFunnelLoaded) loadProductFunnel();
   if (name === 'email-recap' && !emailRecapLoaded) loadEmailRecap();
   if (name === 'user-behavior' && !behaviorLoaded) loadBehavior();
   // Loaded analysis tabs repaint from cache: a language or theme switch made
@@ -7696,6 +7888,8 @@ function wire() {
   wireSeg('#saDropStep', 'step', (v) => { saView.step = Number(v); renderSaDrop(); });
   wireSeg('#saHoursBy', 'by', (v) => { saView.by = v; renderSaHours(); });
   wireSeg('#obSegment', 'segment', (v) => { obView.segment = v; renderObFunnel(); });
+  wireSeg('#pfnSegment', 'segment', (v) => { pfnView.segment = v; renderPfnFunnel(); });
+  wireSeg('#pfnDim', 'dim', (v) => { pfnView.dim = v; renderPfnSplit(); });
   wireSeg('#rdProfileDim', 'dim', (v) => { rdView.dim = v; renderRdProfile(); });
   wireSeg('#egDiscoveryKind', 'kind', (v) => { egView.kind = v; renderEgDiscovery(); });
   $('#bhSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchBehaviorUsers(); });
@@ -7717,9 +7911,6 @@ function wire() {
   $('#ahCrashXlsx').addEventListener('click', () => download({ source: 'app_crash_issues', format: 'xlsx', filename: 'app_crash_issues', ...ahRange() }, 'app_crash_issues.xlsx'));
   $('#ahPerfCsv').addEventListener('click', () => download({ source: 'app_perf_traces', format: 'csv', filename: 'app_perf_traces', ...ahRange() }, 'app_perf_traces.csv'));
   $('#ahPerfXlsx').addEventListener('click', () => download({ source: 'app_perf_traces', format: 'xlsx', filename: 'app_perf_traces', ...ahRange() }, 'app_perf_traces.xlsx'));
-  $('#pfnApply').addEventListener('click', loadProductFunnel);
-  $('#pfnCsv').addEventListener('click', () => download({ source: 'product_funnel', format: 'csv', filename: 'product_funnel', ...pfnRange() }, 'product_funnel.csv'));
-  $('#pfnXlsx').addEventListener('click', () => download({ source: 'product_funnel', format: 'xlsx', filename: 'product_funnel', ...pfnRange() }, 'product_funnel.xlsx'));
 
   $('#apply').addEventListener('click', () => { if ($('#overview').classList.contains('active')) loadOverview(); if ($('#explorer').classList.contains('active')) { ex.offset = 0; loadExplore(); } if ($('#aum').classList.contains('active')) loadAumHistory(); if ($('#revenue-trend').classList.contains('active')) loadRevenueTrend(); if ($('#reconciliation').classList.contains('active')) loadReconciliation(); });
   $('#revApply').addEventListener('click', loadRevenue);
@@ -8255,13 +8446,14 @@ async function init() {
   $('#pushFrom').value = r.from; $('#pushTo').value = r.to;
   $('#mktFrom').value = r.from; $('#mktTo').value = r.to;
   $('#ahFrom').value = r.from; $('#ahTo').value = r.to;
-  $('#pfnFrom').value = r.from; $('#pfnTo').value = r.to;
   // Shorter defaults than the 12 months above: the email log is new, and
   // every User behavior and analysis-tab query scans GA4 for the whole range
   // (about 100 MB a month).
   const er90 = daysAgoRange(90); $('#erFrom').value = er90.from; $('#erTo').value = er90.to;
   const bh30 = daysAgoRange(30); $('#bhFrom').value = bh30.from; $('#bhTo').value = bh30.to;
   ANALYSIS_TABS.forEach((tab) => { $(`#${tab.prefix}From`).value = bh30.from; $(`#${tab.prefix}To`).value = bh30.to; });
+  // Product funnel follows sign-ups for weeks, so it opens on 90 days.
+  const pfn90 = daysAgoRange(90); $('#pfnFrom').value = pfn90.from; $('#pfnTo').value = pfn90.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
   $('#remTxFrom').value = r.from; $('#remTxTo').value = r.to;
   // The event window drives a one-row-per-day recap, so it starts bounded.

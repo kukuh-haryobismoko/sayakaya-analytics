@@ -81,7 +81,6 @@ const EXPORT_SOURCE_TAB = {
   marketing_funnel: 'marketing',
   app_crash_issues: 'app-health',
   app_perf_traces: 'app-health',
-  product_funnel: 'product-funnel',
   referral_program_detail: 'referral-program',
   referral_program_alt_detail: 'referral-program-alt',
   referral_program_invited: 'referral-program',
@@ -867,14 +866,6 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Product funnel: GA4 export (own dataset), see queries.js for why
-  // this is a cohort join rather than a same-window count per step --------
-  app.get('/api/product-funnel', requireTab('product-funnel'), handler(async (req, res) => {
-    const { from, to } = req.query;
-    const q = Q.productFunnelByPlatform(from, to);
-    res.json(await runQuery(q.sql, q.params));
-  }));
-
   // ---- User behavior: GA4 app events (user_id) joined to the main database,
   // see queries.js for the matching rules ------------------------------------
   const behaviorRoute = (path, build) => app.get(path, requireTab('user-behavior'), handler(async (req, res) => {
@@ -899,8 +890,8 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   // ---- Analysis tabs: GA4 app events joined to the main database by
-  // user_id, one tab each for buying, onboarding, selling and app features,
-  // see queries.js -----------------------------------------------------------
+  // user_id, one tab each for buying, onboarding, selling, app features and
+  // the sign-up funnel, see queries.js ----------------------------------
   const ANALYSIS_ROUTES = [
     ['subscription-analysis', 'subscription', {
       funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
@@ -913,6 +904,9 @@ function createApp({ serveStatic = true } = {}) {
     }],
     ['engagement-analysis', 'engagement', {
       features: Q.engagementFeatures, search: Q.engagementSearch, discovery: Q.engagementDiscovery, activity: Q.engagementActivity,
+    }],
+    ['product-funnel', 'product-funnel', {
+      steps: Q.productFunnelSteps, timing: Q.productFunnelTiming, stops: Q.productFunnelStops, installs: Q.productFunnelInstalls,
     }],
   ];
   ANALYSIS_ROUTES.forEach(([tab, prefix, builders]) => Object.entries(builders).forEach(([key, build]) => (
@@ -1648,9 +1642,6 @@ function createApp({ serveStatic = true } = {}) {
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'app_perf_traces') {
       const q = Q.appPerfTraces(req.body.from, req.body.to);
-      rows = await runQuery(q.sql, q.params);
-    } else if (source === 'product_funnel') {
-      const q = Q.productFunnelByPlatform(req.body.from, req.body.to);
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'referral_program_detail' || source === 'referral_program_alt_detail') {
       const q = Q.referralProgramDetail(req.body.from, req.body.to, source === 'referral_program_alt_detail' ? 'verified_at' : 'created_at');
