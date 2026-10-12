@@ -620,7 +620,7 @@ const userSearch = (q) => {
   if (/^\d{5,}$/.test(digits)) params.phone = `%${digits.replace(/^(62|0)/, '')}%`;
   return {
     sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.ifua_code AS ifua,
-        up.name, u.email, up.phone_number AS phone
+        up.name, u.email, up.phone_number AS phone, u.referrer_code, u.sales_code
       FROM ${USERS} u
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
       WHERE LOWER(u.sid_code) LIKE @q OR LOWER(up.name) LIKE @q OR LOWER(u.email) LIKE @q

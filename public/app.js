@@ -5908,36 +5908,56 @@ async function mapLimit(items, limit, fn) {
 // BULK EXPORT — shared by the 5 Portfolio tabs (PWC, Fix, TX, SInvest,
 // Explorer). Builds a list of investors — one at a time via that tab's own
 // search results ("+" on a row, see bulkAddCell/wireBulkAddButtons below), or
-// in bulk by referrer_code/sales_code — then exports them together:
+// in bulk by referrer_code/sales_code — shown as a tick list with both codes,
+// everyone ticked by default. A code search matches any code containing the
+// text (alex also finds ALEXANDER), so only ticked investors are summarised
+// or exported:
 // "combined" hits /api/export/batch for one file (CSV rows tagged with
 // SID/name, XLSX one sheet per investor, PDF one page per investor);
 // "separate" just calls the normal single-investor download() once per
 // investor in the list, same as clicking each one's own Export button in turn.
 function setupBulkExport({ prefix: p, source }) {
-  const basket = new Map(); // userId -> { userId, sid, name, email }
+  const basket = new Map(); // userId -> { userId, sid, name, email, referrerCode, salesCode, checked }
+  const picked = () => [...basket.values()].filter((u) => u.checked);
 
-  function render() {
-    const entries = [...basket.values()];
-    $(`#${p}BulkBar`).classList.toggle('hidden', !entries.length);
-    $(`#${p}BulkCount`).textContent = entries.length;
-    $(`#${p}BulkList`).innerHTML = entries.map((u) =>
-      `<button type="button" class="chip" data-id="${u.userId}">${u.sid || u.name} ✕</button>`).join('');
-    $$(`#${p}BulkList .chip`).forEach((c) => c.addEventListener('click', () => { basket.delete(c.dataset.id); render(); }));
+  // Ticking only updates the count, so keyboard focus stays on the box.
+  function syncPicked() {
+    const n = picked().length;
+    $(`#${p}BulkCount`).textContent = `${n} / ${basket.size}`;
+    const all = $(`#${p}BulkList .bulk-all`);
+    if (all) { all.checked = n === basket.size; all.indeterminate = n > 0 && n < basket.size; }
     // The selection changed, so any summary already on screen is stale —
     // hide it rather than leave numbers up that no longer match the basket.
     $(`#${p}BulkSummary`).classList.add('hidden');
   }
 
+  function render() {
+    const entries = [...basket.values()];
+    $(`#${p}BulkBar`).classList.toggle('hidden', !entries.length);
+    const cell = (v) => (v ? escapeHtml(v) : 'n/a');
+    $(`#${p}BulkList`).innerHTML = entries.length ? `<table><thead><tr>
+        <th class="pick"><label><input type="checkbox" class="bulk-all" aria-label="${t('bulk_tick_all')}"></label></th>
+        <th>SID</th><th>${t('bulk_col_name')}</th><th>${t('bulk_field_referrer')}</th><th>${t('bulk_field_sales')}</th>
+      </tr></thead><tbody>${entries.map((u) => `<tr>
+        <td class="pick"><label><input type="checkbox" data-id="${escapeHtml(u.userId)}" aria-label="${escapeHtml(u.name || u.sid)}"${u.checked ? ' checked' : ''}></label></td>
+        <td>${cell(u.sid)}</td><td>${cell(u.name)}</td><td>${cell(u.referrerCode)}</td><td>${cell(u.salesCode)}</td>
+      </tr>`).join('')}</tbody></table>` : '';
+    syncPicked();
+  }
+
   function addOne(u) {
     if (!u || !u.userId || basket.has(u.userId)) return false;
-    basket.set(u.userId, u);
+    basket.set(u.userId, { ...u, checked: true });
     return true;
   }
 
   function addMany(rows, label) {
     let added = 0;
     (rows || []).forEach((r) => {
-      if (addOne({ userId: val(r.user_id), sid: val(r.sid) || '', name: val(r.name) || val(r.sid) || '', email: val(r.email) || '' })) added++;
+      if (addOne({
+        userId: val(r.user_id), sid: val(r.sid) || '', name: val(r.name) || val(r.sid) || '', email: val(r.email) || '',
+        referrerCode: val(r.referrer_code) || '', salesCode: val(r.sales_code) || '',
+      })) added++;
     });
     render();
     const skipped = (rows || []).length - added;
@@ -5954,7 +5974,7 @@ function setupBulkExport({ prefix: p, source }) {
     catch (e) { toast(e.message); }
   }
 
-  const batchFilename = (format) => `${source.replace('_full', '')}_batch_${basket.size}_${new Date().toISOString().slice(0, 10)}.${format}`;
+  const batchFilename = (format) => `${source.replace('_full', '')}_batch_${picked().length}_${new Date().toISOString().slice(0, 10)}.${format}`;
 
   // Both export modes hit /api/export/batch (never /api/export) so both stay
   // portfolio-only — that route never appends fund-performance sheets/pages,
@@ -5974,7 +5994,7 @@ function setupBulkExport({ prefix: p, source }) {
     const filename = batchFilename(format);
     const body = {
       source, format, filename,
-      users: [...basket.values()].map((u) => ({ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) })),
+      users: picked().map((u) => ({ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) })),
       ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}),
     };
     const result = await fetchBatchBlob(body, filename);
@@ -5993,7 +6013,7 @@ function setupBulkExport({ prefix: p, source }) {
     const date = $(`#${p}BulkDate`).value;
     await loadExportLib('zip');
     const zip = new JSZip();
-    const results = await mapLimit([...basket.values()], 5, (u) => {
+    const results = await mapLimit(picked(), 5, (u) => {
       const filename = `${source.replace('_full', '')}_${u.sid || u.userId}${date ? '_' + date : ''}`;
       const body = {
         source, format, filename,
@@ -6012,6 +6032,7 @@ function setupBulkExport({ prefix: p, source }) {
 
   function runExport(format) {
     if (!basket.size) { toast('Add at least one investor first.'); return; }
+    if (!picked().length) { toast(t('bulk_none_ticked')); return; }
     ($(`#${p}BulkMode`).value === 'separate' ? exportSeparate : exportCombined)(format);
   }
 
@@ -6022,8 +6043,8 @@ function setupBulkExport({ prefix: p, source }) {
   // can be reused as-is for the aggregated ones, instead of a second table
   // renderer that would just recompute the same fundValue/gain/pct math.
   async function loadSummary() {
-    const users = [...basket.values()];
-    if (!users.length) return;
+    const users = picked();
+    if (!users.length) { toast(t(basket.size ? 'bulk_none_ticked' : 'bulk_add_first')); return; }
     const date = $(`#${p}BulkDate`).value;
     $(`#${p}BulkSummary`).classList.remove('hidden');
     $(`#${p}BulkSummaryKpis`).innerHTML = '<div class="loading">Loading…</div>';
@@ -6055,6 +6076,16 @@ function setupBulkExport({ prefix: p, source }) {
   $(`#${p}BulkSearchBtn`).addEventListener('click', searchByCode);
   $(`#${p}BulkCode`).addEventListener('keydown', (e) => { if (e.key === 'Enter') searchByCode(); });
   $(`#${p}BulkClear`).addEventListener('click', () => { basket.clear(); render(); });
+  $(`#${p}BulkList`).addEventListener('change', (e) => {
+    const box = e.target;
+    if (box.classList.contains('bulk-all')) {
+      basket.forEach((u) => { u.checked = box.checked; });
+      $$(`#${p}BulkList tbody input`).forEach((c) => { c.checked = box.checked; });
+    } else if (basket.has(box.dataset.id)) {
+      basket.get(box.dataset.id).checked = box.checked;
+    }
+    syncPicked();
+  });
   $(`#${p}BulkSummaryBtn`).addEventListener('click', loadSummary);
   $(`#${p}BulkCsv`).addEventListener('click', () => runExport('csv'));
   $(`#${p}BulkXlsx`).addEventListener('click', () => runExport('xlsx'));
@@ -6068,12 +6099,16 @@ function setupBulkExport({ prefix: p, source }) {
 // full detail view (which fires several extra queries the basket doesn't need).
 function bulkAddCell(r) {
   const name = String(val(r.name) || val(r.sid) || '').replace(/"/g, '&quot;');
-  return `<td><button type="button" class="btn-ghost bulk-add-btn" data-id="${val(r.user_id)}" data-sid="${val(r.sid) || ''}" data-name="${name}" data-email="${val(r.email) || ''}" title="Add to export list">+ Add</button></td>`;
+  const attr = (v) => escapeHtml(val(v) || '');
+  return `<td><button type="button" class="btn-ghost bulk-add-btn" data-id="${val(r.user_id)}" data-sid="${val(r.sid) || ''}" data-name="${name}" data-email="${val(r.email) || ''}" data-ref="${attr(r.referrer_code)}" data-sales="${attr(r.sales_code)}" title="Add to export list">+ Add</button></td>`;
 }
 function wireBulkAddButtons(containerSel, bulk) {
   $$(`${containerSel} .bulk-add-btn`).forEach((btn) => btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    bulk.addOne({ userId: btn.dataset.id, sid: btn.dataset.sid, name: btn.dataset.name, email: btn.dataset.email });
+    bulk.addOne({
+      userId: btn.dataset.id, sid: btn.dataset.sid, name: btn.dataset.name, email: btn.dataset.email,
+      referrerCode: btn.dataset.ref, salesCode: btn.dataset.sales,
+    });
   }));
 }
 

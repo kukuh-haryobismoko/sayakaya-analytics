@@ -359,6 +359,13 @@ main { padding: 24px; max-width: 1280px; margin: 0 auto; width: 100%; }
 .seg button { border: 0; background: var(--surface); padding: 6px 12px; font-family: inherit; font-size: 12px; cursor: pointer; color: var(--muted); }
 .seg button.on { background: var(--indigo); color: #fff; }
 .seg:empty { display: none; }
+/* Bulk export tick list: scrolls on its own so a long code search does not
+   push the export buttons off screen; the label makes the whole cell the hit area. */
+.bulk-pick { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.bulk-pick th.pick, .bulk-pick td.pick { width: 1%; padding: 0; }
+.bulk-pick .pick label { display: block; padding: 8px 10px; cursor: pointer; }
+.bulk-pick .pick input { width: 16px; height: 16px; margin: 0; vertical-align: middle; }
+@media (pointer: coarse) { .bulk-pick .pick label { padding: 14px; } }
 /* Several .seg groups acting as one choice, each group named by a label. */
 .seg-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .seg-label { font-size: 12px; color: var(--muted); margin-left: 6px; }
