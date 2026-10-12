@@ -7,6 +7,17 @@ const TX = '`sayakaya.main.transactions`';
 const PORT = '`sayakaya.main.portfolios`';
 const USERS = '`sayakaya.main.users`';
 const MIFEE_PORT = '`sayakaya.mi_fee_logs.portfolios`';
+const BONUS_PORT = '`sayakaya.main.bonus_portfolios`';
+// Churn counts ACTIVE funds only. Investors: a completed buy of one. Holders:
+// main.portfolios plus bonus_portfolios still on_going in one. An INACTIVE
+// fund (Avrist Liquid Fund, a sign-up promo leftover in 215k accounts) made
+// almost every sign-up an investor and a holder.
+const ACTIVE_FUNDS = "SELECT id FROM `sayakaya.main.funds` WHERE listing_status = 'ACTIVE'";
+const CHURN_BUYERS = `SELECT user_id, MIN(created_at) AS first_tx FROM ${TX}
+      WHERE type = 'buy' AND status = 'completed' AND fund_id IN (${ACTIVE_FUNDS}) GROUP BY user_id`;
+const CHURN_HOLDERS = `SELECT user_id FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0 AND fund_id IN (${ACTIVE_FUNDS})
+      UNION DISTINCT
+      SELECT user_id FROM ${BONUS_PORT} WHERE status = 'on_going' AND fund_id IN (${ACTIVE_FUNDS})`;
 
 const clampHorizon = (h) => Math.min(Math.max(parseInt(h, 10) || 30, 1), 120);
 
@@ -95,19 +106,16 @@ async function churnPredictions(limit = 100) {
 // ---- Churn exploration (no model needed) ----------------------------------
 async function churnOverview() {
   const overall = await runQuery(`
-    WITH buyers AS (SELECT DISTINCT user_id FROM ${TX} WHERE type='buy' AND status='completed'),
-    holders AS (SELECT DISTINCT user_id FROM ${PORT} WHERE deleted_at IS NULL AND unit>0)
+    WITH buyers AS (${CHURN_BUYERS}),
+    holders AS (${CHURN_HOLDERS})
     SELECT
       (SELECT COUNT(*) FROM buyers) AS total_investors,
       (SELECT COUNT(*) FROM holders) AS active_holders,
       (SELECT COUNT(*) FROM buyers b WHERE b.user_id NOT IN (SELECT user_id FROM holders)) AS churned`, {});
   // churn rate by tenure bucket
   const byTenure = await runQuery(`
-    WITH tx AS (
-      SELECT user_id, MIN(IF(status='completed', created_at, NULL)) AS first_tx
-      FROM ${TX} WHERE type='buy' AND status='completed' GROUP BY user_id
-    ),
-    holders AS (SELECT DISTINCT user_id FROM ${PORT} WHERE deleted_at IS NULL AND unit>0)
+    WITH tx AS (${CHURN_BUYERS}),
+    holders AS (${CHURN_HOLDERS})
     SELECT
       CASE
         WHEN DATE_DIFF(CURRENT_DATE(), DATE(first_tx), DAY) < 90 THEN '0-3 mo'

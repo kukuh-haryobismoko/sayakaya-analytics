@@ -1931,9 +1931,21 @@ export const productFunnelInstalls = (from?: string, to?: string): Query => ({
 const GA4_PASSIVE_EVENTS = `'notification_receive', 'notification_dismiss', 'app_remove', 'os_update', 'app_update', 'app_clear_data', 'firebase_campaign'`;
 const ga4Param = (key: string, type = 'string') => `(SELECT value.${type}_value FROM UNNEST(event_params) WHERE key = '${key}')`;
 const ga4Range = (r: { from: string; to: string }) => ({ ...r, fromSuffix: String(r.from).replace(/-/g, ''), toSuffix: String(r.to).replace(/-/g, '') });
-const HOLDERS_SQL = `SELECT DISTINCT user_id FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0
-        UNION DISTINCT
-        SELECT DISTINCT user_id FROM ${BONUS_PORT} WHERE status = 'on_going'`;
+// Holdings in every Product tab: today's live holdings, main.portfolios
+// plus main.bonus_portfolios still on_going (the daily portfolio_fix and
+// portfolio_with_code snapshots are captured from these two; Oct 2026 they
+// agree on 13,837 holders and Rp 259.7 bn), valued at funds.latest_nav_value,
+// ACTIVE funds only. INACTIVE funds stay in old accounts (Avrist Liquid Fund,
+// a sign-up promo leftover worth a median Rp 23k, in 215k accounts) and made
+// nearly every app user look like a holder.
+const HOLDINGS_NOW_SQL = `SELECT h.user_id, h.fund_id, h.unit * f.latest_nav_value AS amount
+        FROM (
+          SELECT user_id, fund_id, unit FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0
+          UNION ALL
+          SELECT user_id, fund_id, unit FROM ${BONUS_PORT} WHERE status = 'on_going'
+        ) h
+        JOIN ${FUNDS} f ON f.id = h.fund_id AND f.listing_status = 'ACTIVE'`;
+const HOLDERS_SQL = `SELECT DISTINCT user_id FROM (${HOLDINGS_NOW_SQL})`;
 const COMPLETED_BUYS_SQL = `SELECT user_id, fund_id, created_at, final_amount FROM ${TX}
         WHERE type = 'buy' AND status = 'completed' AND DATE(created_at) >= DATE_SUB(CAST(@from AS DATE), INTERVAL 1 DAY)`;
 
@@ -2135,7 +2147,7 @@ export const behaviorProductInterest = (from?: string, to?: string): Query => {
         SELECT fund_id, user_id, COUNT(*) AS views, MIN(ts) AS first_ts
         FROM v WHERE fund_id IS NOT NULL GROUP BY fund_id, user_id
       ),
-      holdings AS (SELECT DISTINCT user_id, fund_id FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0),
+      holdings AS (SELECT DISTINCT user_id, fund_id FROM (${HOLDINGS_NOW_SQL})),
       buys AS (${COMPLETED_BUYS_SQL}),
       scored AS (
         SELECT vw.fund_id, vw.views, h.user_id IS NOT NULL AS holds_now,
@@ -2144,14 +2156,14 @@ export const behaviorProductInterest = (from?: string, to?: string): Query => {
         FROM viewers vw
         LEFT JOIN holdings h ON h.user_id = vw.user_id AND h.fund_id = vw.fund_id
       )
-      SELECT COALESCE(f.name, s.fund_id) AS fund, f.type AS fund_type,
+      SELECT f.name AS fund, f.type AS fund_type,
         SUM(s.views) AS views, COUNT(*) AS viewers,
         COUNTIF(s.buy_amount > 0) AS buyers_7d,
         ROUND(SAFE_DIVIDE(COUNTIF(s.buy_amount > 0), COUNT(*)) * 100, 1) AS view_to_buy_pct,
         SUM(IFNULL(s.buy_amount, 0)) AS buy_amount_7d,
         COUNTIF(s.holds_now) AS viewers_holding_now
       FROM scored s
-      LEFT JOIN ${FUNDS} f ON f.id = s.fund_id
+      JOIN ${FUNDS} f ON f.id = s.fund_id AND f.listing_status = 'ACTIVE'
       GROUP BY fund, fund_type
       ORDER BY viewers DESC`,
     params: ga4Range(r),
@@ -2190,16 +2202,7 @@ export const behaviorIntentNoBuy = (from?: string, to?: string): Query => {
              AND t.created_at BETWEEN TIMESTAMP_SUB(i.first_ts, INTERVAL 10 MINUTE) AND TIMESTAMP_ADD(i.last_ts, INTERVAL 3 DAY)) AS order_statuses
         FROM intent i
       ),
-      aum AS (
-        SELECT h.user_id, SUM(h.unit * f.latest_nav_value) AS aum_now
-        FROM (
-          SELECT user_id, fund_id, unit FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0
-          UNION ALL
-          SELECT user_id, fund_id, unit FROM ${BONUS_PORT} WHERE status = 'on_going'
-        ) h
-        JOIN ${FUNDS} f ON f.id = h.fund_id
-        GROUP BY h.user_id
-      ),
+      aum AS (SELECT user_id, aum AS aum_now FROM (${USER_AUM_SQL})),
       last_buy AS (
         SELECT user_id, MAX(created_at) AS last_buy_at FROM ${TX}
         WHERE type = 'buy' AND status = 'completed' GROUP BY user_id
@@ -2241,11 +2244,6 @@ export const behaviorUserProfile = (userId: string, from?: string, to?: string):
         FROM ${GA4_EVENTS}
         WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id = @userId
       ),
-      holdings AS (
-        SELECT fund_id, unit FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0 AND user_id = @userId
-        UNION ALL
-        SELECT fund_id, unit FROM ${BONUS_PORT} WHERE status = 'on_going' AND user_id = @userId
-      ),
       tx AS (
         SELECT
           COUNTIF(type = 'buy' AND status = 'completed') AS lifetime_buys,
@@ -2257,7 +2255,7 @@ export const behaviorUserProfile = (userId: string, from?: string, to?: string):
       )
       SELECT u.id AS user_id, u.sid_code AS sid, u.email, up.name, u.verification_status,
         DATE(u.created_at) AS registered_on, DATE(u.verified_at) AS verified_on,
-        (SELECT ROUND(COALESCE(SUM(h.unit * f.latest_nav_value), 0)) FROM holdings h JOIN ${FUNDS} f ON f.id = h.fund_id) AS aum_now,
+        (SELECT ROUND(COALESCE(SUM(amount), 0)) FROM (${HOLDINGS_NOW_SQL}) WHERE user_id = @userId) AS aum_now,
         app.*, tx.*
       FROM ${USERS} u
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
@@ -2659,15 +2657,8 @@ const DONE_STATUSES = `'completed', 'completed_payment', 'verified', 'verified_b
 // Unpaid or in-flight sells keep final_amount at 0; amount is what was asked for.
 const SELL_DONE_SQL = `SELECT id, user_id, fund_id, created_at, is_all_unit, COALESCE(NULLIF(final_amount, 0), amount) AS amount FROM ${TX}
         WHERE type = 'sell' AND status IN (${DONE_STATUSES})`;
-// Live holdings value per person, same rule as the follow-up list above.
-const USER_AUM_SQL = `SELECT h.user_id, CAST(SUM(h.unit * f.latest_nav_value) AS FLOAT64) AS aum
-        FROM (
-          SELECT user_id, fund_id, unit FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0
-          UNION ALL
-          SELECT user_id, fund_id, unit FROM ${BONUS_PORT} WHERE status = 'on_going'
-        ) h
-        JOIN ${FUNDS} f ON f.id = h.fund_id
-        GROUP BY h.user_id`;
+// Holdings value per person today, see HOLDINGS_NOW_SQL.
+const USER_AUM_SQL = `SELECT user_id, CAST(SUM(amount) AS FLOAT64) AS aum FROM (${HOLDINGS_NOW_SQL}) GROUP BY user_id`;
 const ga4Screens = (names: string) => `(event_name = 'screen_view' AND ${GA4_SCREEN} IN (${names}))`;
 
 // How well the two sides line up for the period: logged-in app users found
@@ -3192,10 +3183,9 @@ export const engagementDiscovery = (from?: string, to?: string): Query => {
   };
 };
 
-// Investors holding fund units they bought, today (main.portfolios; people
-// holding only promo bonus units, mostly a few thousand rupiah from sign-up
-// campaigns, and institutions are left out; bonus units still count toward
-// AUM) by portfolio size and by how many days they opened the app in the period
+// Investors holding units of an ACTIVE fund in the latest portfolio_fix
+// snapshot (institutions left out) by portfolio size and by how many days
+// they opened the app in the period
 // (logged in; pushes arriving and app updates do not count). Shows how much
 // money sits with people who never opened the app, and whether active
 // investors buy and sell more in the period.
@@ -3205,7 +3195,6 @@ export const engagementActivity = (from?: string, to?: string): Query => {
     sql: `WITH holders AS (
         SELECT a.user_id, a.aum FROM (${USER_AUM_SQL}) a JOIN ${USERS} u ON u.id = a.user_id
         WHERE a.aum > 0 AND NOT IFNULL(u.is_institution, FALSE)
-          AND a.user_id IN (SELECT user_id FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0)
       ),
       act AS (
         SELECT user_id, COUNT(DISTINCT event_date) AS days FROM ${GA4_EVENTS}
@@ -3357,11 +3346,15 @@ export const platformAumAsOf = (date?: string, fundIds: string[] = [], userFilte
 // read a portfolio_with_code snapshot instead; the two can disagree slightly.
 // fundIds narrows "active" to selected funds (used by the Overview map/city
 // tables); callers that don't take a fund filter just pass an empty array.
+// ACTIVE funds only: INACTIVE ones stay in old accounts (Avrist Liquid Fund,
+// a sign-up promo leftover in 215k accounts) and inflated every investor count.
 function activeCte(params: Record<string, unknown>, ids: string[]): string {
   return `active AS (
-      SELECT p.user_id, p.unit, p.fund_id FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0${fundIdsClause(params, 'p.fund_id', ids)}
+      SELECT p.user_id, p.unit, p.fund_id FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0
+        AND p.fund_id IN (SELECT id FROM ${FUNDS} WHERE listing_status = 'ACTIVE')${fundIdsClause(params, 'p.fund_id', ids)}
       UNION ALL
-      SELECT bp.user_id, bp.unit, bp.fund_id FROM \`sayakaya.main.bonus_portfolios\` bp WHERE bp.status = 'on_going'${fundIdsClause(params, 'bp.fund_id', ids)}
+      SELECT bp.user_id, bp.unit, bp.fund_id FROM \`sayakaya.main.bonus_portfolios\` bp WHERE bp.status = 'on_going'
+        AND bp.fund_id IN (SELECT id FROM ${FUNDS} WHERE listing_status = 'ACTIVE')${fundIdsClause(params, 'bp.fund_id', ids)}
     )`;
 }
 
@@ -3426,14 +3419,13 @@ const CITY_LOOKUP_CTE = `city_lookup AS (
 // One row per province — investor count + live AUM, for the Overview choropleth.
 // province_name here must exactly match the `province_name` property baked into
 // public/data/indonesia-provinces.json (see that file's generation notes).
-// fundIds, when given, also switches investor_count/total_aum from "every
-// investor" to "investors holding one of the selected funds" (LEFT -> INNER
-// join on aum_by_user, which is itself already scoped to those funds).
+// An investor is someone holding an active fund today (aum_by_user); with
+// fundIds, one of the selected funds. Counting every profile with a KYC
+// address instead showed 279k "investors", mostly sign-ups holding nothing.
 export const usersByProvince = (fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
   const ids = normalizeFundIds(fundIds);
   const params: Record<string, unknown> = {};
   const active = activeCte(params, ids);
-  const aumJoin = ids.length ? 'JOIN' : 'LEFT JOIN';
   return {
     sql: `WITH ${CITY_LOOKUP_CTE},
     ${active},
@@ -3444,10 +3436,10 @@ export const usersByProvince = (fundIds: string[] = [], userFilter: UserFilterRu
     )
     SELECT cl.province_name,
       COUNT(DISTINCT up.user_id) AS investor_count,
-      ROUND(SUM(IFNULL(abu.aum, 0))) AS total_aum
+      ROUND(SUM(abu.aum)) AS total_aum
     FROM ${USER_PROFILES} up
     JOIN city_lookup cl ON cl.city_code = up.id_address_city
-    ${aumJoin} aum_by_user abu ON abu.user_id = up.user_id${userFilterClause(params, 'up.user_id', userFilter, 'id', '\n    WHERE ')}
+    JOIN aum_by_user abu ON abu.user_id = up.user_id${userFilterClause(params, 'up.user_id', userFilter, 'id', '\n    WHERE ')}
     GROUP BY cl.province_name
     ORDER BY investor_count DESC`,
     params,
@@ -3463,7 +3455,6 @@ function topCitiesQuery(limit: number | string, orderBy: 'investor_count' | 'tot
   const ids = normalizeFundIds(fundIds);
   const params: Record<string, unknown> = { limit: parseInt(String(limit), 10) };
   const active = activeCte(params, ids);
-  const aumJoin = ids.length ? 'JOIN' : 'LEFT JOIN';
   return {
     sql: `WITH ${CITY_LOOKUP_CTE},
       ${active},
@@ -3474,10 +3465,10 @@ function topCitiesQuery(limit: number | string, orderBy: 'investor_count' | 'tot
       )
       SELECT cl.city_name, cl.province_name,
         COUNT(DISTINCT up.user_id) AS investor_count,
-        ROUND(SUM(IFNULL(abu.aum, 0))) AS total_aum
+        ROUND(SUM(abu.aum)) AS total_aum
       FROM ${USER_PROFILES} up
       JOIN city_lookup cl ON cl.city_code = up.id_address_city
-      ${aumJoin} aum_by_user abu ON abu.user_id = up.user_id${userFilterClause(params, 'up.user_id', userFilter, 'id', '\n      WHERE ')}
+      JOIN aum_by_user abu ON abu.user_id = up.user_id${userFilterClause(params, 'up.user_id', userFilter, 'id', '\n      WHERE ')}
       GROUP BY cl.city_name, cl.province_name
       ORDER BY ${orderBy} DESC
       LIMIT @limit`,

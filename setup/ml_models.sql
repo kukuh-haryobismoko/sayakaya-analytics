@@ -64,11 +64,15 @@ WITH tx AS (
     MAX(IF(status = 'completed', created_at, NULL)) AS last_tx,
     MIN(IF(status = 'completed', created_at, NULL)) AS first_tx
   FROM `sayakaya.main.transactions`
+  WHERE fund_id IN (SELECT id FROM `sayakaya.main.funds` WHERE listing_status = 'ACTIVE')
   GROUP BY user_id
 ),
 holders AS (
-  SELECT DISTINCT user_id FROM `sayakaya.main.portfolios`
-  WHERE deleted_at IS NULL AND unit > 0
+  SELECT user_id FROM `sayakaya.main.portfolios`
+  WHERE deleted_at IS NULL AND unit > 0 AND fund_id IN (SELECT id FROM `sayakaya.main.funds` WHERE listing_status = 'ACTIVE')
+  UNION DISTINCT
+  SELECT user_id FROM `sayakaya.main.bonus_portfolios`
+  WHERE status = 'on_going' AND fund_id IN (SELECT id FROM `sayakaya.main.funds` WHERE listing_status = 'ACTIVE')
 )
 SELECT
   t.user_id,
