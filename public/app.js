@@ -2680,7 +2680,7 @@ EG_TAB.sections = [
 // database once they log in. The funnel, the groups and the weeks all come
 // from one query (steps); see queries.js productFunnel*.
 const PFN_TAB = { id: 'product-funnel', prefix: 'pfn', cache: {}, loaded: false, coverage: false, charts: ['pfnFunnelChart', 'pfnWeeksChart'] };
-const pfnView = { segment: 'all:all', dim: 'method' };
+const pfnView = { segment: 'all:all', dim: 'method', weeks: '7d' };
 const PFN_STEPS = ['started', 'otp', 'account', 'kyc_started', 'kyc_sent', 'verified', 'ordered', 'paid'].map((k) => [k, `pfn_step_${k}`, `pfn_src_${k}`]);
 const pfnRows = (dim) => (PFN_TAB.cache.steps || []).filter((r) => val(r.dimension) === dim);
 const pfnRow = (dim, v) => pfnRows(dim).find((r) => val(r.value) === v);
@@ -2716,9 +2716,12 @@ function renderPfnKpis() {
 function renderPfnFunnel() {
   if (!PFN_TAB.cache.steps) return;
   renderPfnKpis();
-  const segs = ['all', 'platform', 'method'].flatMap((d) => pfnRows(d).map((r) => `${d}:${val(r.value)}`));
-  if (!segs.includes(pfnView.segment)) pfnView.segment = 'all:all';
-  segButtons('#pfnSegment', 'segment', segs, pfnView.segment, (k) => pfnLabel(...k.split(':')));
+  // Platform and sign-up method are two splits of the same phones, so each
+  // gets its own labelled group; the three groups act as one choice.
+  const keys = (d) => pfnRows(d).map((r) => `${d}:${val(r.value)}`);
+  if (!['all', 'platform', 'method'].flatMap(keys).includes(pfnView.segment)) pfnView.segment = 'all:all';
+  [['#pfnSegAll', 'all'], ['#pfnSegPlatform', 'platform'], ['#pfnSegMethod', 'method']]
+    .forEach(([sel, d]) => segButtons(sel, 'segment', keys(d), pfnView.segment, (k) => pfnLabel(...k.split(':'))));
   if (!pfnRow('all', 'all')) {
     $('#pfnFunnelTable').innerHTML = `<div class="empty">${t('pfn_empty')}</div>`;
     story('#pfnFunnelStory', []);
@@ -2810,7 +2813,8 @@ function renderPfnSplit() {
 
 // Rates only on the chart (one % axis); weekly volume is in the table.
 // Indigo, chart amber and chart green pass the colour-blind checks in both
-// themes. A 7-day rate shows only once every phone in the week is 7 days old.
+// themes. A 7-day rate shows only once every phone in the week is 7 days old;
+// "Any time" switches the chart to everyone who got there so far.
 function renderPfnWeeks() {
   if (!PFN_TAB.cache.steps) return;
   const r7 = (r, k) => (nval(r.started_7d_ago) && nval(r.started_7d_ago) === nval(r.started) ? pctOf(nval(r[k]), nval(r.started)) : null);
@@ -2821,11 +2825,16 @@ function renderPfnWeeks() {
   const line = (key, label, color) => ({
     label: t(label), data: weeks.map((w) => w[key]), borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 4, tension: .3,
   });
+  const any = pfnView.weeks === 'all';
   paint('pfnWeeksChart', {
     type: 'line',
     data: {
       labels: weeks.map((w) => w.week),
-      datasets: [line('account_pct', 'pfn_chart_account', C.indigo), line('verified_7d_pct', 'pfn_chart_verified_7d', C.chartGreen), line('paid_7d_pct', 'pfn_chart_paid_7d', C.chartAmber)],
+      datasets: [
+        line('account_pct', 'pfn_chart_account', C.indigo),
+        any ? line('verified_pct', 'pfn_col_verified_pct', C.chartGreen) : line('verified_7d_pct', 'pfn_chart_verified_7d', C.chartGreen),
+        any ? line('paid_pct', 'pfn_col_paid_pct', C.chartAmber) : line('paid_7d_pct', 'pfn_chart_paid_7d', C.chartAmber),
+      ],
     },
     options: {
       maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
@@ -7890,6 +7899,7 @@ function wire() {
   wireSeg('#obSegment', 'segment', (v) => { obView.segment = v; renderObFunnel(); });
   wireSeg('#pfnSegment', 'segment', (v) => { pfnView.segment = v; renderPfnFunnel(); });
   wireSeg('#pfnDim', 'dim', (v) => { pfnView.dim = v; renderPfnSplit(); });
+  wireSeg('#pfnWeeksMode', 'mode', (v) => { pfnView.weeks = v; renderPfnWeeks(); });
   wireSeg('#rdProfileDim', 'dim', (v) => { rdView.dim = v; renderRdProfile(); });
   wireSeg('#egDiscoveryKind', 'kind', (v) => { egView.kind = v; renderEgDiscovery(); });
   $('#bhSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchBehaviorUsers(); });

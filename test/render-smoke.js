@@ -541,7 +541,7 @@ sandbox.api = async (path) => {
     [(get('#pfnKpis')._html.match(/kpi-value/g) || []).length === 4 && get('#pfnKpis')._html.includes('197'), '#pfnKpis has 4 cards and the existing-account count'],
     [get('#pfnFunnelStory')._html.includes('317') && get('#pfnFunnelStory')._html.includes('41 (12.9%)') && get('#pfnFunnelStory')._html.includes('197'), '#pfnFunnelStory written from the steps rows'],
     [get('#pfnFunnelTable')._html.includes('<code>otp_on_submit</code>') && get('#pfnFunnelTable')._html.includes('SignupOauthScreen'), '#pfnFunnelTable names the event or screen behind each step'],
-    [get('#pfnSegment')._html.includes('data-segment="method:google"'), '#pfnSegment has a button per platform and method'],
+    [get('#pfnSegMethod')._html.includes('data-segment="method:google"') && get('#pfnSegPlatform')._html.includes('data-segment="platform:IOS"'), '#pfnSegment has a button per platform and method'],
     [get('#pfnStopsTable')._html.includes('86.7%') && get('#pfnStopsTable')._html.includes('>10<'), '#pfnStopsTable folds screens into one row per step'],
     [get('#pfnStopsStory')._html.includes('66 phones') && get('#pfnStopsStory')._html.includes('60 phones'), '#pfnStopsStory names the largest stop and the verified non-buyers'],
     [get('#pfnSplitStory')._html.includes('Register form') && get('#pfnSplitStory')._html.includes('5.0%'), '#pfnSplitStory compares sign-up methods'],

@@ -2817,9 +2817,15 @@
       <div class="panel">
         <div class="panel-head wrap">
           <h2 data-i18n="pfn_funnel_title">From sign-up to first paid buy</h2>
-          <div class="seg" id="pfnSegment" role="group" data-i18n-aria-label="pfn_segment_label" aria-label="Show"></div>
+          <div class="seg-groups" id="pfnSegment" role="group" data-i18n-aria-label="pfn_segment_label" aria-label="Show">
+            <div class="seg" id="pfnSegAll"></div>
+            <span class="seg-label" data-i18n="pfn_dim_platform">Platform</span>
+            <div class="seg" id="pfnSegPlatform"></div>
+            <span class="seg-label" data-i18n="pfn_dim_method">Sign-up method</span>
+            <div class="seg" id="pfnSegMethod"></div>
+          </div>
         </div>
-        <span class="hint" data-i18n="pfn_funnel_hint"></span>
+        <span class="hint" data-i18n-html="pfn_funnel_hint"></span>
         <p class="lineage" data-i18n-html="pfn_lineage_funnel"></p>
         <div id="pfnFunnelStory" class="story" aria-live="polite"></div>
         <div class="chart-wrap" style="margin-top:14px"><canvas id="pfnFunnelChart" aria-label="Phones reaching each sign-up step"></canvas></div>
@@ -2853,7 +2859,13 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="pfn_weeks_title">Week by week</h2></div>
+        <div class="panel-head wrap">
+          <h2 data-i18n="pfn_weeks_title">Week by week</h2>
+          <div class="seg" id="pfnWeeksMode" role="group" data-i18n-aria-label="pfn_weeks_mode_label" aria-label="Count">
+            <button class="on" data-mode="7d" aria-pressed="true" data-i18n="pfn_weeks_mode_7d">Within 7 days</button>
+            <button data-mode="all" aria-pressed="false" data-i18n="pfn_weeks_mode_all">Any time</button>
+          </div>
+        </div>
         <span class="hint" data-i18n="pfn_weeks_hint"></span>
         <div id="pfnWeeksStory" class="story" aria-live="polite"></div>
         <div class="chart-wrap" style="margin-top:14px"><canvas id="pfnWeeksChart" aria-label="Sign-up starts per week and the share reaching an account, KYC and a paid buy within 7 days"></canvas></div>

@@ -1062,7 +1062,7 @@ const TAB_DETAILS = {
         ['Paid within 7 days', 'Hanya ponsel yang mulai paling sedikit 7 hari lalu, agar kelompok baru tidak terlihat lebih buruk.'],
       ],
       },
-      'Week by week': { note: 'Per minggu mulai mendaftar; grafik hanya menampilkan persentase, jumlah ada di tabel.' },
+      'Week by week': { note: 'Per minggu mulai mendaftar; grafik bisa menampilkan angka dalam 7 hari pertama (adil untuk minggu terbaru) atau kapan pun (tanpa batas). Grafik hanya persentase, jumlah ada di tabel.' },
       'How long each step takes': { note: 'Waktu dari mulai mendaftar sampai tiap langkah, dari ponsel yang mencapainya.', columns: [
         ['75% within', 'Tiga dari empat ponsel sampai dalam waktu ini.'],
       ],
