@@ -963,32 +963,8 @@ on('GET', '/api/app-health/performance', requireTab('app-health', async (_req, _
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- User behavior: GA4 app events (user_id) joined to the main database,
-// see queries.ts for the matching rules ------------------------------------
-on('GET', '/api/behavior/segments', requireTab('user-behavior', async (_req, _params, url) => {
-  const q = Q.behaviorSegments(qp(url, 'from'), qp(url, 'to'));
-  return json(await runQuery(q.sql, q.params));
-}));
-on('GET', '/api/behavior/daily', requireTab('user-behavior', async (_req, _params, url) => {
-  const q = Q.behaviorDaily(qp(url, 'from'), qp(url, 'to'));
-  return json(await runQuery(q.sql, q.params));
-}));
-on('GET', '/api/behavior/features', requireTab('user-behavior', async (_req, _params, url) => {
-  const q = Q.behaviorFeatureLift(qp(url, 'from'), qp(url, 'to'));
-  return json(await runQuery(q.sql, q.params));
-}));
-on('GET', '/api/behavior/push', requireTab('user-behavior', async (_req, _params, url) => {
-  const q = Q.behaviorPushImpact(qp(url, 'from'), qp(url, 'to'));
-  return json(await runQuery(q.sql, q.params));
-}));
-on('GET', '/api/behavior/products', requireTab('user-behavior', async (_req, _params, url) => {
-  const q = Q.behaviorProductInterest(qp(url, 'from'), qp(url, 'to'));
-  return json(await runQuery(q.sql, q.params));
-}));
-on('GET', '/api/behavior/intent', requireTab('user-behavior', async (_req, _params, url) => {
-  const q = Q.behaviorIntentNoBuy(qp(url, 'from'), qp(url, 'to'));
-  return json(await runQuery(q.sql, q.params));
-}));
+// ---- Investor journey (tab id user-behavior): one investor's GA4 events
+// (user_id) and transactions on one timeline, see queries.ts -------------
 on('GET', '/api/behavior/user', requireTab('user-behavior', async (_req, _params, url, user) => {
   const userId = qp(url, 'userId');
   if (!userId) return json({ error: 'userId is required.' }, 400);
@@ -1006,7 +982,7 @@ on('GET', '/api/behavior/user', requireTab('user-behavior', async (_req, _params
 const ANALYSIS_ROUTES: [string, string, Record<string, (from?: string, to?: string) => Q.Query>][] = [
   ['subscription-analysis', 'subscription', {
     funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
-    payment: Q.subscriptionPayment, drivers: Q.subscriptionDrivers, timing: Q.subscriptionTiming,
+    payment: Q.subscriptionPayment, intent: Q.behaviorIntentNoBuy, drivers: Q.subscriptionDrivers,
     hours: Q.subscriptionHours, chips: Q.subscriptionChips, profile: Q.subscriptionProfile,
   }],
   ['onboarding-analysis', 'onboarding', { funnel: Q.onboardingFunnel, outcome: Q.onboardingOutcome }],
@@ -1014,6 +990,7 @@ const ANALYSIS_ROUTES: [string, string, Record<string, (from?: string, to?: stri
     funnel: Q.redemptionFunnel, switching: Q.switchingFunnel, profile: Q.redemptionProfile, signals: Q.redemptionSignals,
   }],
   ['engagement-analysis', 'engagement', {
+    daily: Q.behaviorDaily, segments: Q.behaviorSegments, push: Q.behaviorPushImpact, products: Q.behaviorProductInterest,
     features: Q.engagementFeatures, search: Q.engagementSearch, discovery: Q.engagementDiscovery, activity: Q.engagementActivity,
   }],
   ['product-funnel', 'product-funnel', {

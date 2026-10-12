@@ -2567,60 +2567,6 @@ const ga4OutcomeDrivers = (from, to, { outcomeSql, flowNames, population = 'TRUE
 };
 const subscriptionDrivers = (from, to) => ga4OutcomeDrivers(from, to, { outcomeSql: SUB_PAID_SQL, flowNames: SUB_FLOW_NAMES });
 
-// People who signed up in the period: calendar days from sign-up to KYC
-// verified and to their first paid buy (no end date, so recent sign-ups have
-// had less time), plus the logged-in app sessions they had
-// before that first buy. One row per bucket; the medians repeat on every row.
-const SUB_DAY_BUCKET = (col) => `CASE WHEN ${col} IS NULL THEN '6_not_yet' WHEN ${col} <= 0 THEN '1_same_day'
-          WHEN ${col} <= 3 THEN '2_1_3' WHEN ${col} <= 7 THEN '3_4_7' WHEN ${col} <= 30 THEN '4_8_30' ELSE '5_over_30' END`;
-const subscriptionTiming = (from, to) => {
-  const r = range(from, to);
-  return {
-    sql: `WITH cohort AS (
-        SELECT id AS user_id, created_at, verified_at FROM ${USERS}
-        WHERE DATE(created_at) BETWEEN @from AND @to
-      ),
-      first_buy AS (
-        SELECT p.user_id, MIN(p.created_at) AS buy_ts
-        FROM (${SUB_PAID_SQL}) p JOIN cohort c USING (user_id)
-        GROUP BY p.user_id
-      ),
-      sessions AS (
-        SELECT e.user_id, COUNT(DISTINCT ${GA4_SESSION}) AS sessions_before
-        FROM ${GA4_EVENTS} e
-        JOIN first_buy f ON f.user_id = e.user_id AND TIMESTAMP_MICROS(e.event_timestamp) <= f.buy_ts
-        WHERE _TABLE_SUFFIX >= @fromSuffix AND e.user_id IS NOT NULL
-        GROUP BY e.user_id
-      ),
-      d AS (
-        SELECT
-          DATE_DIFF(DATE(c.verified_at), DATE(c.created_at), DAY) AS days_to_kyc,
-          DATE_DIFF(DATE(f.buy_ts), DATE(c.created_at), DAY) AS days_to_buy,
-          DATE_DIFF(DATE(f.buy_ts), DATE(c.verified_at), DAY) AS days_kyc_to_buy,
-          s.sessions_before
-        FROM cohort c LEFT JOIN first_buy f USING (user_id) LEFT JOIN sessions s USING (user_id)
-      ),
-      summary AS (
-        SELECT COUNT(*) AS signed_up,
-          APPROX_QUANTILES(days_to_kyc, 2)[OFFSET(1)] AS median_days_to_kyc,
-          APPROX_QUANTILES(days_kyc_to_buy, 2)[OFFSET(1)] AS median_days_kyc_to_buy,
-          APPROX_QUANTILES(days_to_buy, 2)[OFFSET(1)] AS median_days_to_buy,
-          APPROX_QUANTILES(sessions_before, 2)[OFFSET(1)] AS median_sessions_before_buy
-        FROM d
-      ),
-      b AS (
-        SELECT 'kyc' AS milestone, ${SUB_DAY_BUCKET('days_to_kyc')} AS bucket FROM d
-        UNION ALL
-        SELECT 'buy', ${SUB_DAY_BUCKET('days_to_buy')} FROM d
-      )
-      SELECT b.bucket, COUNTIF(b.milestone = 'kyc') AS verified, COUNTIF(b.milestone = 'buy') AS first_buy, ANY_VALUE(s).*
-      FROM b CROSS JOIN summary s
-      GROUP BY b.bucket
-      ORDER BY b.bucket`,
-    params: ga4Range(r),
-  };
-};
-
 // Logged-in app sessions against buy orders and paid buys, by WIB hour and
 // weekday (1 = Sunday, BigQuery's DAYOFWEEK).
 const subscriptionHours = (from, to) => {
@@ -2804,7 +2750,8 @@ const subscriptionProfile = (from, to) => {
 // SignatureVerificationScreen > VerificationSuccessScreen (submitted).
 // Then the database again: KYC review (users.verification_status, with
 // user_status_logs holding each pending > verified/failed decision since
-// 21 Jul 2026), risk profile (user_profiles.risk_level) and first paid buy.
+// 21 Jul 2026) and risk profile (user_profiles.risk_level). The first paid
+// buy after KYC is Product funnel's.
 // Steps count everyone who reached them, so a later step can only exceed
 // an earlier one when app tracking missed a screen. Columns are addr_step
 // and sign_step, not address and signature: runQuery strips any column
@@ -2835,15 +2782,13 @@ const onboardingFunnel = (from, to) => {
           ${reached(`screen = 'VerificationSuccessScreen' OR event_name = 'kyc_success'`)} AS submitted
         FROM ev GROUP BY user_id
       ),
-      first_buy AS (SELECT p.user_id FROM (${SUB_PAID_SQL}) p JOIN cohort USING (user_id) GROUP BY p.user_id),
       base AS (
         SELECT c.verification_status, IFNULL(a.platform, '(not in app)') AS platform, a.user_id IS NOT NULL AS in_app,
           a.kyc_intro, a.ktp, a.selfie, a.personal, a.occupation, a.addr_step, a.bank, a.sign_step, a.submitted,
-          up.risk_level IS NOT NULL AS risk_profiled, b.user_id IS NOT NULL AS bought
+          up.risk_level IS NOT NULL AS risk_profiled
         FROM cohort c
         LEFT JOIN app a USING (user_id)
         LEFT JOIN ${USER_PROFILES} up ON up.user_id = c.user_id
-        LEFT JOIN first_buy b ON b.user_id = c.user_id
       )
       SELECT IF(GROUPING(platform) = 1, 'all', platform) AS segment,
         COUNT(*) AS signed_up, COUNTIF(in_app) AS in_app,
@@ -2852,8 +2797,7 @@ const onboardingFunnel = (from, to) => {
         COUNTIF(sign_step) AS sign_step, COUNTIF(submitted) AS submitted,
         COUNTIF(verification_status = 'verified') AS verified,
         COUNTIF(verification_status = 'failed') AS failed,
-        COUNTIF(risk_profiled) AS risk_profiled,
-        COUNTIF(bought) AS first_buy
+        COUNTIF(risk_profiled) AS risk_profiled
       FROM base
       GROUP BY GROUPING SETS ((), (platform))
       ORDER BY segment = 'all' DESC, signed_up DESC`,
@@ -5546,7 +5490,7 @@ module.exports = {
   behaviorSegments, behaviorDaily, behaviorFeatureLift, behaviorPushImpact, behaviorProductInterest,
   behaviorIntentNoBuy, behaviorUserProfile, behaviorUserTimeline,
   subscriptionFunnel, subscriptionEntry, subscriptionDropoff, subscriptionPayment, subscriptionDrivers,
-  subscriptionTiming, subscriptionHours, subscriptionChips, subscriptionProfile, analysisCoverage,
+  subscriptionHours, subscriptionChips, subscriptionProfile, analysisCoverage,
   onboardingFunnel, onboardingOutcome, redemptionFunnel, switchingFunnel, redemptionProfile, redemptionSignals,
   engagementFeatures, engagementSearch, engagementDiscovery, engagementActivity,
   goalLatestSnapshotDate, goalUserHoldings, goalUserHoldingsByGoal,

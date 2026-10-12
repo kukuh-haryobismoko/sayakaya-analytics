@@ -253,7 +253,6 @@ const bhSegments = [
   { segment: 'not_verified', app_users: 140, avg_active_days: 2, avg_sessions: 1, avg_screen_views: 9, median_engaged_min: 0.2, buyers: 0, buyer_rate_pct: 0, buy_amount: 0, sellers: 0, sell_amount: 0 },
 ];
 const bhDaily = [{ day: D('2026-09-08'), app_users: 247, holding_users: 208, buyers: 14 }];
-const bhFeatures = [{ event_name: 'top_up_product_click', users: 64, buyers_7d: 56, buy_rate_pct: 87.5, baseline_pct: 13.4, lift: 6.52 }];
 const bhPush = [{ campaign: XSS, first_seen: D('2026-09-08'), last_seen: D('2026-10-06'), received_users: 954, opened_users: 20, open_rate_pct: 2.1,
   opened_then_bought: 0, opened_buy_amount: 0, buyers_72h: 37, buy_rate_pct: 3.8, buy_amount_72h: 2209048136 }];
 const bhProducts = [{ fund: 'Sucorinvest Maxi fund', fund_type: 'EQUITY', views: 393, viewers: 138, buyers_7d: 9, view_to_buy_pct: 6.5, buy_amount_7d: 57800000, viewers_holding_now: 24 }];
@@ -280,8 +279,6 @@ const saDrivers = [
   { kind: 'screen', name: XSS, in_flow: false, users: 642, converted: 214, population: 1124, population_converted: 239, rate_pct: 33.3, rate_without_pct: 9.2, lift: 3.61, share_of_converted_pct: 76.4 },
   { kind: 'action', name: 'order_button', in_flow: true, users: 295, converted: 277, population: 1124, population_converted: 239, rate_pct: 93.9, rate_without_pct: 0.3, lift: 332.09, share_of_converted_pct: 98.9 },
 ];
-const saTimingSummary = { signed_up: 189, median_days_to_kyc: 0, median_days_kyc_to_buy: 1, median_days_to_buy: 2, median_sessions_before_buy: 3 };
-const saTiming = [{ bucket: '1_same_day', verified: 53, first_buy: 4, ...saTimingSummary }, { bucket: '6_not_yet', verified: 86, first_buy: 161, ...saTimingSummary }];
 const saHours = [{ dow: 1, hour: 9, sessions: 61, orders: 2, paid: 2 }, { dow: 2, hour: 22, sessions: 20, orders: 3, paid: 3 }, { dow: 2, hour: 1, sessions: 5, orders: 3, paid: 3 }];
 const saProfile = [
   { dimension: 'age_band', value: '2_25_34', opened_form: 161, paid: 121, paid_pct: 75.2, paid_amount: 2118435831, median_paid_amount: 2238500 },
@@ -387,18 +384,16 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/product-funnel/installs'))     return pfnInstalls;
   if (path.startsWith('/api/email-recap/summary'))         return emailSummary;
   if (path.startsWith('/api/email-recap/log'))             return emailLog;
-  if (path.startsWith('/api/behavior/segments'))           return bhSegments;
-  if (path.startsWith('/api/behavior/daily'))              return bhDaily;
-  if (path.startsWith('/api/behavior/features'))           return bhFeatures;
-  if (path.startsWith('/api/behavior/push'))               return bhPush;
-  if (path.startsWith('/api/behavior/products'))           return bhProducts;
-  if (path.startsWith('/api/behavior/intent'))             return bhIntent;
+  if (path.startsWith('/api/engagement/segments'))         return bhSegments;
+  if (path.startsWith('/api/engagement/daily'))            return bhDaily;
+  if (path.startsWith('/api/engagement/push'))             return bhPush;
+  if (path.startsWith('/api/engagement/products'))         return bhProducts;
+  if (path.startsWith('/api/subscription/intent'))         return bhIntent;
   if (path.startsWith('/api/subscription/funnel'))         return saFunnel;
   if (path.startsWith('/api/subscription/entry'))          return saEntry;
   if (path.startsWith('/api/subscription/dropoff'))        return saDropoff;
   if (path.startsWith('/api/subscription/payment'))        return saPayment;
   if (path.startsWith('/api/subscription/drivers'))        return saDrivers;
-  if (path.startsWith('/api/subscription/timing'))         return saTiming;
   if (path.startsWith('/api/subscription/hours'))          return saHours;
   if (path.startsWith('/api/subscription/chips'))          return saChips;
   if (path.startsWith('/api/subscription/profile'))        return saProfile;
@@ -424,7 +419,7 @@ sandbox.api = async (path) => {
 };
 
 (async () => {
-  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel', 'loadEmailRecap', 'loadBehavior', 'loadSubscription', 'loadOnboarding', 'loadRedemption', 'loadEngagement']) {
+  for (const fn of ['loadUserLifetime', 'loadCampaignRevenue', 'loadReferralProgram', 'loadReferralProgramAlt', 'loadOverview', 'loadAumHistory', 'loadRevenueTrend', 'loadTopInvestors', 'loadDormant', 'loadKalcer', 'loadPush', 'loadMarketing', 'loadAppHealth', 'loadProductFunnel', 'loadEmailRecap', 'loadSubscription', 'loadOnboarding', 'loadRedemption', 'loadEngagement']) {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
@@ -450,7 +445,7 @@ sandbox.api = async (path) => {
   if (!get('#evcUsersTable')._html.includes('Sold everything')) errors.push('#evcUsersTable: portfolio status label missing');
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnFunnelTable', '#pfnStopsTable', '#pfnSplitTable', '#pfnWeeksTable', '#pfnTimingTable', '#pfnInstallsTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#bhSegmentTable', '#bhFeatureTable', '#bhPushTable', '#bhProductTable', '#bhIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnFunnelTable', '#pfnStopsTable', '#pfnSplitTable', '#pfnWeeksTable', '#pfnTimingTable', '#pfnInstallsTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#egSegmentTable', '#egPushTable', '#egProductTable', '#saIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -507,13 +502,13 @@ sandbox.api = async (path) => {
     console.log(`FAIL  #pfnKpis -> ${pfnKpisHtml.slice(0, 200) || '(never rendered)'}`);
     errors.push('#pfnKpis did not render KPI cards');
   }
-  for (const sel of ['#erKpis', '#bhKpis', '#saKpis', '#obKpis', '#rdKpis', '#egKpis']) {
+  for (const sel of ['#erKpis', '#saKpis', '#obKpis', '#rdKpis', '#egKpis']) {
     if (get(sel)._html.includes('kpi-value')) console.log(`ok    ${sel}`);
     else errors.push(`${sel} did not render KPI cards`);
   }
   // Email subjects and push campaign names are typed by people; genTable
   // writes raw HTML, so the new tabs escape them first.
-  for (const sel of ['#erSubjectTable', '#erLogTable', '#bhPushTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saProfileTable',
+  for (const sel of ['#erSubjectTable', '#erLogTable', '#egPushTable', '#egPushStory', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saProfileTable',
     '#rdSignalTable', '#egSearchTable', '#egDiscoveryTable', '#pfnStopsTable', '#saEntryStory', '#saDropStory', '#saPayStory', '#saDriverStory', '#saProfileStory', '#rdSignalStory', '#egSearchStory', '#egDiscoveryStory']) {
     if (get(sel)._html.includes(XSS)) errors.push(`${sel} rendered unescaped HTML`);
     else console.log(`ok    ${sel} escapes HTML`);
@@ -525,15 +520,18 @@ sandbox.api = async (path) => {
     [(get('#saKpis')._html.match(/kpi-value/g) || []).length === 4, '#saKpis has 4 cards'],
     [!get('#saDriverTable')._html.includes('order_button'), '#saDriverTable hides buy-flow steps'],
     [get('#saDropStep')._html.includes('data-step="1"') && get('#saDropStep')._html.includes('data-step="3"'), '#saDropStep has a button per step'],
-    [get('#saTimingSummary')._html.includes('189 '), '#saTimingSummary filled'],
     [get('#saCoverage')._html.includes('99.9%') && get('#saCoverage')._html.includes('94.6%'), '#saCoverage shows how GA4 matches the database'],
     [get('#saFunnelStory')._html.includes('401') && get('#saFunnelStory')._html.includes('69.1%'), '#saFunnelStory written from the funnel rows'],
-    [get('#obFunnelStory')._html.includes('140') && get('#obFunnelStory')._html.includes('13 (9.3%)'), '#obFunnelStory written from the onboarding rows'],
+    [get('#obFunnelStory')._html.includes('140') && get('#obFunnelStory')._html.includes('75 (53.6%)') && !get('#obFunnelStory')._html.includes('first paid buy'), '#obFunnelStory written from the onboarding rows, KYC only'],
+    [get('#obKpis')._html.includes('87.9%') && !get('#obFunnelTable')._html.includes('First paid buy'), '#obKpis shows Opened KYC; the funnel ends at KYC'],
+    [get('#egDailyStory')._html.includes('247') && get('#egSegmentStory')._html.includes('791'), 'Engagement daily users and investor status written from their rows'],
+    [get('#egProductStory')._html.includes('Sucorinvest Maxi fund') && get('#saIntentStory')._html.includes('1 left at the form'), 'Fund pages and the follow-up list have findings'],
     [get('#obOutcomeStory')._html.includes('69'), '#obOutcomeStory filled'],
     [get('#saHoursStory')._html.includes('22:00 to 01:59') && get('#saHoursStory')._html.includes('75%'), '#saHoursStory picks the busiest 4 hours from the data, across midnight'],
     [get('#rdFunnelStory')._html.includes('162 (85.3%)'), '#rdFunnelStory written from the sell funnel'],
     [get('#rdProfileStory')._html.includes('345'), '#rdProfileStory filled'],
     [get('#rdSignalStory')._html.includes('16.9'), '#rdSignalStory names the top signal'],
+    [get('#rdSignalTable')._html.includes('Everyone counted') && get('#rdSignalTable')._html.includes('>912<') && get('#saDriverTable')._html.includes('>1,124<'), 'Lift tables open with the everyone-counted row'],
     [!get('#rdSignalTable')._html.includes('confirm_redeem_click'), '#rdSignalTable hides sell-flow steps'],
     [get('#egActivityStory')._html.includes('38'), '#egActivityStory filled'],
     [get('#egActivityTable')._html.includes('231,273'), '#egActivityTable pivots tiers by app use'],

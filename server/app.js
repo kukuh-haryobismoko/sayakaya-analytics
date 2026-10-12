@@ -866,18 +866,8 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- User behavior: GA4 app events (user_id) joined to the main database,
-  // see queries.js for the matching rules ------------------------------------
-  const behaviorRoute = (path, build) => app.get(path, requireTab('user-behavior'), handler(async (req, res) => {
-    const q = build(req.query.from, req.query.to);
-    res.json(await runQuery(q.sql, q.params));
-  }));
-  behaviorRoute('/api/behavior/segments', Q.behaviorSegments);
-  behaviorRoute('/api/behavior/daily', Q.behaviorDaily);
-  behaviorRoute('/api/behavior/features', Q.behaviorFeatureLift);
-  behaviorRoute('/api/behavior/push', Q.behaviorPushImpact);
-  behaviorRoute('/api/behavior/products', Q.behaviorProductInterest);
-  behaviorRoute('/api/behavior/intent', Q.behaviorIntentNoBuy);
+  // ---- Investor journey (tab id user-behavior): one investor's GA4 events
+  // (user_id) and transactions on one timeline, see queries.js -------------
   app.get('/api/behavior/user', requireTab('user-behavior'), handler(async (req, res) => {
     const { userId, from, to } = req.query;
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
@@ -895,7 +885,7 @@ function createApp({ serveStatic = true } = {}) {
   const ANALYSIS_ROUTES = [
     ['subscription-analysis', 'subscription', {
       funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
-      payment: Q.subscriptionPayment, drivers: Q.subscriptionDrivers, timing: Q.subscriptionTiming,
+      payment: Q.subscriptionPayment, intent: Q.behaviorIntentNoBuy, drivers: Q.subscriptionDrivers,
       hours: Q.subscriptionHours, chips: Q.subscriptionChips, profile: Q.subscriptionProfile,
     }],
     ['onboarding-analysis', 'onboarding', { funnel: Q.onboardingFunnel, outcome: Q.onboardingOutcome }],
@@ -903,6 +893,7 @@ function createApp({ serveStatic = true } = {}) {
       funnel: Q.redemptionFunnel, switching: Q.switchingFunnel, profile: Q.redemptionProfile, signals: Q.redemptionSignals,
     }],
     ['engagement-analysis', 'engagement', {
+      daily: Q.behaviorDaily, segments: Q.behaviorSegments, push: Q.behaviorPushImpact, products: Q.behaviorProductInterest,
       features: Q.engagementFeatures, search: Q.engagementSearch, discovery: Q.engagementDiscovery, activity: Q.engagementActivity,
     }],
     ['product-funnel', 'product-funnel', {

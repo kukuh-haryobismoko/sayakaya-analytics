@@ -211,18 +211,18 @@
           <button class="nav-link" data-tab="referral-program"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gift"></use></svg></span>Referral program</button>
           <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Referral program (KYC based)</button>
           <button class="nav-link" data-tab="kalcer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>Referral activity</button>
+          <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
           <button class="nav-link" data-tab="push"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Push delivery</button>
         </div>
         <div class="nav-group" data-group="product">
           <div class="nav-label"><span data-i18n="nav_group_product">Product</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="app-health"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg></span>App health</button>
           <button class="nav-link" data-tab="product-funnel"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg></span>Product funnel</button>
-          <button class="nav-link" data-tab="user-behavior"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg></span>User behavior</button>
-          <button class="nav-link" data-tab="subscription-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Subscription analysis</button>
           <button class="nav-link" data-tab="onboarding-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg></span>Onboarding analysis</button>
-          <button class="nav-link" data-tab="redemption-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-down"></use></svg></span>Redemption analysis</button>
+          <button class="nav-link" data-tab="subscription-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Subscription analysis</button>
           <button class="nav-link" data-tab="engagement-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Engagement analysis</button>
-          <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
+          <button class="nav-link" data-tab="redemption-analysis"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-down"></use></svg></span>Redemption analysis</button>
+          <button class="nav-link" data-tab="user-behavior"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg></span>Investor journey</button>
         </div>
         <div class="nav-group" data-group="tools">
           <div class="nav-label"><span>Tools</span><span class="nav-group-caret"></span></div>
@@ -2905,44 +2905,6 @@
           <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
           <span data-i18n="bh_info">Lines up what people do in the app (Google Analytics) with what the main database says about them: transactions, holdings, and KYC status. After login the app tags every event with the investor's user ID, which is how the two connect. Anything done before logging in (signing up, browsing as a guest) has no user ID and is left out. A push arriving or an app update doesn't count as using the app. "Bought" means a completed buy in the main database. App data arrives about a day late.</span>
         </div>
-        <div id="bhKpis" class="kpi-grid" style="margin-top:14px"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="bh_daily_title">Logged-in app users per day</h2></div>
-        <span class="hint" data-i18n="bh_daily_hint">People, not sessions. "Bought that day" is an app user who also completed a buy in the main database on the same date.</span>
-        <p id="bhDailyEmpty" class="empty" data-i18n="bh_empty" hidden>No logged-in app activity in this period.</p>
-        <div class="chart-wrap"><canvas id="bhDailyChart" aria-label="Logged-in app users, investors holding a portfolio, and buyers per day"></canvas></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="bh_segment_title">By investor status</h2></div>
-        <span class="hint" data-i18n="bh_segment_hint">Status is today's, not at the start of the period. Holding: owns fund units now. Redeemed: bought before, holds nothing now. Verified, never bought: passed KYC, no completed buy yet. Not verified: KYC not passed.</span>
-        <div id="bhSegmentTable" class="table-wrap" style="margin-top:14px"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="bh_feature_title">In-app actions that come before a purchase</h2></div>
-        <span class="hint" data-i18n="bh_feature_hint">For each action: of the people who did it, how many completed a buy within 7 days of first doing it, next to the same rate for every app user (baseline). Lift 2.0 means twice as likely to buy as the average app user. This shows what buyers tend to do, not what makes them buy: steps inside the buy flow (order button, promo code) rank high because they are part of buying. Actions fewer than 10 people did are hidden.</span>
-        <div id="bhFeatureTable" class="table-wrap tall" style="margin-top:14px"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="bh_push_title">Push campaigns: opened, then bought</h2></div>
-        <span class="hint" data-i18n="bh_push_hint">Logged-in people only, per push campaign name: who got it, who opened it, and who completed a buy within 72 hours. "Bought within 72h" counts everyone who received it, opened or not, so it includes people who would have bought anyway. Pushes with no campaign name are transactional, such as payment receipts.</span>
-        <div id="bhPushTable" class="table-wrap tall" style="margin-top:14px"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="bh_product_title">Fund pages: viewed, then bought</h2></div>
-        <span class="hint" data-i18n="bh_product_hint">People who opened a fund's detail page, and how many bought that same fund within 7 days of their first view in the period. "Already holding" counts viewers who own the fund today.</span>
-        <div id="bhProductTable" class="table-wrap tall" style="margin-top:14px"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="bh_intent_title">Started buying, never paid</h2></div>
-        <span class="hint" data-i18n="bh_intent_hint">Opened the buy form or created an order in this period, with no paid buy from then until 3 days after their last try. "No order created" means they left at the form; "expired" means the order was never paid. Newest first, up to 500 people.</span>
-        <div id="bhIntentTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
@@ -3056,6 +3018,13 @@
       </div>
 
       <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_intent_title">Started buying, never paid</h2></div>
+        <span class="hint" data-i18n="bh_intent_hint">Opened the buy form or created an order in this period, with no paid buy from then until 3 days after their last try. "No order created" means they left at the form; "expired" means the order was never paid. Newest first, up to 500 people.</span>
+        <div id="saIntentStory" class="story" aria-live="polite"></div>
+        <div id="saIntentTable" class="table-wrap tall" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
         <div class="panel-head wrap">
           <h2 data-i18n="sa_driver_title">What people did before subscribing</h2>
           <label class="hint"><input type="checkbox" id="saDriverFlow" /> <span data-i18n="sa_driver_flow">Include buy-flow steps</span></label>
@@ -3066,29 +3035,19 @@
         <div id="saDriverTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
-      <div class="grid-2">
-        <div class="panel">
-          <div class="panel-head"><h2 data-i18n="sa_timing_title">Time to first subscription</h2></div>
-          <span class="hint" data-i18n="sa_timing_hint">People who signed up in this period: days from sign-up to KYC verified and to their first paid buy. There is no end date, so recent sign-ups have had less time.</span>
-          <p class="lineage" data-i18n-html="sa_lineage_timing"></p>
-          <div id="saTimingSummary" class="story" aria-live="polite"></div>
-          <p id="saTimingEmpty" class="empty" data-i18n="sa_timing_empty" hidden>Nobody signed up in this period.</p>
-          <div class="chart-wrap sm"><canvas id="saTimingChart" aria-label="New sign-ups by days to KYC verified and to first paid buy"></canvas></div>
-        </div>
-        <div class="panel">
-          <div class="panel-head wrap">
-            <h2 data-i18n="sa_hours_title">When people subscribe</h2>
-            <div class="seg" id="saHoursBy" role="group" data-i18n-aria-label="sa_hours_by_label" aria-label="Group by">
-              <button class="on" data-by="hour" aria-pressed="true" data-i18n="sa_hours_hour">Hour</button>
-              <button data-by="dow" aria-pressed="false" data-i18n="sa_hours_dow">Weekday</button>
-            </div>
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="sa_hours_title">When people subscribe</h2>
+          <div class="seg" id="saHoursBy" role="group" data-i18n-aria-label="sa_hours_by_label" aria-label="Group by">
+            <button class="on" data-by="hour" aria-pressed="true" data-i18n="sa_hours_hour">Hour</button>
+            <button data-by="dow" aria-pressed="false" data-i18n="sa_hours_dow">Weekday</button>
           </div>
-          <span class="hint" data-i18n="sa_hours_hint">Each hour's share of the period's logged-in app sessions, next to its share of paid buy orders (WIB, by the time the order was created). Where the line sits above the bars, people buy more often than their app use alone would suggest.</span>
-          <p class="lineage" data-i18n-html="sa_lineage_hours"></p>
-          <div id="saHoursStory" class="story" aria-live="polite"></div>
-          <p id="saHoursEmpty" class="empty" data-i18n="sa_hours_empty" hidden>No sessions or orders in this period.</p>
-          <div class="chart-wrap sm"><canvas id="saHoursChart" aria-label="App sessions and paid buy orders by hour or weekday"></canvas></div>
         </div>
+        <span class="hint" data-i18n="sa_hours_hint">Each hour's share of the period's logged-in app sessions, next to its share of paid buy orders (WIB, by the time the order was created). Where the line sits above the bars, people buy more often than their app use alone would suggest.</span>
+        <p class="lineage" data-i18n-html="sa_lineage_hours"></p>
+        <div id="saHoursStory" class="story" aria-live="polite"></div>
+        <p id="saHoursEmpty" class="empty" data-i18n="sa_hours_empty" hidden>No sessions or orders in this period.</p>
+        <div class="chart-wrap sm"><canvas id="saHoursChart" aria-label="App sessions and paid buy orders by hour or weekday"></canvas></div>
       </div>
 
       <div class="panel">
@@ -3246,6 +3205,29 @@
       </div>
 
       <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_daily_title">Logged-in app users per day</h2></div>
+        <span class="hint" data-i18n="bh_daily_hint">People, not sessions. "Bought that day" is an app user who also completed a buy in the main database on the same date.</span>
+        <div id="egDailyStory" class="story" aria-live="polite"></div>
+        <p id="egDailyEmpty" class="empty" data-i18n="bh_empty" hidden>No logged-in app activity in this period.</p>
+        <div class="chart-wrap"><canvas id="egDailyChart" aria-label="Logged-in app users, investors holding a portfolio, and buyers per day"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_segment_title">By investor status</h2></div>
+        <span class="hint" data-i18n="bh_segment_hint">Status is today's, not at the start of the period. Holding: owns fund units now. Redeemed: bought before, holds nothing now. Verified, never bought: passed KYC, no completed buy yet. Not verified: KYC not passed.</span>
+        <div id="egSegmentStory" class="story" aria-live="polite"></div>
+        <div id="egSegmentTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="eg_activity_title">Investors by portfolio size and app use</h2></div>
+        <span class="hint" data-i18n="eg_activity_hint">Investors holding units they bought, today, by portfolio value and by how many days they opened the app in the period (logged in). Each cell: investors, and their portfolio value below. Institution accounts are left out.</span>
+        <p class="lineage" data-i18n-html="eg_lineage_activity"></p>
+        <div id="egActivityStory" class="story" aria-live="polite"></div>
+        <div id="egActivityTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
         <div class="panel-head"><h2 data-i18n="eg_feature_title">Features and the people who use them</h2></div>
         <span class="hint" data-i18n="eg_feature_hint">Per feature: logged-in people who used it in the period, how many hold a portfolio today, their median portfolio value, and how many bought or sold in the period (at any point, not necessarily after using the feature). The first row is every logged-in app user, for comparison.</span>
         <p class="lineage" data-i18n-html="eg_lineage_feature"></p>
@@ -3255,11 +3237,10 @@
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="eg_activity_title">Investors by portfolio size and app use</h2></div>
-        <span class="hint" data-i18n="eg_activity_hint">Investors holding units they bought, today, by portfolio value and by how many days they opened the app in the period (logged in). Each cell: investors, and their portfolio value below. Institution accounts are left out.</span>
-        <p class="lineage" data-i18n-html="eg_lineage_activity"></p>
-        <div id="egActivityStory" class="story" aria-live="polite"></div>
-        <div id="egActivityTable" class="table-wrap" style="margin-top:14px"></div>
+        <div class="panel-head"><h2 data-i18n="bh_push_title">Push campaigns: opened, then bought</h2></div>
+        <span class="hint" data-i18n="bh_push_hint">Logged-in people only, per push campaign name: who got it, who opened it, and who completed a buy within 72 hours. "Bought within 72h" counts everyone who received it, opened or not, so it includes people who would have bought anyway. Pushes with no campaign name are transactional, such as payment receipts.</span>
+        <div id="egPushStory" class="story" aria-live="polite"></div>
+        <div id="egPushTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
       <div class="panel">
@@ -3283,6 +3264,13 @@
         <p class="lineage" data-i18n-html="eg_lineage_discovery"></p>
         <div id="egDiscoveryStory" class="story" aria-live="polite"></div>
         <div id="egDiscoveryTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="bh_product_title">Fund pages: viewed, then bought</h2></div>
+        <span class="hint" data-i18n="bh_product_hint">People who opened a fund's detail page, and how many bought that same fund within 7 days of their first view in the period. "Already holding" counts viewers who own the fund today.</span>
+        <div id="egProductStory" class="story" aria-live="polite"></div>
+        <div id="egProductTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
 
@@ -3562,6 +3550,10 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_kalcer_desc">Who referred whom across every user-to-user referral in the app, not only one program's ambassadors. Built from main.user_referrals (the immutable referral link, set once at referral time, unlike referrer_code which can be reassigned later) plus each referred investor's AUM as of a picked date, from mi_fee_logs.portfolio_with_code, same source and one-day correction as the HNWI tab. Referrers: one row per referrer, with how many people they referred, their first and most recent referral date, and the combined AUM of everyone they referred. Referrals: one row per referral, with the referral date and that investor's own AUM. No bonus amounts, tiers, or eligibility status, that program's exact rules aren't documented anywhere in this codebase, so this only reports referral activity and AUM, not what anyone is paid. Search by the referrer's SID, name, or email.</p>
         </div>
         <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Event code tracking</h3>
+          <p data-i18n="docs_event_code_tracking_desc">Tracks an event's referral or sales code. Pick users.sales_code or users.referrer_code, type the code(s) and set the event window. A code without * matches anywhere in the code; EVT* matches every code that starts with EVT, so a whole family of event codes can be read together. Only completed transactions are counted anywhere in this tab; ongoing and failed ones are shown next to them for reference. The daily recap shows registrations, KYC verified, completed transactions and amounts, and new transactors for every day, with a chart. Type a daily registration or transaction target to see which days met it and filter to those days. Performance per code breaks the same numbers down by each matched code. Further down: the funnel, the list of tagged users with their portfolio (still invested, sold everything, never bought, AUM now), their transaction detail, transaction retention cohorts, and portfolio retention from portfolio_fix (available from August 2026) as % still invested, AUM or AUM against the first reading. Every table exports to CSV or Excel, the user list exports all rows, and Download all panels (Excel) puts everything in one workbook.</p>
+        </div>
+        <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Push delivery</h3>
           <p data-i18n="docs_push_desc">Firebase Cloud Messaging's own delivery log (own dataset, firebase_messaging.data): did FCM accept and hand off each push. This is send-pipeline health only, not an open or click rate. Firebase's standard export has no such engagement events for messaging, and the table carries only an FCM instance ID, not a Sayakaya user ID, so it can't be joined to revenue either. Shows send volume over a date range, a breakdown by platform (Android/iOS/unknown), and a breakdown by campaign (analytics_label), each with total sends, accepted, MISSING_REGISTRATIONS (a stale or invalid device token, the dominant failure reason), other errors, and the resulting delivery rate.</p>
         </div>
@@ -3578,28 +3570,24 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_pfn_desc">Follows every phone that started signing up in the chosen period through account creation, KYC and the first paid buy.</p>
         </div>
         <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg> User behavior</h3>
-          <p data-i18n="docs_user_behavior_desc">Connects what people do in the app (Google Analytics events, which carry the investor's user ID after login) to the main database's transactions, holdings, and KYC status. For a chosen period it shows: logged-in app users per day and how many of them hold a portfolio or bought that day; app activity and buying by investor status (holding, redeemed, verified but never bought, not verified); which in-app actions come before a purchase within 7 days, compared with the average app user; each push campaign's opens and the buys that followed within 72 hours; fund detail pages viewed against buys of that same fund; and a follow-up list of people who started buying but never paid. Search any investor to see their app activity and transactions on one timeline, with their device, app version, and AUM; each lookup is recorded in the Activity log. Activity before login is not included, and it shows what buyers tend to do, not proof of what made them buy.</p>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg> Onboarding analysis</h3>
+          <p data-i18n="docs_ob_desc">Starts from the main database: every account created in the chosen period (institution accounts left out). For each person it checks which KYC screens they reached in the app (KTP photo, selfie, personal data, occupation, address, bank account, signature, submitted), then the KYC review in the main database (verified first time, verified after a failed review, failed, waiting), the risk profile, and the first paid buy. It shows the biggest drop between steps, split by platform; minutes and app sessions to fill in KYC; hours to the review decision; which part of KYC was sent back; and how many verified people bought within 7 days. Each panel names the tables it joins and opens with a finding written from its own numbers.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Subscription analysis</h3>
           <p data-i18n="docs_sa_desc">Follows logged-in people through the app's buy flow (Google Analytics) and checks each step against paid buys in the main database (completed, payment received, or verified; admin bonus buys excluded). For a chosen period it shows: a step funnel from opening the buy form to checkout, payment method, order created, and paid, split by platform, first or repeat buyer, or app version, with median minutes to order and to pay; which screen people open the buy form from (and the one before that) and how many of them pay within 3 days; where sessions leave the buy flow without an order and whether those people pay within a week; every buy order by payment method with expired, cancelled, and unpaid amounts; which screens and actions subscribers did before their first paid buy compared with people who did not (lift; buy-flow steps hidden unless ticked); days from sign-up to KYC and to the first paid buy for new sign-ups; the hours and weekdays when paid orders happen compared with app use; and the preset amount buttons on the buy form. Activity before login is not included, and the comparisons show what subscribers tend to do, not proof of what made them subscribe. A panel compares who opens the buy form and who pays by age, gender, occupation, investment purpose, risk level and account age from the main database. Each panel names the tables it joins and opens with a finding written from its own numbers, and a data map at the top shows how well the app's analytics match the main database for the chosen period.</p>
         </div>
         <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg> Onboarding analysis</h3>
-          <p data-i18n="docs_ob_desc">Starts from the main database: every account created in the chosen period (institution accounts left out). For each person it checks which KYC screens they reached in the app (KTP photo, selfie, personal data, occupation, address, bank account, signature, submitted), then the KYC review in the main database (verified first time, verified after a failed review, failed, waiting), the risk profile, and the first paid buy. It shows the biggest drop between steps, split by platform; minutes and app sessions to fill in KYC; hours to the review decision; which part of KYC was sent back; and how many verified people bought within 7 days. Each panel names the tables it joins and opens with a finding written from its own numbers.</p>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Engagement analysis</h3>
+          <p data-i18n="docs_eg_desc">Lines up what logged-in people use in the app with what the main database says about them. It shows each feature group (search, sort and filter, watchlist, goal planning, calculators, notifications and more) with how many of its users hold a portfolio, their median portfolio value, and how many bought or sold in the period; investors by portfolio size and by how many days they opened the app, including how much money sits with investors who did not open it; the search terms people type, whether they tapped a result and bought that fund; and the sort choices, expert-picks themes and risk levels people pick. Each panel names the tables it joins and opens with a finding written from its own numbers.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-trend-down"></use></svg> Redemption analysis</h3>
           <p data-i18n="docs_rd_desc">Follows investors through the app's sell (redemption) and switch flows and checks each against completed sells and switches in the main database. It shows both flows step by step; every completed sell in the period by how long the fund was held, fund type, and full or partial, with how many sellers bought again within 30 days and how many hold nothing today; and which screens and actions investors used before selling, compared with investors who did not sell. Each panel names the tables it joins and opens with a finding written from its own numbers. The comparisons show patterns, not causes.</p>
         </div>
         <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Engagement analysis</h3>
-          <p data-i18n="docs_eg_desc">Lines up what logged-in people use in the app with what the main database says about them. It shows each feature group (search, sort and filter, watchlist, goal planning, calculators, notifications and more) with how many of its users hold a portfolio, their median portfolio value, and how many bought or sold in the period; investors by portfolio size and by how many days they opened the app, including how much money sits with investors who did not open it; the search terms people type, whether they tapped a result and bought that fund; and the sort choices, expert-picks themes and risk levels people pick. Each panel names the tables it joins and opens with a finding written from its own numbers.</p>
-        </div>
-        <div class="doc-item">
-          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Event code tracking</h3>
-          <p data-i18n="docs_event_code_tracking_desc">Tracks an event's referral or sales code. Pick users.sales_code or users.referrer_code, type the code(s) and set the event window. A code without * matches anywhere in the code; EVT* matches every code that starts with EVT, so a whole family of event codes can be read together. Only completed transactions are counted anywhere in this tab; ongoing and failed ones are shown next to them for reference. The daily recap shows registrations, KYC verified, completed transactions and amounts, and new transactors for every day, with a chart. Type a daily registration or transaction target to see which days met it and filter to those days. Performance per code breaks the same numbers down by each matched code. Further down: the funnel, the list of tagged users with their portfolio (still invested, sold everything, never bought, AUM now), their transaction detail, transaction retention cohorts, and portfolio retention from portfolio_fix (available from August 2026) as % still invested, AUM or AUM against the first reading. Every table exports to CSV or Excel, the user list exports all rows, and Download all panels (Excel) puts everything in one workbook.</p>
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-eye"></use></svg> Investor journey</h3>
+          <p data-i18n="docs_user_behavior_desc">Connects what people do in the app (Google Analytics events, which carry the investor's user ID after login) to the main database's transactions, holdings, and KYC status. For a chosen period it shows: logged-in app users per day and how many of them hold a portfolio or bought that day; app activity and buying by investor status (holding, redeemed, verified but never bought, not verified); which in-app actions come before a purchase within 7 days, compared with the average app user; each push campaign's opens and the buys that followed within 72 hours; fund detail pages viewed against buys of that same fund; and a follow-up list of people who started buying but never paid. Search any investor to see their app activity and transactions on one timeline, with their device, app version, and AUM; each lookup is recorded in the Activity log. Activity before login is not included, and it shows what buyers tend to do, not proof of what made them buy.</p>
         </div>
       </div>
 
