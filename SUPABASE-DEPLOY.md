@@ -222,6 +222,33 @@ they read the same BigQuery project, so they must match exactly.
 
 ---
 
+## Scheduled sending tick (pg_cron)
+
+Scheduled and group sends (Send e-statement & portfolio, Send fund
+performance) are sent by `POST /api/cron/run-due-schedules`. Since
+migration `20261013130000_dashboard_schedules_fast_queue.sql`, Postgres calls
+it itself: pg_cron job `dashboard-run-due-schedules` runs every 10 seconds and,
+through pg_net, starts 5 requests while the queue has rows (1 when a schedule
+is due, none when idle). The GitHub Actions workflow
+`cron-run-schedules.yml` still pings it every 15 minutes as a backup.
+
+The request carries the same `CRON_SECRET` as the function, read from Vault.
+One-time, with the value from `.env` (put it in a file, not on the command
+line, and delete the file afterwards):
+
+```sql
+select vault.create_secret('<CRON_SECRET value>', 'dashboard_cron_secret');
+```
+
+```bash
+supabase db query --linked --file /path/to/that.sql
+```
+
+If you rotate `CRON_SECRET`, update the Vault secret too
+(`select vault.update_secret(id, '<new>') from vault.secrets where name = 'dashboard_cron_secret'`).
+Check it is running: `select * from cron.job_run_details order by start_time desc limit 5`
+and `select status_code, created from net._http_response order by created desc limit 5`.
+
 ## Email tracking (Email recap tab)
 
 Every email the app sends is written to `dashboard_email_log` at send time,

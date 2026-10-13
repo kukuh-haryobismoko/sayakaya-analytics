@@ -2114,8 +2114,14 @@ on('POST', '/api/schedules/otp/request', requireScheduleKindTab(async (req, _par
   const sendPortfolio = b.sendPortfolio as boolean | undefined;
   const sendStatement = b.sendStatement as boolean | undefined;
   const frequency = b.frequency as string | undefined;
+  // A group send from Batch send (frequency 'once') keeps the form's month / NAV date.
+  const once = frequency === 'once';
+  const statementMonth = once && b.statementMonth ? String(b.statementMonth) : null;
+  const navAsOf = once && b.navAsOf ? String(b.navAsOf) : null;
   if (!recipientType) return json({ error: 'recipientType is required.' }, 400);
   if (!frequency) return json({ error: 'frequency is required.' }, 400);
+  if (statementMonth && !/^\d{4}-\d{2}$/.test(statementMonth)) return json({ error: 'statementMonth must be YYYY-MM.' }, 400);
+  if (navAsOf && !/^\d{4}-\d{2}-\d{2}$/.test(navAsOf)) return json({ error: 'navAsOf must be YYYY-MM-DD.' }, 400);
   if (kind === 'statement' && !sendPortfolio && !sendStatement) {
     return json({ error: 'Pick at least one document to send.' }, 400);
   }
@@ -2128,8 +2134,8 @@ on('POST', '/api/schedules/otp/request', requireScheduleKindTab(async (req, _par
     sendPortfolio, sendStatement, subject: b.subject, body: b.body,
     fundFilter: kind === 'fund_performance' ? normalizeFundFilter(b.fundFilter) : null,
     frequency, dayOfWeek: b.dayOfWeek, dayOfMonth: b.dayOfMonth, runTime: b.runTime,
-    endDate: b.endDate, confirmationEmail: b.confirmationEmail,
-    userId: user!.id, username: user!.username,
+    endDate: once ? null : b.endDate, confirmationEmail: b.confirmationEmail,
+    statementMonth, navAsOf, userId: user!.id, username: user!.username,
   });
   return json({ ok: true, otpId, recipientCount: count });
 }));

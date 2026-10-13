@@ -6302,6 +6302,14 @@ function openSsBatchCompose() {
   const portfolioDate = $('#ssBatchPortfolioDate').value;
   const statementMonth = $('#ssBatchStatementMonth').value;
   if (sendStatement && !statementMonth) { toast('Pick a month for the transaction e-statement.'); return; }
+  const group = $('#ssBatchRecipientType').value;
+  if (group !== 'list') {
+    const docs = [sendPortfolio && 'the live portfolio (as of the send date)', sendStatement && `the transaction e-statement for ${statementMonth}`].filter(Boolean).join(' and ');
+    openSchedOnce('statement', group, { sendPortfolio, sendStatement, statementMonth: sendStatement ? statementMonth : null },
+      `Sends once, right away: ${docs}, as chosen in Batch send.`,
+      defaultStatementEmail({ sendPortfolio, portfolioDate: '', sendStatement, statementMonth }));
+    return;
+  }
   // A picked investor goes by SID (exact match server-side), or their email
   // if they have no SID yet.
   const picked = ssBatchPicker.list().map((u) => u.sid || u.email);
@@ -6410,15 +6418,30 @@ function fundScopeSummary(f) {
 
 let fpeRecipients = [];
 let fpeFundFilter = null;
+function fpeDefaultEmail(asOf) {
+  return {
+    subject: `Sayakaya Fund Performance Update${asOf ? ` — ${asOf}` : ''}`,
+    body: 'Dear Investor,\n\nPlease find attached our latest fund performance update (Reksa Dana Update), issued by PT Sayakaya Lahir Batin.\n\nBest regards,\nPT Sayakaya Lahir Batin',
+  };
+}
+
 function openFpeCompose() {
   const pasted = parsePastedEmails($('#fpePasteEmails').value);
   try { fpeFundFilter = fpeScope.read(); } catch (e) { toast(e.message); return; }
+  const asOf = $('#fpeAsOf').value;
+  const group = $('#fpeRecipientType').value;
+  if (group !== 'list') {
+    openSchedOnce('fund_performance', group, { fundFilter: fpeFundFilter, navAsOf: asOf || null },
+      `Sends once, right away: the Reksa Dana Update PDF (${fundScopeSummary(fpeFundFilter)}, NAV ${asOf ? `as of ${asOf}` : 'of the latest date'}), as chosen on this page.`,
+      fpeDefaultEmail(asOf));
+    return;
+  }
   fpeRecipients = [...new Set([...fpePicker.list().map((u) => u.email.toLowerCase()), ...pasted])];
   if (!fpeRecipients.length) { toast('Add at least one recipient.'); return; }
   $('#fpeEmailTo').textContent = `Will be sent to ${fpeRecipients.length} recipient${fpeRecipients.length === 1 ? '' : 's'}.`;
-  const asOf = $('#fpeAsOf').value;
-  $('#fpeEmailSubject').value = `Sayakaya Fund Performance Update${asOf ? ` — ${asOf}` : ''}`;
-  $('#fpeEmailBody').value = 'Dear Investor,\n\nPlease find attached our latest fund performance update (Reksa Dana Update), issued by PT Sayakaya Lahir Batin.\n\nBest regards,\nPT Sayakaya Lahir Batin';
+  const { subject, body } = fpeDefaultEmail(asOf);
+  $('#fpeEmailSubject').value = subject;
+  $('#fpeEmailBody').value = body;
   $('#fpeEmailModal').showModal();
 }
 
@@ -6469,9 +6492,14 @@ async function loadSchedules(kind) {
   const { prefix } = schedCfg(kind);
   schedEl(prefix, 'Table').innerHTML = '<div class="loading">Loading…</div>';
   try {
-    renderSchedules(kind, await api(`/api/schedules?kind=${kind}`));
+    const rows = await api(`/api/schedules?kind=${kind}`);
+    renderSchedules(kind, rows);
+    // Keep the Emails column moving while a send is in progress.
+    clearTimeout(schedRefreshTimer[kind]);
+    if (rows.some((r) => r.progress && r.progress.waiting)) schedRefreshTimer[kind] = setTimeout(() => loadSchedules(kind), 15000);
   } catch (e) { schedEl(prefix, 'Table').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
+const schedRefreshTimer = {};
 
 const SCHED_RECIPIENT_LABEL = { single_email: null, csv_list: null, all_aum: 'All investors with AUM', active_aum: 'Investors with AUM in active funds', all_registered: 'All registered users' };
 function schedRecipientSummary(row) {
@@ -6480,7 +6508,22 @@ function schedRecipientSummary(row) {
   return SCHED_RECIPIENT_LABEL[row.recipient_type] || row.recipient_type;
 }
 const SCHED_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// A group send ('once') ends the moment it is queued, but its emails keep
+// going out for a while: label it by its queue, and let it be paused until done.
+const schedSending = (r) => r.frequency === 'once' && !!(r.progress && r.progress.waiting);
+function schedStatusLabel(r) {
+  if (r.status === 'paused') return 'Paused';
+  if (r.frequency === 'once') return schedSending(r) ? 'Sending' : 'Done';
+  return r.status === 'active' ? 'Active' : 'Ended';
+}
+const schedCanToggle = (r) => r.status !== 'ended' || schedSending(r);
+// Emails queued for a schedule, all runs together (listJobs adds `progress`).
+function schedProgressSummary(p) {
+  if (!p) return 'n/a';
+  return [`${num(p.sent)} sent`, p.waiting && `${num(p.waiting)} waiting`, p.failed && `${num(p.failed)} failed`].filter(Boolean).join(' · ');
+}
 function schedFrequencySummary(row) {
+  if (row.frequency === 'once') return 'Once, right away';
   if (row.frequency === 'daily') return `Daily @ ${row.run_time}`;
   if (row.frequency === 'weekly') return `Weekly (${SCHED_WEEKDAYS[row.day_of_week] || '?'}) @ ${row.run_time}`;
   if (row.frequency === 'monthly_last_day') return `End of month @ ${row.run_time}`;
@@ -6497,21 +6540,22 @@ function renderSchedules(kind, rows) {
   const body = rows.map((r) => `<tr>
       <td>${escapeHtml(schedRecipientSummary(r))}</td>
       <td>${escapeHtml(schedFrequencySummary(r))}</td>
-      <td>${r.kind === 'statement' ? [r.send_portfolio && 'Portfolio', r.send_statement && 'E-statement'].filter(Boolean).join(' + ') : `Fund performance (${escapeHtml(fundScopeSummary(r.fund_filter))})`}</td>
-      <td>${r.status === 'active' ? 'Active' : r.status === 'ended' ? 'Ended' : 'Paused'}</td>
+      <td>${r.kind === 'statement' ? [r.send_portfolio && 'Portfolio', r.send_statement && `E-statement${r.statement_month ? ` ${escapeHtml(r.statement_month)}` : ''}`].filter(Boolean).join(' + ') : `Fund performance (${escapeHtml(fundScopeSummary(r.fund_filter))}${r.nav_as_of ? `, NAV ${escapeHtml(r.nav_as_of)}` : ''})`}</td>
+      <td>${schedStatusLabel(r)}</td>
       <td>${r.end_date || 'n/a'}</td>
       <td>${r.next_run_at ? toJakartaTime(r.next_run_at) : 'n/a'}</td>
       <td>${r.last_run_at ? toJakartaTime(r.last_run_at) : 'n/a'}</td>
       <td class="num">${num(r.run_count)}</td>
+      <td>${escapeHtml(schedProgressSummary(r.progress))}</td>
       <td>${escapeHtml(r.created_by_username || 'n/a')}</td>
       <td>
         <button type="button" class="btn-ghost sched-detail-btn" data-id="${r.id}">Detail</button>
-        ${r.status === 'ended' ? '' : `<button type="button" class="btn-ghost sched-toggle-btn" data-id="${r.id}" data-status="${r.status}">${r.status === 'active' ? 'Pause' : 'Resume'}</button>`}
+        ${schedCanToggle(r) ? `<button type="button" class="btn-ghost sched-toggle-btn" data-id="${r.id}" data-status="${r.status === 'paused' ? 'paused' : 'active'}">${r.status === 'paused' ? 'Resume' : 'Pause'}</button>` : ''}
         <button type="button" class="btn-ghost sched-delete-btn" data-id="${r.id}">Delete</button>
       </td>
     </tr>`).join('');
   tableEl.innerHTML = `<table><thead><tr>
-      <th>Recipients</th><th>Schedule</th><th>Sends</th><th>Status</th><th>Ends</th><th>Next run (WIB)</th><th>Last run (WIB)</th><th class="num">Times sent</th><th>Created by</th><th></th>
+      <th>Recipients</th><th>Schedule</th><th>Sends</th><th>Status</th><th>Ends</th><th>Next run (WIB)</th><th>Last run (WIB)</th><th class="num">Times sent</th><th>Emails</th><th>Created by</th><th></th>
     </tr></thead><tbody>${body}</tbody></table>`;
   $$(`#${prefix}Table .sched-detail-btn`).forEach((btn) => btn.addEventListener('click', () => openSchedDetail(kind, btn.dataset.id)));
   $$(`#${prefix}Table .sched-toggle-btn`).forEach((btn) => btn.addEventListener('click', async () => {
@@ -6578,6 +6622,7 @@ async function openSchedDetail(kind, id) {
 
 function schedResetModal(kind) {
   const { prefix } = schedCfg(kind);
+  schedSetOnceMode(kind, false);
   schedEl(prefix, 'Step1').classList.remove('hidden');
   schedEl(prefix, 'Step2').classList.add('hidden');
   schedEl(prefix, 'RecipientType').value = 'single_email';
@@ -6600,6 +6645,57 @@ function schedResetModal(kind) {
   if (kind === 'statement') { schedEl(prefix, 'SendPortfolio').checked = true; schedEl(prefix, 'SendStatement').checked = true; }
   else fpeSchedScope.reset();
   schedUpdateFieldVisibility(kind);
+}
+
+// Batch send to a recipient group goes through the schedule queue as a
+// one-off job (frequency 'once'): confirmed with an emailed code like a
+// schedule, sent by parallel runners, progress in the Automated sending
+// table. The Batch send form already chose the documents (extras), so the
+// modal only asks for the email text and the code.
+let schedOnce = null; // { kind, extras } while a modal is in send-now mode
+function schedSetOnceMode(kind, on) {
+  const { prefix } = schedCfg(kind);
+  ['WhenRow', 'EndRow', kind === 'statement' ? 'DocsRow' : 'ScopeField'].forEach((n) => schedEl(prefix, n).classList.toggle('hidden', on));
+  if (on && kind === 'fund_performance') ['FundScopeTypes', 'FundScopeFunds'].forEach((n) => schedEl(prefix, n).classList.add('hidden'));
+  schedEl(prefix, 'OnceNote').classList.toggle('hidden', !on);
+  schedEl(prefix, 'Title').textContent = t(on ? 'sched_once_title' : 'sched_modal_title');
+  schedEl(prefix, 'ConfirmBtn').textContent = t(on ? 'sched_once_confirm' : 'sched_confirm');
+  if (!on && schedOnce && schedOnce.kind === kind) schedOnce = null;
+}
+function openSchedOnce(kind, recipientType, extras, note, { subject, body }) {
+  const { prefix } = schedCfg(kind);
+  schedResetModal(kind);
+  schedSetOnceMode(kind, true);
+  schedOnce = { kind, extras };
+  schedEl(prefix, 'RecipientType').value = recipientType;
+  schedEl(prefix, 'OnceNoteText').textContent = note;
+  schedEl(prefix, 'Subject').value = subject;
+  schedEl(prefix, 'Body').value = body;
+  schedUpdateFieldVisibility(kind);
+  schedEl(prefix, 'Modal').showModal();
+  schedPreviewCount(kind);
+}
+
+// Batch send's Recipients dropdown: a group hides the pick/paste fields and
+// shows how many people it reaches now; Compose then opens openSchedOnce.
+let batchGroupSeq = 0;
+async function batchGroupChanged(kind, px) {
+  const type = $(`#${px}RecipientType`).value;
+  const group = type !== 'list';
+  $(`#${px}ListFields`).classList.toggle('hidden', group);
+  $(`#${px}GroupCount`).classList.toggle('hidden', !group);
+  if (kind === 'statement') $('#ssBatchPortfolioDate').disabled = group; // groups always get the live portfolio
+  if (!group) return;
+  const textEl = $(`#${px}GroupCountText`);
+  const seq = ++batchGroupSeq;
+  textEl.textContent = 'Checking recipient count…';
+  try {
+    const { count } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify({ kind, recipientType: type }) });
+    if (seq !== batchGroupSeq) return;
+    textEl.textContent = `${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'} right now.`
+      + ' Compose asks for a confirmation code, then the emails go out from a queue, several at a time; progress shows under Automated sending.'
+      + (kind === 'statement' ? ' A group always gets the live portfolio as of the send date.' : '');
+  } catch (e) { if (seq === batchGroupSeq) textEl.textContent = e.message; }
 }
 
 function schedUpdateFieldVisibility(kind) {
@@ -6663,7 +6759,8 @@ async function schedPreviewCount(kind) {
     const spec = await schedBuildSpec(kind);
     const { count } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify(spec) });
     if (seq !== schedPreviewSeq) return;
-    textEl.textContent = `This will reach approximately ${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'} per send.`;
+    const people = `${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'}`;
+    textEl.textContent = schedOnce && schedOnce.kind === kind ? `This will reach ${people}.` : `This will reach approximately ${people} per send.`;
   } catch (e) { if (seq === schedPreviewSeq) textEl.textContent = e.message; }
 }
 
@@ -6689,12 +6786,15 @@ async function schedSendOtp(kind) {
     } else {
       payload.fundFilter = fpeSchedScope.read();
     }
+    if (schedOnce && schedOnce.kind === kind) Object.assign(payload, { frequency: 'once', endDate: null }, schedOnce.extras);
     const { otpId, recipientCount } = await api('/api/schedules/otp/request', { method: 'POST', body: JSON.stringify(payload) });
     schedOtpState = { kind, otpId };
     schedEl(prefix, 'Step1').classList.add('hidden');
     schedEl(prefix, 'Step2').classList.remove('hidden');
-    schedEl(prefix, 'Step2Hint').textContent =
-      `We sent a 6-digit code to ${payload.confirmationEmail}. Enter it below to create this schedule (reaches ~${num(recipientCount)} recipient${recipientCount === 1 ? '' : 's'} per send).`;
+    const people = `${num(recipientCount)} recipient${recipientCount === 1 ? '' : 's'}`;
+    schedEl(prefix, 'Step2Hint').textContent = payload.frequency === 'once'
+      ? `We sent a 6-digit code to ${payload.confirmationEmail}. Enter it below to start sending to ${people}.`
+      : `We sent a 6-digit code to ${payload.confirmationEmail}. Enter it below to create this schedule (reaches ~${people} per send).`;
     schedEl(prefix, 'Code').value = '';
   } catch (e) { toast(e.message); }
 }
@@ -6704,8 +6804,9 @@ async function schedConfirmOtp(kind) {
   if (!schedOtpState || schedOtpState.kind !== kind) { toast('Start over — session lost.'); return; }
   try {
     await api('/api/schedules/otp/confirm', { method: 'POST', body: JSON.stringify({ otpId: schedOtpState.otpId, code: schedEl(prefix, 'Code').value.trim() }) });
+    const once = schedOnce && schedOnce.kind === kind;
     schedEl(prefix, 'Modal').close();
-    toast('Schedule created.');
+    toast(once ? 'Sending started. Progress shows under Automated sending.' : 'Schedule created.');
     loadSchedules(kind);
   } catch (e) { toast(e.message); }
 }
@@ -7711,6 +7812,7 @@ function wire() {
   ssBatchPicker = setupRecipientPicker('ssBatch');
   $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
+  $('#ssBatchRecipientType').addEventListener('change', () => batchGroupChanged('statement', 'ssBatch'));
   $('#ssBatchEmailCancelBtn').addEventListener('click', () => $('#ssBatchEmailModal').close());
   $('#ssBatchEmailSendBtn').addEventListener('click', () => { $('#ssBatchEmailModal').close(); sendSsBatchEmail(); });
 
@@ -7720,6 +7822,7 @@ function wire() {
   fpeSchedScope = setupFundScope('fpeSched');
   $('#fpeLogRefresh').addEventListener('click', loadFpeLog);
   $('#fpeComposeBtn').addEventListener('click', openFpeCompose);
+  $('#fpeRecipientType').addEventListener('change', () => batchGroupChanged('fund_performance', 'fpe'));
   $('#fpeEmailCancelBtn').addEventListener('click', () => $('#fpeEmailModal').close());
   $('#fpeEmailSendBtn').addEventListener('click', () => { $('#fpeEmailModal').close(); sendFpeEmail(); });
 

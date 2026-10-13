@@ -83,25 +83,39 @@ function birthdatePassword(birthdate) {
 // scheduler (server/schedules.js). Throws on a missing/malformed
 // statementMonth so the caller decides how to report it (fail the whole
 // request vs. one recipient vs. one queued send).
-async function buildStatementAttachments({ userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username }) {
+// First and last day of a 'YYYY-MM' e-statement month.
+function statementMonthRange(statementMonth) {
+  const [year, month] = String(statementMonth || '').split('-').map(Number);
+  if (!year || !month) throw new Error('statementMonth is required (YYYY-MM).');
+  return {
+    from: `${year}-${String(month).padStart(2, '0')}-01`,
+    to: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10), // last day of that month
+  };
+}
+
+// holdings / transactions: rows already fetched for a chunk of investors at
+// once (the schedules drain); omitted, they are queried for this investor.
+async function buildStatementAttachments({ userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username, holdings, transactions }) {
   const password = birthdatePassword(contact.birthdate);
   const attachments = [];
 
   if (sendPortfolio) {
-    const h = portfolioDate ? Q.userHoldingsAsOfFix(sid, portfolioDate) : Q.userHoldings(userId);
-    const holdings = await runQuery(h.sql, h.params);
+    if (!holdings) {
+      const h = portfolioDate ? Q.userHoldingsAsOfFix(sid, portfolioDate) : Q.userHoldings(userId);
+      holdings = await runQuery(h.sql, h.params);
+    }
     // Portfolio-only, no fund-performance pages — this tool never sends performance.
     const buf = await PDF.portfolioReport({ contact, holdings }, [], { username, password });
     attachments.push({ filename: `Portfolio_${sid}${portfolioDate ? '_' + portfolioDate : ''}.pdf`, content: buf });
   }
 
   if (sendStatement) {
-    const [year, month] = String(statementMonth || '').split('-').map(Number);
-    if (!year || !month) throw new Error('statementMonth is required (YYYY-MM).');
-    const from = `${year}-${String(month).padStart(2, '0')}-01`;
-    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of that month
-    const t = Q.userTransactions(userId, from, to);
-    const transactions = await runQuery(t.sql, t.params);
+    const { from, to } = statementMonthRange(statementMonth);
+    if (!transactions) {
+      const t = Q.userTransactions(userId, from, to);
+      transactions = await runQuery(t.sql, t.params);
+    }
+    const [year, month] = statementMonth.split('-').map(Number);
     const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     const buf = await PDF.transactionStatement({ contact, transactions }, monthLabel, { username, password });
     attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: buf });
@@ -214,6 +228,7 @@ module.exports = {
   fundScopeLabel,
   statementDocsLabel,
   buildFundPerformancePdf,
+  statementMonthRange,
   birthdatePassword,
   buildStatementAttachments,
   aggregateBulkHoldings,

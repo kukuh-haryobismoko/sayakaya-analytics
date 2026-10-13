@@ -1,9 +1,8 @@
 name: Run due e-statement schedules
 
-# Ticks the scheduled-sending backend (server/schedules.js / supabase/functions/api/schedules.ts)
-# for the GitHub Pages + Supabase deployment. This site has no Netlify function running, so
-# nothing else calls POST /api/cron/run-due-schedules on a timer — see
-# netlify/functions/cron-run-schedules.js, which only exists for a Netlify-hosted deployment.
+# Backup tick for the scheduled-sending backend (server/schedules.js / supabase/functions/api/schedules.ts).
+# The main tick is pg_cron inside Supabase, every 10 seconds (SUPABASE-DEPLOY.md, "Scheduled
+# sending tick"); GitHub fires this one only every few hours in practice.
 # Requires the CRON_SECRET repo secret to match the CRON_SECRET Supabase secret
 # (`supabase secrets set CRON_SECRET=...`).
 

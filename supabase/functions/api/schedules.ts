@@ -12,7 +12,7 @@ import * as Q from './queries.ts';
 import { val } from './pdf.ts';
 import * as Mail from './mail.ts';
 import { logEvent } from './auth.ts';
-import { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatementAttachments, previousMonthYYYYMM, type FundFilter } from './report-helpers.ts';
+import { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatementAttachments, previousMonthYYYYMM, statementMonthRange, type FundFilter } from './report-helpers.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -21,10 +21,17 @@ const JAKARTA_OFFSET_MIN = 7 * 60;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function jktDateStr(d: Date): string { return new Date(d.getTime() + JAKARTA_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
 
+// Queue rows one runner claims per call (dashboard_claim_queue). A statement
+// builds its own PDFs and an edge function gets ~2 s of CPU per request;
+// fund performance shares one PDF. pg_cron starts several runners at once
+// (migration 20261013130000), so throughput comes from parallel runners,
+// not from big chunks.
 const DRAIN_LIMIT: Record<string, number> = {
-  statement: Number(Deno.env.get('SCHEDULE_DRAIN_LIMIT_STATEMENT')) || 25,
-  fund_performance: Number(Deno.env.get('SCHEDULE_DRAIN_LIMIT_FUND_PERFORMANCE')) || 100,
+  statement: Number(Deno.env.get('SCHEDULE_DRAIN_LIMIT_STATEMENT')) || 10,
+  fund_performance: Number(Deno.env.get('SCHEDULE_DRAIN_LIMIT_FUND_PERFORMANCE')) || 50,
 };
+// Emails in flight at once per runner, to stay near the SES send rate.
+const SEND_CONCURRENCY = Number(Deno.env.get('SCHEDULE_SEND_CONCURRENCY')) || 5;
 const MAX_JOBS_ENQUEUED_PER_TICK = 5;
 
 export interface ScheduledJob {
@@ -38,11 +45,13 @@ export interface ScheduledJob {
   fund_filter: FundFilter | null;
   subject: string | null;
   body: string | null;
-  frequency: 'daily' | 'weekly' | 'monthly_last_day' | 'monthly_day';
+  frequency: 'daily' | 'weekly' | 'monthly_last_day' | 'monthly_day' | 'once';
   day_of_week: number | null;
   day_of_month: number | null;
   run_time: string;
   end_date: string | null;
+  statement_month: string | null; // 'once' sends from Batch send; null = previous month
+  nav_as_of: string | null;       // 'once' fund performance sends; null = latest NAV
   status: 'active' | 'paused' | 'ended';
   next_run_at: string | null;
   last_run_at: string | null;
@@ -86,6 +95,8 @@ export function computeNextRun(job: NextRunSpec, from: Date = new Date()): Date 
   const toUtc = (jktDate: Date) => new Date(jktDate.getTime() - JAKARTA_OFFSET_MIN * 60000);
   const fromJkt = toJkt(from);
   const atTime = (y: number, mo: number, d: number) => new Date(Date.UTC(y, mo, d, h, m, 0, 0));
+
+  if (job.frequency === 'once') return from; // a group send from Batch send: due now
 
   if (job.frequency === 'daily') {
     let next = atTime(fromJkt.getUTCFullYear(), fromJkt.getUTCMonth(), fromJkt.getUTCDate());
@@ -216,6 +227,8 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
       send_portfolio: !!p.sendPortfolio,
       send_statement: !!p.sendStatement,
       fund_filter: p.fundFilter || null, // kind = 'fund_performance'; null = all funds
+      statement_month: p.statementMonth || null,
+      nav_as_of: p.navAsOf || null,
       subject: p.subject || null,
       body: p.body || null,
       frequency: p.frequency,
@@ -235,8 +248,14 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
 }
 
 // ---- CRUD used by the UI ----------------------------------------------------
-export function listJobs(kind: string): Promise<ScheduledJob[]> {
-  return rest(`/dashboard_scheduled_jobs?kind=eq.${kind}&select=*&order=created_at.desc`);
+// Each job carries its email counts (sent / waiting / failed) for the table.
+export async function listJobs(kind: string): Promise<ScheduledJob[]> {
+  const jobs: ScheduledJob[] = await rest(`/dashboard_scheduled_jobs?kind=eq.${kind}&select=*&order=created_at.desc`);
+  if (!jobs.length) return jobs;
+  const progress = await rest(`/dashboard_schedule_progress?job_id=in.(${jobs.map((j) => j.id).join(',')})&select=*`);
+  // deno-lint-ignore no-explicit-any
+  const byJob = new Map(progress.map((p: any) => [p.job_id, p]));
+  return jobs.map((j) => ({ ...j, progress: byJob.get(j.id) || null }));
 }
 
 export async function getJob(id: string): Promise<ScheduledJob | null> {
@@ -303,67 +322,128 @@ async function markQueueRow(id: string, status: string, error?: string): Promise
   });
 }
 
-async function drainQueueForJob(job: ScheduledJob, limit: number): Promise<{ sent: number; failed: number }> {
-  const rows = await rest(`/dashboard_schedule_queue?job_id=eq.${job.id}&status=eq.pending&select=*&order=created_at.asc&limit=${limit}`);
-  if (!rows.length) return { sent: 0, failed: 0 };
+// Runs fn over items with at most `limit` in flight.
+async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) await fn(items[next++]);
+  }));
+}
 
+// SES rejects a burst over the account's send rate (or past its daily quota)
+// with a throttling error; those rows go back to the queue, nothing was sent.
+const THROTTLED_RE = /throttl|rate exceeded|quota exceeded|\b454\b/i;
+
+// One runner's share of the queue: claims a chunk of one job's rows
+// (dashboard_claim_queue, so parallel runners never get the same row),
+// fetches what the chunk needs in one go, then sends SEND_CONCURRENCY at a time.
+async function drainChunk(): Promise<{ sent: number; failed: number }> {
+  // deno-lint-ignore no-explicit-any
+  const rows: any[] = await rest('/rpc/dashboard_claim_queue', {
+    method: 'POST',
+    body: JSON.stringify({ p_statement_limit: DRAIN_LIMIT.statement, p_fund_limit: DRAIN_LIMIT.fund_performance }),
+  });
+  if (!rows?.length) return { sent: 0, failed: 0 };
+  const job = await getJob(rows[0].job_id);
+  if (!job) return { sent: 0, failed: 0 }; // deleted meanwhile; its queue rows went with it
+
+  const sentBy = job.created_by_username || 'schedule';
+  const source = job.frequency === 'once' ? 'batch' : 'schedule';
+  const label = job.frequency === 'once' ? 'Group send' : `Scheduled ${job.frequency}`;
   const senderEmail = job.kind === 'statement'
     ? (Deno.env.get('SMTP_FROM_STATEMENT') || 'estatement@sayakaya.id')
     : (Deno.env.get('SMTP_FROM_FUND_PERFORMANCE') || 'hi@sayakaya.id');
 
-  let fundPerfBuffer: Uint8Array | null = null;
-  let sent = 0, failed = 0;
-
   // deno-lint-ignore no-explicit-any
-  for (const row of rows as any[]) {
-    try {
-      if (job.kind === 'fund_performance') {
-        if (!fundPerfBuffer) {
-          fundPerfBuffer = await buildFundPerformancePdf({ fundFilter: job.fund_filter, username: job.created_by_username || 'schedule' });
-        }
+  let send: (row: any) => Promise<void>;
+  try {
+    if (job.kind === 'fund_performance') {
+      const asOf = job.nav_as_of || undefined;
+      const pdf = await buildFundPerformancePdf({ asOf, fundFilter: job.fund_filter, username: sentBy });
+      send = async (row) => {
         await Mail.sendStatementEmail({
           to: row.recipient_email, subject: job.subject ?? undefined, body: job.body ?? undefined,
-          attachments: [{ filename: 'Reksa_Dana_Update.pdf', content: fundPerfBuffer }],
+          attachments: [{ filename: `Reksa_Dana_Update${asOf ? `_${asOf}` : ''}.pdf`, content: pdf }],
           from: senderEmail,
           log: {
-            category: 'fund_performance', source: 'schedule', sentBy: job.created_by_username, jobId: job.id,
-            description: `Scheduled ${job.frequency} Reksa Dana Update PDF (${fundScopeLabel(job.fund_filter)})`,
+            category: 'fund_performance', source, sentBy: job.created_by_username, jobId: job.id,
+            description: `${label} Reksa Dana Update PDF${asOf ? ` as of ${asOf}` : ''} (${fundScopeLabel(job.fund_filter)})`,
           },
         });
-        await logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_fund_performance',
-          `scheduled fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
-      } else {
-        const c = Q.userContact(row.recipient_user_id);
-        const [contact] = await runQuery(c.sql, c.params, { redact: false });
+        await logEvent(job.created_by_user_id, sentBy, 'email_fund_performance',
+          `${label.toLowerCase()} fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
+      };
+    } else {
+      const statementMonth = job.statement_month || previousMonthYYYYMM(); // recurring sends cover the last completed month
+      const { from, to } = statementMonthRange(statementMonth);
+      const ids = rows.map((r) => r.recipient_user_id as string);
+      const c = Q.userContactBatch(ids);
+      const h = Q.userHoldingsBatch(ids);
+      const t = Q.userTransactionsBatch(ids, from, to);
+      const [contacts, holdings, transactions] = await Promise.all([
+        runQuery(c.sql, c.params, { redact: false }),
+        job.send_portfolio ? runQuery(h.sql, h.params) : [],
+        job.send_statement ? runQuery(t.sql, t.params) : [],
+      ]);
+      const byUser = (list: Record<string, unknown>[]) => {
+        const m = new Map<string, Record<string, unknown>[]>();
+        for (const r of list) {
+          const k = r.user_id as string;
+          if (!m.has(k)) m.set(k, []);
+          m.get(k)!.push(r);
+        }
+        return m;
+      };
+      const contactOf = new Map(contacts.map((r) => [r.user_id as string, r]));
+      const holdingsOf = byUser(holdings);
+      const txOf = byUser(transactions);
+      const docs = statementDocsLabel({ sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth });
+      const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
+      send = async (row) => {
+        const userId = row.recipient_user_id as string;
+        const contact = contactOf.get(userId);
         if (!contact?.email) throw new Error('no email on file');
-        const statementMonth = previousMonthYYYYMM(); // recurring sends always cover the last completed month
         const attachments = await buildStatementAttachments({
-          userId: row.recipient_user_id, sid: row.recipient_sid, contact,
-          sendPortfolio: job.send_portfolio, sendStatement: job.send_statement,
-          statementMonth,
-          username: job.created_by_username || 'schedule',
+          userId, sid: row.recipient_sid, contact,
+          sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth,
+          holdings: holdingsOf.get(userId) || [], transactions: txOf.get(userId) || [],
+          username: sentBy,
         });
+        const name = val(contact.name as string | undefined) || row.recipient_sid;
         await Mail.sendStatementEmail({
           to: contact.email as string, subject: job.subject ?? undefined, body: job.body ?? undefined,
           name: contact.name as string | undefined, attachments, from: senderEmail,
           log: {
-            category: 'statement', source: 'schedule', sentBy: job.created_by_username, jobId: job.id,
-            userId: row.recipient_user_id, sid: row.recipient_sid,
-            description: `Scheduled ${job.frequency} ${statementDocsLabel({ sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth })} for ${val(contact.name as string | undefined) || row.recipient_sid}`,
+            category: 'statement', source, sentBy: job.created_by_username, jobId: job.id,
+            userId, sid: row.recipient_sid, description: `${label} ${docs} for ${name}`,
           },
         });
-        const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
-        const recipient = `${val(contact.name as string | undefined) || row.recipient_sid} (SID ${row.recipient_sid}, ${contact.email})`;
-        await logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_pdf',
-          `scheduled send-statement (${sentDesc}) to ${recipient}`);
-      }
+        await logEvent(job.created_by_user_id, sentBy, 'email_pdf',
+          `${label.toLowerCase()} send-statement (${sentDesc}) to ${name} (SID ${row.recipient_sid}, ${contact.email})`);
+      };
+    }
+  } catch (e) {
+    // Nothing went out: the chunk's shared data (PDF, BigQuery rows) failed.
+    await Promise.all(rows.map((row) => markQueueRow(row.id, 'failed', (e as Error).message)));
+    return { sent: 0, failed: rows.length };
+  }
+
+  let sent = 0, failed = 0;
+  await mapLimit(rows, SEND_CONCURRENCY, async (row) => {
+    try {
+      await send(row);
       await markQueueRow(row.id, 'sent');
       sent++;
     } catch (e) {
-      await markQueueRow(row.id, 'failed', (e as Error).message);
-      failed++;
+      const msg = (e as Error).message;
+      if (THROTTLED_RE.test(msg)) {
+        await markQueueRow(row.id, 'pending');
+      } else {
+        await markQueueRow(row.id, 'failed', msg);
+        failed++;
+      }
     }
-  }
+  });
   return { sent, failed };
 }
 
@@ -386,7 +466,7 @@ export async function runDueJobs(jobId?: string): Promise<{ jobsClaimed: number;
     // if the *next* occurrence would fall after end_date, this is the last
     // run: end the job now instead of advancing next_run_at into the future,
     // so the table doesn't show a "Next run" for a schedule that's done.
-    const isLastRun = job.end_date && jktDateStr(nextRun) > job.end_date;
+    const isLastRun = job.frequency === 'once' || (job.end_date && jktDateStr(nextRun) > job.end_date);
     const claimed = await rest(
       `/dashboard_scheduled_jobs?id=eq.${job.id}&next_run_at=eq.${encodeURIComponent(job.next_run_at || '')}`,
       {
@@ -404,14 +484,8 @@ export async function runDueJobs(jobId?: string): Promise<{ jobsClaimed: number;
     enqueued += await enqueueJob(job);
   }
 
-  // 'ended' too: a job's last run flips it to ended at claim time, above, and
-  // its queue still has to drain. Paused jobs are skipped until resumed.
-  const activeJobs: ScheduledJob[] = await rest(`/dashboard_scheduled_jobs?status=in.(active,ended)${only}&select=*`);
-  let sent = 0, failed = 0;
-  for (const job of activeJobs) {
-    const r = await drainQueueForJob(job, DRAIN_LIMIT[job.kind] || 25);
-    sent += r.sent; failed += r.failed;
-  }
-
+  // Ended jobs still drain (a job's last run flips it to ended at claim time,
+  // above); paused jobs wait (dashboard_claim_queue skips them).
+  const { sent, failed } = await drainChunk();
   return { jobsClaimed: due.length, recipientsEnqueued: enqueued, sent, failed };
 }

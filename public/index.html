@@ -429,6 +429,20 @@
 
       <div class="panel">
         <div class="panel-head"><h2><span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-package"></use></svg></span> <span data-i18n="ss_batch_title">Batch send</span></h2><span class="hint" data-i18n="ss_batch_hint">Send the same documents to many investors. Search by name (use * as a wildcard, e.g. budi*santoso), SID, email, or phone number, then add each investor. You can also paste emails or SIDs below.</span></div>
+        <div class="field-card">
+          <label class="field-card-top" for="ssBatchRecipientType" data-i18n="sched_recipient_type">Recipients</label>
+          <select id="ssBatchRecipientType" class="field-card-input">
+            <option value="list" data-i18n="batch_recipient_list">Picked or pasted investors</option>
+            <option value="active_aum" data-i18n="sched_recipient_active_aum">Investors with AUM in active funds</option>
+            <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM</option>
+            <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users</option>
+          </select>
+        </div>
+        <div class="callout hidden" id="ssBatchGroupCount" style="margin-top:12px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>
+          <span id="ssBatchGroupCountText"></span>
+        </div>
+        <div id="ssBatchListFields" style="margin-top:16px">
         <div class="ask-bar">
           <input id="ssBatchSearchInput" type="text" autocomplete="off" aria-label="Search investors" data-i18n-placeholder="common_recipient_search_ph" placeholder="Name, SID, email, or phone" />
           <button id="ssBatchSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
@@ -441,6 +455,7 @@
         <div class="field-card" style="margin-top:16px">
           <label class="field-card-top" for="ssBatchInput"><span data-i18n="ss_batch_label">Or paste emails or SIDs (one per line, or comma-separated)</span></label>
           <textarea id="ssBatchInput" rows="4" class="field-card-input" style="resize:vertical" placeholder="SID001, SID002&#10;jane@example.com"></textarea>
+        </div>
         </div>
         <div class="field-card-row" style="margin-top:16px">
           <div class="field-card">
@@ -504,7 +519,7 @@
       </dialog>
 
       <dialog id="ssSchedModal" class="admin-modal">
-        <div class="panel-head wrap"><h2 data-i18n="sched_modal_title">New automated schedule</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
+        <div class="panel-head wrap"><h2 id="ssSchedTitle" data-i18n="sched_modal_title">New automated schedule</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
 
         <div id="ssSchedStep1">
           <div class="field-card" style="margin-top:8px">
@@ -534,6 +549,11 @@
             <span id="ssSchedCountPreviewText"></span>
           </div>
 
+          <div class="callout hidden" id="ssSchedOnceNote" style="margin-top:12px">
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-file"></use></svg></span>
+            <span id="ssSchedOnceNoteText"></span>
+          </div>
+
           <div class="field-card-row" id="ssSchedDocsRow" style="margin-top:16px">
             <div class="field-card">
               <label class="field-card-top"><input type="checkbox" id="ssSchedSendPortfolio" checked />
@@ -545,7 +565,7 @@
             </div>
           </div>
 
-          <div class="field-card-row" style="margin-top:16px">
+          <div class="field-card-row" id="ssSchedWhenRow" style="margin-top:16px">
             <div class="field-card">
               <label class="field-card-top" data-i18n="sched_frequency">Frequency</label>
               <select id="ssSchedFrequency" class="field-card-input">
@@ -577,7 +597,7 @@
             </div>
           </div>
 
-          <div class="field-card-row" style="margin-top:16px">
+          <div class="field-card-row" id="ssSchedEndRow" style="margin-top:16px">
             <div class="field-card">
               <label class="field-card-top"><input type="checkbox" id="ssSchedEndless" checked />
                 <span data-i18n="sched_endless">No end date (send indefinitely)</span></label>
@@ -632,6 +652,20 @@
     <section id="send-fund-performance" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="fpe_recipients_title">Recipients</h2><span class="hint" data-i18n="fpe_recipients_hint">Search by name (use * as a wildcard, e.g. budi*santoso), SID, email, or phone number, then add each person. You can also paste a list of emails below.</span></div>
+        <div class="field-card">
+          <label class="field-card-top" for="fpeRecipientType" data-i18n="sched_recipient_type">Recipients</label>
+          <select id="fpeRecipientType" class="field-card-input">
+            <option value="list" data-i18n="batch_recipient_list_people">Picked or pasted emails</option>
+            <option value="active_aum" data-i18n="sched_recipient_active_aum">Investors with AUM in active funds</option>
+            <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM</option>
+            <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users</option>
+          </select>
+        </div>
+        <div class="callout hidden" id="fpeGroupCount" style="margin-top:12px">
+          <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>
+          <span id="fpeGroupCountText"></span>
+        </div>
+        <div id="fpeListFields" style="margin-top:16px">
         <div class="ask-bar">
           <input id="fpeSearchInput" type="text" autocomplete="off" aria-label="Search registered users" data-i18n-placeholder="common_recipient_search_ph" placeholder="Name, SID, email, or phone" />
           <button id="fpeSearchBtn" class="btn-primary" data-i18n="common_search">Search</button>
@@ -646,6 +680,7 @@
         <div class="field-card" style="margin-top:16px">
           <label class="field-card-top" for="fpePasteEmails"><span data-i18n="fpe_paste_label">Or paste emails (one per line, or comma-separated)</span></label>
           <textarea id="fpePasteEmails" rows="4" class="field-card-input" style="resize:vertical" placeholder="jane@example.com&#10;john@example.com"></textarea>
+        </div>
         </div>
       </div>
 
@@ -711,7 +746,7 @@
       </dialog>
 
       <dialog id="fpeSchedModal" class="admin-modal">
-        <div class="panel-head wrap"><h2 data-i18n="sched_modal_title">New automated schedule</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
+        <div class="panel-head wrap"><h2 id="fpeSchedTitle" data-i18n="sched_modal_title">New automated schedule</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
 
         <div id="fpeSchedStep1">
           <div class="field-card" style="margin-top:8px">
@@ -741,7 +776,12 @@
             <span id="fpeSchedCountPreviewText"></span>
           </div>
 
-          <div class="field-card" style="margin-top:16px">
+          <div class="callout hidden" id="fpeSchedOnceNote" style="margin-top:12px">
+            <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-file"></use></svg></span>
+            <span id="fpeSchedOnceNoteText"></span>
+          </div>
+
+          <div class="field-card" id="fpeSchedScopeField" style="margin-top:16px">
             <label class="field-card-top" for="fpeSchedFundScope" data-i18n="fpe_scope_label">Funds in the report</label>
             <select id="fpeSchedFundScope" class="field-card-input">
               <option value="all" data-i18n="fpe_scope_all">All funds</option>
@@ -755,7 +795,7 @@
             <div id="fpeSchedFundScopeFundList" class="fund-pick" role="group" aria-label="Funds"></div>
           </div>
 
-          <div class="field-card-row" style="margin-top:16px">
+          <div class="field-card-row" id="fpeSchedWhenRow" style="margin-top:16px">
             <div class="field-card">
               <label class="field-card-top" data-i18n="sched_frequency">Frequency</label>
               <select id="fpeSchedFrequency" class="field-card-input">
@@ -787,7 +827,7 @@
             </div>
           </div>
 
-          <div class="field-card-row" style="margin-top:16px">
+          <div class="field-card-row" id="fpeSchedEndRow" style="margin-top:16px">
             <div class="field-card">
               <label class="field-card-top"><input type="checkbox" id="fpeSchedEndless" checked />
                 <span data-i18n="sched_endless">No end date (send indefinitely)</span></label>
@@ -3506,11 +3546,11 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Send e-statement &amp; portfolio</h3>
-          <p data-i18n="docs_send_statement_desc">Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, their monthly transaction e-statement for a chosen month, or both in one email. The compose step shows an editable subject and body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's date of birth on file (DDMMYYYY) as its open password, or left unlocked if we have no birthdate for them, and the default letter tells them the password format. Batch send sends the same documents to many investors at once: search by name (* works as a wildcard, e.g. budi*santoso), SID, email, or phone number and add investors one by one, and/or paste a list of emails or SIDs. Anything that doesn't match an investor is reported back, not silently skipped. "+ New schedule" turns this into a recurring send (daily, weekly, or monthly at a chosen WIB time) of the portfolio, the e-statement, or both. A schedule goes to one email, a pasted or uploaded list, investors with AUM in active funds (holding an active fund today), all investors with AUM (the latest snapshot, which also counts leftover units in inactive funds such as the Avrist Liquid sign-up promo), or all registered users. The form shows how many people that is before you confirm. Creating a schedule needs a one-time code emailed to whoever sets it up. It runs until an optional end date. Resuming a paused schedule sends anything that came due while it was paused right away and refreshes its next run date. Every scheduled send is logged in the same history as manual sends.</p>
+          <p data-i18n="docs_send_statement_desc">Search an investor, then email them their portfolio (holdings only, no fund performance breakdown) as of a chosen date, their monthly transaction e-statement for a chosen month, or both in one email. The compose step shows an editable subject and body (pre-filled with a default letter) before anything is sent. Each attached PDF is locked with the investor's date of birth on file (DDMMYYYY) as its open password, or left unlocked if we have no birthdate for them, and the default letter tells them the password format. Batch send sends the same documents to many investors at once: search by name (* works as a wildcard, e.g. budi*santoso), SID, email, or phone number and add investors one by one, and/or paste a list of emails or SIDs. Anything that doesn't match an investor is reported back, not silently skipped. "+ New schedule" turns this into a recurring send (daily, weekly, or monthly at a chosen WIB time) of the portfolio, the e-statement, or both. A schedule goes to one email, a pasted or uploaded list, investors with AUM in active funds (holding an active fund today), all investors with AUM (the latest snapshot, which also counts leftover units in inactive funds such as the Avrist Liquid sign-up promo), or all registered users. The form shows how many people that is before you confirm. Batch send can also go to one of these groups once, right away: pick the group under Recipients, confirm with an emailed code, and the emails go out from a queue, several at a time. The Emails column under Automated sending shows how many are sent, waiting, or failed. A group always gets the live portfolio. Creating a schedule needs a one-time code emailed to whoever sets it up. It runs until an optional end date. Resuming a paused schedule sends anything that came due while it was paused right away and refreshes its next run date. Every scheduled send is logged in the same history as manual sends.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg> Send fund performance</h3>
-          <p data-i18n="docs_send_fund_performance_desc">Emails the "Reksa Dana Update" PDF to a list of people. Choose which funds the report covers: all funds, one or more fund categories, or specific funds, plus the NAV date. Add recipients by searching name (* works as a wildcard), SID, email, or phone number and adding them one by one, and/or paste a list of emails. Each recipient gets their own email, so one bad address doesn't block the rest. Unlike Send e-statement &amp; portfolio, this can go to any email, investor or not. It has its own send history, and "+ New schedule" sets up a recurring send with the same fund choice. A schedule goes to one email, a pasted or uploaded list, investors with AUM in active funds (holding an active fund today), all investors with AUM (the latest snapshot, which also counts leftover units in inactive funds such as the Avrist Liquid sign-up promo), or all registered users. The form shows how many people that is before you confirm. Resuming a paused schedule sends anything that came due while it was paused right away and refreshes its next run date.</p>
+          <p data-i18n="docs_send_fund_performance_desc">Emails the "Reksa Dana Update" PDF to a list of people. Choose which funds the report covers: all funds, one or more fund categories, or specific funds, plus the NAV date. Add recipients by searching name (* works as a wildcard), SID, email, or phone number and adding them one by one, and/or paste a list of emails. Each recipient gets their own email, so one bad address doesn't block the rest. Unlike Send e-statement &amp; portfolio, this can go to any email, investor or not. It has its own send history, and "+ New schedule" sets up a recurring send with the same fund choice. A schedule goes to one email, a pasted or uploaded list, investors with AUM in active funds (holding an active fund today), all investors with AUM (the latest snapshot, which also counts leftover units in inactive funds such as the Avrist Liquid sign-up promo), or all registered users. The form shows how many people that is before you confirm. Recipients can also be one of these groups, sent once, right away: confirm with an emailed code, and the emails go out from a queue, several at a time. The Emails column under Automated sending shows how many are sent, waiting, or failed. Resuming a paused schedule sends anything that came due while it was paused right away and refreshes its next run date.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Email recap</h3>

@@ -131,6 +131,20 @@ interface StatementAttachmentArgs {
   sendStatement?: boolean;
   statementMonth?: string;
   username: string;
+  // Rows already fetched for a chunk of investors at once (the schedules
+  // drain); omitted, they are queried for this investor.
+  holdings?: Record<string, unknown>[];
+  transactions?: Record<string, unknown>[];
+}
+
+// First and last day of a 'YYYY-MM' e-statement month.
+export function statementMonthRange(statementMonth?: string): { from: string; to: string } {
+  const [year, month] = String(statementMonth || '').split('-').map(Number);
+  if (!year || !month) throw new Error('statementMonth is required (YYYY-MM).');
+  return {
+    from: `${year}-${String(month).padStart(2, '0')}-01`,
+    to: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10), // last day of that month
+  };
 }
 
 // Builds the 1-2 statement PDF attachments (and applies the shared
@@ -139,26 +153,28 @@ interface StatementAttachmentArgs {
 // scheduler (schedules.ts). Throws on a missing/malformed statementMonth so
 // the caller decides how to report it.
 export async function buildStatementAttachments(
-  { userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username }: StatementAttachmentArgs,
+  { userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username, holdings, transactions }: StatementAttachmentArgs,
 ): Promise<{ filename: string; content: Uint8Array }[]> {
   const password = birthdatePassword(contact.birthdate) ?? undefined;
   const attachments: { filename: string; content: Uint8Array }[] = [];
 
   if (sendPortfolio) {
-    const h = portfolioDate ? Q.userHoldingsAsOfFix(sid, portfolioDate) : Q.userHoldings(userId);
-    const holdings = await runQuery(h.sql, h.params);
+    if (!holdings) {
+      const h = portfolioDate ? Q.userHoldingsAsOfFix(sid, portfolioDate) : Q.userHoldings(userId);
+      holdings = await runQuery(h.sql, h.params);
+    }
     // Portfolio-only, no fund-performance pages — this tool never sends performance.
     const buf = await portfolioReport({ contact, holdings }, [], { username, password });
     attachments.push({ filename: `Portfolio_${sid}${portfolioDate ? '_' + portfolioDate : ''}.pdf`, content: new Uint8Array(buf) });
   }
 
   if (sendStatement) {
-    const [year, month] = String(statementMonth || '').split('-').map(Number);
-    if (!year || !month) throw new Error('statementMonth is required (YYYY-MM).');
-    const from = `${year}-${String(month).padStart(2, '0')}-01`;
-    const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10); // last day of that month
-    const t = Q.userTransactions(userId, from, to);
-    const transactions = await runQuery(t.sql, t.params);
+    const { from, to } = statementMonthRange(statementMonth);
+    if (!transactions) {
+      const t = Q.userTransactions(userId, from, to);
+      transactions = await runQuery(t.sql, t.params);
+    }
+    const [year, month] = String(statementMonth).split('-').map(Number);
     const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     const buf = await transactionStatement({ contact, transactions }, monthLabel, { username, password });
     attachments.push({ filename: `Transaction_Statement_${sid}_${statementMonth}.pdf`, content: new Uint8Array(buf) });

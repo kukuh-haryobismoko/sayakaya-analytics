@@ -30,7 +30,7 @@ const Q = require('./queries');
 const PDF = require('./pdf');
 const Mail = require('./mail');
 const Auth = require('./auth');
-const { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatementAttachments, previousMonthYYYYMM } = require('./report-helpers');
+const { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatementAttachments, previousMonthYYYYMM, statementMonthRange } = require('./report-helpers');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -39,14 +39,16 @@ const JAKARTA_OFFSET_MIN = 7 * 60; // WIB, UTC+7, no DST — same convention as 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function jktDateStr(d) { return new Date(d.getTime() + JAKARTA_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
 
-// Per drain call: statement sends each cost a BigQuery query + PDF render;
-// fund_performance sends share one already-built PDF, so they're cheap and
-// can run a much larger batch. Tune via env without a code change once the
-// real per-invocation time budget (Netlify vs. GCP Cloud Run) is known.
+// Queue rows one runner claims per call (dashboard_claim_queue): a statement
+// builds its own PDFs, fund performance shares one. Throughput comes from
+// parallel runners (pg_cron, migration 20261013130000), not big chunks; kept
+// the same as supabase/functions/api/schedules.ts.
 const DRAIN_LIMIT = {
-  statement: Number(process.env.SCHEDULE_DRAIN_LIMIT_STATEMENT) || 25,
-  fund_performance: Number(process.env.SCHEDULE_DRAIN_LIMIT_FUND_PERFORMANCE) || 100,
+  statement: Number(process.env.SCHEDULE_DRAIN_LIMIT_STATEMENT) || 10,
+  fund_performance: Number(process.env.SCHEDULE_DRAIN_LIMIT_FUND_PERFORMANCE) || 50,
 };
+// Emails in flight at once per runner, to stay near the SES send rate.
+const SEND_CONCURRENCY = Number(process.env.SCHEDULE_SEND_CONCURRENCY) || 5;
 // How many due jobs get a fresh queue populated per call — separate from the
 // per-job drain limit above, since populating the queue for "all registered
 // users" is itself one big (cheap) query, not per-recipient work.
@@ -86,6 +88,8 @@ function computeNextRun(job, from = new Date()) {
   const toUtc = (jktDate) => new Date(jktDate.getTime() - JAKARTA_OFFSET_MIN * 60000);
   const fromJkt = toJkt(from);
   const atTime = (y, mo, d) => new Date(Date.UTC(y, mo, d, h, m, 0, 0));
+
+  if (job.frequency === 'once') return from; // a group send from Batch send: due now
 
   if (job.frequency === 'daily') {
     let next = atTime(fromJkt.getUTCFullYear(), fromJkt.getUTCMonth(), fromJkt.getUTCDate());
@@ -216,6 +220,8 @@ async function confirmOtp(otpId, code) {
       send_portfolio: !!p.sendPortfolio,
       send_statement: !!p.sendStatement,
       fund_filter: p.fundFilter || null, // kind = 'fund_performance'; null = all funds
+      statement_month: p.statementMonth || null, // 'once' sends; null = previous month
+      nav_as_of: p.navAsOf || null,              // 'once' sends; null = latest NAV
       subject: p.subject || null,
       body: p.body || null,
       frequency: p.frequency,
@@ -235,8 +241,13 @@ async function confirmOtp(otpId, code) {
 }
 
 // ---- CRUD used by the UI ----------------------------------------------------
-function listJobs(kind) {
-  return rest(`/dashboard_scheduled_jobs?kind=eq.${kind}&select=*&order=created_at.desc`);
+// Each job carries its email counts (sent / waiting / failed) for the table.
+async function listJobs(kind) {
+  const jobs = await rest(`/dashboard_scheduled_jobs?kind=eq.${kind}&select=*&order=created_at.desc`);
+  if (!jobs.length) return jobs;
+  const progress = await rest(`/dashboard_schedule_progress?job_id=in.(${jobs.map((j) => j.id).join(',')})&select=*`);
+  const byJob = new Map(progress.map((p) => [p.job_id, p]));
+  return jobs.map((j) => ({ ...j, progress: byJob.get(j.id) || null }));
 }
 
 async function getJob(id) {
@@ -309,74 +320,132 @@ async function markQueueRow(id, status, error) {
 
 // Drains up to `limit` pending queue rows for one job. Builds the shared fund
 // performance PDF at most once per call (not once per recipient).
-async function drainQueueForJob(job, limit) {
-  const rows = await rest(`/dashboard_schedule_queue?job_id=eq.${job.id}&status=eq.pending&select=*&order=created_at.asc&limit=${limit}`);
-  if (!rows.length) return { sent: 0, failed: 0 };
+// Runs fn over items with at most `limit` in flight.
+async function mapLimit(items, limit, fn) {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) await fn(items[next++]);
+  }));
+}
 
+// SES rejects a burst over the account's send rate (or past its daily quota)
+// with a throttling error; those rows go back to the queue, nothing was sent.
+const THROTTLED_RE = /throttl|rate exceeded|quota exceeded|\b454\b/i;
+
+// Groups BigQuery rows by user_id.
+function byUser(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    if (!m.has(r.user_id)) m.set(r.user_id, []);
+    m.get(r.user_id).push(r);
+  }
+  return m;
+}
+
+// One runner's share of the queue: claims a chunk of one job's rows
+// (dashboard_claim_queue, so parallel runners never get the same row),
+// fetches what the chunk needs in one go, then sends SEND_CONCURRENCY at a time.
+async function drainChunk() {
+  const rows = await rest('/rpc/dashboard_claim_queue', {
+    method: 'POST',
+    body: JSON.stringify({ p_statement_limit: DRAIN_LIMIT.statement, p_fund_limit: DRAIN_LIMIT.fund_performance }),
+  });
+  if (!rows || !rows.length) return { sent: 0, failed: 0 };
+  const job = await getJob(rows[0].job_id);
+  if (!job) return { sent: 0, failed: 0 }; // deleted meanwhile; its queue rows went with it
+
+  const sentBy = job.created_by_username || 'schedule';
+  const source = job.frequency === 'once' ? 'batch' : 'schedule';
+  const label = job.frequency === 'once' ? 'Group send' : `Scheduled ${job.frequency}`;
   const senderEmail = job.kind === 'statement'
     ? (process.env.SMTP_FROM_STATEMENT || 'estatement@sayakaya.id')
     : (process.env.SMTP_FROM_FUND_PERFORMANCE || 'hi@sayakaya.id');
 
-  let fundPerfBuffer = null;
-  let sent = 0, failed = 0;
-
-  for (const row of rows) {
-    try {
-      if (job.kind === 'fund_performance') {
-        if (!fundPerfBuffer) {
-          fundPerfBuffer = await buildFundPerformancePdf({ fundFilter: job.fund_filter, username: job.created_by_username || 'schedule' });
-        }
+  let send;
+  try {
+    if (job.kind === 'fund_performance') {
+      const asOf = job.nav_as_of || undefined;
+      const pdf = await buildFundPerformancePdf({ asOf, fundFilter: job.fund_filter, username: sentBy });
+      send = async (row) => {
         await Mail.sendStatementEmail({
           to: row.recipient_email, subject: job.subject, body: job.body,
-          attachments: [{ filename: 'Reksa_Dana_Update.pdf', content: fundPerfBuffer }],
+          attachments: [{ filename: `Reksa_Dana_Update${asOf ? `_${asOf}` : ''}.pdf`, content: pdf }],
           from: senderEmail,
           log: {
-            category: 'fund_performance', source: 'schedule', sentBy: job.created_by_username, jobId: job.id,
-            description: `Scheduled ${job.frequency} Reksa Dana Update PDF (${fundScopeLabel(job.fund_filter)})`,
+            category: 'fund_performance', source, sentBy: job.created_by_username, jobId: job.id,
+            description: `${label} Reksa Dana Update PDF${asOf ? ` as of ${asOf}` : ''} (${fundScopeLabel(job.fund_filter)})`,
           },
         });
-        await Auth.logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_fund_performance',
-          `scheduled fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
-      } else {
-        const c = Q.userContact(row.recipient_user_id);
-        const [contact] = await runQuery(c.sql, c.params, { redact: false });
-        if (!contact?.email) throw new Error('no email on file');
-        const statementMonth = previousMonthYYYYMM(); // recurring sends always cover the last completed month
+        await Auth.logEvent(job.created_by_user_id, sentBy, 'email_fund_performance',
+          `${label.toLowerCase()} fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
+      };
+    } else {
+      const statementMonth = job.statement_month || previousMonthYYYYMM(); // recurring sends cover the last completed month
+      const { from, to } = statementMonthRange(statementMonth);
+      const ids = rows.map((r) => r.recipient_user_id);
+      const c = Q.userContactBatch(ids);
+      const h = Q.userHoldingsBatch(ids);
+      const t = Q.userTransactionsBatch(ids, from, to);
+      const [contacts, holdings, transactions] = await Promise.all([
+        runQuery(c.sql, c.params, { redact: false }),
+        job.send_portfolio ? runQuery(h.sql, h.params) : [],
+        job.send_statement ? runQuery(t.sql, t.params) : [],
+      ]);
+      const contactOf = new Map(contacts.map((r) => [r.user_id, r]));
+      const holdingsOf = byUser(holdings);
+      const txOf = byUser(transactions);
+      const docs = statementDocsLabel({ sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth });
+      const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
+      send = async (row) => {
+        const userId = row.recipient_user_id;
+        const contact = contactOf.get(userId);
+        if (!contact || !contact.email) throw new Error('no email on file');
         const attachments = await buildStatementAttachments({
-          userId: row.recipient_user_id, sid: row.recipient_sid, contact,
-          sendPortfolio: job.send_portfolio, sendStatement: job.send_statement,
-          statementMonth,
-          username: job.created_by_username || 'schedule',
+          userId, sid: row.recipient_sid, contact,
+          sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth,
+          holdings: holdingsOf.get(userId) || [], transactions: txOf.get(userId) || [],
+          username: sentBy,
         });
+        const name = PDF.val(contact.name) || row.recipient_sid;
         await Mail.sendStatementEmail({
           to: contact.email, subject: job.subject, body: job.body, name: contact.name, attachments, from: senderEmail,
           log: {
-            category: 'statement', source: 'schedule', sentBy: job.created_by_username, jobId: job.id,
-            userId: row.recipient_user_id, sid: row.recipient_sid,
-            description: `Scheduled ${job.frequency} ${statementDocsLabel({ sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth })} for ${PDF.val(contact.name) || row.recipient_sid}`,
+            category: 'statement', source, sentBy: job.created_by_username, jobId: job.id,
+            userId, sid: row.recipient_sid, description: `${label} ${docs} for ${name}`,
           },
         });
-        const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
-        const recipient = `${PDF.val(contact.name) || row.recipient_sid} (SID ${row.recipient_sid}, ${contact.email})`;
-        await Auth.logEvent(job.created_by_user_id, job.created_by_username || 'schedule', 'email_pdf',
-          `scheduled send-statement (${sentDesc}) to ${recipient}`);
-      }
+        await Auth.logEvent(job.created_by_user_id, sentBy, 'email_pdf',
+          `${label.toLowerCase()} send-statement (${sentDesc}) to ${name} (SID ${row.recipient_sid}, ${contact.email})`);
+      };
+    }
+  } catch (e) {
+    // Nothing went out: the chunk's shared data (PDF, BigQuery rows) failed.
+    await Promise.all(rows.map((row) => markQueueRow(row.id, 'failed', e.message)));
+    return { sent: 0, failed: rows.length };
+  }
+
+  let sent = 0, failed = 0;
+  await mapLimit(rows, SEND_CONCURRENCY, async (row) => {
+    try {
+      await send(row);
       await markQueueRow(row.id, 'sent');
       sent++;
     } catch (e) {
-      await markQueueRow(row.id, 'failed', e.message);
-      failed++;
+      if (THROTTLED_RE.test(e.message)) {
+        await markQueueRow(row.id, 'pending');
+      } else {
+        await markQueueRow(row.id, 'failed', e.message);
+        failed++;
+      }
     }
-  }
+  });
   return { sent, failed };
 }
 
-// The entry point invoked by POST /api/cron/run-due-schedules. Two-phase per
 // tick: (1) claim newly-due jobs by populating their queue and pushing
 // next_run_at forward — done first and atomically-enough (see the
 // conditional PATCH below) so a job is never enqueued twice even if two
-// ticks overlap; (2) drain a bounded number of pending queue rows so
-// existing large jobs make steady progress across ticks.
+// ticks overlap; (2) send one claimed chunk of the queue (drainChunk).
 // jobId (optional): limit the tick to one job — used by resumeJob().
 async function runDueJobs(jobId) {
   const nowIso = new Date().toISOString();
@@ -396,7 +465,7 @@ async function runDueJobs(jobId) {
     // if the *next* occurrence would fall after end_date, this is the last
     // run: end the job now instead of advancing next_run_at into the future,
     // so the table doesn't show a "Next run" for a schedule that's done.
-    const isLastRun = job.end_date && jktDateStr(nextRun) > job.end_date;
+    const isLastRun = job.frequency === 'once' || (job.end_date && jktDateStr(nextRun) > job.end_date);
     // Conditional claim: only proceed if next_run_at still matches what we
     // just read — if another concurrent tick already claimed it, this PATCH
     // affects zero rows and we skip, avoiding a double-enqueue.
@@ -417,15 +486,9 @@ async function runDueJobs(jobId) {
     enqueued += await enqueueJob(job);
   }
 
-  // 'ended' too: a job's last run flips it to ended at claim time, above, and
-  // its queue still has to drain. Paused jobs are skipped until resumed.
-  const activeJobs = await rest(`/dashboard_scheduled_jobs?status=in.(active,ended)${only}&select=*`);
-  let sent = 0, failed = 0;
-  for (const job of activeJobs) {
-    const r = await drainQueueForJob(job, DRAIN_LIMIT[job.kind] || 25);
-    sent += r.sent; failed += r.failed;
-  }
-
+  // Ended jobs still drain (a job's last run flips it to ended at claim time,
+  // above); paused jobs wait (dashboard_claim_queue skips them).
+  const { sent, failed } = await drainChunk();
   return { jobsClaimed: due.length, recipientsEnqueued: enqueued, sent, failed };
 }
 

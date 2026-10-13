@@ -733,6 +733,47 @@ export const userHoldings = (userId: string): Query => ({
   params: { userId },
 });
 
+// userTransactions / userHoldings for a whole chunk of investors, one query
+// each, for scheduled and group sends (the schedules drain): 3 queries per 10
+// statements instead of 30, and ~133 MB scanned per chunk instead of per
+// investor. Same SQL as the single-investor queries, plus user_id.
+export const userTransactionsBatch = (userIds: string[], from: string, to: string): Query => ({
+  sql: `SELECT t.user_id, t.created_at, t.type, t.status, f.name AS fund, t.unit, t.amount, t.final_amount
+    FROM ${TX} t
+    LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+    WHERE t.user_id IN UNNEST(@userIds) AND DATE(t.created_at) BETWEEN @from AND @to
+      AND t.status IN ('completed', 'verified', 'completed_payment')
+    ORDER BY t.user_id, t.created_at`,
+  params: { userIds, from, to },
+});
+
+export const userHoldingsBatch = (userIds: string[]): Query => ({
+  sql: `WITH holdings AS (
+      SELECT user_id, fund_id, SUM(unit) AS unit, SAFE_DIVIDE(SUM(unit * price), SUM(unit)) AS avg_buy_price, MIN(created_at) AS opened_at
+      FROM (
+        SELECT p.user_id, p.fund_id, p.unit, p.initial_price AS price, p.created_at
+        FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id IN UNNEST(@userIds)
+        UNION ALL
+        SELECT bp.user_id, bp.fund_id, bp.unit, bp.average_nav AS price, bp.created_at
+        FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id IN UNNEST(@userIds)
+      )
+      GROUP BY user_id, fund_id
+    )
+    SELECT *, value - fund_value AS gain_loss,
+      SAFE_DIVIDE(value - fund_value, fund_value) * 100 AS gain_pct
+    FROM (
+      SELECT h.user_id, f.name AS fund, f.type AS fund_type, h.unit, h.avg_buy_price,
+        f.latest_nav_value AS nav, f.latest_nav_date AS nav_date,
+        ROUND(h.unit * h.avg_buy_price) AS fund_value,
+        ROUND(h.unit * f.latest_nav_value) AS value,
+        h.opened_at
+      FROM holdings h
+      JOIN ${FUNDS} f ON f.id = h.fund_id
+    )
+    ORDER BY user_id, value DESC`,
+  params: { userIds },
+});
+
 // Batched per-recipient recap for a schedule's queue detail view: for each
 // user, whether they currently hold any portfolio units (same "active
 // holdings" definition as userHoldings — regular + bonus, unit > 0/on_going)

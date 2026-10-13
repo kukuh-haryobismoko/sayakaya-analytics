@@ -1959,8 +1959,14 @@ function createApp({ serveStatic = true } = {}) {
       kind, recipientType, recipientEmail, recipientList, sendPortfolio, sendStatement,
       subject, body, frequency, dayOfWeek, dayOfMonth, runTime, endDate, confirmationEmail,
     } = req.body || {};
+    // A group send from Batch send (frequency 'once') keeps the form's month / NAV date.
+    const once = frequency === 'once';
+    const statementMonth = once && req.body.statementMonth ? String(req.body.statementMonth) : null;
+    const navAsOf = once && req.body.navAsOf ? String(req.body.navAsOf) : null;
     if (!recipientType) return res.status(400).json({ error: 'recipientType is required.' });
     if (!frequency) return res.status(400).json({ error: 'frequency is required.' });
+    if (statementMonth && !/^\d{4}-\d{2}$/.test(statementMonth)) return res.status(400).json({ error: 'statementMonth must be YYYY-MM.' });
+    if (navAsOf && !/^\d{4}-\d{2}-\d{2}$/.test(navAsOf)) return res.status(400).json({ error: 'navAsOf must be YYYY-MM-DD.' });
     if (kind === 'statement' && !sendPortfolio && !sendStatement) {
       return res.status(400).json({ error: 'Pick at least one document to send.' });
     }
@@ -1970,8 +1976,8 @@ function createApp({ serveStatic = true } = {}) {
     const otpId = await Sched.requestOtp({
       kind, recipientType, recipientEmail, recipientList, sendPortfolio, sendStatement,
       fundFilter: kind === 'fund_performance' ? normalizeFundFilter(req.body.fundFilter) : null,
-      subject, body, frequency, dayOfWeek, dayOfMonth, runTime, endDate, confirmationEmail,
-      userId: req.user.id, username: req.user.username,
+      subject, body, frequency, dayOfWeek, dayOfMonth, runTime, endDate: once ? null : endDate, confirmationEmail,
+      statementMonth, navAsOf, userId: req.user.id, username: req.user.username,
     });
     res.json({ ok: true, otpId, recipientCount: count });
   }));
