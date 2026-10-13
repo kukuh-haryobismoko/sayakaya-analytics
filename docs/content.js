@@ -520,7 +520,7 @@ const TAB_DETAILS = {
   },
   predict: {
     panels: {
-      'Model status': { note: 'Kapan model terakhir dilatih, dan tombol Retrain now untuk melatih ulang. Jadwal bulanannya ada di Netlify, jadi cek tanggal di panel ini untuk memastikan masih berjalan.', },
+      'Model status': { note: 'Kapan model terakhir dilatih, dan tombol Retrain now untuk melatih ulang. Jadwal bulanannya pg_cron di Supabase (tanggal 1, 07.00 WIB), jadi cek tanggal di panel ini untuk memastikan masih berjalan.', },
       'AUM forecast': { note: 'AUM harian historis dan perkiraan ke depan dari model ARIMA_PLUS (sayakaya.ml.aum_forecast), dengan rentang ketidakpastian (batas bawah dan atas).', },
       'Transaction (buy volume) forecast': { note: 'Volume pembelian completed harian dan perkiraannya (sayakaya.ml.tx_forecast), memperhitungkan hari libur Indonesia.', },
       'Churn risk (current holders)': { note: 'Investor yang masih memegang unit, diurutkan dari risiko churn tertinggi.', columns: [

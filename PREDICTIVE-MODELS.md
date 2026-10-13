@@ -18,10 +18,10 @@ The retention and churn-rate sections work immediately. The forecasts and churn
 
 ## Retraining
 
-The models retrain **automatically, monthly** (the 1st of each month, via a
-Netlify Scheduled Function → `POST /api/cron/retrain-models`, same shape as
-the e-statement schedule cron — see `netlify/functions/cron-retrain-models.js`
-and `netlify.toml`). A superuser can also trigger it on demand from the
+The models retrain **automatically, monthly** (the 1st of each month, 07:00
+WIB, via the Supabase pg_cron job `dashboard-retrain-models` →
+`POST /api/cron/retrain-models`, same shape as the scheduled-sending tick; see
+`supabase/migrations/20261013140000_retrain_models_cron.sql`). A superuser can also trigger it on demand from the
 **Predict** tab's "Retrain now" button (`POST /api/ml/retrain`) — useful right
 after a data shift you don't want to wait for the schedule on. Both call the
 same job, `server/ml-train.js` (`supabase/functions/api/ml-train.ts` on the
@@ -66,8 +66,8 @@ queries use their own cap, `ML_TRAIN_MAX_BYTES_BILLED` (default 50 GB, see
 tying it to the same cap as page-load queries would mean bumping both every
 time one needs headroom. Calling the models (what the app does on each page
 load) is cheap and stays under `MAX_BYTES_BILLED` as usual. Monthly is the
-default cadence — change it in `netlify.toml`'s `[functions."cron-retrain-models"]`
-block if you need it more or less often.
+default cadence — change it with `cron.alter_job` on `dashboard-retrain-models`
+(or a new migration) if you need it more or less often.
 
 ## Checking quality
 

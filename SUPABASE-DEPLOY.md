@@ -249,6 +249,10 @@ If you rotate `CRON_SECRET`, update the Vault secret too
 Check it is running: `select * from cron.job_run_details order by start_time desc limit 5`
 and `select status_code, created from net._http_response order by created desc limit 5`.
 
+The monthly model retrain uses the same key: pg_cron job
+`dashboard-retrain-models`, 00:00 UTC on the 1st (07:00 WIB), calls
+`POST /api/cron/retrain-models` (migration `20261013140000_retrain_models_cron.sql`).
+
 ## Email tracking (Email recap tab)
 
 Every email the app sends is written to `dashboard_email_log` at send time,

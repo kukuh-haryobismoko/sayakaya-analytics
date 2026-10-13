@@ -2284,8 +2284,8 @@ on('POST', '/api/cron/run-due-schedules', async (req) => {
 });
 
 // ---- Scheduled ML retraining: same external-scheduler shape as the cron
-// route above (Netlify Scheduled Function, monthly — see netlify.toml), just
-// a different job. See server/ml-train.js's header comment for why.
+// route above (pg_cron job dashboard-retrain-models, monthly), just a
+// different job. See server/ml-train.js's header comment for why.
 on('POST', '/api/cron/retrain-models', async (req) => {
   const expected = Deno.env.get('CRON_SECRET');
   if (!expected) return json({ error: 'CRON_SECRET is not configured on the server.' }, 500);
