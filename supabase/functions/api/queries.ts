@@ -1255,6 +1255,19 @@ export const allInvestorsWithAum = (): Query => ({
   params: {},
 });
 
+// Every investor holding units of an ACTIVE fund today, with an email on
+// file: the same holdings rule as the Product tabs (USER_AUM_SQL, live
+// portfolios plus on-going bonus units, ACTIVE funds only). allInvestorsWithAum
+// above also counts INACTIVE-fund leftovers (Avrist Liquid promo, ~218k
+// accounts in Oct 2026), so it reaches ~232k people against ~13.8k here.
+export const allActiveFundInvestors = (): Query => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.email
+    FROM (${USER_AUM_SQL}) a
+    JOIN ${USERS} u ON u.id = a.user_id
+    WHERE a.aum > 0 AND u.email IS NOT NULL`,
+  params: {},
+});
+
 // Every registered user with an email on file — the broadest recipient pool,
 // regardless of whether they hold anything.
 export const allRegisteredUsersWithEmail = (): Query => ({

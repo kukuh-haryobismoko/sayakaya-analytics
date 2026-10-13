@@ -30,7 +30,7 @@ const MAX_JOBS_ENQUEUED_PER_TICK = 5;
 export interface ScheduledJob {
   id: string;
   kind: 'statement' | 'fund_performance';
-  recipient_type: 'single_email' | 'csv_list' | 'all_aum' | 'all_registered';
+  recipient_type: 'single_email' | 'csv_list' | 'all_aum' | 'active_aum' | 'all_registered';
   recipient_email: string | null;
   recipient_list: string[] | null;
   send_portfolio: boolean;
@@ -136,8 +136,9 @@ export interface RecipientSpec {
 interface Recipient { email: string; userId: string | null; sid: string | null }
 
 export async function resolveRecipients({ kind, recipientType, recipientEmail, recipientList }: RecipientSpec): Promise<Recipient[]> {
-  if (recipientType === 'all_aum' || recipientType === 'all_registered') {
-    const q = recipientType === 'all_aum' ? Q.allInvestorsWithAum() : Q.allRegisteredUsersWithEmail();
+  const pool = new Map([['all_aum', Q.allInvestorsWithAum], ['active_aum', Q.allActiveFundInvestors], ['all_registered', Q.allRegisteredUsersWithEmail]]).get(recipientType);
+  if (pool) {
+    const q = pool();
     const rows = await runQuery(q.sql, q.params);
     return rows
       .map((r) => ({ email: val(r.email) as string, userId: r.user_id as string, sid: val(r.sid) as string }))

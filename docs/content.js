@@ -785,7 +785,7 @@ const TAB_DETAILS = {
       'Portfolio preview': { note: 'Isi lampiran portofolio sebelum dikirim: tanpa tanggal memakai kepemilikan live (unit dikali NAV terbaru, harga beli dari portfolios.initial_price); dengan tanggal memakai snapshot portfolio_fix pada tanggal itu.', },
       'Transaction e-statement preview': { note: 'Transaksi berstatus completed, verified, atau completed_payment pada bulan terpilih yang akan masuk e-statement.', },
       'Batch send': { note: 'Kirim dokumen yang sama ke banyak investor sekaligus: cari per nama (* sebagai wildcard), SID, email, atau nomor HP, atau tempel daftar email/SID. Satu email per penerima.', },
-      'Automated sending': { note: 'Jadwal kirim berulang. Membuat jadwal meminta kode OTP lewat email. Jadwal selalu memakai portofolio live dan e-statement bulan lalu.', columns: [
+      'Automated sending': { note: 'Jadwal kirim berulang. Membuat jadwal meminta kode OTP lewat email. Jadwal selalu memakai portofolio live dan e-statement bulan lalu. Penerima: satu email, daftar tempel/CSV, investor dengan AUM di fund aktif (holding live ACTIVE, sama dengan tab Product, ~13,8 rb per Okt 2026), semua investor dengan AUM (snapshot portfolio_fix terakhir, termasuk sisa unit fund nonaktif, ~232 rb), atau semua pengguna terdaftar. Jumlah penerima tampil sebelum OTP.', columns: [
         ['Sends', 'Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.'],
         ['Status', 'Active (berjalan), Paused (dijeda), Ended (melewati tanggal akhir).'],
       ],
@@ -800,7 +800,7 @@ const TAB_DETAILS = {
     panels: {
       Recipients: { note: 'Daftar penerima: cari investor per nama, SID, email, atau nomor HP, atau tempel daftar email.', },
       'Fund performance report': { note: 'PDF "Reksa Dana Update": persen perubahan NAV per periode (sama dengan tab Performance) untuk semua fund, kategori tertentu, atau fund pilihan, dengan NAV per tanggal terpilih.', },
-      'Automated sending': { note: 'Jadwal kirim laporan performa fund berulang.', columns: [
+      'Automated sending': { note: 'Jadwal kirim laporan performa fund berulang. Penerima: satu email, daftar tempel/CSV, investor dengan AUM di fund aktif (holding live ACTIVE, sama dengan tab Product, ~13,8 rb per Okt 2026), semua investor dengan AUM (snapshot portfolio_fix terakhir, termasuk sisa unit fund nonaktif, ~232 rb), atau semua pengguna terdaftar. Jumlah penerima tampil sebelum OTP.', columns: [
         ['Sends', 'Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.'],
         ['Status', 'Active (berjalan), Paused (dijeda), Ended (melewati tanggal akhir).'],
       ],

@@ -6473,7 +6473,7 @@ async function loadSchedules(kind) {
   } catch (e) { schedEl(prefix, 'Table').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
-const SCHED_RECIPIENT_LABEL = { single_email: null, csv_list: null, all_aum: 'All investors with AUM', all_registered: 'All registered users' };
+const SCHED_RECIPIENT_LABEL = { single_email: null, csv_list: null, all_aum: 'All investors with AUM', active_aum: 'Investors with AUM in active funds', all_registered: 'All registered users' };
 function schedRecipientSummary(row) {
   if (row.recipient_type === 'single_email') return val(row.recipient_email);
   if (row.recipient_type === 'csv_list') return `${(row.recipient_list || []).length} emails`;
@@ -6611,8 +6611,6 @@ function schedUpdateFieldVisibility(kind) {
   schedEl(prefix, 'WeekdayField').classList.toggle('hidden', freq !== 'weekly');
   schedEl(prefix, 'DayOfMonthField').classList.toggle('hidden', freq !== 'monthly_day');
   schedEl(prefix, 'EndDateField').classList.toggle('hidden', schedEl(prefix, 'Endless').checked);
-  if (type === 'all_aum' || type === 'all_registered') schedPreviewCount(kind);
-  else schedEl(prefix, 'CountPreview').classList.add('hidden');
 }
 
 // Reads the CSV file (if one was chosen) or falls back to the pasted
@@ -6644,17 +6642,29 @@ async function schedBuildSpec(kind) {
   return spec;
 }
 
+// Shown for every recipient choice so the count can be checked before the
+// OTP step; single email / CSV wait until something is entered. A pool count
+// can take seconds (all_aum returns ~232k rows), so a reply that lands after
+// the choice changed is dropped instead of overwriting the newer count.
+let schedPreviewSeq = 0;
 async function schedPreviewCount(kind) {
   const { prefix } = schedCfg(kind);
   const el = schedEl(prefix, 'CountPreview');
   const textEl = schedEl(prefix, 'CountPreviewText');
+  const type = schedEl(prefix, 'RecipientType').value;
+  const seq = ++schedPreviewSeq;
+  const empty = type === 'single_email' ? !schedEl(prefix, 'SingleEmail').value.trim()
+    : type === 'csv_list' ? !schedEl(prefix, 'CsvFile').files.length && !schedEl(prefix, 'CsvPaste').value.trim()
+    : false;
+  if (empty) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
   textEl.textContent = 'Checking recipient count…';
   try {
     const spec = await schedBuildSpec(kind);
     const { count } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify(spec) });
+    if (seq !== schedPreviewSeq) return;
     textEl.textContent = `This will reach approximately ${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'} per send.`;
-  } catch (e) { textEl.textContent = e.message; }
+  } catch (e) { if (seq === schedPreviewSeq) textEl.textContent = e.message; }
 }
 
 async function schedSendOtp(kind) {
@@ -7717,7 +7727,8 @@ function wire() {
   function wireSchedModal(kind) {
     const { prefix } = schedCfg(kind);
     schedEl(prefix, 'NewBtn').addEventListener('click', () => { schedResetModal(kind); schedEl(prefix, 'Modal').showModal(); });
-    schedEl(prefix, 'RecipientType').addEventListener('change', () => schedUpdateFieldVisibility(kind));
+    schedEl(prefix, 'RecipientType').addEventListener('change', () => { schedUpdateFieldVisibility(kind); schedPreviewCount(kind); });
+    schedEl(prefix, 'SingleEmail').addEventListener('change', () => schedPreviewCount(kind));
     schedEl(prefix, 'Frequency').addEventListener('change', () => schedUpdateFieldVisibility(kind));
     schedEl(prefix, 'Endless').addEventListener('change', () => schedUpdateFieldVisibility(kind));
     schedEl(prefix, 'CsvFile').addEventListener('change', () => schedPreviewCount(kind));

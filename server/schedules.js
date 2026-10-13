@@ -133,8 +133,9 @@ function computeNextRun(job, from = new Date()) {
 // send (see queries.js:usersByIdentifiers). For kind='fund_performance' any
 // syntactically valid email works since the same PDF goes to everyone.
 async function resolveRecipients({ kind, recipientType, recipientEmail, recipientList }) {
-  if (recipientType === 'all_aum' || recipientType === 'all_registered') {
-    const q = recipientType === 'all_aum' ? Q.allInvestorsWithAum() : Q.allRegisteredUsersWithEmail();
+  const pool = new Map([['all_aum', Q.allInvestorsWithAum], ['active_aum', Q.allActiveFundInvestors], ['all_registered', Q.allRegisteredUsersWithEmail]]).get(recipientType);
+  if (pool) {
+    const q = pool();
     const rows = await runQuery(q.sql, q.params, { redact: false });
     return rows
       .map((r) => ({ email: PDF.val(r.email), userId: r.user_id, sid: PDF.val(r.sid) }))
