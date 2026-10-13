@@ -552,6 +552,11 @@ td.neg { color: var(--neg-text); }
   padding: 18px 20px; width: 640px; max-width: calc(100vw - 32px);
   max-height: 85vh; overflow-y: auto;
 }
+/* Booth event: the rules panel, headings and bullet lists written from booth-event-config.js. */
+.be-rules h3 { font-size: 13px; font-weight: 600; margin: 16px 0 6px; }
+.be-rules h3:first-child { margin-top: 0; }
+.be-rules ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+.be-rules li { margin-bottom: 4px; }
 .admin-modal::backdrop { background: rgba(10, 12, 30, .5); }
 /* Tables and long lists: wider, so fewer columns need a sideways scroll. */
 .admin-modal.wide { width: 1000px; }

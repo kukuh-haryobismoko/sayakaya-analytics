@@ -33,7 +33,7 @@ Yang bisa dilakukan, secara garis besar:
 - **Marketing dan produk**: atribusi iklan, program referral, push notification, kesehatan aplikasi, dan perilaku pengguna di aplikasi yang dicocokkan dengan database (siapa membeli, di mana orang berhenti, fitur apa yang dipakai).
 - **Alat bantu**: bertanya dalam bahasa biasa (Ask), menjelajah tabel mentah, dan menulis query SQL sendiri (read-only).
 
-Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 48 tab dalam 8 grup.
+Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 49 tab dalam 8 grup.
 
 ## 2. Istilah penting
 
@@ -123,6 +123,7 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 | [Referral program (KYC based)](#tab-referral-program-alt) | Aturan dan detail sama dengan Referral program, definisi "Invited" berbeda. |
 | [Referral activity](#tab-kalcer) | Siapa mengajak siapa dan kapan, dari semua referral antar pengguna di aplikasi (bukan hanya ambassador satu program), plus AUM investor yang diajak pada tanggal pilihan. Dulu bernama Kalcer ambassadors. |
 | [Event code tracking](#tab-event-code) | Lacak kode referral/sales sebuah event: rekap harian registrasi dan transaksi completed terhadap target harian, performa per kode (termasuk keluarga kode lewat wildcard), funnel, daftar pengguna beserta portofolionya, detail transaksi, retensi transaksi, dan retensi portofolio. Semua panel bisa diunduh, termasuk satu workbook Excel berisi semuanya. |
+| [Booth event](#tab-booth-event) | Event booth offline di Pondok Indah Mall, Gandaria City, dan Central Park (19 Okt 2026 s.d. 3 Jan 2027): rekap harian nasabah baru per kode sales, insentif sales, flying team, dan team lead per periode, bonus nasabah (welcome bonus, nabung rutin, top up nasabah existing), dan journey Sucorwave. Versi khusus dari Event code tracking. |
 | [Push delivery](#tab-push) | Kesehatan pengiriman push notification: tren, per campaign, per platform. |
 
 **Product (Produk)**
@@ -378,6 +379,8 @@ Salinan database produksi aplikasi Sayakaya di BigQuery: akun dan profil penggun
 | `goal_snapshots` | Snapshot harian nilai per goal (sumber "GS"). | Portfolio Explorer (GS), Remisier sharing (GS), Revenue (GS) |
 | `goals` | Tujuan/portofolio tabungan yang dibuat investor di aplikasi. | Portfolio Explorer (GS), Remisier sharing (GS), Revenue (GS) |
 | `investment_managers` | Daftar manajer investasi. | AUM history, Campaign revenue, Data explorer, Growth, Overview, Referral program, Referral program (KYC based), Revenue (GS), Revenue (PWC), Revenue trend, User lifetime |
+| `investment_plan_funds` |  | alat bantu (Ask, Data explorer, ML) |
+| `investment_plans` |  | alat bantu (Ask, Data explorer, ML) |
 | `management_fee_logs` | Rate fee manajemen per fund dan perubahannya, termasuk bagian AperD dan MI. | Campaign revenue, Remisier sharing (GS), Remisier sharing (PWC), Revenue (GS), Revenue (PWC), Revenue trend, User lifetime |
 | `portfolios` | Kepemilikan unit per investor per fund saat ini, beserta harga beli awal. | Data explorer, Engagement analysis, Forecast & churn, Growth, Investor journey, Overview, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Redemption analysis, Send e-statement & portfolio, Subscription analysis |
 | `snapshots` | Riwayat harian NAV (dan AUM) per fund. | Campaign revenue, Performance, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Send e-statement & portfolio |
@@ -1294,6 +1297,38 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Endpoint: `GET /api/event-code/users`, `GET /api/event-code/funnel`, `GET /api/event-code/cohort`, `GET /api/event-code/recap`, `GET /api/event-code/portfolio`, `GET /api/event-code/transactions`
   - Fungsi query (`server/queries.js`): `eventCodeCohort`, `eventCodeFunnel`, `eventCodePortfolio`, `eventCodeRecap`, `eventCodeUsers`, `remisierTransactions`
   - Tabel BigQuery yang disentuh: `main.funds`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_fix`
+
+<a id="tab-booth-event"></a>
+#### Booth event
+
+- **Untuk apa**: Event booth offline di Pondok Indah Mall, Gandaria City, dan Central Park (19 Okt 2026 s.d. 3 Jan 2027): rekap harian nasabah baru per kode sales, insentif sales, flying team, dan team lead per periode, bonus nasabah (welcome bonus, nabung rutin, top up nasabah existing), dan journey Sucorwave. Versi khusus dari Event code tracking.
+- **Penjelasan sederhana**: Booth offline di Pondok Indah Mall, Gandaria City, dan Central Park, 19 Okt 2026 s.d. 3 Jan 2027. Setiap sales, team lead, dan flying team punya kode referral; nasabah yang daftar dengan kode itu dihitung sebagai nasabah baru orang dan booth tersebut. Tab ini menampilkan rekap harian (daftar, KYC verified, transaksi pertama, nasabah yang mencapai Rp 1 jt, uang masuk dan keluar), setiap nasabah dengan saldo hari ini dan berapa hari mereka menahan dana, insentif setiap sales dan flying team serta setiap team lead untuk periode terpilih (syarat, rule 1 sampai 4, total, dan yang dibayar setelah batas maksimal, dengan alasan bila syarat belum tercapai), serta bonus nasabah: welcome bonus, nabung rutin, dan bonus top up nasabah existing. Bulan yang tidak penuh targetnya diprorate. Semua aturan ada di satu file config (booth-event-config.js), dan panel Aturan di bawah ditulis dari file itu.
+- **Data yang dibaca**: main.users, main.user_profiles, main.transactions, main.funds, main.investment_managers, main.investment_plans, main.investment_plan_funds, main.portfolios, main.bonus_portfolios
+- **Cara hitung**: Semua aturan ada di public/booth-event-config.js (roster 27 kode, periode, target, tier insentif, bonus nasabah); endpoint /api/booth-event/data hanya mengirim data mentah dan halaman menghitung semuanya (boothCompute, boothIncentives, boothCustomerBonuses di app.js), jadi perubahan aturan cukup di file config. Nasabah baru = daftar 19 Okt s.d. 3 Jan (WIB, created_at UTC + 7 jam) dengan users.referrer_code atau users.sales_code sama persis dengan kode roster. SID baru = KYC verified, masuk periode tanggal verifikasi (verifikasi sesudah event masuk periode terakhir). Transaksi = beli dan jual completed tanpa manual_bonus; dana bersih = beli dikurangi jual sampai akhir periode. Periode: Okt 19-31 (13/31 x 21 = 8,8 hari kerja), Nov (21), Des + 1-3 Jan (23,0); semua target dan threshold dikali hari kerja / 21. Sales dan flying team (3 kode flying team dijumlah): syarat minimal 50 SID dan minimal 50% SID funded 1 jt+, kalau salah satu tidak tercapai insentif 0; rule 1 SID 50/55/63 = 150/200/400 rb; rule 2 persen funded dari SID yang didapat 50/65/75% = 300/450/800 rb; rule 3 dana bersih 49,5/55/63 jt = 225/550/600 rb tanpa syarat holding; rule 4 minimal 30% SID beli lagi 1 jt+ di M1 = 250 rb; maksimal 2,5 jt. Team lead: tim = semua kode booth (TL, 6 sales, kode flying team mall itu), target 6 x 3 x hari kerja (378 per bulan penuh); syarat minimal 80% target dan minimal 60% SID funded 1,5 jt+; rule 1 750 rb; rule 2 60/70% = 300/700 rb; rule 3 283,5/340,2 jt = 300/700 rb; rule 4 minimal 25% beli lagi 1,5 jt+ di M1 = 350 rb; maksimal 2,5 jt. M1 per periode: Nov, Des, 4 Jan s.d. 3 Feb. Bonus nasabah, produk SAM = fund dengan manajer investasi Sucor Asset Management: welcome bonus (pembelian pertama produk SAM 1 jt+, 25 rb unit SAM setelah 30 hari tanpa menjual produk SAM), nabung rutin (investment_plans bulanan yang dibuat selama event dengan 500 rb+ ke SAM menurut investment_plan_funds, transaksi rencana (transactions.investment_plan_id) completed 3 bulan berturut-turut, 100 rb), top up existing (daftar sebelum event, beli SAM 5 jt+ per transaksi dengan kode sales atau promoCodes sebagai transactions.promo_code, cashback 0,5% maks. 250 rb per nasabah, gugur kalau menjual SAM dalam 30 hari). Lama menahan = hari dari beli pertama sampai hari ini (masih ada saldo) atau sampai jual terakhir. Saldo hari ini = kepemilikan live fund ACTIVE (USER_AUM_SQL).
+- **Isi tab**:
+  - *Kartu ringkasan di atas tab*:
+    - **Registered / Mendaftar**: Nasabah yang daftar dengan salah satu kode event selama event.
+    - **KYC verified (new SID)**: Yang KYC-nya verified; inilah SID baru untuk target.
+    - **Made a purchase**: Yang sudah punya beli completed.
+    - **Funded**: Yang dana bersihnya (beli dikurangi jual) pernah mencapai minimum funded sales (Rp 1 jt).
+    - **Net money in**: Total beli dikurangi jual nasabah baru.
+    - **Avg days holding**: Rata-rata hari dari beli pertama sampai hari ini, atau sampai jual terakhir bagi yang sudah jual semua.
+  - *Daily recap* (Rekap harian): Satu baris per hari event (WIB): daftar, KYC verified, transaksi pertama, mencapai minimum funded, beli, dan jual. Mengikuti filter booth dan sales.
+  - *Sales and flying team incentive* (Insentif sales dan flying team): Satu baris per orang untuk periode terpilih: target SID, SID, funded, syarat (rule 1+2), rule 1 sampai 4, total, dan yang dibayar setelah batas maksimal. Status: berjalan (sementara), rule 1-3 final menunggu M1, atau final.
+  - *Team lead incentive* (Insentif team lead): Satu baris per booth: semua kode booth dijumlah, minimum funded 1,5 jt.
+  - *Customers* (Nasabah): Setiap nasabah baru dengan kontak, kode, tanggal daftar dan KYC, beli pertama, total beli, dana bersih, saldo hari ini, lama menahan, dan status dana.
+  - *Welcome bonus (new customers)* (Welcome bonus (nasabah baru)): Nasabah baru yang sudah beli: apakah pembelian pertama memenuhi syarat, tanggal akhir holding, layak, atau gugur.
+  - *Nabung rutin bonus* (Bonus nabung rutin): Rencana nabung rutin yang dibuat selama event dan bulan berturut-turut yang sudah terbayar.
+  - *Top up bonus (existing customers)* (Bonus top up (nasabah existing)): Nasabah lama yang membeli produk SAM 5 jt+ dengan kode sales sebagai kode promo, cashback, dan statusnya.
+  - *Sucorwave community journeys* (Journey komunitas Sucorwave): Langkah SayaKaya dari tiap journey Sucorwave: daftar dan KYC verified, beli, serta verified dan beli SAM 1 jt+. Pendaftaran Sucorwave sendiri ada di luar data ini.
+  - *Rules and how it is counted* (Aturan dan cara hitung): Ditulis otomatis dari booth-event-config.js untuk periode terpilih, ditambah roster kode.
+- **Catatan penting**:
+  - Ubah aturan atau T&C hanya di public/booth-event-config.js; tabel dan panel aturan langsung mengikuti setelah deploy.
+  - Follow media sosial dan rating app store tidak ada di data, dicatat manual di booth.
+- **Detail teknis** (otomatis dari kode):
+  - Id tab untuk hak akses: `booth-event`
+  - Endpoint: `GET /api/booth-event/data`
+  - Fungsi query (`server/queries.js`): `boothEventData`
 
 <a id="tab-push"></a>
 #### Push delivery

@@ -212,6 +212,7 @@
           <button class="nav-link" data-tab="referral-program-alt"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Referral program (KYC based)</button>
           <button class="nav-link" data-tab="kalcer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>Referral activity</button>
           <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
+          <button class="nav-link" data-tab="booth-event"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calendar"></use></svg></span>Booth event</button>
           <button class="nav-link" data-tab="push"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Push delivery</button>
         </div>
         <div class="nav-group" data-group="product">
@@ -2778,6 +2779,79 @@
     <!-- PUSH DELIVERY: FCM's own send-pipeline health log (own dataset,
          firebase_messaging.data). Delivery/send health only, there is no
          open/click or revenue data in this table, see the callout below. -->
+    <!-- BOOTH EVENT: offline booths at PIM, Gandaria City and Central Park.
+         Every rule lives in booth-event-config.js; app.js boothCompute and
+         boothIncentives turn the raw rows into everything below. -->
+    <section id="booth-event" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="be_title">Booth event</h2>
+          <div class="range">
+            <label><span data-i18n="be_period">Incentive period</span> <select id="bePeriod" aria-label="Incentive period"></select></label>
+            <label><span data-i18n="be_booth">Booth</span> <select id="beBooth" aria-label="Booth"></select></label>
+            <label><span data-i18n="be_person">Sales</span> <select id="bePerson" aria-label="Sales"></select></label>
+            <button id="beReload" class="btn-ghost" data-i18n="common_refresh">Refresh</button>
+          </div>
+        </div>
+        <span class="hint" id="beHint"></span>
+        <div id="beKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_daily_title">Daily recap</h2></div>
+        <span class="hint" data-i18n="be_daily_hint">New customers per day (WIB): registrations, KYC verifications, first purchases, customers whose net purchases reached the funded minimum, and money in and out. Follows the booth and sales filters.</span>
+        <div id="beDaily" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_sales_title">Sales and flying team incentive</h2></div>
+        <span class="hint" id="beIncentiveNote"></span>
+        <div id="beSales" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_leads_title">Team lead incentive</h2></div>
+        <span class="hint" data-i18n="be_leads_hint">One row per booth: the team is every code of that booth, including the team lead's own code and the flying team code for that mall.</span>
+        <div id="beLeads" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_customers_title">Customers</h2></div>
+        <span class="hint" data-i18n="be_customers_hint">Everyone who registered with an event code: when they registered and passed KYC, their first purchase, net money in, today's balance, and how many days they have held their money (until today, or until their last sale if they sold everything).</span>
+        <div id="beCustomers" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_welcome_title">Welcome bonus (new customers)</h2></div>
+        <span class="hint" data-i18n="be_welcome_hint">New customers who bought: whether the first purchase qualifies, and when the bonus units can be credited after the holding period.</span>
+        <div id="beWelcome" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_plans_title">Nabung rutin bonus</h2></div>
+        <span class="hint" data-i18n="be_plans_hint">Recurring plans (investment_plans) started since the event began, by customers of the event, with how many months in a row they have been paid.</span>
+        <div id="bePlans" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_topup_title">Top up bonus (existing customers)</h2></div>
+        <span class="hint" data-i18n="be_topup_hint">Customers registered before the event who bought SAM funds with a sales code (or an event promo code) as promo code.</span>
+        <div id="beTopUp" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_sucorwave_title">Sucorwave community journeys</h2></div>
+        <div id="beSucorwave" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="be_rules_title">Rules and how it is counted</h2></div>
+        <span class="hint" data-i18n="be_rules_hint">Written from the same config file the numbers use (booth-event-config.js), so it always matches the tables above.</span>
+        <div id="beRules" class="be-rules" style="margin-top:12px"></div>
+        <div id="beRoster" class="table-wrap" style="margin-top:16px"></div>
+      </div>
+    </section>
+
     <section id="push" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -3661,6 +3735,10 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_event_code_tracking_desc">Tracks an event's referral or sales code. Pick users.sales_code or users.referrer_code, type the code(s) and set the event window. A code without * matches anywhere in the code; EVT* matches every code that starts with EVT, so a whole family of event codes can be read together. Only completed transactions are counted anywhere in this tab; ongoing and failed ones are shown next to them for reference. The daily recap shows registrations, KYC verified, completed transactions and amounts, and new transactors for every day, with a chart. Type a daily registration or transaction target to see which days met it and filter to those days. Performance per code breaks the same numbers down by each matched code. Further down: the funnel, the list of tagged users with their portfolio (still invested, sold everything, never bought, AUM now), their transaction detail, transaction retention cohorts, and portfolio retention from portfolio_fix (available from August 2026) as % still invested, AUM or AUM against the first reading. Every table exports to CSV or Excel, the user list exports all rows, and Download all panels (Excel) puts everything in one workbook.</p>
         </div>
         <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calendar"></use></svg> Booth event</h3>
+          <p data-i18n="docs_booth_event_desc">Offline booths at Pondok Indah Mall, Gandaria City and Central Park, 19 Oct 2026 to 3 Jan 2027. Each sales person, team lead and flying team member has a referral code; customers who register with one count as new customers of that person and that booth. The tab shows the daily recap (registrations, KYC verified, first purchases, customers reaching Rp 1 jt, money in and out), each customer with their balance today and how many days they have held their money, the incentive of every sales person and flying team member and of every team lead for the chosen period (threshold, rules 1 to 4, total and the amount paid after the cap, with the reason when a threshold is missed), and the customer bonuses: welcome bonus, nabung rutin, and the top up bonus for existing customers. Months that are not full have their targets scaled down. Every rule is in one config file (booth-event-config.js), and the Rules panel at the bottom is written from it.</p>
+        </div>
+        <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Push delivery</h3>
           <p data-i18n="docs_push_desc">Firebase Cloud Messaging's own delivery log (own dataset, firebase_messaging.data): did FCM accept and hand off each push. This is send-pipeline health only, not an open or click rate. Firebase's standard export has no such engagement events for messaging, and the table carries only an FCM instance ID, not a Sayakaya user ID, so it can't be joined to revenue either. Shows send volume over a date range, a breakdown by platform (Android/iOS/unknown), and a breakdown by campaign (analytics_label), each with total sends, accepted, MISSING_REGISTRATIONS (a stale or invalid device token, the dominant failure reason), other errors, and the resulting delivery rate.</p>
         </div>
@@ -3848,6 +3926,7 @@ ORDER BY n DESC"></textarea>
   <div id="toast" class="toast"></div>
   <div id="navTooltip" class="nav-tooltip"></div>
   <script src="i18n.js"></script>
+  <script src="booth-event-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

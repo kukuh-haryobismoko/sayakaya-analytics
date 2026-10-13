@@ -6923,6 +6923,400 @@ async function schedConfirmOtp(kind) {
   } catch (e) { toast(e.message); }
 }
 
+// BOOTH EVENT: offline booths in three malls. Every rule and number comes
+// from BOOTH_EVENT (public/booth-event-config.js); the server only returns
+// raw rows (customers, completed transactions, recurring plans) and
+// boothCompute / boothIncentives / boothCustomerBonuses below turn them into
+// the recaps, incentives and customer bonuses, so a rule change is a config
+// change. Days are WIB dates as YYYY-MM-DD strings.
+const bL = (en, id) => (getLang() === 'id' ? id : en);
+const bAddDays = (iso, n) => { const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const bDays = (a, b) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+const bWibToday = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+// Tier list -> amount of the highest tier reached.
+const bTier = (tiers, reached) => tiers.reduce((amt, tr) => (reached(tr) ? tr.amount : amt), 0);
+
+function boothCompute({ customers, transactions }, cfg, today) {
+  const roster = new Map(cfg.roster.map((r) => [r.code.toUpperCase(), r]));
+  const last = cfg.periods[cfg.periods.length - 1];
+  // A verification after the event lands in the last period.
+  const periodOf = (day) => cfg.periods.find((pd) => day >= pd.from && day <= pd.to) || (day > last.to ? last : null);
+  const txBy = new Map();
+  for (const t of transactions) {
+    if (!txBy.has(t.user_id)) txBy.set(t.user_id, []);
+    txBy.get(t.user_id).push({ ...t, amount: Number(t.amount) || 0 });
+  }
+  const people = customers.map((c) => {
+    const r = roster.get(String(c.code || '').toUpperCase()) || null;
+    const txs = (txBy.get(c.user_id) || []).sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+    const buys = txs.filter((t) => t.type === 'buy');
+    const sells = txs.filter((t) => t.type === 'sell');
+    const sum = (list, ok) => list.reduce((a, t) => a + (ok(t) ? t.amount : 0), 0);
+    let cum = 0, fundedOn = null;
+    for (const t of txs) {
+      cum += t.type === 'buy' ? t.amount : -t.amount;
+      if (!fundedOn && cum >= cfg.sales.minFunded) fundedOn = t.day;
+    }
+    const aumNow = Number(c.aum_now) || 0;
+    const firstBuy = buys[0] || null;
+    const lastSell = sells.length ? sells[sells.length - 1].day : null;
+    const isNew = c.via === 'code';
+    return {
+      ...c, aumNow, txs, buys, sells, isNew,
+      person: r ? r.person : null, booth: r ? r.booth : null, role: r ? r.role : null,
+      verified: c.verification_status === 'verified' && !!c.verified_on,
+      sidPeriod: isNew && c.verification_status === 'verified' && c.verified_on ? periodOf(c.verified_on) : null,
+      firstBuy, fundedOn,
+      totalBuy: sum(buys, () => true), totalSell: sum(sells, () => true),
+      // Money in minus money out, up to and including `day`.
+      netUpTo: (day) => sum(buys, (t) => t.day <= day) - sum(sells, (t) => t.day <= day),
+      buysBetween: (from, to) => sum(buys, (t) => t.day >= from && t.day <= to),
+      samBuys: sum(buys, (t) => t.sam),
+      // Days from the first buy until today while still holding, or until the last sell.
+      heldDays: firstBuy ? bDays(firstBuy.day, aumNow > 0 || !lastSell ? today : lastSell) : null,
+      holding: firstBuy ? (aumNow > 0 ? 'holding' : 'sold') : 'none',
+    };
+  });
+  return { people, roster };
+}
+
+// Incentives for one period: sales and flying team per person, team leads per booth.
+function boothIncentives(people, cfg, period, today) {
+  const scale = period.workDays / cfg.fullMonthWorkDays;
+  const needSid = (n) => Math.ceil(n * scale - 1e-9);
+  const status = today <= period.to ? 'running' : today <= period.m1.to ? 'waiting_m1' : 'final';
+  const measure = (cohort, minFunded, minRepeat) => {
+    const sid = cohort.length;
+    const funded = cohort.filter((x) => x.netUpTo(period.to) >= minFunded).length;
+    const repeat = cohort.filter((x) => x.buysBetween(period.m1.from, period.m1.to) >= minRepeat).length;
+    return {
+      sid, funded, fundedPct: sid ? (funded / sid) * 100 : 0,
+      aum: cohort.reduce((a, x) => a + Math.max(0, x.netUpTo(period.to)), 0),
+      repeat, repeatPct: sid ? (repeat / sid) * 100 : 0,
+    };
+  };
+  const inPeriod = people.filter((x) => x.sidPeriod === period);
+  const S = cfg.sales;
+  const persons = [...new Set(cfg.roster.filter((r) => r.role === 'sales' || r.role === 'flying').map((r) => r.person))];
+  const sales = persons.map((person) => {
+    const codes = cfg.roster.filter((r) => r.person === person);
+    const m = measure(inPeriod.filter((x) => x.person === person), S.minFunded, S.rule4.minAmount);
+    const target = S.dailySidTarget * period.workDays;
+    const gateSid = needSid(S.gate.minSid);
+    const gate = m.sid >= gateSid && m.fundedPct >= S.gate.minFundedPct;
+    const r1 = gate ? bTier(S.rule1, (tr) => m.sid >= needSid(tr.minSid)) : 0;
+    const r2 = gate ? bTier(S.rule2, (tr) => m.fundedPct >= tr.minPct) : 0;
+    const r3 = gate ? bTier(S.rule3, (tr) => m.aum >= Math.round(tr.minAum * scale)) : 0;
+    const r4 = gate && m.repeatPct >= S.rule4.minPct ? S.rule4.amount : 0;
+    const total = r1 + r2 + r3 + r4;
+    return {
+      person, role: codes[0].role, codes: codes.map((r) => r.code).join(', '),
+      booth: [...new Set(codes.map((r) => r.booth))].join(', '),
+      target, gateSid, ...m, gate, r1, r2, r3, r4, total, paid: Math.min(total, S.cap),
+      aumTarget: Math.round(S.aumTarget * scale), status,
+    };
+  });
+  const T = cfg.teamLead;
+  const leads = Object.keys(cfg.booths).map((booth) => {
+    const lead = cfg.roster.find((r) => r.role === 'team_lead' && r.booth === booth);
+    const m = measure(inPeriod.filter((x) => x.booth === booth), T.minFunded, T.rule4.minAmount);
+    const target = T.salesPerBooth * T.dailySidTarget * period.workDays;
+    const sidPct = target ? (m.sid / target) * 100 : 0;
+    const gate = sidPct >= T.gate.minSidPct && m.fundedPct >= T.gate.minFundedPct;
+    const r1 = gate ? bTier(T.rule1, (tr) => sidPct >= tr.minSidPct) : 0;
+    const r2 = gate ? bTier(T.rule2, (tr) => m.fundedPct >= tr.minPct) : 0;
+    const r3 = gate ? bTier(T.rule3, (tr) => m.aum >= Math.round(tr.minAum * scale)) : 0;
+    const r4 = gate && m.repeatPct >= T.rule4.minPct ? T.rule4.amount : 0;
+    const total = r1 + r2 + r3 + r4;
+    return {
+      booth, person: lead ? lead.person : 'n/a', code: lead ? lead.code : '', target, sidPct, ...m, gate,
+      r1, r2, r3, r4, total, paid: Math.min(total, T.cap), status,
+      aumTarget: Math.round(T.aumTarget * scale),
+    };
+  });
+  return { sales, leads, scale, status };
+}
+
+// Customer bonus programs: welcome bonus, nabung rutin, top up of existing customers.
+function boothCustomerBonuses(people, plans, cfg, today) {
+  const C = cfg.customer;
+  const promo = new Set([...cfg.roster.map((r) => r.code.toUpperCase()), ...C.promoCodes.map((c) => String(c).toUpperCase())]);
+  const samSoldBetween = (x, from, to) => x.sells.find((t) => t.sam && t.day > from && t.day <= to);
+  const holdState = (x, from, days) => {
+    const until = bAddDays(from, days);
+    const sold = samSoldBetween(x, from, until);
+    if (sold) return { key: 'lapsed', until, soldOn: sold.day };
+    return { key: today >= until ? 'eligible' : 'holding', until };
+  };
+  const welcome = people.filter((x) => x.isNew && x.firstBuy).map((x) => {
+    const f = x.firstBuy;
+    const ok = f.sam && f.amount >= C.welcome.minFirstBuy;
+    const st = ok ? holdState(x, f.day, C.welcome.holdingDays) : { key: f.sam ? 'below_min' : 'not_sam' };
+    return { x, day: f.day, fund: f.fund, amount: f.amount, sam: f.sam, ...st, bonus: st.key === 'eligible' ? C.welcome.bonus : 0 };
+  });
+  const byUser = new Map(people.map((x) => [x.user_id, x]));
+  const nabung = (plans || []).filter((pl) => byUser.has(pl.user_id) && pl.created_on >= cfg.start).map((pl) => {
+    const x = byUser.get(pl.user_id);
+    const months = [...new Set(x.buys.filter((t) => t.plan_id === pl.plan_id).map((t) => t.day.slice(0, 7)))].sort();
+    let streak = 0, best = 0, prev = null;
+    for (const mo of months) {
+      const next = prev && (() => { const [y, m] = prev.split('-').map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; })();
+      streak = prev && mo === next ? streak + 1 : 1;
+      best = Math.max(best, streak);
+      prev = mo;
+    }
+    const samAmount = Number(pl.sam_amount) || 0;
+    const fits = pl.frequency === 'MONTHLY' && samAmount >= C.nabungRutin.minMonthly;
+    const key = !fits ? 'not_eligible' : best >= C.nabungRutin.minMonths ? 'eligible' : pl.deleted ? 'stopped' : 'running';
+    return { x, plan: pl, samAmount, months: best, key, bonus: key === 'eligible' ? C.nabungRutin.bonus : 0 };
+  });
+  const topUp = people.filter((x) => x.registered_on < cfg.start).map((x) => {
+    const qual = x.buys.filter((t) => t.sam && t.amount >= C.topUp.minAmount && promo.has(t.promo) && t.day >= cfg.start && t.day <= cfg.end);
+    if (!qual.length) return null;
+    const amount = qual.reduce((a, t) => a + t.amount, 0);
+    const st = holdState(x, qual[0].day, C.topUp.holdingDays);
+    const cashback = Math.min(amount * C.topUp.cashbackPct / 100, C.topUp.cashbackMax);
+    const r = cfg.roster.find((rr) => rr.code.toUpperCase() === qual[0].promo);
+    return { x, day: qual[0].day, promo: qual[0].promo, person: r ? r.person : '', amount, cashback, ...st, payable: st.key === 'eligible' ? cashback : 0 };
+  }).filter(Boolean);
+  return { welcome, nabung, topUp };
+}
+
+const BOOTH = { data: null, loading: false };
+const bEsc = (v) => escapeHtml(v == null ? '' : v);
+const bStatusLabel = (k, x) => ({
+  running: bL('Running (estimate)', 'Berjalan (sementara)'),
+  waiting_m1: bL('Rules 1-3 final, rule 4 waits for M1', 'Rule 1-3 final, rule 4 menunggu M1'),
+  final: bL('Final', 'Final'),
+  eligible: bL('Eligible', 'Layak'),
+  holding: bL(`Holding until ${x && x.until}`, `Holding sampai ${x && x.until}`),
+  lapsed: bL(`Lapsed: sold SAM on ${x && x.soldOn}`, `Gugur: jual SAM ${x && x.soldOn}`),
+  below_min: bL('First buy below minimum', 'Beli pertama di bawah minimum'),
+  not_sam: bL('First buy not a SAM fund', 'Beli pertama bukan produk SAM'),
+  not_eligible: bL('Not monthly, or SAM part below minimum', 'Bukan bulanan, atau porsi SAM di bawah minimum'),
+  stopped: bL('Plan stopped', 'Rencana berhenti'),
+}[k] || k);
+
+async function loadBoothEvent() {
+  const cfg = BOOTH_EVENT;
+  if (!$('#bePeriod').options.length) {
+    const today = bWibToday();
+    const current = cfg.periods.find((pd) => today >= pd.from && today <= pd.to) || (today < cfg.periods[0].from ? cfg.periods[0] : cfg.periods[cfg.periods.length - 1]);
+    $('#bePeriod').innerHTML = cfg.periods.map((pd) => `<option value="${pd.id}"${pd === current ? ' selected' : ''}>${bEsc(pd.label)}</option>`).join('');
+    $('#beBooth').innerHTML = `<option value="">${bL('All booths', 'Semua booth')}</option>` + Object.entries(cfg.booths).map(([k, v]) => `<option value="${k}">${bEsc(v)}</option>`).join('');
+    $('#bePerson').innerHTML = `<option value="">${bL('Everyone', 'Semua')}</option>` + [...new Set(cfg.roster.map((r) => r.person))].map((n) => `<option>${bEsc(n)}</option>`).join('');
+  }
+  BOOTH.loading = true;
+  $('#beKpis').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
+  try {
+    const qs = new URLSearchParams({ from: cfg.start, to: cfg.end, sam: cfg.customer.samManager });
+    cfg.roster.forEach((r) => qs.append('codes', r.code));
+    cfg.customer.promoCodes.forEach((c) => qs.append('promo', c));
+    BOOTH.data = await api(`/api/booth-event/data?${qs}`);
+    renderBoothEvent();
+  } catch (e) {
+    $('#beKpis').innerHTML = `<div class="empty">${bEsc(e.message)}</div>`;
+  } finally { BOOTH.loading = false; }
+}
+
+function renderBoothEvent() {
+  if (!BOOTH.data) return;
+  const cfg = BOOTH_EVENT;
+  const today = bWibToday();
+  const { people } = boothCompute(BOOTH.data, cfg, today);
+  const period = cfg.periods.find((pd) => pd.id === $('#bePeriod').value) || cfg.periods[0];
+  const booth = $('#beBooth').value;
+  const person = $('#bePerson').value;
+  const pick = (x) => (!booth || x.booth === booth) && (!person || x.person === person);
+  const mine = people.filter((x) => x.isNew && pick(x));
+  const yes = bL('Yes', 'Ya');
+  const no = bL('No', 'Tidak');
+
+  $('#beHint').textContent = bL(
+    `${cfg.name}, ${cfg.start} to ${cfg.end}. New customers = registered with one of the ${cfg.roster.length} codes (referral or sales code). Today ${today} WIB. Rules: see "Rules and how it's counted" at the bottom.`,
+    `${cfg.name}, ${cfg.start} s.d. ${cfg.end}. Nasabah baru = daftar dengan salah satu dari ${cfg.roster.length} kode (kode referral atau sales). Hari ini ${today} WIB. Aturan: lihat "Aturan dan cara hitung" di bawah.`);
+
+  const held = mine.filter((x) => x.heldDays != null);
+  $('#beKpis').innerHTML = [
+    kpi(bL('Registered', 'Daftar'), num(mine.length), bL('with an event code', 'dengan kode event'), 'accent', ICONS.userPlus),
+    kpi(bL('KYC verified (new SID)', 'KYC verified (SID baru)'), num(mine.filter((x) => x.verified).length), '', '', ICONS.check),
+    kpi(bL('Made a purchase', 'Sudah transaksi'), num(mine.filter((x) => x.firstBuy).length), '', '', ICONS.receipt),
+    kpi(bL('Funded', 'Funded'), num(mine.filter((x) => x.fundedOn).length), bL(`net purchases reached ${idr(cfg.sales.minFunded)}`, `dana bersih pernah mencapai ${idr(cfg.sales.minFunded)}`), '', ICONS.coin),
+    kpi(bL('Net money in', 'Dana bersih masuk'), idr(mine.reduce((a, x) => a + x.totalBuy - x.totalSell, 0)), bL('buys minus sells', 'beli dikurangi jual'), '', ICONS.trendUp),
+    kpi(bL('Avg days holding', 'Rata-rata lama menahan'), held.length ? `${num(Math.round(held.reduce((a, x) => a + x.heldDays, 0) / held.length))} ${bL('days', 'hari')}` : 'n/a',
+      bL(`${num(mine.filter((x) => x.holding === 'holding').length)} still hold today`, `${num(mine.filter((x) => x.holding === 'holding').length)} masih menahan hari ini`), '', ICONS.hourglass),
+  ].join('');
+
+  // Daily recap, one row per event day up to today.
+  const days = [];
+  for (let d = cfg.start; d <= cfg.end && d <= today; d = bAddDays(d, 1)) days.push(d);
+  const daily = days.map((d) => {
+    const txs = mine.flatMap((x) => x.txs.filter((tx) => tx.day === d));
+    return {
+      day: d,
+      registered: mine.filter((x) => x.registered_on === d).length,
+      verified: mine.filter((x) => x.verified && x.verified_on === d).length,
+      first_buy: mine.filter((x) => x.firstBuy && x.firstBuy.day === d).length,
+      funded: mine.filter((x) => x.fundedOn === d).length,
+      buy: txs.filter((tx) => tx.type === 'buy').reduce((a, tx) => a + tx.amount, 0),
+      sell: txs.filter((tx) => tx.type === 'sell').reduce((a, tx) => a + tx.amount, 0),
+    };
+  }).reverse();
+  genTable('#beDaily', daily, [
+    { key: 'day', label: bL('Day (WIB)', 'Tanggal (WIB)'), type: 'date' },
+    { key: 'registered', label: bL('Registered', 'Daftar'), type: 'num', sum: true },
+    { key: 'verified', label: bL('KYC verified', 'KYC verified'), type: 'num', sum: true },
+    { key: 'first_buy', label: bL('First purchase', 'Transaksi pertama'), type: 'num', sum: true },
+    { key: 'funded', label: bL(`Reached ${idr(cfg.sales.minFunded)}`, `Capai ${idr(cfg.sales.minFunded)}`), type: 'num', sum: true },
+    { key: 'buy', label: bL('Bought', 'Beli'), type: 'idr', sum: true },
+    { key: 'sell', label: bL('Sold', 'Jual'), type: 'idr', sum: true },
+  ], bL('The event has not started yet.', 'Event belum dimulai.'));
+
+  // Incentives for the chosen period.
+  const inc = boothIncentives(people, cfg, period, today);
+  const st = bStatusLabel(inc.status);
+  const gateText = (r, sidNeed, sidHave, pctNeed) => (r.gate ? bL('Met', 'Tercapai')
+    : bL(`Not yet: SID ${sidHave}/${sidNeed}, funded ${r.fundedPct.toFixed(0)}%/${pctNeed}%`, `Belum: SID ${sidHave}/${sidNeed}, funded ${r.fundedPct.toFixed(0)}%/${pctNeed}%`));
+  const salesRows = inc.sales.filter((r) => (!booth || r.booth.split(', ').includes(booth)) && (!person || r.person === person)).map((r) => ({
+    ...r, person: bEsc(r.person), codes: bEsc(r.codes), target: Math.round(r.target * 10) / 10,
+    gate_text: gateText(r, r.gateSid, r.sid, cfg.sales.gate.minFundedPct), status_text: st,
+  }));
+  genTable('#beSales', salesRows, [
+    { key: 'person', label: bL('Sales', 'Sales') }, { key: 'codes', label: bL('Code', 'Kode') }, { key: 'booth', label: 'Booth' },
+    { key: 'target', label: bL('SID target', 'Target SID'), type: 'num' }, { key: 'sid', label: 'SID', type: 'num', sum: true },
+    { key: 'funded', label: `Funded ${idr(cfg.sales.minFunded)}+`, type: 'num', sum: true }, { key: 'fundedPct', label: 'Funded %', type: 'pct' },
+    { key: 'gate_text', label: bL('Threshold (rules 1+2)', 'Syarat (rule 1+2)') },
+    { key: 'r1', label: 'Rule 1 SID', type: 'idr', sum: true }, { key: 'r2', label: 'Rule 2 funded', type: 'idr', sum: true },
+    { key: 'aum', label: bL('Net money in', 'Dana bersih'), type: 'idr', sum: true }, { key: 'aumTarget', label: bL('AUM target', 'Target AUM'), type: 'idr' },
+    { key: 'r3', label: 'Rule 3 AUM', type: 'idr', sum: true }, { key: 'repeatPct', label: bL('Bought again in M1', 'Beli lagi di M1'), type: 'pct' },
+    { key: 'r4', label: 'Rule 4 M1', type: 'idr', sum: true }, { key: 'total', label: 'Total', type: 'idr', sum: true },
+    { key: 'paid', label: bL(`Paid (max ${idr(cfg.sales.cap)})`, `Dibayar (maks. ${idr(cfg.sales.cap)})`), type: 'idr', sum: true },
+    { key: 'status_text', label: 'Status' },
+  ], bL('No sales in this filter.', 'Tidak ada sales di filter ini.'));
+
+  const leadRows = inc.leads.filter((r) => !booth || r.booth === booth).map((r) => ({
+    ...r, booth: bEsc(cfg.booths[r.booth] || r.booth), person: bEsc(r.person), target: Math.round(r.target * 10) / 10,
+    gate_text: r.gate ? bL('Met', 'Tercapai') : bL(`Not yet: SID ${r.sidPct.toFixed(0)}%/${cfg.teamLead.gate.minSidPct}%, funded ${r.fundedPct.toFixed(0)}%/${cfg.teamLead.gate.minFundedPct}%`,
+      `Belum: SID ${r.sidPct.toFixed(0)}%/${cfg.teamLead.gate.minSidPct}%, funded ${r.fundedPct.toFixed(0)}%/${cfg.teamLead.gate.minFundedPct}%`),
+    status_text: st,
+  }));
+  genTable('#beLeads', leadRows, [
+    { key: 'booth', label: 'Booth' }, { key: 'person', label: 'Team lead' },
+    { key: 'target', label: bL('Team SID target', 'Target SID tim'), type: 'num' }, { key: 'sid', label: bL('Team SID', 'SID tim'), type: 'num', sum: true },
+    { key: 'sidPct', label: bL('Of target', 'Dari target'), type: 'pct' },
+    { key: 'funded', label: `Funded ${idr(cfg.teamLead.minFunded)}+`, type: 'num', sum: true }, { key: 'fundedPct', label: 'Funded %', type: 'pct' },
+    { key: 'gate_text', label: bL('Threshold (rules 1+2)', 'Syarat (rule 1+2)') },
+    { key: 'r1', label: 'Rule 1 SID', type: 'idr', sum: true }, { key: 'r2', label: 'Rule 2 funded', type: 'idr', sum: true },
+    { key: 'aum', label: bL('Team net money in', 'Dana bersih tim'), type: 'idr', sum: true }, { key: 'aumTarget', label: bL('AUM target', 'Target AUM'), type: 'idr' },
+    { key: 'r3', label: 'Rule 3 AUM', type: 'idr', sum: true }, { key: 'repeatPct', label: bL('Bought again in M1', 'Beli lagi di M1'), type: 'pct' },
+    { key: 'r4', label: 'Rule 4 M1', type: 'idr', sum: true }, { key: 'total', label: 'Total', type: 'idr', sum: true },
+    { key: 'paid', label: bL(`Paid (max ${idr(cfg.teamLead.cap)})`, `Dibayar (maks. ${idr(cfg.teamLead.cap)})`), type: 'idr', sum: true },
+    { key: 'status_text', label: 'Status' },
+  ], bL('No booth in this filter.', 'Tidak ada booth di filter ini.'));
+  $('#beIncentiveNote').textContent = bL(
+    `${period.label}: ${period.from} to ${period.to}, ${period.workDays.toFixed(1)} working days (${(inc.scale * 100).toFixed(0)}% of a full month, so every target and threshold is scaled by that). M1 for rule 4: ${period.m1.from} to ${period.m1.to}. ${st}.`,
+    `${period.label}: ${period.from} s.d. ${period.to}, ${period.workDays.toFixed(1)} hari kerja (${(inc.scale * 100).toFixed(0)}% dari bulan penuh, semua target dan threshold dikali angka itu). M1 untuk rule 4: ${period.m1.from} s.d. ${period.m1.to}. ${st}.`);
+
+  // Customers: who registered, verified, bought, and how long they hold.
+  genTable('#beCustomers', mine.map((x) => ({
+    name: bEsc(x.name || 'n/a'), sid: bEsc(x.sid || 'n/a'), email: bEsc(x.email), phone: bEsc(x.phone || ''),
+    code: bEsc(x.code), person: bEsc(x.person || ''), booth: bEsc(x.booth || ''),
+    registered_on: x.registered_on, verified_on: x.verified ? x.verified_on : null,
+    first_buy: x.firstBuy ? x.firstBuy.day : null, total_buy: x.totalBuy, net: x.totalBuy - x.totalSell,
+    funded: x.fundedOn ? yes : no, aum_now: x.aumNow, held: x.heldDays,
+    holding: { holding: bL('Still holding', 'Masih menahan'), sold: bL('Sold everything', 'Sudah jual semua'), none: bL('No purchase yet', 'Belum beli') }[x.holding],
+  })).sort((a, b) => (a.registered_on < b.registered_on ? 1 : -1)), [
+    { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') },
+    { key: 'code', label: bL('Code', 'Kode') }, { key: 'person', label: 'Sales' }, { key: 'booth', label: 'Booth' },
+    { key: 'registered_on', label: bL('Registered', 'Daftar'), type: 'date' }, { key: 'verified_on', label: bL('KYC verified', 'KYC verified'), type: 'date' },
+    { key: 'first_buy', label: bL('First purchase', 'Beli pertama'), type: 'date' }, { key: 'total_buy', label: bL('Total bought', 'Total beli'), type: 'idr', sum: true },
+    { key: 'net', label: bL('Net money in', 'Dana bersih'), type: 'idr', sum: true }, { key: 'funded', label: `${idr(cfg.sales.minFunded)}+` },
+    { key: 'aum_now', label: bL('Balance today', 'Saldo hari ini'), type: 'idr', sum: true }, { key: 'held', label: bL('Days holding', 'Lama menahan (hari)'), type: 'num' },
+    { key: 'holding', label: bL('Holding', 'Status dana') },
+  ], bL('No customer has registered with an event code yet.', 'Belum ada nasabah yang daftar dengan kode event.'));
+
+  // Customer bonuses.
+  const bon = boothCustomerBonuses(people.filter(pick), BOOTH.data.plans, cfg, today);
+  const C = cfg.customer;
+  genTable('#beWelcome', bon.welcome.map((w) => ({
+    name: bEsc(w.x.name || 'n/a'), sid: bEsc(w.x.sid || ''), person: bEsc(w.x.person || ''), day: w.day, fund: bEsc(w.fund || ''),
+    sam: w.sam ? yes : no, amount: w.amount, status: bStatusLabel(w.key, w), bonus: w.bonus,
+  })), [
+    { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'person', label: 'Sales' },
+    { key: 'day', label: bL('First purchase', 'Beli pertama'), type: 'date' }, { key: 'fund', label: bL('Fund', 'Produk') }, { key: 'sam', label: 'SAM' },
+    { key: 'amount', label: bL('Amount', 'Nominal'), type: 'idr' }, { key: 'status', label: 'Status' },
+    { key: 'bonus', label: bL('Bonus units', 'Bonus unit'), type: 'idr', sum: true },
+  ], bL('No new customer has bought yet.', 'Belum ada nasabah baru yang beli.'));
+  genTable('#bePlans', bon.nabung.map((n) => ({
+    name: bEsc(n.x.name || 'n/a'), sid: bEsc(n.x.sid || ''), person: bEsc(n.x.person || ''), created: n.plan.created_on,
+    frequency: bEsc(n.plan.frequency), sam_amount: n.samAmount, months: n.months, status: bStatusLabel(n.key), bonus: n.bonus,
+  })), [
+    { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'person', label: 'Sales' },
+    { key: 'created', label: bL('Plan created', 'Rencana dibuat'), type: 'date' }, { key: 'frequency', label: bL('Frequency', 'Frekuensi') },
+    { key: 'sam_amount', label: bL('SAM per run', 'SAM per debit'), type: 'idr' },
+    { key: 'months', label: bL(`Months in a row (need ${C.nabungRutin.minMonths})`, `Bulan berturut-turut (perlu ${C.nabungRutin.minMonths})`), type: 'num' },
+    { key: 'status', label: 'Status' }, { key: 'bonus', label: bL('Bonus units', 'Bonus unit'), type: 'idr', sum: true },
+  ], bL('No recurring plan started since the event began.', 'Belum ada rencana nabung rutin sejak event mulai.'));
+  genTable('#beTopUp', bon.topUp.map((u) => ({
+    name: bEsc(u.x.name || 'n/a'), sid: bEsc(u.x.sid || ''), email: bEsc(u.x.email), promo: bEsc(u.promo), person: bEsc(u.person),
+    day: u.day, amount: u.amount, cashback: u.cashback, status: bStatusLabel(u.key, u), payable: u.payable,
+  })), [
+    { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'email', label: 'Email' },
+    { key: 'promo', label: bL('Promo code', 'Kode promo') }, { key: 'person', label: 'Sales' }, { key: 'day', label: bL('First top up', 'Top up pertama'), type: 'date' },
+    { key: 'amount', label: bL('SAM top ups', 'Top up SAM'), type: 'idr', sum: true }, { key: 'cashback', label: 'Cashback', type: 'idr', sum: true },
+    { key: 'status', label: 'Status' }, { key: 'payable', label: bL('Payable', 'Dibayar'), type: 'idr', sum: true },
+  ], bL('No existing customer has topped up with an event code yet.', 'Belum ada nasabah existing yang top up dengan kode event.'));
+  const sw = mine;
+  genTable('#beSucorwave', [
+    { step: bL('Journey 1: registered and KYC verified', 'Journey 1: daftar dan KYC verified'), n: sw.filter((x) => x.verified).length },
+    { step: bL('Journey 2: bought any fund', 'Journey 2: beli reksa dana apa pun'), n: sw.filter((x) => x.firstBuy).length },
+    { step: bL(`Benefit 3: verified and SAM purchases ${idr(C.welcome.minFirstBuy)}+`, `Benefit 3: verified dan beli SAM ${idr(C.welcome.minFirstBuy)}+`), n: sw.filter((x) => x.verified && x.samBuys >= C.welcome.minFirstBuy).length },
+  ], [{ key: 'step', label: 'Sucorwave' }, { key: 'n', label: bL('Customers', 'Nasabah'), type: 'num' }], '');
+
+  renderBoothRules(cfg, period, inc.scale);
+}
+
+// The rules panel is written from the same config the numbers use.
+function renderBoothRules(cfg, period, scale) {
+  const S = cfg.sales, T = cfg.teamLead, C = cfg.customer;
+  const need = (n) => Math.ceil(n * scale - 1e-9);
+  const li = (en, id) => `<li>${bL(en, id)}</li>`;
+  const tiers = (list, fmt) => list.map(fmt).join('; ');
+  $('#beRules').innerHTML = `
+    <h3>${bL('Periods', 'Periode')}</h3><ul>${cfg.periods.map((pd) => li(
+      `${bEsc(pd.label)}: ${pd.from} to ${pd.to}, ${pd.workDays.toFixed(1)} working days, sales target ${(S.dailySidTarget * pd.workDays).toFixed(1)} SID, booth target ${(T.salesPerBooth * T.dailySidTarget * pd.workDays).toFixed(1)} SID; M1 ${pd.m1.from} to ${pd.m1.to}.`,
+      `${bEsc(pd.label)}: ${pd.from} s.d. ${pd.to}, ${pd.workDays.toFixed(1)} hari kerja, target sales ${(S.dailySidTarget * pd.workDays).toFixed(1)} SID, target booth ${(T.salesPerBooth * T.dailySidTarget * pd.workDays).toFixed(1)} SID; M1 ${pd.m1.from} s.d. ${pd.m1.to}.`)).join('')}</ul>
+    <h3>${bL('Definitions', 'Definisi')}</h3><ul>
+      ${li('New SID: registered with an event code during the event (referral or sales code, exact match) and KYC verified. Counted in the period of the verification date; a verification after the event counts in the last period.', 'SID baru: daftar dengan kode event selama event (kode referral atau sales, sama persis) dan KYC verified. Dihitung di periode tanggal verifikasi; verifikasi sesudah event masuk periode terakhir.')}
+      ${li('Transactions: completed buys and sells only; bonus units given by admin (manual_bonus) do not count. Net money in = buys minus sells from registration to the end of the period.', 'Transaksi: hanya beli dan jual berstatus completed; bonus unit dari admin (manual_bonus) tidak dihitung. Dana bersih = beli dikurangi jual dari daftar sampai akhir periode.')}
+      ${li('Flying team: one person, three codes (one per mall). Their SID add up for their own incentive and count in the team target of the mall the code belongs to. A team lead\'s own code counts for the team.', 'Flying team: satu orang, tiga kode (satu per mall). SID ketiganya dijumlah untuk insentif sendiri dan masuk target tim mall pemilik kode. Kode team lead sendiri dihitung ke tim.')}
+    </ul>
+    <h3>${bL('Sales and flying team, this period', 'Sales dan flying team, periode ini')} (${bEsc(period.label)})</h3><ul>
+      ${li(`Threshold: at least ${need(S.gate.minSid)} SID (${S.gate.minSid} in a full month) AND at least ${S.gate.minFundedPct}% of them funded ${idr(S.minFunded)}+. Missing either means no incentive for the period.`, `Syarat: minimal ${need(S.gate.minSid)} SID (${S.gate.minSid} di bulan penuh) DAN minimal ${S.gate.minFundedPct}% di antaranya funded ${idr(S.minFunded)}+. Salah satu tidak tercapai = tidak ada insentif periode itu.`)}
+      ${li(`Rule 1, SID: ${tiers(S.rule1, (tr) => `${need(tr.minSid)}+ SID ${idrFull(tr.amount)}`)}.`, `Rule 1, SID: ${tiers(S.rule1, (tr) => `${need(tr.minSid)}+ SID ${idrFull(tr.amount)}`)}.`)}
+      ${li(`Rule 2, funded share of the SID they got: ${tiers(S.rule2, (tr) => `${tr.minPct}%+ ${idrFull(tr.amount)}`)}.`, `Rule 2, persen funded dari SID yang didapat: ${tiers(S.rule2, (tr) => `${tr.minPct}%+ ${idrFull(tr.amount)}`)}.`)}
+      ${li(`Rule 3, net money in from the period's new SID (no holding requirement): ${tiers(S.rule3, (tr) => `${idrFull(Math.round(tr.minAum * scale))}+ ${idrFull(tr.amount)}`)}.`, `Rule 3, dana bersih nasabah baru periode ini (tanpa syarat holding): ${tiers(S.rule3, (tr) => `${idrFull(Math.round(tr.minAum * scale))}+ ${idrFull(tr.amount)}`)}.`)}
+      ${li(`Rule 4, retention: ${S.rule4.minPct}%+ of the period's SID buy again for ${idr(S.rule4.minAmount)}+ in M1: ${idrFull(S.rule4.amount)}.`, `Rule 4, retensi: ${S.rule4.minPct}%+ SID periode ini beli lagi total ${idr(S.rule4.minAmount)}+ di M1: ${idrFull(S.rule4.amount)}.`)}
+      ${li(`Maximum ${idrFull(S.cap)} per person per period.`, `Maksimal ${idrFull(S.cap)} per orang per periode.`)}
+    </ul>
+    <h3>${bL('Team lead, this period', 'Team lead, periode ini')}</h3><ul>
+      ${li(`Team = every code of the booth. Threshold: team SID at least ${T.gate.minSidPct}% of the booth target AND at least ${T.gate.minFundedPct}% of the team SID funded ${idr(T.minFunded)}+ (a share of the SID they got, so "60% of the 80%").`, `Tim = semua kode di booth. Syarat: SID tim minimal ${T.gate.minSidPct}% target booth DAN minimal ${T.gate.minFundedPct}% SID tim funded ${idr(T.minFunded)}+ (persen dari SID yang didapat, jadi "60% dari 80%").`)}
+      ${li(`Rule 1: ${tiers(T.rule1, (tr) => `${tr.minSidPct}%+ of target ${idrFull(tr.amount)}`)}. Rule 2: ${tiers(T.rule2, (tr) => `${tr.minPct}%+ ${idrFull(tr.amount)}`)}.`, `Rule 1: ${tiers(T.rule1, (tr) => `${tr.minSidPct}%+ target ${idrFull(tr.amount)}`)}. Rule 2: ${tiers(T.rule2, (tr) => `${tr.minPct}%+ ${idrFull(tr.amount)}`)}.`)}
+      ${li(`Rule 3, team net money in: ${tiers(T.rule3, (tr) => `${idrFull(Math.round(tr.minAum * scale))}+ ${idrFull(tr.amount)}`)}. Rule 4: ${T.rule4.minPct}%+ buy again for ${idr(T.rule4.minAmount)}+ in M1: ${idrFull(T.rule4.amount)}. Maximum ${idrFull(T.cap)}.`, `Rule 3, dana bersih tim: ${tiers(T.rule3, (tr) => `${idrFull(Math.round(tr.minAum * scale))}+ ${idrFull(tr.amount)}`)}. Rule 4: ${T.rule4.minPct}%+ beli lagi ${idr(T.rule4.minAmount)}+ di M1: ${idrFull(T.rule4.amount)}. Maksimal ${idrFull(T.cap)}.`)}
+    </ul>
+    <h3>${bL('Customer bonuses', 'Bonus nasabah')}</h3><ul>
+      ${li(`Welcome bonus (new customers): first purchase is a ${bEsc(C.samManager)} fund for ${idr(C.welcome.minFirstBuy)}+; ${idrFull(C.welcome.bonus)} in SAM units after ${C.welcome.holdingDays} days, lapses if a SAM fund is sold before that; plus ${bEsc(C.welcome.extra)}.`, `Welcome bonus (nasabah baru): pembelian pertama produk ${bEsc(C.samManager)} ${idr(C.welcome.minFirstBuy)}+; ${idrFull(C.welcome.bonus)} unit SAM setelah ${C.welcome.holdingDays} hari, gugur kalau menjual produk SAM sebelum itu; plus ${bEsc(C.welcome.extra)}.`)}
+      ${li(`Nabung rutin: a monthly plan started during the event with ${idr(C.nabungRutin.minMonthly)}+ going to SAM funds, paid ${C.nabungRutin.minMonths} months in a row: ${idrFull(C.nabungRutin.bonus)} in SAM units.`, `Nabung rutin: rencana bulanan yang dibuat selama event dengan ${idr(C.nabungRutin.minMonthly)}+ ke produk SAM, terbayar ${C.nabungRutin.minMonths} bulan berturut-turut: ${idrFull(C.nabungRutin.bonus)} unit SAM.`)}
+      ${li(`Top up (customers registered before the event): SAM purchases of ${idr(C.topUp.minAmount)}+ each with a sales code${C.promoCodes.length ? ` or ${C.promoCodes.map(bEsc).join(', ')}` : ''} as promo code; ${C.topUp.cashbackPct}% cashback, at most ${idrFull(C.topUp.cashbackMax)} per customer, after ${C.topUp.holdingDays} days without selling a SAM fund; plus ${bEsc(C.topUp.extra)}.`, `Top up (nasabah yang daftar sebelum event): pembelian SAM ${idr(C.topUp.minAmount)}+ per transaksi dengan kode sales${C.promoCodes.length ? ` atau ${C.promoCodes.map(bEsc).join(', ')}` : ''} sebagai kode promo; cashback ${C.topUp.cashbackPct}%, maks. ${idrFull(C.topUp.cashbackMax)} per nasabah, setelah ${C.topUp.holdingDays} hari tanpa menjual produk SAM; plus ${bEsc(C.topUp.extra)}.`)}
+      ${li('Social media follow and app store rating (small SAM merchandise) and Sucorwave sign-ups happen outside SayaKaya, so they are not in this data; the Sucorwave table counts the SayaKaya steps of each journey.', 'Follow media sosial dan rating app store (merchandise SAM kecil) serta pendaftaran Sucorwave terjadi di luar SayaKaya, jadi tidak ada di data ini; tabel Sucorwave menghitung langkah SayaKaya dari tiap journey.')}
+    </ul>`;
+  genTable('#beRoster', cfg.roster.map((r) => ({
+    code: bEsc(r.code), person: bEsc(r.person), role: { sales: 'Sales', team_lead: 'Team lead', flying: 'Flying team' }[r.role] || bEsc(r.role),
+    booth: bEsc(cfg.booths[r.booth] || r.booth), email: bEsc(r.email),
+  })), [{ key: 'code', label: bL('Code', 'Kode') }, { key: 'person', label: bL('Name', 'Nama') }, { key: 'role', label: bL('Role', 'Peran') },
+    { key: 'booth', label: 'Booth' }, { key: 'email', label: bL('Sales account', 'Akun sales') }], '');
+}
+
 // ASK (natural language)
 let askSqlCache = '';
 let askTablesLoaded = false;
@@ -7619,6 +8013,7 @@ function switchTab(name) {
     const cfg = PRES_VIEWS[name];
     loadPresentation(name, $(`${cfg.seg} .on`)?.dataset.month || cfg.defaultMonth);
   }
+  if (name === 'booth-event' && !BOOTH.data && !BOOTH.loading) loadBoothEvent();
   if (name === 'send-statement') { loadSsLog(); loadSchedules('statement'); loadExclusions(); }
   if (name === 'send-fund-performance') { loadFpeLog(); loadSchedules('fund_performance'); loadExclusions(); }
 }
@@ -7744,6 +8139,7 @@ function repaintActiveTab() {
     case 'portfolio-fix': if (pfxSelected) loadPfxUser(); break;
     case 'portfolio-tx': if (ptxSelected) loadPtxUser(); break;
     case 'portfolio-sinvest': if (psiSelected) loadPsiUser(); break;
+    case 'booth-event': renderBoothEvent(); break;
     case 'event-code':
       renderEvcRecap(); renderEvcPortfolio(); renderEvcUsers();
       renderEvcCohort('#evcCohortRegHeatmap', evcCohortRows.reg); renderEvcCohort('#evcCohortTxHeatmap', evcCohortRows.tx);
@@ -7924,6 +8320,8 @@ function wire() {
   ssBatchPicker = setupRecipientPicker('ssBatch');
   $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
+  ['bePeriod', 'beBooth', 'bePerson'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothEvent));
+  $('#beReload').addEventListener('click', loadBoothEvent);
   $('#ssBatchRecipientType').addEventListener('change', () => batchGroupChanged('statement', 'ssBatch'));
   $('#ssBatchCsv').addEventListener('change', () => loadBatchCsv($('#ssBatchCsv'), $('#ssBatchInput'), true));
   $('#fpeCsv').addEventListener('change', () => loadBatchCsv($('#fpeCsv'), $('#fpePasteEmails'), false));

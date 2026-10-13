@@ -645,6 +645,30 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
 // `field` still picks referrer_code vs sales_code instead of a real event
 // column) — funnel, tagged users, cohort, and transaction detail for
 // whatever referral/sales codes an eventual event hands out. ----------------
+// ---- Booth event: the page sends codes and dates from
+// public/booth-event-config.js and computes targets and incentives itself.
+const BOOTH_CODE_RE = /^[A-Za-z0-9_-]{2,40}$/;
+const BOOTH_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+on('GET', '/api/booth-event/data', requireTab('booth-event', async (_req, _params, url) => {
+  const codes = qpAll(url, 'codes');
+  const promo = qpAll(url, 'promo');
+  const from = qp(url, 'from') || '';
+  const to = qp(url, 'to') || '';
+  const sam = qp(url, 'sam') || '';
+  if (!codes.length || codes.length > 200 || promo.length > 200 || ![...codes, ...promo].every((c) => BOOTH_CODE_RE.test(c))) {
+    return json({ error: 'codes: 1 to 200 codes of letters, digits, - or _.' }, 400);
+  }
+  if (!BOOTH_DATE_RE.test(from) || !BOOTH_DATE_RE.test(to)) return json({ error: 'from and to are required (YYYY-MM-DD).' }, 400);
+  if (!sam || sam.length > 120) return json({ error: 'sam (investment manager name) is required.' }, 400);
+  const q = Q.boothEventData({ codes, promoCodes: promo, from, to, samManager: sam });
+  const [customers, transactions, plans] = await Promise.all([
+    runQuery(q.customers.sql, q.customers.params, { redact: false }),
+    runQuery(q.transactions.sql, q.transactions.params),
+    runQuery(q.plans.sql, q.plans.params),
+  ]);
+  return json({ customers, transactions, plans });
+}));
+
 on('GET', '/api/event-code/users', requireTab('event-code', async (_req, _params, url) => {
   const codes = qpAll(url, 'codes');
   if (!codes.length) return json({ error: 'At least one code is required.' }, 400);

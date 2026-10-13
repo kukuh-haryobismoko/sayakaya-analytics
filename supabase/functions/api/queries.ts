@@ -4660,6 +4660,92 @@ export const topInvestors = (
 // instead of hardcoding one, and `codes` is whatever wildcard list the
 // caller types in (see codePatterns). Swap in a real field/column once the
 // event defines one.
+// ---- Booth event (tab "Booth event", rules in public/booth-event-config.js).
+// The page sends the event's codes and dates; everything about targets and
+// incentives is computed in the browser from these three row sets.
+//
+// people: who registered with an event code (users.referrer_code or
+// sales_code, exact, case-insensitive) between @from and @to WIB, plus
+// customers who made a completed buy in that window with one of @promo as
+// promo code (existing customers attributed by the promo code they typed).
+// Dates are UTC in the warehouse; +7h gives the WIB day the booth saw.
+const INVESTMENT_PLANS = '`sayakaya.main.investment_plans`';
+const INVESTMENT_PLAN_FUNDS = '`sayakaya.main.investment_plan_funds`';
+const boothPeopleCte = () => `people AS (
+      SELECT u.id AS user_id,
+        IF(UPPER(u.referrer_code) IN UNNEST(@codes), UPPER(u.referrer_code), UPPER(u.sales_code)) AS code,
+        'code' AS via
+      FROM ${USERS} u
+      WHERE (UPPER(u.referrer_code) IN UNNEST(@codes) OR UPPER(u.sales_code) IN UNNEST(@codes))
+        AND DATE(DATETIME_ADD(u.created_at, INTERVAL 7 HOUR)) BETWEEN @from AND @to
+      UNION ALL
+      SELECT t.user_id, ARRAY_AGG(UPPER(t.promo_code) ORDER BY t.created_at LIMIT 1)[OFFSET(0)], 'promo'
+      FROM ${TX} t
+      JOIN ${USERS} u ON u.id = t.user_id
+      WHERE UPPER(t.promo_code) IN UNNEST(@promo) AND t.type = 'buy' AND t.status = 'completed'
+        AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
+        AND NOT ((UPPER(u.referrer_code) IN UNNEST(@codes) OR UPPER(u.sales_code) IN UNNEST(@codes))
+          AND DATE(DATETIME_ADD(u.created_at, INTERVAL 7 HOUR)) BETWEEN @from AND @to)
+      GROUP BY t.user_id
+    )`;
+const boothParams = ({ codes, promoCodes, from, to, samManager }: { codes: string[]; promoCodes?: string[]; from: string; to: string; samManager: string }) => {
+  const up = (a?: string[]) => [...new Set((a || []).map((c) => String(c).trim().toUpperCase()).filter(Boolean))];
+  const codeList = up(codes);
+  return { codes: codeList, promo: up([...codeList, ...(promoCodes || [])]), from, to, sam: samManager };
+};
+export const boothEventData = (opts: { codes: string[]; promoCodes?: string[]; from: string; to: string; samManager: string }) => {
+  const params = boothParams(opts);
+  return {
+    // Contact, KYC dates, and today's holdings value (USER_AUM_SQL: ACTIVE
+    // funds, own plus on-going bonus units).
+    customers: <Query>{
+      sql: `WITH ${boothPeopleCte()}
+        SELECT p.user_id, p.code, p.via, u.sid_code AS sid, u.email, up.name, up.phone_number AS phone,
+          u.verification_status,
+          FORMAT_DATE('%F', DATE(DATETIME_ADD(u.created_at, INTERVAL 7 HOUR))) AS registered_on,
+          FORMAT_DATE('%F', DATE(DATETIME_ADD(u.verified_at, INTERVAL 7 HOUR))) AS verified_on,
+          ROUND(IFNULL(a.aum, 0)) AS aum_now
+        FROM people p
+        JOIN ${USERS} u ON u.id = p.user_id
+        LEFT JOIN ${USER_PROFILES} up ON up.user_id = p.user_id
+        LEFT JOIN (${USER_AUM_SQL}) a ON a.user_id = p.user_id`,
+      params,
+    },
+    // Their completed buys and sells from the event start on (no admin
+    // manual_bonus), amount as paid out or in, with the fund's manager so the
+    // page can tell SAM products apart.
+    transactions: <Query>{
+      sql: `WITH ${boothPeopleCte()}
+        SELECT t.user_id, FORMAT_DATE('%F', DATE(t.created_at, 'Asia/Jakarta')) AS day, t.type,
+          CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount,
+          f.name AS fund, IFNULL(im.name = @sam, FALSE) AS sam, UPPER(t.promo_code) AS promo, t.investment_plan_id AS plan_id
+        FROM ${TX} t
+        JOIN people p ON p.user_id = t.user_id
+        LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+        WHERE t.status = 'completed' AND t.type IN ('buy', 'sell')
+          AND IFNULL(t.payment_method, '') != 'manual_bonus'
+          AND DATE(t.created_at, 'Asia/Jakarta') >= @from
+        ORDER BY t.user_id, t.created_at`,
+      params,
+    },
+    // Recurring investment plans (nabung rutin) and how much of each goes to SAM funds.
+    plans: <Query>{
+      sql: `WITH ${boothPeopleCte()}
+        SELECT ip.id AS plan_id, ip.user_id, ip.frequency, ip.status, ip.deleted_at IS NOT NULL AS deleted,
+          FORMAT_DATE('%F', DATE(ip.created_at, 'Asia/Jakarta')) AS created_on,
+          CAST(SUM(IF(im.name = @sam, ipf.amount, 0)) AS FLOAT64) AS sam_amount
+        FROM ${INVESTMENT_PLANS} ip
+        JOIN people p ON p.user_id = ip.user_id
+        LEFT JOIN ${INVESTMENT_PLAN_FUNDS} ipf ON ipf.investment_plan_id = ip.id
+        LEFT JOIN ${FUNDS} f ON f.id = ipf.fund_id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+        GROUP BY 1, 2, 3, 4, 5, 6`,
+      params,
+    },
+  };
+};
+
 const eventCodeWhere = (field?: string): string => {
   const col = remisierFieldColumn(field);
   return `u.${col} IS NOT NULL AND EXISTS (SELECT 1 FROM UNNEST(@codes) c WHERE UPPER(u.${col}) LIKE c)`;
