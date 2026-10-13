@@ -161,10 +161,75 @@ async function resolveRecipients({ kind, recipientType, recipientEmail, recipien
     .filter((r) => r.email);
 }
 
-// Preview for the compose UI, before the OTP step: "this will reach N people".
+// ---- Exclusion (opt-out) list -----------------------------------------------
+// dashboard_send_exclusions (migration 20261013160000): skipped by schedules,
+// group sends and batch sends. An entry matches on what was typed and on the
+// SID / email BigQuery returned for it, so one added by SID also catches that
+// investor's email on a fund performance list. All lowercased.
+function listExclusions() {
+  return rest('/dashboard_send_exclusions?select=*&order=created_at.desc');
+}
+
+// Every excluded email/SID that applies to sends of this kind.
+async function exclusionSet(kind) {
+  const scope = kind === 'fund_performance' ? 'fund_performance' : 'statement';
+  const rows = await rest(`/dashboard_send_exclusions?scope=in.(all,${scope})&select=identifier,sid,email`);
+  const set = new Set();
+  for (const r of rows) for (const v of [r.identifier, r.sid, r.email]) if (v) set.add(v.toLowerCase());
+  return set;
+}
+
+function isExcluded(set, r) {
+  return set.has(String(r.email || '').toLowerCase()) || set.has(String(r.sid || '').toLowerCase());
+}
+
+// What to store for each typed email/SID: the investor BigQuery finds for it,
+// or the bare email for someone who is not an investor. A SID nobody has is
+// returned in `invalid` instead.
+async function exclusionEntries(identifiers) {
+  const ids = [...new Set(identifiers.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean))];
+  const u = Q.usersByIdentifiers(ids);
+  const users = ids.length ? await runQuery(u.sql, u.params, { redact: false }) : [];
+  const c = Q.userContactBatch(users.map((x) => x.user_id));
+  const contacts = users.length ? await runQuery(c.sql, c.params, { redact: false }) : [];
+  const nameOf = new Map(contacts.map((r) => [r.user_id, PDF.val(r.name)]));
+  const entries = [];
+  const invalid = [];
+  for (const id of ids) {
+    const m = users.find((x) => String(PDF.val(x.sid) || '').toLowerCase() === id || String(PDF.val(x.email) || '').toLowerCase() === id);
+    if (m) {
+      const email = PDF.val(m.email);
+      entries.push({ identifier: id, sid: PDF.val(m.sid) || null, email: email ? String(email).toLowerCase() : null, name: nameOf.get(m.user_id) || null });
+    } else if (EMAIL_RE.test(id)) entries.push({ identifier: id, sid: null, email: id, name: null });
+    else invalid.push(id);
+  }
+  return { entries, invalid };
+}
+
+function addExclusions(entries, scope, reason, username) {
+  // Adding someone again updates their scope and reason instead of failing.
+  return rest('/dashboard_send_exclusions?on_conflict=identifier', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(entries.map((e) => ({ ...e, scope, reason, created_by_username: username }))),
+  });
+}
+
+async function removeExclusion(id) {
+  const rows = await rest(`/dashboard_send_exclusions?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Prefer: 'return=representation' } });
+  return (rows && rows[0]) || null;
+}
+
+// Recipients minus the exclusion list for this kind; `excluded` = how many it dropped.
+async function resolveSendable(spec) {
+  const [all, ex] = await Promise.all([resolveRecipients(spec), exclusionSet(spec.kind)]);
+  const recipients = all.filter((r) => !isExcluded(ex, r));
+  return { recipients, excluded: all.length - recipients.length };
+}
+
 async function previewRecipientCount(spec) {
-  const recipients = await resolveRecipients(spec);
-  return recipients.length;
+  const { recipients, excluded } = await resolveSendable(spec);
+  return { count: recipients.length, excluded };
 }
 
 // ---- OTP-gated schedule creation --------------------------------------------
@@ -297,7 +362,7 @@ async function deleteJob(id) {
 // mid-drain (e.g. "all registered users" gaining a new signup partway
 // through a multi-tick drain doesn't retroactively add them to this run).
 async function enqueueJob(job) {
-  const recipients = await resolveRecipients({
+  const { recipients } = await resolveSendable({
     kind: job.kind, recipientType: job.recipient_type,
     recipientEmail: job.recipient_email, recipientList: job.recipient_list,
   });
@@ -346,13 +411,20 @@ function byUser(rows) {
 // (dashboard_claim_queue, so parallel runners never get the same row),
 // fetches what the chunk needs in one go, then sends SEND_CONCURRENCY at a time.
 async function drainChunk() {
-  const rows = await rest('/rpc/dashboard_claim_queue', {
+  let rows = await rest('/rpc/dashboard_claim_queue', {
     method: 'POST',
     body: JSON.stringify({ p_statement_limit: DRAIN_LIMIT.statement, p_fund_limit: DRAIN_LIMIT.fund_performance }),
   });
   if (!rows || !rows.length) return { sent: 0, failed: 0 };
   const job = await getJob(rows[0].job_id);
   if (!job) return { sent: 0, failed: 0 }; // deleted meanwhile; its queue rows went with it
+
+  // Excluded after these rows were queued (a long group send): skip, don't send.
+  const ex = await exclusionSet(job.kind);
+  const skipped = rows.filter((r) => isExcluded(ex, { email: r.recipient_email, sid: r.recipient_sid }));
+  await Promise.all(skipped.map((r) => markQueueRow(r.id, 'skipped', 'On the exclusion list')));
+  rows = rows.filter((r) => !skipped.includes(r));
+  if (!rows.length) return { sent: 0, failed: 0 };
 
   const sentBy = job.created_by_username || 'schedule';
   const source = job.frequency === 'once' ? 'batch' : 'schedule';
@@ -495,7 +567,14 @@ async function runDueJobs(jobId) {
 module.exports = {
   computeNextRun,
   resolveRecipients,
+  resolveSendable,
   previewRecipientCount,
+  listExclusions,
+  exclusionSet,
+  isExcluded,
+  exclusionEntries,
+  addExclusions,
+  removeExclusion,
   requestOtp,
   confirmOtp,
   listJobs,

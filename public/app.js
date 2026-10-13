@@ -6339,6 +6339,7 @@ async function sendSsBatchEmail() {
     const parts = [`${data.sent.length} sent`];
     if (data.failed?.length) parts.push(`${data.failed.length} failed`);
     if (data.notFound?.length) parts.push(`${data.notFound.length} not found`);
+    if (data.excluded?.length) parts.push(`${data.excluded.length} skipped (exclusion list)`);
     toast(parts.join(', '));
     loadSsLog();
   } catch (e) { toast(e.message); }
@@ -6458,7 +6459,8 @@ async function sendFpeEmail() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { toast(data.error || 'Email failed'); return; }
     const failedNote = data.failed?.length ? `, ${data.failed.length} failed` : '';
-    toast(`Sent to ${data.sent.length} recipient${data.sent.length === 1 ? '' : 's'}${failedNote}`);
+    const exclNoteText = data.excluded?.length ? `, ${data.excluded.length} skipped (exclusion list)` : '';
+    toast(`Sent to ${data.sent.length} recipient${data.sent.length === 1 ? '' : 's'}${failedNote}${exclNoteText}`);
     loadFpeLog();
   } catch { toast('Could not reach the server.'); }
 }
@@ -6520,7 +6522,7 @@ const schedCanToggle = (r) => r.status !== 'ended' || schedSending(r);
 // Emails queued for a schedule, all runs together (listJobs adds `progress`).
 function schedProgressSummary(p) {
   if (!p) return 'n/a';
-  return [`${num(p.sent)} sent`, p.waiting && `${num(p.waiting)} waiting`, p.failed && `${num(p.failed)} failed`].filter(Boolean).join(' · ');
+  return [`${num(p.sent)} sent`, p.waiting && `${num(p.waiting)} waiting`, p.failed && `${num(p.failed)} failed`, p.skipped && `${num(p.skipped)} skipped`].filter(Boolean).join(' · ');
 }
 function schedFrequencySummary(row) {
   if (row.frequency === 'once') return 'Once, right away';
@@ -6647,6 +6649,67 @@ function schedResetModal(kind) {
   schedUpdateFieldVisibility(kind);
 }
 
+// EXCLUSION LIST: one list shared by both Send tabs (each entry says which
+// sends skip it); the server applies it to schedules, group sends and batch
+// sends. Both tabs render the same rows, each with its own filter box.
+const EXCL_PANELS = ['ssExcl', 'fpeExcl'];
+const EXCL_SCOPE_LABEL = { all: 'Every send', statement: 'E-statement & portfolio', fund_performance: 'Fund performance' };
+let exclRows = [];
+async function loadExclusions() {
+  EXCL_PANELS.forEach((p) => { $(`#${p}Table`).innerHTML = '<div class="loading">Loading…</div>'; });
+  try {
+    exclRows = await api('/api/send-exclusions');
+    EXCL_PANELS.forEach(renderExclusions);
+  } catch (e) {
+    EXCL_PANELS.forEach((p) => { $(`#${p}Table`).innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; });
+  }
+}
+function renderExclusions(p) {
+  const el = $(`#${p}Table`);
+  const q = $(`#${p}Filter`).value.trim().toLowerCase();
+  const rows = exclRows.filter((r) => !q || [r.name, r.sid, r.email, r.identifier, r.reason].some((v) => String(v || '').toLowerCase().includes(q)));
+  if (!exclRows.length) { el.innerHTML = '<div class="empty">No one is excluded.</div>'; return; }
+  if (!rows.length) { el.innerHTML = '<div class="empty">No one on the list matches this filter.</div>'; return; }
+  el.innerHTML = `<table><thead><tr>
+      <th>Name</th><th>SID</th><th>Email</th><th>Skipped from</th><th>Reason</th><th>Added by</th><th>Added (WIB)</th><th></th>
+    </tr></thead><tbody>${rows.map((r) => `<tr>
+      <td>${escapeHtml(r.name || 'n/a')}</td>
+      <td>${escapeHtml(r.sid || 'n/a')}</td>
+      <td>${escapeHtml(r.email || r.identifier)}</td>
+      <td>${escapeHtml(EXCL_SCOPE_LABEL[r.scope] || r.scope)}</td>
+      <td>${escapeHtml(r.reason || '')}</td>
+      <td>${escapeHtml(r.created_by_username || 'n/a')}</td>
+      <td>${toJakartaTime(r.created_at)}</td>
+      <td><button type="button" class="btn-ghost excl-remove-btn" data-id="${r.id}" data-who="${escapeHtml(r.name || r.sid || r.email || r.identifier)}">Remove</button></td>
+    </tr>`).join('')}</tbody></table>`;
+  el.querySelectorAll('.excl-remove-btn').forEach((btn) => btn.addEventListener('click', async () => {
+    if (!confirm(`Remove ${btn.dataset.who} from the exclusion list? Schedules and group sends will reach them again.`)) return;
+    try {
+      await api(`/api/send-exclusions/${btn.dataset.id}`, { method: 'DELETE' });
+      toast(`${btn.dataset.who} removed from the exclusion list.`);
+      loadExclusions();
+    } catch (e) { toast(e.message); }
+  }));
+}
+async function addExclusions(p) {
+  const identifiers = parseBatchIdentifiers($(`#${p}Input`).value);
+  if (!identifiers.length) { toast('Enter at least one email or SID.'); return; }
+  const btn = $(`#${p}AddBtn`);
+  btn.disabled = true;
+  try {
+    const { added, invalid } = await api('/api/send-exclusions', {
+      method: 'POST',
+      body: JSON.stringify({ identifiers, scope: $(`#${p}Scope`).value, reason: $(`#${p}Reason`).value }),
+    });
+    // Unknown SIDs stay in the box so they can be corrected.
+    $(`#${p}Input`).value = invalid.join('\n');
+    if (!invalid.length) $(`#${p}Reason`).value = '';
+    toast(`${num(added)} added to the exclusion list.${invalid.length ? ` No investor has ${invalid.join(', ')}; left in the box.` : ''}`);
+    loadExclusions();
+  } catch (e) { toast(e.message); } finally { btn.disabled = false; }
+}
+const exclNote = (n) => (n ? ` ${num(n)} on the exclusion list ${n === 1 ? 'is' : 'are'} skipped.` : '');
+
 // Batch send to a recipient group goes through the schedule queue as a
 // one-off job (frequency 'once'): confirmed with an emailed code like a
 // schedule, sent by parallel runners, progress in the Automated sending
@@ -6690,9 +6753,9 @@ async function batchGroupChanged(kind, px) {
   const seq = ++batchGroupSeq;
   textEl.textContent = 'Checking recipient count…';
   try {
-    const { count } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify({ kind, recipientType: type }) });
+    const { count, excluded } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify({ kind, recipientType: type }) });
     if (seq !== batchGroupSeq) return;
-    textEl.textContent = `${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'} right now.`
+    textEl.textContent = `${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'} right now.${exclNote(excluded)}`
       + ' Compose asks for a confirmation code, then the emails go out from a queue, several at a time; progress shows under Automated sending.'
       + (kind === 'statement' ? ' A group always gets the live portfolio as of the send date.' : '');
   } catch (e) { if (seq === batchGroupSeq) textEl.textContent = e.message; }
@@ -6757,10 +6820,10 @@ async function schedPreviewCount(kind) {
   textEl.textContent = 'Checking recipient count…';
   try {
     const spec = await schedBuildSpec(kind);
-    const { count } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify(spec) });
+    const { count, excluded } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify(spec) });
     if (seq !== schedPreviewSeq) return;
     const people = `${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'}`;
-    textEl.textContent = schedOnce && schedOnce.kind === kind ? `This will reach ${people}.` : `This will reach approximately ${people} per send.`;
+    textEl.textContent = (schedOnce && schedOnce.kind === kind ? `This will reach ${people}.` : `This will reach approximately ${people} per send.`) + exclNote(excluded);
   } catch (e) { if (seq === schedPreviewSeq) textEl.textContent = e.message; }
 }
 
@@ -7507,8 +7570,8 @@ function switchTab(name) {
     const cfg = PRES_VIEWS[name];
     loadPresentation(name, $(`${cfg.seg} .on`)?.dataset.month || cfg.defaultMonth);
   }
-  if (name === 'send-statement') { loadSsLog(); loadSchedules('statement'); }
-  if (name === 'send-fund-performance') { loadFpeLog(); loadSchedules('fund_performance'); }
+  if (name === 'send-statement') { loadSsLog(); loadSchedules('statement'); loadExclusions(); }
+  if (name === 'send-fund-performance') { loadFpeLog(); loadSchedules('fund_performance'); loadExclusions(); }
 }
 
 // Decks are PDFs fetched with the Bearer token (not linked directly — a plain
@@ -7813,6 +7876,10 @@ function wire() {
   $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
   $('#ssBatchRecipientType').addEventListener('change', () => batchGroupChanged('statement', 'ssBatch'));
+  EXCL_PANELS.forEach((p) => {
+    $(`#${p}AddBtn`).addEventListener('click', () => addExclusions(p));
+    $(`#${p}Filter`).addEventListener('input', () => renderExclusions(p));
+  });
   $('#ssBatchEmailCancelBtn').addEventListener('click', () => $('#ssBatchEmailModal').close());
   $('#ssBatchEmailSendBtn').addEventListener('click', () => { $('#ssBatchEmailModal').close(); sendSsBatchEmail(); });
 

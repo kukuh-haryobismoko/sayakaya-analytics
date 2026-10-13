@@ -1,8 +1,10 @@
 // Queue drain (drainChunk in server/schedules.js, mirrored in
 // supabase/functions/api/schedules.ts), run with `node test/sched-drain-smoke.js`.
-// One claimed chunk of 3 statement rows: BigQuery is asked 3 times for the
+// One claimed chunk of 4 statement rows: BigQuery is asked 3 times for the
 // whole chunk (not 3 times per investor), a throttled email goes back to
-// 'pending', an investor without an email fails, the rest are sent.
+// 'pending', an investor without an email fails, one put on the exclusion list
+// after being queued is skipped, the rest are sent. The preview count leaves
+// excluded people out.
 const assert = require('assert');
 const path = require('path');
 
@@ -46,7 +48,9 @@ global.fetch = async (url, opts = {}) => {
   let body = [];
   if (u.startsWith('/dashboard_scheduled_jobs?status=eq.active')) body = [];
   else if (u.startsWith('/rpc/dashboard_claim_queue')) {
-    body = ['u1', 'u2', 'u3'].map((id, i) => ({ id: `q${i + 1}`, job_id: 'job1', recipient_user_id: id, recipient_sid: `SID${i + 1}` }));
+    body = ['u1', 'u2', 'u3', 'u4'].map((id, i) => ({ id: `q${i + 1}`, job_id: 'job1', recipient_user_id: id, recipient_sid: `SID${i + 1}`, recipient_email: `${id}@example.com` }));
+  } else if (u.startsWith('/dashboard_send_exclusions?scope=in.(all,')) {
+    body = [{ identifier: 'sid4', sid: 'SID4', email: null }, { identifier: 'out@example.com', sid: null, email: 'out@example.com' }];
   } else if (u.startsWith('/dashboard_scheduled_jobs?id=eq.job1')) body = [job];
   else if (u.startsWith('/dashboard_schedule_queue?id=eq.')) {
     const { status, error } = JSON.parse(opts.body);
@@ -60,11 +64,13 @@ const Sched = require('../server/schedules');
 (async () => {
   const r = await Sched.runDueJobs();
   assert.strictEqual(queries.length, 3, 'contacts, holdings, transactions: one query each for the chunk');
-  assert.deepStrictEqual(marks, { q1: 'sent', q2: 'pending', q3: 'failed: no email on file' });
+  assert.deepStrictEqual(marks, { q1: 'sent', q2: 'pending', q3: 'failed: no email on file', q4: 'skipped: On the exclusion list' });
   assert.deepStrictEqual({ sent: r.sent, failed: r.failed }, { sent: 1, failed: 1 });
   assert.strictEqual(mails.length, 1);
   assert.strictEqual(mails[0].attachments.length, 2, 'portfolio + e-statement');
   assert.strictEqual(mails[0].attachments[1].filename, 'Transaction_Statement_SID1_2026-09.pdf', "the job's month, not last month");
   assert.strictEqual(mails[0].log.source, 'batch', 'a group send logs as a batch send');
+  const preview = await Sched.previewRecipientCount({ kind: 'fund_performance', recipientType: 'csv_list', recipientList: ['in@example.com', 'OUT@example.com'] });
+  assert.deepStrictEqual(preview, { count: 1, excluded: 1 }, 'excluded emails match case-insensitively');
   console.log('sched-drain smoke test passed');
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -171,9 +171,84 @@ export async function resolveRecipients({ kind, recipientType, recipientEmail, r
     .filter((r) => r.email);
 }
 
-export async function previewRecipientCount(spec: RecipientSpec): Promise<number> {
-  const recipients = await resolveRecipients(spec);
-  return recipients.length;
+// ---- Exclusion (opt-out) list -----------------------------------------------
+// dashboard_send_exclusions (migration 20261013160000): skipped by schedules,
+// group sends and batch sends. An entry matches on what was typed and on the
+// SID / email BigQuery returned for it, so one added by SID also catches that
+// investor's email on a fund performance list. All lowercased.
+export interface Exclusion {
+  id: string; identifier: string; sid: string | null; email: string | null; name: string | null;
+  scope: 'all' | 'statement' | 'fund_performance'; reason: string | null;
+  created_by_username: string | null; created_at: string;
+}
+
+export function listExclusions(): Promise<Exclusion[]> {
+  return rest('/dashboard_send_exclusions?select=*&order=created_at.desc');
+}
+
+// Every excluded email/SID that applies to sends of this kind.
+export async function exclusionSet(kind: string): Promise<Set<string>> {
+  const scope = kind === 'fund_performance' ? 'fund_performance' : 'statement';
+  const rows: Exclusion[] = await rest(`/dashboard_send_exclusions?scope=in.(all,${scope})&select=identifier,sid,email`);
+  const set = new Set<string>();
+  for (const r of rows) for (const v of [r.identifier, r.sid, r.email]) if (v) set.add(v.toLowerCase());
+  return set;
+}
+
+export function isExcluded(set: Set<string>, r: { email?: unknown; sid?: unknown }): boolean {
+  return set.has(String(r.email || '').toLowerCase()) || set.has(String(r.sid || '').toLowerCase());
+}
+
+// What to store for each typed email/SID: the investor BigQuery finds for it,
+// or the bare email for someone who is not an investor. A SID nobody has is
+// returned in `invalid` instead.
+export async function exclusionEntries(identifiers: string[]) {
+  const ids = [...new Set(identifiers.map((s) => String(s || '').trim().toLowerCase()).filter(Boolean))];
+  const u = Q.usersByIdentifiers(ids);
+  const users = ids.length ? await runQuery(u.sql, u.params, { redact: false }) : [];
+  const c = Q.userContactBatch(users.map((x) => x.user_id as string));
+  const contacts = users.length ? await runQuery(c.sql, c.params, { redact: false }) : [];
+  const nameOf = new Map(contacts.map((r) => [r.user_id, val(r.name as string | undefined)]));
+  const entries: { identifier: string; sid: string | null; email: string | null; name: string | null }[] = [];
+  const invalid: string[] = [];
+  for (const id of ids) {
+    const m = users.find((x) => String(val(x.sid as string) || '').toLowerCase() === id || String(val(x.email as string) || '').toLowerCase() === id);
+    if (m) {
+      const email = val(m.email as string);
+      entries.push({ identifier: id, sid: (val(m.sid as string) as string) || null, email: email ? String(email).toLowerCase() : null, name: (nameOf.get(m.user_id) as string) || null });
+    } else if (EMAIL_RE.test(id)) entries.push({ identifier: id, sid: null, email: id, name: null });
+    else invalid.push(id);
+  }
+  return { entries, invalid };
+}
+
+export function addExclusions(
+  entries: { identifier: string; sid: string | null; email: string | null; name: string | null }[],
+  scope: string, reason: string | null, username: string | null,
+): Promise<Exclusion[]> {
+  // Adding someone again updates their scope and reason instead of failing.
+  return rest('/dashboard_send_exclusions?on_conflict=identifier', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(entries.map((e) => ({ ...e, scope, reason, created_by_username: username }))),
+  });
+}
+
+export async function removeExclusion(id: string): Promise<Exclusion | null> {
+  const rows = await rest(`/dashboard_send_exclusions?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Prefer: 'return=representation' } });
+  return rows?.[0] || null;
+}
+
+// Recipients minus the exclusion list for this kind; `excluded` = how many it dropped.
+export async function resolveSendable(spec: RecipientSpec): Promise<{ recipients: Recipient[]; excluded: number }> {
+  const [all, ex] = await Promise.all([resolveRecipients(spec), exclusionSet(spec.kind)]);
+  const recipients = all.filter((r) => !isExcluded(ex, r));
+  return { recipients, excluded: all.length - recipients.length };
+}
+
+export async function previewRecipientCount(spec: RecipientSpec): Promise<{ count: number; excluded: number }> {
+  const { recipients, excluded } = await resolveSendable(spec);
+  return { count: recipients.length, excluded };
 }
 
 // ---- OTP-gated schedule creation --------------------------------------------
@@ -301,7 +376,7 @@ export async function deleteJob(id: string): Promise<void> {
 
 // ---- Execution: called by POST /api/cron/run-due-schedules -----------------
 async function enqueueJob(job: ScheduledJob): Promise<number> {
-  const recipients = await resolveRecipients({
+  const { recipients } = await resolveSendable({
     kind: job.kind, recipientType: job.recipient_type,
     recipientEmail: job.recipient_email || undefined, recipientList: job.recipient_list || undefined,
   });
@@ -339,13 +414,20 @@ const THROTTLED_RE = /throttl|rate exceeded|quota exceeded|\b454\b/i;
 // fetches what the chunk needs in one go, then sends SEND_CONCURRENCY at a time.
 async function drainChunk(): Promise<{ sent: number; failed: number }> {
   // deno-lint-ignore no-explicit-any
-  const rows: any[] = await rest('/rpc/dashboard_claim_queue', {
+  let rows: any[] = await rest('/rpc/dashboard_claim_queue', {
     method: 'POST',
     body: JSON.stringify({ p_statement_limit: DRAIN_LIMIT.statement, p_fund_limit: DRAIN_LIMIT.fund_performance }),
   });
   if (!rows?.length) return { sent: 0, failed: 0 };
   const job = await getJob(rows[0].job_id);
   if (!job) return { sent: 0, failed: 0 }; // deleted meanwhile; its queue rows went with it
+
+  // Excluded after these rows were queued (a long group send): skip, don't send.
+  const ex = await exclusionSet(job.kind);
+  const skipped = rows.filter((r) => isExcluded(ex, { email: r.recipient_email, sid: r.recipient_sid }));
+  await Promise.all(skipped.map((r) => markQueueRow(r.id, 'skipped', 'On the exclusion list')));
+  rows = rows.filter((r) => !skipped.includes(r));
+  if (!rows.length) return { sent: 0, failed: 0 };
 
   const sentBy = job.created_by_username || 'schedule';
   const source = job.frequency === 'once' ? 'batch' : 'schedule';

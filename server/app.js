@@ -1834,9 +1834,14 @@ function createApp({ serveStatic = true } = {}) {
     });
     const notFound = idList.filter((id) => !byKey.has(id.toLowerCase()));
     // Same investor may have been pasted twice (SID and email both) — send once.
-    const users = [...new Map(idList.filter((id) => byKey.has(id.toLowerCase()))
+    const matched = [...new Map(idList.filter((id) => byKey.has(id.toLowerCase()))
       .map((id) => byKey.get(id.toLowerCase()))
       .map((m) => [m.user_id, m])).values()];
+    // The exclusion list applies to batch sends too (a single send still goes out).
+    const ex = await Sched.exclusionSet('statement');
+    const onList = (m) => Sched.isExcluded(ex, { email: PDF.val(m.email), sid: PDF.val(m.sid) });
+    const excluded = matched.filter(onList).map((m) => PDF.val(m.sid) || PDF.val(m.email));
+    const users = matched.filter((m) => !onList(m));
 
     const senderEmail = process.env.SMTP_FROM_STATEMENT || 'estatement@sayakaya.id';
     const results = await Promise.allSettled(users.map(async (m) => {
@@ -1863,9 +1868,9 @@ function createApp({ serveStatic = true } = {}) {
 
     const sentDesc = [sendPortfolio && 'portfolio', sendStatement && 'tx-statement'].filter(Boolean).join('+');
     await Auth.logEvent(req.user.id, username, 'email_pdf',
-      `send-statement batch (${sentDesc}) to ${sent.length} recipient(s)${failed.length ? `, ${failed.length} failed` : ''}${notFound.length ? `, not found: ${notFound.join(', ')}` : ''}`);
+      `send-statement batch (${sentDesc}) to ${sent.length} recipient(s)${failed.length ? `, ${failed.length} failed` : ''}${notFound.length ? `, not found: ${notFound.join(', ')}` : ''}${excluded.length ? `, excluded: ${excluded.join(', ')}` : ''}`);
 
-    res.json({ ok: true, sent, failed, notFound });
+    res.json({ ok: true, sent, failed, notFound, excluded });
   }));
 
   // Send history for the Send Statement tab itself — not the superuser-only
@@ -1884,10 +1889,14 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/fund-performance/email', requireTab('send-fund-performance'), handler(async (req, res) => {
     const { to, subject, body, asOf } = req.body || {};
     const fundFilter = normalizeFundFilter(req.body?.fundFilter);
-    const recipients = [...new Set((Array.isArray(to) ? to : []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
-    if (!recipients.length) return res.status(400).json({ error: 'At least one recipient email is required.' });
-    const bad = recipients.find((e) => !EMAIL_RE.test(e));
+    const listed = [...new Set((Array.isArray(to) ? to : []).map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+    if (!listed.length) return res.status(400).json({ error: 'At least one recipient email is required.' });
+    const bad = listed.find((e) => !EMAIL_RE.test(e));
     if (bad) return res.status(400).json({ error: `Invalid email address: ${bad}` });
+    const ex = await Sched.exclusionSet('fund_performance');
+    const excluded = listed.filter((e) => ex.has(e));
+    const recipients = listed.filter((e) => !ex.has(e));
+    if (!recipients.length) return res.status(400).json({ error: 'Everyone on this list is on the exclusion list.' });
 
     const username = req.user.username;
     let buf;
@@ -1915,7 +1924,7 @@ function createApp({ serveStatic = true } = {}) {
       `fund-performance (${fundScopeLabel(fundFilter)}) to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
 
     if (!sent.length) return res.status(502).json({ error: 'All sends failed. Check the SMTP configuration.' });
-    res.json({ ok: true, sent, failed });
+    res.json({ ok: true, sent, failed, excluded });
   }));
 
   // Send history for this tab, same convention as /api/statement/log.
@@ -1947,8 +1956,7 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/schedules/preview', requireScheduleKindTab, handler(async (req, res) => {
     const { kind, recipientType, recipientEmail, recipientList } = req.body || {};
     if (!recipientType) return res.status(400).json({ error: 'recipientType is required.' });
-    const count = await Sched.previewRecipientCount({ kind, recipientType, recipientEmail, recipientList });
-    res.json({ count });
+    res.json(await Sched.previewRecipientCount({ kind, recipientType, recipientEmail, recipientList }));
   }));
 
   // Validates the config and emails a 6-digit code to the confirmation
@@ -1970,7 +1978,7 @@ function createApp({ serveStatic = true } = {}) {
     if (kind === 'statement' && !sendPortfolio && !sendStatement) {
       return res.status(400).json({ error: 'Pick at least one document to send.' });
     }
-    const count = await Sched.previewRecipientCount({ kind, recipientType, recipientEmail, recipientList });
+    const { count } = await Sched.previewRecipientCount({ kind, recipientType, recipientEmail, recipientList });
     if (!count) return res.status(400).json({ error: 'No recipients matched — nothing would be sent.' });
 
     const otpId = await Sched.requestOtp({
@@ -2016,7 +2024,7 @@ function createApp({ serveStatic = true } = {}) {
     // reach" is answerable before the schedule ever fires.
     let preview = false;
     if (!queue.length) {
-      const recipients = await Sched.resolveRecipients({
+      const { recipients } = await Sched.resolveSendable({
         kind: job.kind, recipientType: job.recipient_type,
         recipientEmail: job.recipient_email, recipientList: job.recipient_list,
       });
@@ -2077,6 +2085,38 @@ function createApp({ serveStatic = true } = {}) {
     if (!job) return res.status(404).json({ error: 'Schedule not found.' });
     await Auth.logEvent(req.user.id, req.user.username, 'schedule_update', `${status === 'paused' ? 'paused' : 'resumed'} ${job.kind} schedule ${job.id}`);
     res.json({ ok: true, job });
+  }));
+
+  // ---- Exclusion list (both Send tabs share it) ----------------------------
+  const EXCLUSION_SCOPES = ['all', 'statement', 'fund_performance'];
+  app.get('/api/send-exclusions', requireEitherScheduleTab, handler(async (_req, res) => {
+    res.json(await Sched.listExclusions());
+  }));
+
+  // identifiers: emails and/or SIDs. Each is looked up in BigQuery so the list
+  // shows who it is; an email that is no investor is kept as is, an unknown
+  // SID is refused.
+  app.post('/api/send-exclusions', requireEitherScheduleTab, handler(async (req, res) => {
+    const identifiers = Array.isArray(req.body?.identifiers) ? req.body.identifiers : [];
+    const scope = String(req.body?.scope || 'all');
+    const reason = String(req.body?.reason || '').trim().slice(0, 300) || null;
+    if (!EXCLUSION_SCOPES.includes(scope)) return res.status(400).json({ error: 'scope must be all, statement, or fund_performance.' });
+    if (!identifiers.length) return res.status(400).json({ error: 'Add at least one email or SID.' });
+    if (identifiers.length > 1000) return res.status(400).json({ error: 'At most 1,000 at a time.' });
+    const { entries, invalid } = await Sched.exclusionEntries(identifiers);
+    const added = entries.length ? await Sched.addExclusions(entries, scope, reason, req.user.username) : [];
+    if (added.length) {
+      await Auth.logEvent(req.user.id, req.user.username, 'exclusion_add',
+        `excluded from ${scope}: ${added.map((e) => e.sid || e.email || e.identifier).join(', ')}${reason ? ` (${reason})` : ''}`);
+    }
+    res.json({ ok: true, added: added.length, invalid });
+  }));
+
+  app.delete('/api/send-exclusions/:id', requireEitherScheduleTab, handler(async (req, res) => {
+    const removed = await Sched.removeExclusion(req.params.id);
+    if (!removed) return res.status(404).json({ error: 'Not on the exclusion list.' });
+    await Auth.logEvent(req.user.id, req.user.username, 'exclusion_remove', `removed from the exclusion list: ${removed.sid || removed.email || removed.identifier}`);
+    res.json({ ok: true });
   }));
 
   app.delete('/api/schedules/:id', requireEitherScheduleTab, handler(async (req, res) => {
