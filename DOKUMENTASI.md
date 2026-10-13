@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `5236dba (2026-10-13)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `a397bf5 (2026-10-13)`.
 
 ## Cara membaca dokumen ini
 
@@ -420,7 +420,7 @@ Feed transaksi dari S-INVEST (KSEI), sistem kustodian. Sumber independen untuk m
 
 ### 5.2 Tabel, view, dan fungsi Supabase
 
-Dibuat oleh migrasi di `supabase/migrations/` (12 file).
+Dibuat oleh migrasi di `supabase/migrations/` (13 file).
 
 | Nama | Isi |
 |---|---|
@@ -596,7 +596,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Data yang dibaca**: Model BigQuery ML: sayakaya.ml.aum_forecast, tx_forecast, churn_model (view ml.churn_features); main.transactions, main.portfolios, main.bonus_portfolios, main.funds
 - **Cara hitung**: Forecast AUM dan transaksi memakai ARIMA_PLUS. Churn memakai regresi logistik (LOGISTIC_REG) yang menghasilkan probabilitas per investor. Sejak 12 Oktober 2026 churn hanya menghitung fund ACTIVE: investor = pernah beli completed di fund ACTIVE, pemegang = main.portfolios + main.bonus_portfolios on_going di fund ACTIVE, churned = investor yang tidak memegang apa pun. Sebelumnya fund INACTIVE (Avrist Liquid Fund, sisa promo di sekitar 215 ribu akun) membuat ringkasan menghitung 263 ribu investor dan 232 ribu pemegang; sekarang 15.710 investor, 13.837 pemegang, 1.881 churn. Model dilatih ulang dengan definisi ini. Retensi dihitung sebagai cohort bulanan, untuk user dan untuk AUM.
 - **Isi tab**:
-  - *Model status* (Status model): Kapan model terakhir dilatih, dan tombol Retrain now untuk melatih ulang. Jadwal bulanannya ada di Netlify, jadi cek tanggal di panel ini untuk memastikan masih berjalan.
+  - *Model status* (Status model): Kapan model terakhir dilatih, dan tombol Retrain now untuk melatih ulang. Jadwal bulanannya pg_cron di Supabase (tanggal 1, 07.00 WIB), jadi cek tanggal di panel ini untuk memastikan masih berjalan.
   - *AUM forecast* (Prediksi AUM): AUM harian historis dan perkiraan ke depan dari model ARIMA_PLUS (sayakaya.ml.aum_forecast), dengan rentang ketidakpastian (batas bawah dan atas).
   - *Transaction (buy volume) forecast* (Prediksi transaksi (volume beli)): Volume pembelian completed harian dan perkiraannya (sayakaya.ml.tx_forecast), memperhitungkan hari libur Indonesia.
   - *Churn risk (current holders)* (Risiko churn (pemegang saat ini)): Investor yang masih memegang unit, diurutkan dari risiko churn tertinggi.
