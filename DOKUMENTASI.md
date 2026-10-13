@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `a397bf5 (2026-10-13)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `82ad099 (2026-10-13)`.
 
 ## Cara membaca dokumen ini
 
@@ -420,7 +420,7 @@ Feed transaksi dari S-INVEST (KSEI), sistem kustodian. Sumber independen untuk m
 
 ### 5.2 Tabel, view, dan fungsi Supabase
 
-Dibuat oleh migrasi di `supabase/migrations/` (13 file).
+Dibuat oleh migrasi di `supabase/migrations/` (14 file).
 
 | Nama | Isi |
 |---|---|
@@ -435,9 +435,9 @@ Dibuat oleh migrasi di `supabase/migrations/` (13 file).
 | `dashboard_email_events` | Event dari Amazon SES per email: terkirim, dibuka, diklik, bounce, spam. |
 | `dashboard_email_overview` | View: setiap email beserta status terakhirnya (terkirim, dibuka, diklik, bounce), gabungan dua tabel di atas. |
 | `dashboard_email_recap` | Fungsi SQL: rekap email per hari, kategori, dan subjek untuk tab Email recap. |
-| `dashboard_claim_queue` | (Belum ada deskripsi.) |
-| `dashboard_schedule_workers` | (Belum ada deskripsi.) |
-| `dashboard_schedule_progress` | (Belum ada deskripsi.) |
+| `dashboard_claim_queue` | Fungsi: mengklaim potongan antrean satu jadwal (10 statement atau 50 fund performance) untuk satu runner, tanpa dobel. |
+| `dashboard_schedule_workers` | Fungsi: jumlah runner yang dijalankan pg_cron tiap 10 detik (5 bila ada antrean, 1 bila ada jadwal jatuh tempo, 0 bila kosong). |
+| `dashboard_schedule_progress` | View: jumlah email per jadwal yang terkirim, menunggu, dan gagal (kolom Emails). |
 
 ### 5.3 Menghubungkan aktivitas aplikasi dengan database
 
@@ -1650,11 +1650,3 @@ Endpoint yang tidak terikat pada satu tab: login dan akun, admin, ekspor, jadwal
 | `POST /api/cron/run-due-schedules` | - | `dashboard_claim_queue`, `dashboard_scheduled_jobs` |
 | `POST /api/cron/retrain-models` | - | `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.mi_fee`, `ml.aum_forecast`, `ml.churn_features`, `ml.churn_model`, `ml.tx_forecast`, `dashboard_audit_log` |
 | `GET *` | - | - |
-
-## Catatan untuk pengelola
-
-Bagian berikut belum lengkap saat dokumen ini dibuat:
-
-- Tabel Supabase "dashboard_claim_queue" belum punya deskripsi di docs/content.js SUPABASE_TABLES.
-- Tabel Supabase "dashboard_schedule_workers" belum punya deskripsi di docs/content.js SUPABASE_TABLES.
-- Tabel Supabase "dashboard_schedule_progress" belum punya deskripsi di docs/content.js SUPABASE_TABLES.
