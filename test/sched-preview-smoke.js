@@ -50,6 +50,12 @@ const preview = (type) => { $('#ssSchedRecipientType').value = type; return vm.r
   $('#ssSchedSingleEmail').value = 'jane@example.com';
   await preview('single_email');
   assert.match($('#ssSchedCountPreviewText').textContent, /1 investor per send/, 'a typed email is counted too');
+  // CSV / pasted lists: emails and SIDs anywhere in the text, other cells dropped.
+  const csv = 'name,email,sid,phone\n"Budi Santoso","Budi@Example.com",idd2302a8215347,0812\nAni;ani@example.com;;\nbudi@example.com,TESTING,123';
+  assert.deepStrictEqual(JSON.parse(vm.runInContext(`JSON.stringify(extractRecipients(${JSON.stringify(csv)}, true))`, sandbox)),
+    ['budi@example.com', 'IDD2302A8215347', 'ani@example.com'], 'statement: emails + SIDs, deduped, header and names dropped');
+  assert.deepStrictEqual(JSON.parse(vm.runInContext(`JSON.stringify(extractRecipients(${JSON.stringify(csv)}, false))`, sandbox)),
+    ['budi@example.com', 'ani@example.com'], 'fund performance: emails only');
   console.log('sched-preview smoke test passed');
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -6290,6 +6290,11 @@ let ssBatchPicker, fpePicker;
 
 // Splits on newlines/commas/semicolons — each entry is either a SID or an
 // email, so (unlike parsePastedEmails) nothing is filtered by an email regex.
+// A direct batch send builds every email in one request, and an edge
+// function gets ~2 s of CPU (a statement's two PDFs take ~40 ms), so longer
+// lists go through the schedule queue as a one-off send (openSchedOnce).
+const BATCH_DIRECT_MAX = { statement: 10, fund_performance: 50 };
+
 function parseBatchIdentifiers(text) {
   return [...new Set((text || '').split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean))];
 }
@@ -6303,8 +6308,8 @@ function openSsBatchCompose() {
   const statementMonth = $('#ssBatchStatementMonth').value;
   if (sendStatement && !statementMonth) { toast('Pick a month for the transaction e-statement.'); return; }
   const group = $('#ssBatchRecipientType').value;
+  const docs = [sendPortfolio && 'the live portfolio (as of the send date)', sendStatement && `the transaction e-statement for ${statementMonth}`].filter(Boolean).join(' and ');
   if (group !== 'list') {
-    const docs = [sendPortfolio && 'the live portfolio (as of the send date)', sendStatement && `the transaction e-statement for ${statementMonth}`].filter(Boolean).join(' and ');
     openSchedOnce('statement', group, { sendPortfolio, sendStatement, statementMonth: sendStatement ? statementMonth : null },
       `Sends once, right away: ${docs}, as chosen in Batch send.`,
       defaultStatementEmail({ sendPortfolio, portfolioDate: '', sendStatement, statementMonth }));
@@ -6315,6 +6320,13 @@ function openSsBatchCompose() {
   const picked = ssBatchPicker.list().map((u) => u.sid || u.email);
   ssBatchIdentifiers = [...new Set([...picked, ...parseBatchIdentifiers($('#ssBatchInput').value)])];
   if (!ssBatchIdentifiers.length) { toast('Add or paste at least one investor.'); return; }
+  if (ssBatchIdentifiers.length > BATCH_DIRECT_MAX.statement) {
+    openSchedOnce('statement', 'csv_list', { sendPortfolio, sendStatement, statementMonth: sendStatement ? statementMonth : null },
+      `${num(ssBatchIdentifiers.length)} emails/SIDs is more than ${BATCH_DIRECT_MAX.statement}, so they go out once, right away, from the queue: ${docs}.`
+        + (portfolioDate ? ' The portfolio date is not used; queued sends attach the live portfolio.' : ''),
+      defaultStatementEmail({ sendPortfolio, portfolioDate: '', sendStatement, statementMonth }), ssBatchIdentifiers);
+    return;
+  }
   const { subject, body } = defaultStatementEmail({ sendPortfolio, portfolioDate, sendStatement, statementMonth });
   $('#ssBatchEmailTo').textContent = `Will be matched against ${ssBatchIdentifiers.length} picked or pasted email/SID${ssBatchIdentifiers.length === 1 ? '' : 's'} and sent to each investor found.`;
   $('#ssBatchEmailSubject').value = subject;
@@ -6439,6 +6451,12 @@ function openFpeCompose() {
   }
   fpeRecipients = [...new Set([...fpePicker.list().map((u) => u.email.toLowerCase()), ...pasted])];
   if (!fpeRecipients.length) { toast('Add at least one recipient.'); return; }
+  if (fpeRecipients.length > BATCH_DIRECT_MAX.fund_performance) {
+    openSchedOnce('fund_performance', 'csv_list', { fundFilter: fpeFundFilter, navAsOf: asOf || null },
+      `${num(fpeRecipients.length)} emails is more than ${BATCH_DIRECT_MAX.fund_performance}, so they go out once, right away, from the queue: the Reksa Dana Update PDF (${fundScopeSummary(fpeFundFilter)}, NAV ${asOf ? `as of ${asOf}` : 'of the latest date'}).`,
+      fpeDefaultEmail(asOf), fpeRecipients);
+    return;
+  }
   $('#fpeEmailTo').textContent = `Will be sent to ${fpeRecipients.length} recipient${fpeRecipients.length === 1 ? '' : 's'}.`;
   const { subject, body } = fpeDefaultEmail(asOf);
   $('#fpeEmailSubject').value = subject;
@@ -6727,12 +6745,13 @@ function schedSetOnceMode(kind, on) {
   schedEl(prefix, 'ConfirmBtn').textContent = t(on ? 'sched_once_confirm' : 'sched_confirm');
   if (!on && schedOnce && schedOnce.kind === kind) schedOnce = null;
 }
-function openSchedOnce(kind, recipientType, extras, note, { subject, body }) {
+function openSchedOnce(kind, recipientType, extras, note, { subject, body }, list = null) {
   const { prefix } = schedCfg(kind);
   schedResetModal(kind);
   schedSetOnceMode(kind, true);
   schedOnce = { kind, extras };
   schedEl(prefix, 'RecipientType').value = recipientType;
+  if (list) schedEl(prefix, 'CsvPaste').value = list.join('\n');
   schedEl(prefix, 'OnceNoteText').textContent = note;
   schedEl(prefix, 'Subject').value = subject;
   schedEl(prefix, 'Body').value = body;
@@ -6774,10 +6793,39 @@ function schedUpdateFieldVisibility(kind) {
   schedEl(prefix, 'EndDateField').classList.toggle('hidden', schedEl(prefix, 'Endless').checked);
 }
 
-// Reads the CSV file (if one was chosen) or falls back to the pasted
-// textarea — same tolerant comma/newline/semicolon split as the Send
-// statement batch tool's parseBatchIdentifiers, but filtered to valid emails
-// only (a schedule always sends by email, never by SID).
+// Emails (and, for e-statement sends, SIDs) found anywhere in pasted text or
+// an uploaded CSV. Other cells (names, phone numbers, amounts, a header row)
+// are dropped, and so are quotes and spaces around values. The server turns
+// a SID into that investor's email; fund performance goes to emails only.
+const RECIPIENT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SID_RE = /^[a-z]{3}\d{4}[a-z0-9]{8}$/i; // every SID on file: 3 letters, 4 digits, 8 letters/digits
+function extractRecipients(text, withSids) {
+  return [...new Set((text || '').split(/[\s,;"'<>()]+/)
+    .filter((c) => RECIPIENT_EMAIL_RE.test(c) || (withSids && SID_RE.test(c)))
+    .map((c) => (c.includes('@') ? c.toLowerCase() : c.toUpperCase())))];
+}
+
+// Batch send's CSV upload: what the file holds is added to the paste box, so
+// it can be checked or edited before sending.
+async function loadBatchCsv(fileInput, textarea, withSids) {
+  const file = fileInput.files[0];
+  if (!file) return;
+  try {
+    const found = extractRecipients(await schedReadFileAsText(file), withSids);
+    const current = textarea.value.split(/[\n,;]+/).map((v) => v.trim()).filter(Boolean);
+    const known = new Set(current.map((v) => v.toLowerCase()));
+    const added = found.filter((v) => !known.has(v.toLowerCase()));
+    textarea.value = [...current, ...added].join('\n');
+    const what = withSids ? 'emails/SIDs' : 'emails';
+    const dupes = found.length - added.length;
+    toast(found.length
+      ? `${num(added.length)} ${what} added from ${file.name}${dupes ? ` (${num(dupes)} already in the box)` : ''}.`
+      : `No ${what} found in ${file.name}.`);
+  } catch (e) { toast(e.message); }
+  fileInput.value = ''; // so the same file can be picked again
+}
+
+// Reads the CSV file (if one was chosen) or falls back to the pasted textarea.
 function schedReadFileAsText(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -6786,12 +6834,11 @@ function schedReadFileAsText(file) {
     reader.readAsText(file);
   });
 }
-async function schedCollectEmails(kind) {
+async function schedCollectRecipients(kind) {
   const { prefix } = schedCfg(kind);
   const file = schedEl(prefix, 'CsvFile').files[0];
   const text = file ? await schedReadFileAsText(file) : schedEl(prefix, 'CsvPaste').value;
-  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return [...new Set(text.split(/[\n,;]+/).map((s) => s.trim().toLowerCase()).filter((s) => EMAIL_RE.test(s)))];
+  return extractRecipients(text, kind === 'statement');
 }
 
 async function schedBuildSpec(kind) {
@@ -6799,7 +6846,7 @@ async function schedBuildSpec(kind) {
   const recipientType = schedEl(prefix, 'RecipientType').value;
   const spec = { kind, recipientType };
   if (recipientType === 'single_email') spec.recipientEmail = schedEl(prefix, 'SingleEmail').value.trim();
-  if (recipientType === 'csv_list') spec.recipientList = await schedCollectEmails(kind);
+  if (recipientType === 'csv_list') spec.recipientList = await schedCollectRecipients(kind);
   return spec;
 }
 
@@ -7878,6 +7925,8 @@ function wire() {
   $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
   $('#ssBatchRecipientType').addEventListener('change', () => batchGroupChanged('statement', 'ssBatch'));
+  $('#ssBatchCsv').addEventListener('change', () => loadBatchCsv($('#ssBatchCsv'), $('#ssBatchInput'), true));
+  $('#fpeCsv').addEventListener('change', () => loadBatchCsv($('#fpeCsv'), $('#fpePasteEmails'), false));
   EXCL_PANELS.forEach((p) => {
     $(`#${p}AddBtn`).addEventListener('click', () => addExclusions(p));
     $(`#${p}Filter`).addEventListener('input', () => renderExclusions(p));
