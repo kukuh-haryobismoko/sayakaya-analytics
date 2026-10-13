@@ -553,6 +553,16 @@ td.neg { color: var(--neg-text); }
   max-height: 85vh; overflow-y: auto;
 }
 .admin-modal::backdrop { background: rgba(10, 12, 30, .5); }
+/* Tables and long lists: wider, so fewer columns need a sideways scroll. */
+.admin-modal.wide { width: 1000px; }
+/* The title row with the close button stays in view while the modal scrolls
+   down or sideways under it. Sticky offsets count from inside the modal's
+   18px/20px padding, so they are negative to pin it flush to the edges; the
+   negative margin lets it cover that padding at rest too. */
+.admin-modal > .panel-head:first-child {
+  position: sticky; top: -18px; left: -20px; z-index: 3; background: var(--surface);
+  margin: -18px -20px 16px; padding: 18px 20px 14px;
+}
 .modal-close {
   width: 28px; height: 28px; padding: 0; border: none; background: none; cursor: pointer;
   font-size: 15px; line-height: 1; color: var(--muted); border-radius: 6px; flex: none;

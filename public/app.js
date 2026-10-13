@@ -6616,9 +6616,11 @@ async function openSchedDetail(kind, id) {
         <td>${lastLabel}</td>
       </tr>`;
     }).join('');
-    schedEl(prefix, 'DetailBody').innerHTML = `${note}<table><thead><tr>
+    // Own scroll box: the recipient list can run to thousands of rows and
+    // seven columns, and its column headers stay in view inside it.
+    schedEl(prefix, 'DetailBody').innerHTML = `${note}<div class="table-wrap" style="max-height:60vh"><table><thead><tr>
         <th>Name</th><th>SID</th><th>Email</th><th>Has portfolio</th><th>Tx last month</th><th>Sent</th><th>Last send (WIB)</th>
-      </tr></thead><tbody>${rows}</tbody></table>`;
+      </tr></thead><tbody>${rows}</tbody></table></div>`;
   } catch (e) { schedEl(prefix, 'DetailBody').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 
