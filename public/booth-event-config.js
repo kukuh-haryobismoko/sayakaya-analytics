@@ -12,7 +12,9 @@ const BOOTH_EVENT = {
   booths: { PIM: 'Pondok Indah Mall', GC: 'Gandaria City', CP: 'Central Park' },
 
   // Periode insentif. workDays = hari kerja yang jadi dasar target: 21 per
-  // bulan penuh, bulan yang tidak penuh diprorate per hari kalender
+  // bulan penuh. Hari kerja = hari shift tiap sales (boleh akhir pekan,
+  // sesuai pembagian shift), bukan Senin-Jumat; tanggal mana yang jadi shift
+  // tidak memengaruhi hitungan. Bulan yang tidak penuh diprorate per hari kalender
   // (Oktober 19-31 = 13/31 x 21). 1-3 Januari digabung ke periode Desember.
   // m1 = bulan berikutnya untuk rule 4 (beli lagi / retensi).
   periods: [
