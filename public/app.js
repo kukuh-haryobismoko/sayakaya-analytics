@@ -6923,6 +6923,157 @@ async function schedConfirmOtp(kind) {
   } catch (e) { toast(e.message); }
 }
 
+// PROMO RECAP: who bought with a promo code (payouts excluded), every promo
+// participation (bonus_portfolios: on_going = waiting for the holding date,
+// succeeded = eligible, redeemed = withdrawn early) with how long the promo
+// units stayed and the fee they earned (portfolio_with_code, server side),
+// and the bonus already sent. The per-promo summary is built here.
+const PR = { data: null, loading: false };
+const prStatus = (k) => ({
+  on_going: bL('Waiting for the holding date', 'Menunggu holding selesai'),
+  succeeded: bL('Eligible', 'Layak'),
+  redeemed: bL('Lapsed: withdrawn before the holding date', 'Gugur: ditarik sebelum holding selesai'),
+  none: bL('No bonus: did not qualify', 'Tidak dapat bonus: tidak memenuhi syarat'),
+}[k] || k);
+// Bonus owed to one participation by the campaign rule: a fixed amount, or a
+// percentage of the locked value; null when the campaign sets neither (decided by hand).
+function prBonusDue(r) {
+  if (r.status !== 'succeeded') return 0;
+  if (Number(r.bonus_amount) > 0) return Number(r.bonus_amount);
+  if (Number(r.bonus_percentage) > 0) return Math.round((Number(r.locked_value) * Number(r.bonus_percentage)) / 100);
+  return null;
+}
+function prBonusRule(r) {
+  if (Number(r.bonus_amount) > 0) return idrFull(r.bonus_amount);
+  if (Number(r.bonus_percentage) > 0) return `${r.bonus_percentage}%`;
+  return bL('set by hand', 'manual');
+}
+// One row per promo code from the raw rows.
+function promoSummary(transactions, participants) {
+  const by = new Map();
+  const row = (promo, src) => {
+    if (!by.has(promo)) {
+      by.set(promo, {
+        promo, campaign: src.campaign || '', campaign_start: src.campaign_start, campaign_end: src.campaign_end,
+        min_amount: src.min_amount, campaign_holding: src.campaign_holding, rule: prBonusRule(src),
+        buys: 0, users: new Set(), amount: 0, failed: 0, no_bonus: 0,
+        parts: 0, waiting: 0, eligible: 0, lapsed: 0, due: 0, dueManual: 0, sent: new Map(),
+        value_now: 0, days: 0, fee_total: 0, fee_aperd: 0,
+      });
+    }
+    return by.get(promo);
+  };
+  for (const t of transactions) {
+    const r = row(t.promo, t);
+    if (t.status !== 'completed') { r.failed++; continue; }
+    r.buys++; r.users.add(t.user_id); r.amount += Number(t.amount) || 0;
+    if (!t.bonus) r.no_bonus++;
+  }
+  for (const p of participants) {
+    const r = row(p.promo, p);
+    r.parts++;
+    if (p.status === 'on_going') r.waiting++;
+    else if (p.status === 'succeeded') r.eligible++;
+    else if (p.status === 'redeemed') r.lapsed++;
+    const due = prBonusDue(p);
+    if (due == null) r.dueManual++; else r.due += due;
+    r.sent.set(p.user_id, Number(p.bonus_paid) || 0); // a payout is per customer and promo, not per participation
+    r.value_now += Number(p.value_now) || 0; r.days += Number(p.days_held) || 0;
+    r.fee_total += Number(p.fee_total) || 0; r.fee_aperd += Number(p.fee_aperd) || 0;
+  }
+  return [...by.values()].map((r) => ({
+    ...r, users: r.users.size, sent: [...r.sent.values()].reduce((a, v) => a + v, 0),
+    avg_days: r.parts ? Math.round(r.days / r.parts) : null,
+  })).sort((a, b) => b.amount - a.amount);
+}
+
+async function loadPromoRecap() {
+  if (!$('#prFrom').value) {
+    const today = bWibToday();
+    $('#prFrom').value = `${today.slice(0, 4)}-01-01`;
+    $('#prTo').value = today;
+  }
+  PR.loading = true;
+  ['#prKpis', '#prSummary', '#prParticipants', '#prTransactions'].forEach((sel) => { $(sel).innerHTML = `<div class="loading">${t('common_loading')}</div>`; });
+  try {
+    const qs = new URLSearchParams({ from: $('#prFrom').value, to: $('#prTo').value });
+    $('#prCodes').value.split(/[\s,;]+/).map((c) => c.trim()).filter(Boolean).forEach((c) => qs.append('promo', c));
+    PR.data = await api(`/api/promo-recap/data?${qs}`);
+    renderPromoRecap();
+  } catch (e) {
+    ['#prKpis', '#prSummary', '#prParticipants', '#prTransactions'].forEach((sel) => { $(sel).innerHTML = `<div class="empty">${bEsc(e.message)}</div>`; });
+  } finally { PR.loading = false; }
+}
+
+function renderPromoRecap() {
+  if (!PR.data) return;
+  const { transactions, participants } = PR.data;
+  const sum = promoSummary(transactions, participants);
+  const total = (k) => sum.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  $('#prKpis').innerHTML = [
+    kpi(bL('Promo buys', 'Beli dengan promo'), num(total('buys')), bL(`${num(new Set(transactions.filter((x) => x.status === 'completed').map((x) => x.user_id)).size)} customers, ${idr(total('amount'))}`, `${num(new Set(transactions.filter((x) => x.status === 'completed').map((x) => x.user_id)).size)} nasabah, ${idr(total('amount'))}`), 'accent', ICONS.receipt),
+    kpi(bL('Eligible', 'Layak'), num(total('eligible')), bL('holding period done', 'holding selesai'), '', ICONS.check),
+    kpi(bL('Waiting', 'Menunggu'), num(total('waiting')), bL('still locked', 'masih terkunci'), '', ICONS.hourglass),
+    kpi(bL('Lapsed', 'Gugur'), num(total('lapsed')), bL(`withdrawn early; ${num(total('no_bonus'))} buys got no bonus`, `ditarik lebih awal; ${num(total('no_bonus'))} beli tidak dapat bonus`), '', ICONS.xCircle),
+    kpi(bL('Bonus owed / sent', 'Bonus harus / sudah dikirim'), `${idr(total('due'))} / ${idr(total('sent'))}`, total('dueManual') ? bL(`+ ${num(total('dueManual'))} set by hand`, `+ ${num(total('dueManual'))} ditentukan manual`) : '', '', ICONS.coin),
+    kpi(bL('Fee earned (AperD)', 'Fee didapat (AperD)'), idr(total('fee_aperd')), bL(`of ${idr(total('fee_total'))} management fee`, `dari ${idr(total('fee_total'))} management fee`), '', ICONS.trendUp),
+  ].join('');
+
+  genTable('#prSummary', sum.map((r) => ({
+    ...r, promo: bEsc(r.promo), campaign: bEsc(r.campaign),
+    window: r.campaign_start ? `${r.campaign_start} s.d. ${r.campaign_end || ''}` : 'n/a',
+  })), [
+    { key: 'promo', label: 'Promo' }, { key: 'campaign', label: 'Campaign' }, { key: 'window', label: bL('Campaign dates', 'Periode campaign') },
+    { key: 'min_amount', label: bL('Minimum', 'Minimum'), type: 'idr' }, { key: 'campaign_holding', label: bL('Holding until', 'Holding sampai'), type: 'date' },
+    { key: 'rule', label: bL('Bonus rule', 'Aturan bonus') },
+    { key: 'buys', label: bL('Buys', 'Beli'), type: 'num', sum: true }, { key: 'users', label: bL('Customers', 'Nasabah'), type: 'num', sum: true },
+    { key: 'amount', label: bL('Amount', 'Nominal'), type: 'idr', sum: true }, { key: 'failed', label: bL('Expired or cancelled', 'Expired atau batal'), type: 'num', sum: true },
+    { key: 'no_bonus', label: bL('No bonus', 'Tanpa bonus'), type: 'num', sum: true },
+    { key: 'waiting', label: bL('Waiting', 'Menunggu'), type: 'num', sum: true }, { key: 'eligible', label: bL('Eligible', 'Layak'), type: 'num', sum: true },
+    { key: 'lapsed', label: bL('Lapsed', 'Gugur'), type: 'num', sum: true },
+    { key: 'due', label: bL('Bonus owed', 'Bonus harus dikirim'), type: 'idr', sum: true }, { key: 'sent', label: bL('Bonus sent', 'Bonus terkirim'), type: 'idr', sum: true },
+    { key: 'value_now', label: bL('Still held today', 'Masih dipegang hari ini'), type: 'idr', sum: true }, { key: 'avg_days', label: bL('Avg days held', 'Rata-rata hari holding'), type: 'num' },
+    { key: 'fee_total', label: bL('Management fee', 'Management fee'), type: 'idr', sum: true }, { key: 'fee_aperd', label: bL('Fee AperD', 'Fee AperD'), type: 'idr', sum: true },
+  ], bL('No promo buys in this window.', 'Tidak ada pembelian promo di rentang ini.'));
+
+  const status = $('#prStatus').value;
+  genTable('#prParticipants', participants.filter((r) => !status || r.status === status).map((r) => {
+    const due = prBonusDue(r);
+    return {
+      promo: bEsc(r.promo), campaign: bEsc(r.campaign || ''), name: bEsc(r.name || 'n/a'), email: bEsc(r.email), phone: bEsc(r.phone || ''),
+      sid: bEsc(r.sid || ''), ifua: bEsc(r.ifua || ''), fund: bEsc(r.fund || ''), manager: bEsc(r.manager || ''),
+      unit: Math.round(Number(r.unit) * 10000) / 10000, locked_value: r.locked_value, start_d: r.start_d, holding_d: r.holding_d,
+      status: r.status === 'redeemed' && r.redeemed_d ? `${prStatus(r.status)} (${r.redeemed_d})` : prStatus(r.status),
+      due: due == null ? bL('set by hand', 'manual') : due, sent: Number(r.bonus_paid) || 0, sent_on: r.bonus_paid_on,
+      days: r.days_held, value_now: r.value_now, fee_total: r.fee_total, fee_aperd: r.fee_aperd,
+    };
+  }), [
+    { key: 'promo', label: 'Promo' }, { key: 'campaign', label: 'Campaign' }, { key: 'name', label: bL('Customer', 'Nasabah') },
+    { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') }, { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' },
+    { key: 'fund', label: bL('Product', 'Produk') }, { key: 'manager', label: 'MI' },
+    { key: 'unit', label: bL('Units locked', 'Unit dikunci'), type: 'num' }, { key: 'locked_value', label: bL('Value locked', 'Nilai dikunci'), type: 'idr', sum: true },
+    { key: 'start_d', label: bL('Locked on', 'Mulai dikunci'), type: 'date' }, { key: 'holding_d', label: bL('Holding until', 'Holding sampai'), type: 'date' },
+    { key: 'status', label: 'Status' }, { key: 'due', label: bL('Bonus owed', 'Bonus harus dikirim'), type: 'idr', sum: true },
+    { key: 'sent', label: bL('Bonus sent', 'Bonus terkirim'), type: 'idr', sum: true }, { key: 'sent_on', label: bL('Sent on', 'Dikirim'), type: 'date' },
+    { key: 'days', label: bL('Days held', 'Hari holding'), type: 'num' }, { key: 'value_now', label: bL('Still held today', 'Masih dipegang hari ini'), type: 'idr', sum: true },
+    { key: 'fee_total', label: 'Management fee', type: 'idr', sum: true }, { key: 'fee_aperd', label: 'Fee AperD', type: 'idr', sum: true },
+  ], bL('No promo participation matches.', 'Tidak ada peserta promo yang cocok.'));
+
+  genTable('#prTransactions', transactions.map((r) => ({
+    day: r.day, promo: bEsc(r.promo), campaign: bEsc(r.campaign || ''), name: bEsc(r.name || 'n/a'), email: bEsc(r.email), phone: bEsc(r.phone || ''),
+    sid: bEsc(r.sid || ''), ifua: bEsc(r.ifua || ''), fund: bEsc(r.fund || ''), manager: bEsc(r.manager || ''),
+    amount: r.amount, unit: r.unit == null ? null : Math.round(Number(r.unit) * 10000) / 10000, status: bEsc(r.status), payment: bEsc(r.payment_method || ''),
+    bonus: r.status !== 'completed' ? '' : prStatus(r.bonus ? r.bonus.status : 'none'), holding: r.bonus ? r.bonus.holding_until : null,
+  })), [
+    { key: 'day', label: bL('Day (WIB)', 'Tanggal (WIB)'), type: 'date' }, { key: 'promo', label: 'Promo' }, { key: 'campaign', label: 'Campaign' },
+    { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') },
+    { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' }, { key: 'fund', label: bL('Product', 'Produk') }, { key: 'manager', label: 'MI' },
+    { key: 'amount', label: bL('Amount', 'Nominal'), type: 'idr', sum: true }, { key: 'unit', label: 'Unit', type: 'num' },
+    { key: 'status', label: bL('Transaction', 'Transaksi') }, { key: 'payment', label: bL('Payment', 'Pembayaran') },
+    { key: 'bonus', label: bL('Bonus status', 'Status bonus') }, { key: 'holding', label: bL('Holding until', 'Holding sampai'), type: 'date' },
+  ], bL('No promo buys in this window.', 'Tidak ada pembelian promo di rentang ini.'));
+}
+
 // BOOTH EVENT: offline booths in three malls. Every rule and number comes
 // from BOOTH_EVENT (public/booth-event-config.js); the server only returns
 // raw rows (customers, completed transactions, recurring plans) and
@@ -8015,6 +8166,7 @@ function switchTab(name) {
     loadPresentation(name, $(`${cfg.seg} .on`)?.dataset.month || cfg.defaultMonth);
   }
   if (name === 'booth-event' && !BOOTH.data && !BOOTH.loading) loadBoothEvent();
+  if (name === 'promo-recap' && !PR.data && !PR.loading) loadPromoRecap();
   if (name === 'send-statement') { loadSsLog(); loadSchedules('statement'); loadExclusions(); }
   if (name === 'send-fund-performance') { loadFpeLog(); loadSchedules('fund_performance'); loadExclusions(); }
 }
@@ -8141,6 +8293,7 @@ function repaintActiveTab() {
     case 'portfolio-tx': if (ptxSelected) loadPtxUser(); break;
     case 'portfolio-sinvest': if (psiSelected) loadPsiUser(); break;
     case 'booth-event': renderBoothEvent(); break;
+    case 'promo-recap': renderPromoRecap(); break;
     case 'event-code':
       renderEvcRecap(); renderEvcPortfolio(); renderEvcUsers();
       renderEvcCohort('#evcCohortRegHeatmap', evcCohortRows.reg); renderEvcCohort('#evcCohortTxHeatmap', evcCohortRows.tx);
@@ -8323,6 +8476,8 @@ function wire() {
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
   ['bePeriod', 'beBooth', 'bePerson'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothEvent));
   $('#beReload').addEventListener('click', loadBoothEvent);
+  $('#prApply').addEventListener('click', loadPromoRecap);
+  $('#prStatus').addEventListener('change', renderPromoRecap);
   $('#ssBatchRecipientType').addEventListener('change', () => batchGroupChanged('statement', 'ssBatch'));
   $('#ssBatchCsv').addEventListener('change', () => loadBatchCsv($('#ssBatchCsv'), $('#ssBatchInput'), true));
   $('#fpeCsv').addEventListener('change', () => loadBatchCsv($('#fpeCsv'), $('#fpePasteEmails'), false));

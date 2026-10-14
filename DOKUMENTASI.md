@@ -33,7 +33,7 @@ Yang bisa dilakukan, secara garis besar:
 - **Marketing dan produk**: atribusi iklan, program referral, push notification, kesehatan aplikasi, dan perilaku pengguna di aplikasi yang dicocokkan dengan database (siapa membeli, di mana orang berhenti, fitur apa yang dipakai).
 - **Alat bantu**: bertanya dalam bahasa biasa (Ask), menjelajah tabel mentah, dan menulis query SQL sendiri (read-only).
 
-Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 49 tab dalam 8 grup.
+Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 50 tab dalam 8 grup.
 
 ## 2. Istilah penting
 
@@ -124,6 +124,7 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 | [Referral activity](#tab-kalcer) | Siapa mengajak siapa dan kapan, dari semua referral antar pengguna di aplikasi (bukan hanya ambassador satu program), plus AUM investor yang diajak pada tanggal pilihan. Dulu bernama Kalcer ambassadors. |
 | [Event code tracking](#tab-event-code) | Lacak kode referral/sales sebuah event: rekap harian registrasi dan transaksi completed terhadap target harian, performa per kode (termasuk keluarga kode lewat wildcard), funnel, daftar pengguna beserta portofolionya, detail transaksi, retensi transaksi, dan retensi portofolio. Semua panel bisa diunduh, termasuk satu workbook Excel berisi semuanya. |
 | [Booth event](#tab-booth-event) | Event booth offline di Pondok Indah Mall, Gandaria City, dan Central Park (19 Okt 2026 s.d. 3 Jan 2027): rekap harian nasabah baru per kode sales, insentif sales, flying team, dan team lead per periode, bonus nasabah (welcome bonus, nabung rutin, top up nasabah existing), dan journey Sucorwave. Versi khusus dari Event code tracking. |
+| [Promo recap](#tab-promo-recap) | Rekap promo: siapa yang membeli dengan kode promo, peserta yang layak, menunggu holding, atau gugur, bonus yang harus dan sudah dikirim, berapa lama unit promo dipegang, dan fee yang dihasilkan, per promo dan per nasabah, dengan nama, email, HP, SID, IFUA, dan produk untuk pemantauan dan distribusi bonus. |
 | [Push delivery](#tab-push) | Kesehatan pengiriman push notification: tren, per campaign, per platform. |
 
 **Product (Produk)**
@@ -1183,7 +1184,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Cara hitung**: Referral sah jika transaksi pertama sepanjang masa si invitee adalah pembelian fund Sucor Asset Management minimal Rp1.000.000 dengan kode referral. Bonus Rp25.000 per sisi baru berlaku jika unit ditahan 30 hari. Status: Eligible, Pending (masih masa 30 hari), atau Not eligible beserta alasannya. Leaderboard invitee dihitung dari tanggal registrasi.
 - **Isi tab**:
   - *Kartu ringkasan di atas tab*:
-    - **Eligible**: Referral yang memenuhi semua syarat dan sudah lewat masa tahan 30 hari.
+    - **Eligible / Layak**: Referral yang memenuhi semua syarat dan sudah lewat masa tahan 30 hari.
     - **Pending**: Memenuhi syarat pembelian tetapi masa tahan 30 harinya belum selesai.
     - **Est. bonus payable / Estimasi bonus dibayarkan**: Perkiraan bonus yang harus dibayar: Rp25.000 untuk pengajak dan Rp25.000 untuk yang diajak, per referral Eligible.
   - *Inviter leaderboard* (Leaderboard pengundang): Satu baris per pengajak. "Invited" dihitung dari tanggal invitee mendaftar di periode program.
@@ -1211,7 +1212,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Cara hitung**: Invited ditentukan oleh tanggal verifikasi KYC invitee (dengan grace 1 hari), bukan tanggal registrasi.
 - **Isi tab**:
   - *Kartu ringkasan di atas tab*:
-    - **Eligible**: Referral yang memenuhi semua syarat dan sudah lewat masa tahan 30 hari.
+    - **Eligible / Layak**: Referral yang memenuhi semua syarat dan sudah lewat masa tahan 30 hari.
     - **Pending**: Memenuhi syarat pembelian tetapi masa tahan 30 harinya belum selesai.
     - **Est. bonus payable / Estimasi bonus dibayarkan**: Perkiraan bonus yang harus dibayar: Rp25.000 untuk pengajak dan Rp25.000 untuk yang diajak, per referral Eligible.
   - *Inviter leaderboard* (Leaderboard pengundang): Satu baris per pengajak. "Invited" dihitung dari tanggal KYC invitee terverifikasi (dengan kelonggaran 1 hari), bukan tanggal daftar.
@@ -1329,6 +1330,31 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `booth-event`
   - Endpoint: `GET /api/booth-event/data`
   - Fungsi query (`server/queries.js`): `boothEventData`
+
+<a id="tab-promo-recap"></a>
+#### Promo recap
+
+- **Untuk apa**: Rekap promo: siapa yang membeli dengan kode promo, peserta yang layak, menunggu holding, atau gugur, bonus yang harus dan sudah dikirim, berapa lama unit promo dipegang, dan fee yang dihasilkan, per promo dan per nasabah, dengan nama, email, HP, SID, IFUA, dan produk untuk pemantauan dan distribusi bonus.
+- **Penjelasan sederhana**: Semua yang membeli dengan kode promo, dan kelanjutannya. Pembelian promo mengunci unitnya di bonus_portfolios sampai tanggal holding campaign (menunggu), lalu unit pindah ke portofolio (layak); menarik dana sebelum tanggal itu membuatnya gugur, dan pembelian promo yang tidak punya baris bonus berarti tidak memenuhi syarat. Per promo: beli, nasabah, nominal, layak, menunggu, dan gugur, bonus yang harus dikirim menurut aturan campaign (nominal tetap atau persen) dan bonus yang sudah dikirim (pembayaran manual_bonus atau bonus dengan kode promo itu atau BONUS ditambah kode), yang masih dipegang hari ini, rata-rata hari holding, serta management fee dan porsi AperD dari unit promo. Daftar peserta (bisa difilter per status) dan daftar pembelian promo memuat nama, email, HP, SID, IFUA, produk, dan manajer investasi untuk pemantauan dan distribusi bonus; setiap tabel bisa diekspor. Holding dan fee dari portfolio_with_code, yang harian sejak 14 Januari 2026, jadi promo yang lebih lama dihitung sejak tanggal itu.
+- **Data yang dibaca**: main.transactions, main.bonus_portfolios, main.campaigns, main.users, main.user_profiles, main.funds, main.investment_managers, main.management_fee_logs, mi_fee_logs.portfolio_with_code
+- **Cara hitung**: Endpoint /api/promo-recap/data (promoRecapData) mengirim data mentah, halaman membuat ringkasan per promo (promoSummary). Pembelian promo = transactions.promo_code terisi, tanggal (WIB) di rentang, kecuali pembayaran bonus (payment_method manual_bonus atau bonus). Kode promo tanpa * dicocokkan sebagian, * mengunci posisi (codePatterns). Peserta = baris main.bonus_portfolios dari nasabah dan promo itu (atau dibuat di rentang): on_going = menunggu holding_date, succeeded = layak (unit sudah pindah ke main.portfolios), redeemed = gugur (ditarik sebelum holding_date). Pembelian promo dicocokkan ke baris bonus dengan nasabah, promo, dan fund yang sama, yang waktunya paling dekat; tanpa baris bonus = tidak memenuhi syarat. Bonus harus dikirim per peserta layak = campaigns.bonus_amount, atau bonus_percentage x nilai dikunci (unit x average_nav), atau manual bila campaign tidak mengisi keduanya. Bonus terkirim = transaksi completed manual_bonus atau bonus milik nasabah itu dengan kode promo yang sama atau BONUS + kode (per nasabah dan promo, tidak dobel). Holding dan fee dari mi_fee_logs.portfolio_with_code (harian sejak 14 Jan 2026, tanggal = created_at - 1 hari, sudah termasuk unit yang masih terkunci): bagian promo per hari = amount fund itu x min(1, unit promo / total_unit hari itu), mulai tanggal dikunci, berhenti di redeemed_at untuk yang gugur; hari holding = hari dengan bagian > 0; fee per hari = bagian x management_fee (x aperd_share untuk fee AperD) / jumlah hari setahun, aturan Revenue (PWC); masih dipegang hari ini = bagian di hari portfolio_with_code terbaru. Kalau satu nasabah punya beberapa promo di fund yang sama, masing-masing dibatasi saldo fund itu. Satu kali muat memindai sekitar 5,7 GB portfolio_with_code.
+- **Isi tab**:
+  - *Kartu ringkasan di atas tab*:
+    - **Promo buys / Pembelian promo**: Pembelian completed dengan kode promo di rentang (tanpa pembayaran bonus), dengan jumlah nasabah dan nominal.
+    - **Eligible / Layak**: Peserta yang holding-nya selesai (status succeeded).
+    - **Waiting / Menunggu**: Peserta yang unitnya masih terkunci sampai holding_date (on_going).
+    - **Lapsed / Gugur**: Peserta yang menarik dana sebelum holding_date (redeemed); di bawahnya pembelian promo yang tidak dapat baris bonus.
+    - **Fee earned (AperD)**: Porsi AperD dari management fee atas unit promo selama dipegang.
+  - *Per promo*: Satu baris per kode promo dengan data campaign, beli, nasabah, nominal, peserta per status, bonus harus dan sudah dikirim, yang masih dipegang, rata-rata hari holding, dan fee.
+  - *Participants (for bonus distribution)* (Peserta (untuk distribusi bonus)): Satu baris per peserta promo, bisa difilter per status, dengan kontak, SID, IFUA, produk, unit dan nilai dikunci, tanggal holding, bonus, hari holding, nilai sekarang, dan fee.
+  - *Promo buys* (Pembelian promo): Setiap pembelian dengan kode promo di rentang, dengan status transaksi dan status bonus peserta yang cocok.
+- **Catatan penting**:
+  - portfolio_with_code harian sejak 14 Jan 2026, jadi hari holding dan fee promo yang lebih lama dihitung sejak tanggal itu.
+  - Pembayaran bonus dengan kode yang berbeda dari kode promo atau BONUS + kode (misalnya salah ketik) tidak terdeteksi sebagai bonus terkirim.
+- **Detail teknis** (otomatis dari kode):
+  - Id tab untuk hak akses: `promo-recap`
+  - Endpoint: `GET /api/promo-recap/data`
+  - Fungsi query (`server/queries.js`): `promoRecapData`
 
 <a id="tab-push"></a>
 #### Push delivery

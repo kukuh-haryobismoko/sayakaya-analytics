@@ -225,6 +225,12 @@ const TABS = {
     computation: "Semua aturan ada di public/booth-event-config.js (roster 27 kode, periode, target, tier insentif, bonus nasabah); endpoint /api/booth-event/data hanya mengirim data mentah dan halaman menghitung semuanya (boothCompute, boothIncentives, boothCustomerBonuses di app.js), jadi perubahan aturan cukup di file config. Nasabah baru = daftar 19 Okt s.d. 3 Jan (WIB, created_at UTC + 7 jam) dengan users.referrer_code atau users.sales_code sama persis dengan kode roster. SID baru = KYC verified, masuk periode tanggal verifikasi (verifikasi sesudah event masuk periode terakhir). Transaksi = beli dan jual completed tanpa manual_bonus; dana bersih = beli dikurangi jual sampai akhir periode. Hari kerja = hari shift tiap sales (21 per bulan, boleh akhir pekan, bukan Senin-Jumat). Periode: Okt 19-31 (13/31 x 21 = 8,8 hari kerja), Nov (21), Des + 1-3 Jan (23,0); semua target dan threshold dikali hari kerja / 21. Sales dan flying team (3 kode flying team dijumlah): syarat minimal 50 SID dan minimal 50% SID funded 1 jt+, kalau salah satu tidak tercapai insentif 0; rule 1 SID 50/55/63 = 150/200/400 rb; rule 2 persen funded dari SID yang didapat 50/65/75% = 300/450/800 rb; rule 3 dana bersih 49,5/55/63 jt = 225/550/600 rb tanpa syarat holding; rule 4 minimal 30% SID beli lagi 1 jt+ di M1 = 250 rb; maksimal 2,5 jt. Team lead: tim = semua kode booth (TL, 6 sales, kode flying team mall itu), target 6 x 3 x hari kerja (378 per bulan penuh); syarat minimal 80% target dan minimal 60% SID funded 1,5 jt+; rule 1 750 rb; rule 2 60/70% = 300/700 rb; rule 3 283,5/340,2 jt = 300/700 rb; rule 4 minimal 25% beli lagi 1,5 jt+ di M1 = 350 rb; maksimal 2,5 jt. M1 per periode: Nov, Des, 4 Jan s.d. 3 Feb. Bonus nasabah, produk SAM = fund dengan manajer investasi Sucor Asset Management: welcome bonus (pembelian pertama produk SAM 1 jt+, 25 rb unit SAM setelah 30 hari tanpa menjual produk SAM), nabung rutin (investment_plans bulanan yang dibuat selama event dengan 500 rb+ ke SAM menurut investment_plan_funds, transaksi rencana (transactions.investment_plan_id) completed 3 bulan berturut-turut, 100 rb), top up existing (daftar sebelum event, beli SAM 5 jt+ per transaksi dengan kode sales atau promoCodes sebagai transactions.promo_code, cashback 0,5% maks. 250 rb per nasabah, gugur kalau menjual SAM dalam 30 hari). Lama menahan = hari dari beli pertama sampai hari ini (masih ada saldo) atau sampai jual terakhir. Saldo hari ini = kepemilikan live fund ACTIVE (USER_AUM_SQL).",
   },
 
+  "promo-recap": {
+    summary: "Rekap promo: siapa yang membeli dengan kode promo, peserta yang layak, menunggu holding, atau gugur, bonus yang harus dan sudah dikirim, berapa lama unit promo dipegang, dan fee yang dihasilkan, per promo dan per nasabah, dengan nama, email, HP, SID, IFUA, dan produk untuk pemantauan dan distribusi bonus.",
+    datasets: "main.transactions, main.bonus_portfolios, main.campaigns, main.users, main.user_profiles, main.funds, main.investment_managers, main.management_fee_logs, mi_fee_logs.portfolio_with_code",
+    computation: "Endpoint /api/promo-recap/data (promoRecapData) mengirim data mentah, halaman membuat ringkasan per promo (promoSummary). Pembelian promo = transactions.promo_code terisi, tanggal (WIB) di rentang, kecuali pembayaran bonus (payment_method manual_bonus atau bonus). Kode promo tanpa * dicocokkan sebagian, * mengunci posisi (codePatterns). Peserta = baris main.bonus_portfolios dari nasabah dan promo itu (atau dibuat di rentang): on_going = menunggu holding_date, succeeded = layak (unit sudah pindah ke main.portfolios), redeemed = gugur (ditarik sebelum holding_date). Pembelian promo dicocokkan ke baris bonus dengan nasabah, promo, dan fund yang sama, yang waktunya paling dekat; tanpa baris bonus = tidak memenuhi syarat. Bonus harus dikirim per peserta layak = campaigns.bonus_amount, atau bonus_percentage x nilai dikunci (unit x average_nav), atau manual bila campaign tidak mengisi keduanya. Bonus terkirim = transaksi completed manual_bonus atau bonus milik nasabah itu dengan kode promo yang sama atau BONUS + kode (per nasabah dan promo, tidak dobel). Holding dan fee dari mi_fee_logs.portfolio_with_code (harian sejak 14 Jan 2026, tanggal = created_at - 1 hari, sudah termasuk unit yang masih terkunci): bagian promo per hari = amount fund itu x min(1, unit promo / total_unit hari itu), mulai tanggal dikunci, berhenti di redeemed_at untuk yang gugur; hari holding = hari dengan bagian > 0; fee per hari = bagian x management_fee (x aperd_share untuk fee AperD) / jumlah hari setahun, aturan Revenue (PWC); masih dipegang hari ini = bagian di hari portfolio_with_code terbaru. Kalau satu nasabah punya beberapa promo di fund yang sama, masing-masing dibatasi saldo fund itu. Satu kali muat memindai sekitar 5,7 GB portfolio_with_code.",
+  },
+
   "ask": {
     summary: "Tanya dalam bahasa biasa (mis. \"top 10 funds by AUM\") dan dapatkan jawaban dengan chart.",
     datasets: "Dataset BigQuery utama, lewat server/ask.js",
@@ -1223,6 +1229,24 @@ const TAB_DETAILS = {
       'Workbook dan export pengguna maksimal 50.000 baris per sheet; sheet Ringkasan mencatat jumlah baris dan filter Detail transaksi yang dipakai.',
       'Heatmap retensi selalu penuh: setiap hari, minggu, atau bulan di periode menjadi baris meskipun ukurannya 0, setiap periode yang sudah lewat diberi nilai termasuk 0%, dan · hanya untuk periode yang belum terjadi.',
       'Funnel dan cohort masih langkah generik; sesuaikan bila event punya aturan sendiri.',
+    ],
+  },
+  'promo-recap': {
+    kpis: [
+      ['Promo buys', 'Pembelian completed dengan kode promo di rentang (tanpa pembayaran bonus), dengan jumlah nasabah dan nominal.'],
+      ['Eligible', 'Peserta yang holding-nya selesai (status succeeded).'],
+      ['Waiting', 'Peserta yang unitnya masih terkunci sampai holding_date (on_going).'],
+      ['Lapsed', 'Peserta yang menarik dana sebelum holding_date (redeemed); di bawahnya pembelian promo yang tidak dapat baris bonus.'],
+      ['Fee earned (AperD)', 'Porsi AperD dari management fee atas unit promo selama dipegang.'],
+    ],
+    panels: {
+      'Per promo': { note: 'Satu baris per kode promo dengan data campaign, beli, nasabah, nominal, peserta per status, bonus harus dan sudah dikirim, yang masih dipegang, rata-rata hari holding, dan fee.', },
+      'Participants (for bonus distribution)': { note: 'Satu baris per peserta promo, bisa difilter per status, dengan kontak, SID, IFUA, produk, unit dan nilai dikunci, tanggal holding, bonus, hari holding, nilai sekarang, dan fee.', },
+      'Promo buys': { note: 'Setiap pembelian dengan kode promo di rentang, dengan status transaksi dan status bonus peserta yang cocok.', },
+    },
+    notes: [
+      'portfolio_with_code harian sejak 14 Jan 2026, jadi hari holding dan fee promo yang lebih lama dihitung sejak tanggal itu.',
+      'Pembayaran bonus dengan kode yang berbeda dari kode promo atau BONUS + kode (misalnya salah ketik) tidak terdeteksi sebagai bonus terkirim.',
     ],
   },
   'booth-event': {

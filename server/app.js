@@ -540,6 +540,22 @@ function createApp({ serveStatic = true } = {}) {
   // `field` still picks referrer_code vs sales_code instead of a real event
   // column) — funnel, tagged users, cohort, and transaction detail for
   // whatever referral/sales codes an eventual event hands out. ----------------
+  // ---- Promo recap: raw promo buys and promo participations (with holding
+  // and fee from portfolio_with_code); the page builds the per-promo summary.
+  const PROMO_CODE_RE = /^[A-Za-z0-9_*-]{1,60}$/;
+  app.get('/api/promo-recap/data', requireTab('promo-recap'), handler(async (req, res) => {
+    const promo = req.query.promo == null ? [] : [].concat(req.query.promo);
+    const { from, to } = req.query;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from || '') || !/^\d{4}-\d{2}-\d{2}$/.test(to || '')) return res.status(400).json({ error: 'from and to are required (YYYY-MM-DD).' });
+    if (promo.length > 50 || !promo.every((c) => PROMO_CODE_RE.test(c))) return res.status(400).json({ error: 'promo: up to 50 codes of letters, digits, -, _ or *.' });
+    const q = Q.promoRecapData(from, to, promo);
+    const [transactions, participants] = await Promise.all([
+      runQuery(q.transactions.sql, q.transactions.params, { redact: false }),
+      runQuery(q.participants.sql, q.participants.params, { redact: false }),
+    ]);
+    res.json({ transactions, participants });
+  }));
+
   // ---- Booth event: the page sends codes and dates from
   // public/booth-event-config.js and computes targets and incentives itself.
   const BOOTH_CODE_RE = /^[A-Za-z0-9_-]{2,40}$/;

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node test/render-smoke.js && node test/sheets-format-smoke.js && node test/portfolio-batch-smoke.js && node test/bulk-summary-smoke.js && node test/table-export-smoke.js && node test/send-filters-smoke.js && node test/email-log-smoke.js && node test/user-filter-smoke.js && node test/event-code-smoke.js && node test/bulk-pick-smoke.js && node test/sched-preview-smoke.js && node test/sched-drain-smoke.js && node test/booth-event-smoke.js",
+    "test": "node test/render-smoke.js && node test/sheets-format-smoke.js && node test/portfolio-batch-smoke.js && node test/bulk-summary-smoke.js && node test/table-export-smoke.js && node test/send-filters-smoke.js && node test/email-log-smoke.js && node test/user-filter-smoke.js && node test/event-code-smoke.js && node test/bulk-pick-smoke.js && node test/sched-preview-smoke.js && node test/sched-drain-smoke.js && node test/booth-event-smoke.js && node test/promo-recap-smoke.js",
     "docs": "node scripts/generate-docs.js",
     "deploy:all": "bash scripts/deploy-all.sh",
     "predeploy:supabase": "npm test",

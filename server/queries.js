@@ -5204,6 +5204,144 @@ const topInvestors = ({ from, to, metric, limit = 100, direction }) => {
 // instead of hardcoding one, and `codes` is whatever wildcard list the
 // caller types in (see codePatterns). Swap in a real field/column once the
 // event defines one.
+// ---- Promo recap (tab "Promo recap"). A promo buy (transactions.promo_code)
+// locks its units in main.bonus_portfolios until the holding date (status
+// on_going), then they move to main.portfolios (succeeded) where they carry
+// no promo mark; redeemed = pulled out before the holding date. Bonus payouts
+// are buys with payment_method manual_bonus or bonus (THRCUAN pays under its
+// own code, others as BONUS<code>), so they are kept out of the usage list
+// and matched back as "bonus sent". The page builds the per-promo summary.
+// @promo holds LIKE patterns (codePatterns); ['%'] = every promo.
+const PROMO_PAYOUT_METHODS = `('manual_bonus', 'bonus')`;
+const promoMatch = (col) => `EXISTS (SELECT 1 FROM UNNEST(@promo) pc WHERE UPPER(${col}) LIKE pc)`;
+const PROMO_TX_WHERE = `t.promo_code IS NOT NULL AND IFNULL(t.payment_method, '') NOT IN ${PROMO_PAYOUT_METHODS}
+        AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to AND ${promoMatch('t.promo_code')}`;
+// Latest campaign row per promo code: name, window, minimum, bonus rule.
+const PROMO_CAMPAIGN_CTE = `camp AS (
+      SELECT UPPER(promo_code) AS promo,
+        ARRAY_AGG(STRUCT(name, campaign_type, start_date, end_date, holding_date, min_amount, bonus_amount, bonus_percentage)
+          ORDER BY created_at DESC LIMIT 1)[OFFSET(0)] AS c
+      FROM ${CAMPAIGNS} WHERE deleted_at IS NULL AND promo_code IS NOT NULL
+      GROUP BY 1
+    )`;
+const PROMO_CAMPAIGN_COLS = `camp.c.name AS campaign, camp.c.campaign_type,
+      FORMAT_DATE('%F', DATE(camp.c.start_date)) AS campaign_start, FORMAT_DATE('%F', DATE(camp.c.end_date)) AS campaign_end,
+      FORMAT_DATE('%F', DATE(camp.c.holding_date)) AS campaign_holding, camp.c.min_amount, camp.c.bonus_amount, camp.c.bonus_percentage`;
+const promoRecapData = (from, to, codes) => {
+  const pats = codePatterns(codes || []);
+  const params = { ...range(from, to), promo: pats.length ? pats : ['%'] };
+  return {
+    // Every promo buy in the window (payouts excluded) with the buyer's
+    // contact and the nearest bonus row of the same promo and fund.
+    transactions: {
+      sql: `WITH ${PROMO_CAMPAIGN_CTE},
+      tx AS (SELECT t.*, UPPER(t.promo_code) AS promo FROM ${TX} t WHERE ${PROMO_TX_WHERE}),
+      near AS (
+        SELECT tx.id AS tx_id,
+          ARRAY_AGG(STRUCT(bp.status, FORMAT_DATE('%F', DATE(bp.holding_date)) AS holding_until)
+            ORDER BY ABS(DATETIME_DIFF(bp.created_at, DATETIME(tx.created_at), SECOND)) LIMIT 1)[OFFSET(0)] AS bonus
+        FROM tx
+        JOIN ${BONUS_PORT} bp ON bp.user_id = tx.user_id AND UPPER(bp.promo_code) = tx.promo AND bp.fund_id = tx.fund_id
+        GROUP BY tx.id
+      )
+        SELECT t.id AS tx_id, FORMAT_DATE('%F', DATE(t.created_at, 'Asia/Jakarta')) AS day, t.promo,
+          ${PROMO_CAMPAIGN_COLS},
+          t.user_id, up.name, u.email, up.phone_number AS phone, u.sid_code AS sid, u.ifua_code AS ifua,
+          f.name AS fund, COALESCE(im.common_name, im.name) AS manager, t.type, t.status, t.payment_method,
+          CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount, CAST(t.unit AS FLOAT64) AS unit,
+          n.bonus
+        FROM tx t
+        JOIN ${USERS} u ON u.id = t.user_id
+        LEFT JOIN ${USER_PROFILES} up ON up.user_id = t.user_id
+        LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+        LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+        LEFT JOIN camp ON camp.promo = t.promo
+        LEFT JOIN near n ON n.tx_id = t.id
+        ORDER BY t.created_at DESC`,
+      params,
+    },
+    // One row per promo participation (bonus row) of the promos and buyers
+    // above, or created in the window. Holding and fee come from
+    // portfolio_with_code (daily, from 14 Jan 2026; its date is created_at - 1
+    // day; it includes units still locked): the promo's share of that fund's
+    // value each day = value x min(1, promo units / units held that day), so
+    // selling eats into it. Fee per day = that x management fee (x AperD share)
+    // / days in the year, the Revenue (PWC) rule. A redeemed row stops at its
+    // redeemed date.
+    participants: {
+      sql: `WITH ${PROMO_CAMPAIGN_CTE},
+      win AS (SELECT DISTINCT t.user_id, UPPER(t.promo_code) AS promo FROM ${TX} t WHERE ${PROMO_TX_WHERE}),
+      bp AS (
+        SELECT bp.id AS bonus_id, bp.user_id, UPPER(bp.promo_code) AS promo, bp.fund_id, bp.status,
+          CAST(bp.unit AS FLOAT64) AS unit, CAST(bp.average_nav AS FLOAT64) AS avg_nav, u.sid_code AS sid,
+          DATE(DATETIME_ADD(bp.created_at, INTERVAL 7 HOUR)) AS start_d,
+          DATE(bp.holding_date) AS holding_d,
+          DATE(DATETIME_ADD(bp.redeemed_at, INTERVAL 7 HOUR)) AS redeemed_d
+        FROM ${BONUS_PORT} bp
+        JOIN ${USERS} u ON u.id = bp.user_id
+        WHERE bp.promo_code IS NOT NULL AND bp.unit > 0
+          AND (EXISTS (SELECT 1 FROM win WHERE win.user_id = bp.user_id AND win.promo = UPPER(bp.promo_code))
+            OR (DATE(DATETIME_ADD(bp.created_at, INTERVAL 7 HOUR)) BETWEEN @from AND @to AND ${promoMatch('bp.promo_code')}))
+      ),
+      fee AS (
+        SELECT management_fee_id, management_fee, aperd_share
+        FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY management_fee_id ORDER BY updated_at DESC) AS rn FROM ${MGMT_FEE_LOGS})
+        WHERE rn = 1
+      ),
+      pwc AS (
+        SELECT p.sid_code, p.id AS fund_id, DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY) AS d,
+          CAST(p.total_unit AS FLOAT64) AS units, CAST(p.amount AS FLOAT64) AS value
+        FROM ${PORT_WITH_CODE} p
+        WHERE p.total_unit > 0 AND p.sid_code IN (SELECT sid FROM bp)
+      ),
+      held AS (
+        SELECT b.bonus_id, w.d, w.value * LEAST(1, SAFE_DIVIDE(b.unit, w.units)) AS value,
+          DATE_DIFF(DATE_ADD(DATE_TRUNC(w.d, YEAR), INTERVAL 1 YEAR), DATE_TRUNC(w.d, YEAR), DAY) AS year_days
+        FROM bp b
+        JOIN pwc w ON w.sid_code = b.sid AND w.fund_id = b.fund_id AND w.d >= b.start_d
+        WHERE b.status != 'redeemed' OR b.redeemed_d IS NULL OR w.d < b.redeemed_d
+      ),
+      rev AS (
+        SELECT h.bonus_id, COUNT(*) AS days_held, FORMAT_DATE('%F', MIN(h.d)) AS first_held, MAX(h.d) AS last_d,
+          SUM(h.value * IFNULL(f.management_fee, 0) / h.year_days) AS fee_total,
+          SUM(h.value * IFNULL(f.management_fee, 0) * IFNULL(f.aperd_share, 0) / h.year_days) AS fee_aperd,
+          ARRAY_AGG(h.value ORDER BY h.d DESC LIMIT 1)[OFFSET(0)] AS last_value
+        FROM held h
+        JOIN bp b ON b.bonus_id = h.bonus_id
+        LEFT JOIN fee f ON f.management_fee_id = b.fund_id
+        GROUP BY h.bonus_id
+      ),
+      payout AS (
+        SELECT t.user_id, UPPER(t.promo_code) AS code, SUM(CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64)) AS paid,
+          FORMAT_DATE('%F', MIN(DATE(t.created_at, 'Asia/Jakarta'))) AS paid_on
+        FROM ${TX} t
+        WHERE t.status = 'completed' AND t.payment_method IN ${PROMO_PAYOUT_METHODS} AND t.promo_code IS NOT NULL
+        GROUP BY 1, 2
+      )
+      SELECT b.bonus_id, b.user_id, b.promo, b.status, b.unit, b.avg_nav, ROUND(b.unit * b.avg_nav) AS locked_value,
+        FORMAT_DATE('%F', b.start_d) AS start_d, FORMAT_DATE('%F', b.holding_d) AS holding_d, FORMAT_DATE('%F', b.redeemed_d) AS redeemed_d,
+        ${PROMO_CAMPAIGN_COLS},
+        up.name, u.email, up.phone_number AS phone, b.sid, u.ifua_code AS ifua,
+        f.name AS fund, COALESCE(im.common_name, im.name) AS manager,
+        IFNULL(r.days_held, 0) AS days_held, r.first_held,
+        ROUND(IFNULL(r.fee_total, 0)) AS fee_total, ROUND(IFNULL(r.fee_aperd, 0)) AS fee_aperd,
+        IF(r.last_d = (SELECT MAX(d) FROM pwc), ROUND(r.last_value), 0) AS value_now,
+        IFNULL(p1.paid, 0) + IFNULL(p2.paid, 0) AS bonus_paid, COALESCE(p1.paid_on, p2.paid_on) AS bonus_paid_on
+      FROM bp b
+      JOIN ${USERS} u ON u.id = b.user_id
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = b.user_id
+      LEFT JOIN ${FUNDS} f ON f.id = b.fund_id
+      LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
+      LEFT JOIN camp ON camp.promo = b.promo
+      LEFT JOIN rev r ON r.bonus_id = b.bonus_id
+      LEFT JOIN payout p1 ON p1.user_id = b.user_id AND p1.code = b.promo
+      LEFT JOIN payout p2 ON p2.user_id = b.user_id AND p2.code = CONCAT('BONUS', b.promo)
+      ORDER BY b.start_d DESC`,
+      params,
+    },
+  };
+};
+
 // ---- Booth event (tab "Booth event", rules in public/booth-event-config.js).
 // The page sends the event's codes and dates; everything about targets and
 // incentives is computed in the browser from these three row sets.
@@ -5611,6 +5749,7 @@ module.exports = {
   userPerformanceFix, userAumHistoryFix, userHoldingsLatestDateFix, userHoldingsAsOfFix,
   allInvestorsWithAum, allActiveFundInvestors, allRegisteredUsersWithEmail,
   boothEventData,
+  promoRecapData,
   userHoldingsFromTx, userHoldingsFromTxAsOf,
   hnwiLatestDate, hnwiTotal, hnwiByFund,
   dormantConversionSummary, dormantRepeatBuyers, dormantTimeToConvert,

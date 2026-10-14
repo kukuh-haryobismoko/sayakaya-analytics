@@ -213,6 +213,7 @@
           <button class="nav-link" data-tab="kalcer"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>Referral activity</button>
           <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
           <button class="nav-link" data-tab="booth-event"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calendar"></use></svg></span>Booth event</button>
+          <button class="nav-link" data-tab="promo-recap"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Promo recap</button>
           <button class="nav-link" data-tab="push"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Push delivery</button>
         </div>
         <div class="nav-group" data-group="product">
@@ -2779,6 +2780,53 @@
     <!-- PUSH DELIVERY: FCM's own send-pipeline health log (own dataset,
          firebase_messaging.data). Delivery/send health only, there is no
          open/click or revenue data in this table, see the callout below. -->
+    <!-- PROMO RECAP: promo buys, promo participations (bonus_portfolios) with
+         holding and fee from portfolio_with_code, and bonuses sent. -->
+    <section id="promo-recap" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="pr_title">Promo recap</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="prFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="prTo" /></label>
+            <button id="prApply" class="btn-primary" data-i18n="apply">Apply</button>
+          </div>
+        </div>
+        <div class="ask-bar" style="flex-wrap:wrap; margin-top:10px">
+          <input id="prCodes" type="text" autocomplete="off" aria-label="Promo codes" data-i18n-placeholder="pr_codes_ph" placeholder="Promo code(s), comma separated; empty = every promo. THR* = starts with THR" style="min-width:300px" />
+        </div>
+        <span class="hint" data-i18n="pr_hint">From/To is the date of the promo buy (WIB). A promo buy locks its units in bonus_portfolios until the holding date (waiting), then they move to the portfolio (eligible); withdrawn before that date = lapsed; a buy without a bonus row did not qualify. Bonus payouts (manual_bonus or bonus payments, under the promo code or BONUS plus the code) are kept out of the buys and shown as bonus sent.</span>
+        <div id="prKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="pr_summary_title">Per promo</h2></div>
+        <span class="hint" data-i18n="pr_summary_hint">One row per promo code: buys, customers, amount, eligible, waiting and lapsed participations, bonus owed by the campaign rule and bonus already sent, what is still held today, average days held, and the fee earned on the promo units so far.</span>
+        <div id="prSummary" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="pr_participants_title">Participants (for bonus distribution)</h2>
+          <label><span data-i18n="pr_status">Status</span>
+            <select id="prStatus" aria-label="Status">
+              <option value="" data-i18n="pr_status_all">All</option>
+              <option value="succeeded" data-i18n="pr_status_eligible">Eligible</option>
+              <option value="on_going" data-i18n="pr_status_waiting">Waiting for the holding date</option>
+              <option value="redeemed" data-i18n="pr_status_lapsed">Lapsed</option>
+            </select></label>
+        </div>
+        <span class="hint" data-i18n="pr_participants_hint">One row per promo participation with the customer's contact, SID, IFUA and product. Days held, value still held today and fee come from portfolio_with_code (daily from 14 Jan 2026, so older promos count from that date): the promo's share of that fund each day is the fund value times promo units over units held, so selling reduces it.</span>
+        <div id="prParticipants" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="pr_tx_title">Promo buys</h2></div>
+        <span class="hint" data-i18n="pr_tx_hint">Every buy made with a promo code in the window, with its status and the bonus status of the matching participation (same customer, promo and fund).</span>
+        <div id="prTransactions" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
+      </div>
+    </section>
+
     <!-- BOOTH EVENT: offline booths at PIM, Gandaria City and Central Park.
          Every rule lives in booth-event-config.js; app.js boothCompute and
          boothIncentives turn the raw rows into everything below. -->
@@ -3737,6 +3785,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calendar"></use></svg> Booth event</h3>
           <p data-i18n="docs_booth_event_desc">Offline booths at Pondok Indah Mall, Gandaria City and Central Park, 19 Oct 2026 to 3 Jan 2027. Each sales person, team lead and flying team member has a referral code; customers who register with one count as new customers of that person and that booth. The tab shows the daily recap (registrations, KYC verified, first purchases, customers reaching Rp 1 jt, money in and out), each customer with their balance today and how many days they have held their money, the incentive of every sales person and flying team member and of every team lead for the chosen period (threshold, rules 1 to 4, total and the amount paid after the cap, with the reason when a threshold is missed), and the customer bonuses: welcome bonus, nabung rutin, and the top up bonus for existing customers. Months that are not full have their targets scaled down. Every rule is in one config file (booth-event-config.js), and the Rules panel at the bottom is written from it.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg> Promo recap</h3>
+          <p data-i18n="docs_promo_recap_desc">Everyone who bought with a promo code, and what became of it. A promo buy locks its units in bonus_portfolios until the campaign's holding date (waiting), then the units move to the portfolio (eligible); withdrawing before that date makes it lapse, and a promo buy that got no bonus row did not qualify. Per promo: buys, customers, amount, eligible, waiting and lapsed, the bonus owed by the campaign rule (fixed amount or percentage) and the bonus already sent (manual_bonus or bonus payments under the promo code or BONUS plus the code), what is still held today, average days held, and the management fee and AperD share earned on the promo units. The participant list (filter by status) and the list of promo buys carry name, email, phone, SID, IFUA, product and fund manager for monitoring and bonus distribution; every table exports. Holding and fee come from portfolio_with_code, which is daily from 14 January 2026, so older promos count from that date.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Push delivery</h3>
