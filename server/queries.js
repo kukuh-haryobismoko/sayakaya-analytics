@@ -5208,25 +5208,31 @@ const topInvestors = ({ from, to, metric, limit = 100, direction }) => {
 // public/hnwi-bonus-config.js; the page computes lots, FIFO and monthly
 // bonus from these rows).
 //
-// Candidates: total AUM (every fund) in portfolio_with_code on @start_d at
-// least @min_aum, then every snapshot day from the next day to @to checked
-// against the same minimum (first_below = first day under it). The
-// snapshot's date is created_at - 1 day; a day the SID has no row at all
-// counts as 0, but only days that exist in the snapshot are checked.
-// @exclude_inst drops institutional accounts (HNWI = individuals).
-const hnwiBonusCandidates = ({ startDate, minAum, to, excludeInstitutions }) => ({
-  sql: `WITH snap AS (
+// Participants: customers with a completed buy using one of @promo in the
+// purchase period. For each, total AUM (every fund) in portfolio_with_code on
+// @start_d (start_aum) and on every snapshot day after it up to @to
+// (first_below = first day under @min_aum). The snapshot's date is
+// created_at - 1 day; a day the SID has no row at all counts as 0, but only
+// days that exist in the snapshot are checked.
+const hnwiBonusCandidates = ({ promoCodes, purchaseFrom, purchaseTo, startDate, minAum, to }) => ({
+  sql: `WITH ppl AS (
+      SELECT DISTINCT u.id AS user_id, u.sid_code
+      FROM ${TX} t
+      JOIN ${USERS} u ON u.id = t.user_id
+      WHERE UPPER(t.promo_code) IN UNNEST(@promo) AND t.type = 'buy' AND t.status = 'completed'
+        AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @purchase_from AND @purchase_to
+    ),
+    snap AS (
       SELECT sid_code, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS d, SUM(CAST(amount AS FLOAT64)) AS aum
       FROM ${PORT_WITH_CODE}
       WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) BETWEEN @start_d AND @to
       GROUP BY 1, 2
     ),
     days AS (SELECT DISTINCT d FROM snap WHERE d > @start_d),
-    start AS (SELECT sid_code, aum FROM snap WHERE d = @start_d AND aum >= @min_aum),
     chk AS (
-      SELECT s.sid_code, dd.d, IFNULL(sn.aum, 0) AS aum
-      FROM start s CROSS JOIN days dd
-      LEFT JOIN snap sn ON sn.sid_code = s.sid_code AND sn.d = dd.d
+      SELECT p.sid_code, dd.d, IFNULL(sn.aum, 0) AS aum
+      FROM ppl p CROSS JOIN days dd
+      LEFT JOIN snap sn ON sn.sid_code = p.sid_code AND sn.d = dd.d
     ),
     agg AS (
       SELECT sid_code, MIN(IF(aum < @min_aum, d, NULL)) AS first_below,
@@ -5234,16 +5240,20 @@ const hnwiBonusCandidates = ({ startDate, minAum, to, excludeInstitutions }) => 
         MIN(aum) AS lowest_aum, MAX(d) AS last_day, ARRAY_AGG(aum ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_aum, COUNT(*) AS days_checked
       FROM chk GROUP BY 1
     )
-    SELECT u.id AS user_id, s.sid_code AS sid, u.email, up.name, up.phone_number AS phone, u.ifua_code AS ifua,
-      ROUND(s.aum) AS start_aum, FORMAT_DATE('%F', a.first_below) AS first_below, ROUND(a.below_aum) AS below_aum,
+    SELECT p.user_id, p.sid_code AS sid, u.email, up.name, up.phone_number AS phone, u.ifua_code AS ifua,
+      IFNULL(u.is_institution, FALSE) AS institution,
+      ROUND(IFNULL(st.aum, 0)) AS start_aum, FORMAT_DATE('%F', a.first_below) AS first_below, ROUND(a.below_aum) AS below_aum,
       ROUND(a.lowest_aum) AS lowest_aum, ROUND(a.latest_aum) AS latest_aum, FORMAT_DATE('%F', a.last_day) AS last_day,
       IFNULL(a.days_checked, 0) AS days_checked
-    FROM start s
-    JOIN ${USERS} u ON u.sid_code = s.sid_code
-    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
-    LEFT JOIN agg a ON a.sid_code = s.sid_code
-    WHERE NOT (@exclude_inst AND IFNULL(u.is_institution, FALSE))`,
-  params: { start_d: startDate, min_aum: Number(minAum), to, exclude_inst: !!excludeInstitutions },
+    FROM ppl p
+    JOIN ${USERS} u ON u.id = p.user_id
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = p.user_id
+    LEFT JOIN snap st ON st.sid_code = p.sid_code AND st.d = @start_d
+    LEFT JOIN agg a ON a.sid_code = p.sid_code`,
+  params: {
+    promo: promoCodes.map((c) => String(c).toUpperCase()), purchase_from: purchaseFrom, purchase_to: purchaseTo,
+    start_d: startDate, min_aum: Number(minAum), to,
+  },
 });
 
 // Their completed program-relevant transactions in @from..@to on funds of
@@ -5263,7 +5273,7 @@ const hnwiBonusTransactions = ({ userIds, from, to, samManager }) => ({
       FORMAT_DATE('%F', DATE(t.created_at, 'Asia/Jakarta')) AS day,
       FORMAT_DATE('%F', DATE(COALESCE(t.completed_at, t.created_at), 'Asia/Jakarta')) AS done_day,
       CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount,
-      IF(t.type = 'SWITCH_OUT', IFNULL(s.to_sam, FALSE), NULL) AS to_sam
+      IF(t.type = 'SWITCH_OUT', IFNULL(s.to_sam, FALSE), NULL) AS to_sam, UPPER(t.promo_code) AS promo
     FROM ${TX} t
     JOIN ${FUNDS} f ON f.id = t.fund_id
     JOIN ${IM} im ON im.id = f.investment_manager_id AND im.name = @sam

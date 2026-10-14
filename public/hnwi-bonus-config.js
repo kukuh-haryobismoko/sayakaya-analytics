@@ -8,15 +8,19 @@ const HNWI_BONUS = {
   name: 'Program HNWI Bonus',
   samManager: 'Sucor Asset Management', // produk program = fund dengan manajer investasi ini
 
-  // Pasal 1 dan 11: AUM total semua produk minimal minAum pada aumStartDate,
-  // lalu dicek SETIAP HARI selama program dari snapshot harian
-  // portfolio_with_code; sekali saja di bawah minAum = gugur permanen
-  // (bonus yang belum dibayar ikut hangus).
+  // Peserta = nasabah dengan beli completed memakai salah satu kode promo ini
+  // di periode pembelian. promoPurchasesOnly: hanya pembelian dengan kode itu
+  // yang dihitung sebagai pembelian program (false = semua beli fresh fund
+  // produk SAM peserta di periode pembelian).
+  promoCodes: ['SYKYPRIO'],
+  promoPurchasesOnly: true,
+
+  // Pasal 1 dan 11: AUM total semua produk minimal minAum pada aumStartDate
+  // (kalau tidak, peserta tidak memenuhi syarat), lalu dicek SETIAP HARI
+  // selama program dari snapshot harian portfolio_with_code; sekali saja di
+  // bawah minAum = gugur permanen (bonus yang belum dibayar ikut hangus).
   aumStartDate: '2026-09-30',
   minAum: 500000000,
-  // HNWI = perorangan: akun institusi (users.is_institution) tidak ikut.
-  // Ubah ke false kalau institusi boleh ikut.
-  excludeInstitutions: true,
 
   // Pasal 3 dan 7.
   purchaseFrom: '2026-10-01',

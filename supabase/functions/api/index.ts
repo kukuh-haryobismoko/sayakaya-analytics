@@ -650,13 +650,16 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
 on('GET', '/api/hnwi-bonus/data', requireTab('hnwi-bonus', async (_req, _params, url) => {
   const startDate = qp(url, 'startDate') || '';
   const purchaseFrom = qp(url, 'purchaseFrom') || '';
+  const purchaseTo = qp(url, 'purchaseTo') || '';
   const programTo = qp(url, 'programTo') || '';
   const minAum = Number(qp(url, 'minAum'));
   const sam = qp(url, 'sam') || '';
+  const promo = qpAll(url, 'promo');
   const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
-  if (![startDate, purchaseFrom, programTo].every(isDate)) return json({ error: 'startDate, purchaseFrom and programTo are required (YYYY-MM-DD).' }, 400);
+  if (![startDate, purchaseFrom, purchaseTo, programTo].every(isDate)) return json({ error: 'startDate, purchaseFrom, purchaseTo and programTo are required (YYYY-MM-DD).' }, 400);
   if (!(minAum > 0) || !sam || sam.length > 120) return json({ error: 'minAum and sam are required.' }, 400);
-  const c = Q.hnwiBonusCandidates({ startDate, minAum, to: programTo, excludeInstitutions: qp(url, 'excludeInstitutions') !== '0' });
+  if (!promo.length || promo.length > 20 || !promo.every((c) => /^[A-Za-z0-9_-]{1,60}$/.test(c))) return json({ error: 'promo: 1 to 20 promo codes.' }, 400);
+  const c = Q.hnwiBonusCandidates({ promoCodes: promo, purchaseFrom, purchaseTo, startDate, minAum, to: programTo });
   const candidates = await runQuery(c.sql, c.params, { redact: false });
   if (!candidates.length) return json({ candidates, transactions: [] });
   const t = Q.hnwiBonusTransactions({ userIds: candidates.map((r) => r.user_id as string), from: purchaseFrom, to: programTo, samManager: sam });

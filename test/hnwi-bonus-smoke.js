@@ -18,11 +18,11 @@ const MMF = 'PlFsTEcPFZCWZNeBOQ7Qw'; // 0.10%
 const BOND = 'daZyyZB1L-UShYEfCDJN3'; // 0.15%
 const PREMIUM = 'Z6uXYPsFUf_m7K3TIkEJJ'; // 0.20%
 const MAXI = 'Pp0Dyh3SaSBFVoyIx0Khx'; // 0.25%
-const buy = (day, amount, fund_id, done_day = day) => ({ type: 'buy', day, done_day, amount, fund_id, fund: fund_id });
+const buy = (day, amount, fund_id, done_day = day, promo = 'SYKYPRIO') => ({ type: 'buy', day, done_day, amount, fund_id, fund: fund_id, promo });
 const sell = (day, amount) => ({ type: 'sell', day, done_day: day, amount, fund_id: MMF, fund: 'x' });
 const swOut = (day, amount, to_sam) => ({ type: 'SWITCH_OUT', day, done_day: day, amount, fund_id: MMF, fund: 'x', to_sam });
 const run = (c, txs, today) => {
-  ctx.__args = { c: { user_id: 'u', sid: 'S', first_below: null, ...c }, txs, today };
+  ctx.__args = { c: { user_id: 'u', sid: 'S', first_below: null, start_aum: 1e9, ...c }, txs, today };
   return JSON.parse(vm.runInContext('JSON.stringify(hnwiCustomer(__args.c, __args.txs, HNWI_BONUS, __args.today))', ctx));
 };
 const month = (r, m) => r.months.find((x) => x.m === m);
@@ -68,5 +68,11 @@ assert.deepStrictEqual([r.lots[0].remaining, r.redeemed], [120e6, 30e6]);
 // A fund outside the rate table counts toward the minimum but earns nothing.
 r = run({}, [buy('2026-10-01', 150e6, 'not-in-table')], '2026-12-10');
 assert.deepStrictEqual([r.qualifiedOn, r.earned, r.running], ['2026-10-01', 0, 0]);
+
+// Only buys with the promo code count (promoPurchasesOnly), and AUM under 500 jt on the start date is not eligible.
+r = run({}, [buy('2026-10-01', 150e6, MMF), buy('2026-10-02', 90e6, MMF, '2026-10-02', null)], '2026-12-10');
+assert.deepStrictEqual([r.subs, r.lots.length], [150e6, 1]);
+r = run({ start_aum: 499e6 }, [buy('2026-10-01', 300e6, MMF)], '2026-12-10');
+assert.deepStrictEqual([r.status, r.earned, r.running], ['not_eligible', 0, 0]);
 
 console.log('hnwi-bonus smoke test passed');

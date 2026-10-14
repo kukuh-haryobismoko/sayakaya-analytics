@@ -6949,8 +6949,11 @@ function hAddTradingDays(iso, n) {
 function hnwiCustomer(c, txs, cfg, today) {
   const rateOf = new Map(cfg.rates.flatMap((tier) => tier.funds.map((f) => [f.id, tier.pct])));
   const end = today < cfg.programTo ? today : cfg.programTo;
-  const F = c.first_below || null; // first day under the AUM minimum: out for good from that day
-  const lots = txs.filter((t) => t.type === 'buy' && t.day >= cfg.purchaseFrom && t.day <= cfg.purchaseTo)
+  // Under the AUM minimum on the start date: not eligible at all (treated as out from day one).
+  const unqualified = Number(c.start_aum) < cfg.minAum;
+  const F = unqualified ? cfg.programFrom : c.first_below || null; // first day under the AUM minimum: out for good from that day
+  const codes = new Set(cfg.promoCodes.map((x) => x.toUpperCase()));
+  const lots = txs.filter((t) => t.type === 'buy' && t.day >= cfg.purchaseFrom && t.day <= cfg.purchaseTo && (!cfg.promoPurchasesOnly || codes.has(t.promo)))
     .map((t) => {
       const start = t.done_day > t.day ? t.done_day : t.day;
       return { tx_id: t.tx_id, fund_id: t.fund_id, fund: t.fund, rate: rateOf.get(t.fund_id) || 0, orderDay: t.day, start,
@@ -7013,7 +7016,7 @@ function hnwiCustomer(c, txs, cfg, today) {
   });
   const earned = rows.filter((r) => r.state === 'done').reduce((a, r) => a + r.amount, 0);
   const running = rows.filter((r) => r.state === 'running').reduce((a, r) => a + r.amount, 0);
-  const status = F ? 'lapsed_aum' : Q ? 'active' : !subs ? 'not_joined' : today > cfg.purchaseTo ? 'not_reached' : 'building';
+  const status = unqualified ? 'not_eligible' : F ? 'lapsed_aum' : Q ? 'active' : !subs ? 'not_joined' : today > cfg.purchaseTo ? 'not_reached' : 'building';
   return {
     ...c, lots, reds, subs, redeemed, net: subs - redeemed, netNow: lots.reduce((a, l) => a + l.remaining, 0),
     qualifiedOn: Q, months: rows, earned, running, pending: Math.round(pending), forfeited: Math.round(forfeited),
@@ -7034,6 +7037,7 @@ const hbStatus = (k, x) => ({
   not_reached: bL(`Did not reach ${idr(HNWI_BONUS.minNetSubs)}`, `Tidak mencapai ${idr(HNWI_BONUS.minNetSubs)}`),
   not_joined: bL('No program purchase', 'Belum ada pembelian program'),
   lapsed_aum: bL(`Out: AUM under ${idr(HNWI_BONUS.minAum)} on ${x && x.first_below}`, `Gugur: AUM di bawah ${idr(HNWI_BONUS.minAum)} pada ${x && x.first_below}`),
+  not_eligible: bL(`Not eligible: AUM under ${idr(HNWI_BONUS.minAum)} on ${HNWI_BONUS.aumStartDate}`, `Tidak memenuhi: AUM di bawah ${idr(HNWI_BONUS.minAum)} pada ${HNWI_BONUS.aumStartDate}`),
   done: bL('To send', 'Siap dikirim'), running: bL('Month running (estimate)', 'Bulan berjalan (sementara)'),
   pending: bL(`Waits for ${idr(HNWI_BONUS.minNetSubs)}`, `Menunggu ${idr(HNWI_BONUS.minNetSubs)}`),
   lapsed: bL('Lost: out on AUM', 'Hangus: gugur AUM'),
@@ -7044,7 +7048,8 @@ async function loadHnwiBonus() {
   HB.loading = true;
   ['#hbKpis', '#hbCustomers', '#hbMonthly', '#hbLots'].forEach((sel) => { $(sel).innerHTML = `<div class="loading">${t('common_loading')}</div>`; });
   try {
-    const qs = new URLSearchParams({ startDate: cfg.aumStartDate, purchaseFrom: cfg.purchaseFrom, programTo: cfg.programTo, minAum: cfg.minAum, sam: cfg.samManager, excludeInstitutions: cfg.excludeInstitutions ? '1' : '0' });
+    const qs = new URLSearchParams({ startDate: cfg.aumStartDate, purchaseFrom: cfg.purchaseFrom, purchaseTo: cfg.purchaseTo, programTo: cfg.programTo, minAum: cfg.minAum, sam: cfg.samManager });
+    cfg.promoCodes.forEach((c) => qs.append('promo', c));
     HB.data = await api(`/api/hnwi-bonus/data?${qs}`);
     renderHnwiBonus();
   } catch (e) {
@@ -7059,11 +7064,12 @@ function renderHnwiBonus() {
   const people = hnwiCompute(HB.data, cfg, today);
   const joined = people.filter((x) => x.subs > 0);
   const lastDone = [...new Set(people.flatMap((x) => x.months.filter((r) => r.state === 'done').map((r) => r.m)))].sort().pop();
+  const codesText = cfg.promoCodes.join(', ');
   $('#hbHint').textContent = bL(
-    `${cfg.name}: purchases ${cfg.purchaseFrom} to ${cfg.purchaseTo}, bonus until ${cfg.programTo}. Candidates = AUM ${idr(cfg.minAum)}+ on ${cfg.aumStartDate}; AUM checked every day after (data up to ${people[0] ? people[0].last_day || 'n/a' : 'n/a'}). Today ${today} WIB.`,
-    `${cfg.name}: pembelian ${cfg.purchaseFrom} s.d. ${cfg.purchaseTo}, bonus sampai ${cfg.programTo}. Kandidat = AUM ${idr(cfg.minAum)}+ pada ${cfg.aumStartDate}; AUM dicek setiap hari sesudahnya (data s.d. ${people[0] ? people[0].last_day || 'n/a' : 'n/a'}). Hari ini ${today} WIB.`);
+    `${cfg.name}: participants = completed buys with promo code ${codesText}, ${cfg.purchaseFrom} to ${cfg.purchaseTo}; bonus until ${cfg.programTo}. They need AUM ${idr(cfg.minAum)}+ on ${cfg.aumStartDate}, checked every day after (data up to ${people[0] ? people[0].last_day || 'n/a' : 'n/a'}). Today ${today} WIB.`,
+    `${cfg.name}: peserta = beli completed dengan kode promo ${codesText}, ${cfg.purchaseFrom} s.d. ${cfg.purchaseTo}; bonus sampai ${cfg.programTo}. Syarat AUM ${idr(cfg.minAum)}+ pada ${cfg.aumStartDate}, dicek setiap hari sesudahnya (data s.d. ${people[0] ? people[0].last_day || 'n/a' : 'n/a'}). Hari ini ${today} WIB.`);
   $('#hbKpis').innerHTML = [
-    kpi(bL('Candidates', 'Kandidat'), num(people.length), bL(`AUM ${idr(cfg.minAum)}+ on ${cfg.aumStartDate}`, `AUM ${idr(cfg.minAum)}+ pada ${cfg.aumStartDate}`), 'accent', ICONS.users),
+    kpi(bL('Participants', 'Peserta'), num(people.length), bL(`used ${codesText}; ${num(people.filter((x) => x.status === 'not_eligible').length)} without the AUM minimum`, `pakai ${codesText}; ${num(people.filter((x) => x.status === 'not_eligible').length)} tanpa AUM minimum`), 'accent', ICONS.users),
     kpi(bL('Bought in the program', 'Beli di program'), num(joined.length), bL(`${num(people.filter((x) => x.status === 'active').length)} reached ${idr(cfg.minNetSubs)}`, `${num(people.filter((x) => x.status === 'active').length)} mencapai ${idr(cfg.minNetSubs)}`), '', ICONS.userPlus),
     kpi(bL('Out on AUM', 'Gugur AUM'), num(people.filter((x) => x.status === 'lapsed_aum').length), bL(`AUM fell under ${idr(cfg.minAum)}`, `AUM turun di bawah ${idr(cfg.minAum)}`), '', ICONS.xCircle),
     kpi(bL('Net subs', 'Nett subs'), idr(joined.reduce((a, x) => a + x.netNow, 0)), bL(`of ${idr(joined.reduce((a, x) => a + x.subs, 0))} bought`, `dari ${idr(joined.reduce((a, x) => a + x.subs, 0))} dibeli`), '', ICONS.coin),
@@ -7086,7 +7092,7 @@ function renderHnwiBonus() {
     { key: 'earned', label: bL('Bonus, months done', 'Bonus bulan selesai'), type: 'idr', sum: true }, { key: 'running', label: bL('This month so far', 'Bulan ini sejauh ini'), type: 'idr', sum: true },
     { key: 'pending', label: bL('Waiting', 'Tertunda'), type: 'idr', sum: true }, { key: 'forfeited', label: bL('Lost', 'Hangus'), type: 'idr', sum: true },
     { key: 'status', label: 'Status' },
-  ], bL('No customer had the minimum AUM on the start date.', 'Tidak ada nasabah dengan AUM minimum pada tanggal awal.'));
+  ], bL(`Nobody has used ${codesText} yet.`, `Belum ada yang memakai ${codesText}.`));
 
   const monthSel = $('#hbMonth');
   const monthsAll = [...new Set(people.flatMap((x) => x.months.filter((r) => r.amount > 0).map((r) => r.m)))].sort();
@@ -7123,9 +7129,14 @@ function renderHnwiBonus() {
 function renderHnwiRules(cfg) {
   const li = (en, id) => `<li>${bL(en, id)}</li>`;
   $('#hbRules').innerHTML = `<ul>
-    ${cfg.excludeInstitutions ? li('Individuals only: institutional accounts (users.is_institution) do not take part.', 'Hanya perorangan: akun institusi (users.is_institution) tidak ikut.') : li('Institutional accounts take part too.', 'Akun institusi ikut juga.')}
-    ${li(`Candidates: total AUM (every product) of ${idr(cfg.minAum)}+ on ${cfg.aumStartDate}, from the daily portfolio_with_code snapshot. AUM is then checked every day; one day under ${idr(cfg.minAum)} and the customer is out for good, and bonus not yet paid is lost.`, `Kandidat: AUM total (semua produk) ${idr(cfg.minAum)}+ pada ${cfg.aumStartDate}, dari snapshot harian portfolio_with_code. Lalu AUM dicek setiap hari; sekali saja di bawah ${idr(cfg.minAum)}, nasabah gugur permanen dan bonus yang belum dibayar hangus.`)}
-    ${li(`Program purchases: completed buys of ${bEsc(cfg.samManager)} funds ordered ${cfg.purchaseFrom} to ${cfg.purchaseTo}, fresh money only (switching in and bonus payouts do not count).`, `Pembelian program: beli completed produk ${bEsc(cfg.samManager)} yang diorder ${cfg.purchaseFrom} s.d. ${cfg.purchaseTo}, hanya fresh fund (switching masuk dan pembayaran bonus tidak dihitung).`)}
+    ${li(`Participants: customers with a completed buy using promo code ${bEsc(cfg.promoCodes.join(', '))} from ${cfg.purchaseFrom} to ${cfg.purchaseTo}, individuals and institutions alike.`, `Peserta: nasabah dengan beli completed memakai kode promo ${bEsc(cfg.promoCodes.join(', '))} dari ${cfg.purchaseFrom} s.d. ${cfg.purchaseTo}, perorangan maupun institusi.`)}
+    ${li(`They need total AUM (every product) of ${idr(cfg.minAum)}+ on ${cfg.aumStartDate}, from the daily portfolio_with_code snapshot, or they are not eligible. AUM is then checked every day; one day under ${idr(cfg.minAum)} and the customer is out for good, and bonus not yet paid is lost.`, `Syaratnya AUM total (semua produk) ${idr(cfg.minAum)}+ pada ${cfg.aumStartDate}, dari snapshot harian portfolio_with_code; kalau tidak, tidak memenuhi syarat. Lalu AUM dicek setiap hari; sekali saja di bawah ${idr(cfg.minAum)}, nasabah gugur permanen dan bonus yang belum dibayar hangus.`)}
+    ${li(cfg.promoPurchasesOnly
+      ? `Program purchases: completed buys of ${bEsc(cfg.samManager)} funds with the promo code, ordered ${cfg.purchaseFrom} to ${cfg.purchaseTo}, fresh money only (switching in and bonus payouts do not count). Buys without the code do not count.`
+      : `Program purchases: every completed fresh-money buy of ${bEsc(cfg.samManager)} funds by a participant, ordered ${cfg.purchaseFrom} to ${cfg.purchaseTo}, with or without the code.`,
+    cfg.promoPurchasesOnly
+      ? `Pembelian program: beli completed produk ${bEsc(cfg.samManager)} dengan kode promo, diorder ${cfg.purchaseFrom} s.d. ${cfg.purchaseTo}, hanya fresh fund (switching masuk dan pembayaran bonus tidak dihitung). Beli tanpa kode tidak dihitung.`
+      : `Pembelian program: semua beli fresh fund completed produk ${bEsc(cfg.samManager)} oleh peserta, diorder ${cfg.purchaseFrom} s.d. ${cfg.purchaseTo}, dengan atau tanpa kode.`)}
     ${li(`Every redemption of a ${bEsc(cfg.samManager)} fund from ${cfg.programFrom} to ${cfg.programTo} (a sale, or switching to a fund of another manager) reduces the program purchases, oldest first (FIFO), across products; one made before a purchase reduces the next one. Switching between their own funds is not a redemption and keeps the rate of the product first bought.`, `Setiap redemption produk ${bEsc(cfg.samManager)} dari ${cfg.programFrom} s.d. ${cfg.programTo} (jual, atau switching ke produk manajer lain) mengurangi pembelian program, yang tertua dulu (FIFO), lintas produk; redemption sebelum ada pembelian memotong pembelian berikutnya. Switching antar produk mereka sendiri bukan redemption dan rate tetap rate produk pembelian awal.`)}
     ${li(`Bonus per day = what is left of each purchase x its rate a year / 365, from the day it completed. The part redeemed before ${cfg.holdMonths} month(s) earns nothing; the first month is paid in the month the purchase completes ${cfg.holdMonths} month(s).`, `Bonus per hari = sisa tiap pembelian x rate per tahun / 365, sejak hari transaksi berhasil. Bagian yang di-redeem sebelum ${cfg.holdMonths} bulan tidak dapat bonus; bulan pertama dibayar di bulan saat pembelian genap ${cfg.holdMonths} bulan.`)}
     ${li(`Net subs (program purchases minus redemptions) must reach ${idr(cfg.minNetSubs)} by ${cfg.purchaseTo}; bonus before that waits and is paid in the month it is reached. Not reached by then: no bonus.`, `Nett subs (pembelian program dikurangi redemption) harus mencapai ${idr(cfg.minNetSubs)} paling lambat ${cfg.purchaseTo}; bonus sebelum itu tertunda dan dibayar di bulan saat tercapai. Tidak tercapai: tidak ada bonus.`)}
