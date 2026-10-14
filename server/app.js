@@ -526,9 +526,9 @@ function createApp({ serveStatic = true } = {}) {
 
   // ---- Users transactions (any investor, by SID/email/name) -----------------
   app.get('/api/users-transactions', requireTab('users-tx'), handler(async (req, res) => {
-    const { q, type, status, fundId, from, to, limit, offset, sort, dir } = req.query;
-    if (!q) return res.status(400).json({ error: 'A SID, email, or name search is required.' });
-    const query = Q.usersTransactions({ q, type, status, fundId, from, to, limit: limit || 50, offset: offset || 0, sort, dir });
+    const { q, type, status, fundId, fundName, promo, from, to, limit, offset, sort, dir } = req.query;
+    if (!q && !fundName && !promo) return res.status(400).json({ error: 'A SID, email, name, fund name, or promo code search is required.' });
+    const query = Q.usersTransactions({ q, type, status, fundId, fundName, promo, from, to, limit: limit || 50, offset: offset || 0, sort, dir });
     const [rows, countRows] = await Promise.all([
       runQuery(query.sql, query.params),
       runQuery(query.countSql, query.params),
@@ -1632,12 +1632,13 @@ function createApp({ serveStatic = true } = {}) {
       const q = Q.sinvestTransactions({ from: req.body.from, to: req.body.to, type: req.body.type, sid: req.body.sid, search: req.body.search, limit: limit || 100000, offset: 0, sort: req.body.sort, dir: req.body.dir });
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'users_transactions') {
-      const { q: searchQ, type, status, fundId, from, to, sort, dir } = req.body;
-      if (!searchQ) return res.status(400).json({ error: 'A SID, email, or name search is required.' });
-      const q = Q.usersTransactions({ q: searchQ, type, status, fundId, from, to, limit: limit || 100000, offset: 0, sort, dir });
+      const { q: searchQ, type, status, fundId, fundName, promo, from, to, sort, dir } = req.body;
+      if (!searchQ && !fundName && !promo) return res.status(400).json({ error: 'A SID, email, name, fund name, or promo code search is required.' });
+      const q = Q.usersTransactions({ q: searchQ, type, status, fundId, fundName, promo, from, to, limit: limit || 100000, offset: 0, sort, dir });
       rows = await runQuery(q.sql, q.params);
       if (format === 'pdf') {
-        const buf = await PDF.usersTransactionsReport(rows, { username, query: searchQ });
+        const label = [searchQ, fundName && `fund ${fundName}`, promo && `promo ${promo}`].filter(Boolean).join(', ');
+        const buf = await PDF.usersTransactionsReport(rows, { username, query: label });
         return sendPdf(res, buf, filename, username);
       }
     } else if (source === 'event_code_transactions') {

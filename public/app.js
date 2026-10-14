@@ -4882,6 +4882,8 @@ async function loadUtxFundOptions() {
 function utxParams() {
   return {
     q: $('#utxSearch').value.trim(),
+    fundName: $('#utxFundName').value.trim(),
+    promo: $('#utxPromo').value.trim(),
     type: $('#utxType').value,
     status: $('#utxStatus').value,
     fundId: $('#utxFund').value,
@@ -4893,9 +4895,10 @@ function utxParams() {
 
 async function loadUtx() {
   const p = utxParams();
-  if (!p.q) { toast('Enter a SID, email, or name to search.'); return; }
+  if (!p.q && !p.fundName && !p.promo) { toast('Enter a SID, email, name, fund name, or promo code to search.'); return; }
   $('#utxTable').innerHTML = '<div class="loading">Loading…</div>';
-  const qs = new URLSearchParams({ q: p.q });
+  const qs = new URLSearchParams();
+  for (const k of ['q', 'fundName', 'promo']) if (p[k]) qs.set(k, p[k]);
   if (p.type) qs.set('type', p.type);
   if (p.status) qs.set('status', p.status);
   if (p.fundId) qs.set('fundId', p.fundId);
@@ -4911,7 +4914,7 @@ async function loadUtx() {
       { key: 'transaction_number', label: 'Trx #', sort: true },
       { key: 'type', label: 'Type', sort: true }, { key: 'status', label: 'Status', sort: true },
       { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: 'Name', sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: 'Phone', sort: true },
-      { key: 'fund_name', label: 'Fund', sort: true },
+      { key: 'fund_name', label: 'Fund', sort: true }, { key: 'promo_code', label: 'Promo', sort: true },
       { key: 'unit', label: 'Unit', type: 'num', sort: true },
       { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
       { key: 'amount', label: 'Amount', type: 'idr', sort: true }, { key: 'final_amount', label: 'Final amount', type: 'idr', sort: true },
@@ -7079,12 +7082,13 @@ function renderHnwiBonus() {
 
   genTable('#hbCustomers', people.map((x) => ({
     name: bEsc(x.name || 'n/a'), sid: bEsc(x.sid || ''), ifua: bEsc(x.ifua || ''), email: bEsc(x.email || ''), phone: bEsc(x.phone || ''),
-    start_aum: x.start_aum, lowest_aum: x.lowest_aum, latest_aum: x.latest_aum,
+    start_aum: x.start_aum, lowest_aum: x.lowest_aum, avg_aum: x.avg_aum, latest_aum: x.latest_aum,
     subs: x.subs, redeemed: x.redeemed, net: x.netNow, qualified: x.qualifiedOn, earned: x.earned, running: x.running,
     pending: x.pending, forfeited: x.forfeited, status: hbStatus(x.status, x) + (x.capReached ? bL(', cap reached', ', batas tercapai') : ''),
   })).sort((a, b) => b.subs - a.subs || b.start_aum - a.start_aum), [
     { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' }, { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') },
     { key: 'start_aum', label: bL(`AUM ${cfg.aumStartDate}`, `AUM ${cfg.aumStartDate}`), type: 'idr' }, { key: 'lowest_aum', label: bL('Lowest AUM since', 'AUM terendah sejak itu'), type: 'idr' },
+    { key: 'avg_aum', label: bL(`Avg daily AUM since ${cfg.programFrom}`, `Rata-rata AUM harian sejak ${cfg.programFrom}`), type: 'idr' },
     { key: 'latest_aum', label: bL('Latest AUM', 'AUM terbaru'), type: 'idr' },
     { key: 'subs', label: bL('Program buys', 'Beli program'), type: 'idr', sum: true }, { key: 'redeemed', label: bL('SAM redemptions', 'Redemption SAM'), type: 'idr', sum: true },
     { key: 'net', label: bL('Net subs now', 'Nett subs sekarang'), type: 'idr', sum: true },
@@ -9205,6 +9209,9 @@ function wire() {
 
   // users transactions
   $('#utxRun').addEventListener('click', () => { utx.offset = 0; loadUtx(); });
+  for (const id of ['#utxSearch', '#utxFundName', '#utxPromo']) {
+    $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { utx.offset = 0; loadUtx(); } });
+  }
   $('#tiDate').value = isoDate(new Date());
   $('#tiMetric').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;

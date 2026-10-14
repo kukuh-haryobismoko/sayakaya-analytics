@@ -687,7 +687,9 @@ const I18N = {
 
     utx_title: `Users transactions`,
     utx_search_ph: `SID, email, or name`,
-    utx_hint: `Search by SID code, email, or name (partial match, required). Type, status, fund, and the date range (on transaction date) are optional refinements.`,
+    utx_fund_ph: `Fund name, e.g. sucor*`,
+    utx_promo_ph: `Promo code, e.g. THR*`,
+    utx_hint: `Search by SID code, email, or name, by fund name, or by promo code: fill at least one. Fund name and promo code match anywhere in the text; use * to pin the position (sucor* = starts with Sucor, *fund = ends with Fund) and commas for several terms (THR*, SYKYPRIO). Type, status, fund, and the date range (on transaction date) narrow the result.`,
     ti_title: `Top investors`,
     sitx_title: `SInvest transactions`,
     sitx_hint: `Raw KSEI/SInvest custodian feed (sinvest.trx_history), filtered by Transaction_Date. The source table stores every column as a string, including Transaction_Date/Input_Date (YYYYMMDD) — both are reformatted to YYYY-MM-DD here.`,
@@ -2169,7 +2171,9 @@ const I18N = {
 
     utx_title: `Transaksi pengguna`,
     utx_search_ph: `SID, email, atau nama`,
-    utx_hint: `Cari berdasarkan kode SID, email, atau nama (kecocokan sebagian, wajib diisi). Jenis, status, produk, dan rentang tanggal (berdasarkan tanggal transaksi) adalah filter tambahan opsional.`,
+    utx_fund_ph: `Nama produk, mis. sucor*`,
+    utx_promo_ph: `Kode promo, mis. THR*`,
+    utx_hint: `Cari berdasarkan kode SID, email, atau nama, nama produk, atau kode promo: isi minimal satu. Nama produk dan kode promo cocok di bagian mana pun; pakai * untuk mengunci posisi (sucor* = diawali Sucor, *fund = diakhiri Fund) dan koma untuk beberapa kata (THR*, SYKYPRIO). Jenis, status, produk, dan rentang tanggal (berdasarkan tanggal transaksi) mempersempit hasil.`,
     ti_title: `Investor teratas`,
     sitx_title: `Transaksi SInvest`,
     sitx_hint: `Feed mentah kustodian KSEI/SInvest (sinvest.trx_history), difilter berdasarkan Transaction_Date. Tabel sumbernya menyimpan setiap kolom sebagai string, termasuk Transaction_Date/Input_Date (YYYYMMDD) — keduanya diformat ulang jadi YYYY-MM-DD di sini.`,

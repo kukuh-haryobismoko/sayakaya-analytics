@@ -73,4 +73,10 @@ assert.deepStrictEqual(names(sortExportRows(xr, { sortKey: 'd', sortDir: 'desc' 
 assert.deepStrictEqual(names(sortExportRows(xr, { sortKey: 'nope', orderKey: 'name', order: ['cy', 'Al'] })), ['cy', 'Al', 'bea'], 'unknown column: on-screen first-column order, others after');
 assert.strictEqual(sortExportRows(xr, {}), xr, 'no sort: rows untouched');
 
+// Users transactions: fund name and promo code take the same comma-separated patterns.
+const ut = Q.usersTransactions({ fundName: 'sucor*, money', promo: 'thr*' });
+assert.deepStrictEqual([ut.params.fundPats, ut.params.promoPats, ut.params.q], [['SUCOR%', '%MONEY%'], ['THR%'], undefined]);
+assert.ok(/UPPER\(f\.name\) LIKE fp/.test(ut.countSql), 'count joins funds for the fund-name filter');
+assert.ok(!('fundPats' in Q.usersTransactions({ q: 'x', fundName: ' , ' }).params), 'blank terms add no filter');
+
 console.log('event-code smoke test passed');

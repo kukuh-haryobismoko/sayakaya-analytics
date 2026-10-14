@@ -1058,6 +1058,8 @@
         <div class="panel-head wrap"><h2 data-i18n="utx_title">Users transactions</h2></div>
         <div class="ask-bar" style="flex-wrap:wrap">
           <input id="utxSearch" type="text" autocomplete="off" data-i18n-placeholder="utx_search_ph" placeholder="SID, email, or name" />
+          <input id="utxFundName" type="text" autocomplete="off" data-i18n-placeholder="utx_fund_ph" placeholder="Fund name, e.g. sucor*" />
+          <input id="utxPromo" type="text" autocomplete="off" data-i18n-placeholder="utx_promo_ph" placeholder="Promo code, e.g. THR*" />
           <select id="utxType">
             <option value="" data-i18n="common_all_types">All types</option>
             <option value="buy">buy</option>
@@ -1082,7 +1084,7 @@
           <label><span data-i18n="range_to">To</span> <input type="date" id="utxTo" /></label>
           <button id="utxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint" data-i18n="utx_hint">Search by SID code, email, or name (partial match, required). Type, status, fund, and the date range (on transaction date) are optional refinements.</span>
+        <span class="hint" data-i18n="utx_hint">Search by SID code, email, or name, by fund name, or by promo code: fill at least one. Fund name and promo code match anywhere in the text; use * to pin the position (sucor* = starts with Sucor, *fund = ends with Fund) and commas for several terms (THR*, SYKYPRIO). Type, status, fund, and the date range (on transaction date) narrow the result.</span>
       </div>
 
       <div class="panel">

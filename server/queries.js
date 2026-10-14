@@ -5116,8 +5116,10 @@ function remisierTransactions({ referrerCodes = [], salesCodes = [], type, statu
 // users/user_profiles/funds join as remisierTransactions above, just keyed
 // by investor identity instead of referrer/sales code.
 const USERS_TX_SORT = ['created_at', 'transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone',
-  'fund_name', 'unit', 'value_per_unit', 'amount', 'final_amount'];
-function usersTransactions({ q, type, status, fundId, from, to, limit = 100, offset = 0, sort, dir }) {
+  'fund_name', 'promo_code', 'unit', 'value_per_unit', 'amount', 'final_amount'];
+// Fund name and promo code take comma-separated wildcard terms (codePatterns:
+// no * = contains, * pins the position, e.g. "sucor*" = starts with Sucor).
+function usersTransactions({ q, type, status, fundId, fundName, promo, from, to, limit = 100, offset = 0, sort, dir }) {
   const params = {
     ...range(from, to),
     limit: parseInt(limit, 10),
@@ -5132,10 +5134,14 @@ function usersTransactions({ q, type, status, fundId, from, to, limit = 100, off
   if (type) { where += ' AND t.type = @type'; params.type = type; }
   if (status) { where += ' AND t.status = @status'; params.status = status; }
   if (fundId) { where += ' AND t.fund_id = @fundId'; params.fundId = fundId; }
+  const fundPats = codePatterns(String(fundName || '').split(','));
+  if (fundPats.length) { where += ' AND EXISTS (SELECT 1 FROM UNNEST(@fundPats) fp WHERE UPPER(f.name) LIKE fp)'; params.fundPats = fundPats; }
+  const promoPats = codePatterns(String(promo || '').split(','));
+  if (promoPats.length) { where += ' AND EXISTS (SELECT 1 FROM UNNEST(@promoPats) pp WHERE UPPER(t.promo_code) LIKE pp)'; params.promoPats = promoPats; }
   return {
     sql: `SELECT
         t.id, t.transaction_number, t.type, t.status, t.created_at,
-        t.unit, t.amount, t.final_amount, t.value_per_unit,
+        t.unit, t.amount, t.final_amount, t.value_per_unit, t.promo_code,
         u.sid_code AS sid, u.email, up.name, up.phone_number AS phone,
         f.name AS fund_name
       FROM ${TX} t
@@ -5150,6 +5156,7 @@ function usersTransactions({ q, type, status, fundId, from, to, limit = 100, off
       FROM ${TX} t
       JOIN ${USERS} u ON u.id = t.user_id
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
       WHERE ${where}`,
   };
 }
@@ -5211,7 +5218,8 @@ const topInvestors = ({ from, to, metric, limit = 100, direction }) => {
 // Participants: customers with a completed buy using one of @promo in the
 // purchase period. For each, total AUM (every fund) in portfolio_with_code on
 // @start_d (start_aum) and on every snapshot day after it up to @to
-// (first_below = first day under @min_aum). The snapshot's date is
+// (first_below = first day under @min_aum; avg_aum = mean of those days, so
+// the program period so far). The snapshot's date is
 // created_at - 1 day; a day the SID has no row at all counts as 0, but only
 // days that exist in the snapshot are checked.
 const hnwiBonusCandidates = ({ promoCodes, purchaseFrom, purchaseTo, startDate, minAum, to }) => ({
@@ -5237,13 +5245,13 @@ const hnwiBonusCandidates = ({ promoCodes, purchaseFrom, purchaseTo, startDate, 
     agg AS (
       SELECT sid_code, MIN(IF(aum < @min_aum, d, NULL)) AS first_below,
         ARRAY_AGG(IF(aum < @min_aum, STRUCT(d, aum), NULL) IGNORE NULLS ORDER BY d LIMIT 1)[SAFE_OFFSET(0)].aum AS below_aum,
-        MIN(aum) AS lowest_aum, MAX(d) AS last_day, ARRAY_AGG(aum ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_aum, COUNT(*) AS days_checked
+        MIN(aum) AS lowest_aum, AVG(aum) AS avg_aum, MAX(d) AS last_day, ARRAY_AGG(aum ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_aum, COUNT(*) AS days_checked
       FROM chk GROUP BY 1
     )
     SELECT p.user_id, p.sid_code AS sid, u.email, up.name, up.phone_number AS phone, u.ifua_code AS ifua,
       IFNULL(u.is_institution, FALSE) AS institution,
       ROUND(IFNULL(st.aum, 0)) AS start_aum, FORMAT_DATE('%F', a.first_below) AS first_below, ROUND(a.below_aum) AS below_aum,
-      ROUND(a.lowest_aum) AS lowest_aum, ROUND(a.latest_aum) AS latest_aum, FORMAT_DATE('%F', a.last_day) AS last_day,
+      ROUND(a.lowest_aum) AS lowest_aum, ROUND(a.avg_aum) AS avg_aum, ROUND(a.latest_aum) AS latest_aum, FORMAT_DATE('%F', a.last_day) AS last_day,
       IFNULL(a.days_checked, 0) AS days_checked
     FROM ppl p
     JOIN ${USERS} u ON u.id = p.user_id

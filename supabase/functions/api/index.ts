@@ -627,9 +627,11 @@ on('GET', '/api/sinvest-transactions', requireTab('sinvest-tx', async (_req, _pa
 // ---- Users transactions (any investor, by SID/email/name) -----------------
 on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params, url) => {
   const q2 = qp(url, 'q');
-  if (!q2) return json({ error: 'A SID, email, or name search is required.' }, 400);
+  const fundName = qp(url, 'fundName');
+  const promo = qp(url, 'promo');
+  if (!q2 && !fundName && !promo) return json({ error: 'A SID, email, name, fund name, or promo code search is required.' }, 400);
   const q = Q.usersTransactions({
-    q: q2, type: qp(url, 'type'), status: qp(url, 'status'), fundId: qp(url, 'fundId'),
+    q: q2, type: qp(url, 'type'), status: qp(url, 'status'), fundId: qp(url, 'fundId'), fundName, promo,
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
     sort: qp(url, 'sort'), dir: qp(url, 'dir'),
@@ -1752,11 +1754,14 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'users_transactions') {
     const searchQ = body.q as string;
-    if (!searchQ) return json({ error: 'A SID, email, or name search is required.' }, 400);
-    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
+    const fundName = body.fundName as string;
+    const promo = body.promo as string;
+    if (!searchQ && !fundName && !promo) return json({ error: 'A SID, email, name, fund name, or promo code search is required.' }, 400);
+    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, fundName, promo, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
     rows = await runQuery(q.sql, q.params);
     if (format === 'pdf') {
-      const buf = await usersTransactionsReport(rows, { username, query: searchQ });
+      const label = [searchQ, fundName && `fund ${fundName}`, promo && `promo ${promo}`].filter(Boolean).join(', ');
+      const buf = await usersTransactionsReport(rows, { username, query: label });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
