@@ -540,6 +540,20 @@ function createApp({ serveStatic = true } = {}) {
   // `field` still picks referrer_code vs sales_code instead of a real event
   // column) — funnel, tagged users, cohort, and transaction detail for
   // whatever referral/sales codes an eventual event hands out. ----------------
+  // ---- HNWI bonus: the page sends the program's dates and thresholds from
+  // public/hnwi-bonus-config.js and computes the bonus itself.
+  app.get('/api/hnwi-bonus/data', requireTab('hnwi-bonus'), handler(async (req, res) => {
+    const { startDate, purchaseFrom, programTo, minAum, sam, excludeInstitutions } = req.query;
+    const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+    if (![startDate, purchaseFrom, programTo].every(isDate)) return res.status(400).json({ error: 'startDate, purchaseFrom and programTo are required (YYYY-MM-DD).' });
+    if (!(Number(minAum) > 0) || !sam || String(sam).length > 120) return res.status(400).json({ error: 'minAum and sam are required.' });
+    const c = Q.hnwiBonusCandidates({ startDate, minAum: Number(minAum), to: programTo, excludeInstitutions: excludeInstitutions !== '0' });
+    const candidates = await runQuery(c.sql, c.params, { redact: false });
+    if (!candidates.length) return res.json({ candidates, transactions: [] });
+    const t = Q.hnwiBonusTransactions({ userIds: candidates.map((r) => r.user_id), from: purchaseFrom, to: programTo, samManager: String(sam) });
+    res.json({ candidates, transactions: await runQuery(t.sql, t.params) });
+  }));
+
   // ---- Promo recap: raw promo buys and promo participations (with holding
   // and fee from portfolio_with_code); the page builds the per-promo summary.
   const PROMO_CODE_RE = /^[A-Za-z0-9_*-]{1,60}$/;

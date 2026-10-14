@@ -645,6 +645,24 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
 // `field` still picks referrer_code vs sales_code instead of a real event
 // column) — funnel, tagged users, cohort, and transaction detail for
 // whatever referral/sales codes an eventual event hands out. ----------------
+// ---- HNWI bonus: the page sends the program's dates and thresholds from
+// public/hnwi-bonus-config.js and computes the bonus itself.
+on('GET', '/api/hnwi-bonus/data', requireTab('hnwi-bonus', async (_req, _params, url) => {
+  const startDate = qp(url, 'startDate') || '';
+  const purchaseFrom = qp(url, 'purchaseFrom') || '';
+  const programTo = qp(url, 'programTo') || '';
+  const minAum = Number(qp(url, 'minAum'));
+  const sam = qp(url, 'sam') || '';
+  const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (![startDate, purchaseFrom, programTo].every(isDate)) return json({ error: 'startDate, purchaseFrom and programTo are required (YYYY-MM-DD).' }, 400);
+  if (!(minAum > 0) || !sam || sam.length > 120) return json({ error: 'minAum and sam are required.' }, 400);
+  const c = Q.hnwiBonusCandidates({ startDate, minAum, to: programTo, excludeInstitutions: qp(url, 'excludeInstitutions') !== '0' });
+  const candidates = await runQuery(c.sql, c.params, { redact: false });
+  if (!candidates.length) return json({ candidates, transactions: [] });
+  const t = Q.hnwiBonusTransactions({ userIds: candidates.map((r) => r.user_id as string), from: purchaseFrom, to: programTo, samManager: sam });
+  return json({ candidates, transactions: await runQuery(t.sql, t.params) });
+}));
+
 // ---- Promo recap: raw promo buys and promo participations (with holding
 // and fee from portfolio_with_code); the page builds the per-promo summary.
 const PROMO_CODE_RE = /^[A-Za-z0-9_*-]{1,60}$/;

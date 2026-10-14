@@ -5204,6 +5204,77 @@ const topInvestors = ({ from, to, metric, limit = 100, direction }) => {
 // instead of hardcoding one, and `codes` is whatever wildcard list the
 // caller types in (see codePatterns). Swap in a real field/column once the
 // event defines one.
+// ---- HNWI bonus program (tab "HNWI bonus", rules in
+// public/hnwi-bonus-config.js; the page computes lots, FIFO and monthly
+// bonus from these rows).
+//
+// Candidates: total AUM (every fund) in portfolio_with_code on @start_d at
+// least @min_aum, then every snapshot day from the next day to @to checked
+// against the same minimum (first_below = first day under it). The
+// snapshot's date is created_at - 1 day; a day the SID has no row at all
+// counts as 0, but only days that exist in the snapshot are checked.
+// @exclude_inst drops institutional accounts (HNWI = individuals).
+const hnwiBonusCandidates = ({ startDate, minAum, to, excludeInstitutions }) => ({
+  sql: `WITH snap AS (
+      SELECT sid_code, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS d, SUM(CAST(amount AS FLOAT64)) AS aum
+      FROM ${PORT_WITH_CODE}
+      WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) BETWEEN @start_d AND @to
+      GROUP BY 1, 2
+    ),
+    days AS (SELECT DISTINCT d FROM snap WHERE d > @start_d),
+    start AS (SELECT sid_code, aum FROM snap WHERE d = @start_d AND aum >= @min_aum),
+    chk AS (
+      SELECT s.sid_code, dd.d, IFNULL(sn.aum, 0) AS aum
+      FROM start s CROSS JOIN days dd
+      LEFT JOIN snap sn ON sn.sid_code = s.sid_code AND sn.d = dd.d
+    ),
+    agg AS (
+      SELECT sid_code, MIN(IF(aum < @min_aum, d, NULL)) AS first_below,
+        ARRAY_AGG(IF(aum < @min_aum, STRUCT(d, aum), NULL) IGNORE NULLS ORDER BY d LIMIT 1)[SAFE_OFFSET(0)].aum AS below_aum,
+        MIN(aum) AS lowest_aum, MAX(d) AS last_day, ARRAY_AGG(aum ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_aum, COUNT(*) AS days_checked
+      FROM chk GROUP BY 1
+    )
+    SELECT u.id AS user_id, s.sid_code AS sid, u.email, up.name, up.phone_number AS phone, u.ifua_code AS ifua,
+      ROUND(s.aum) AS start_aum, FORMAT_DATE('%F', a.first_below) AS first_below, ROUND(a.below_aum) AS below_aum,
+      ROUND(a.lowest_aum) AS lowest_aum, ROUND(a.latest_aum) AS latest_aum, FORMAT_DATE('%F', a.last_day) AS last_day,
+      IFNULL(a.days_checked, 0) AS days_checked
+    FROM start s
+    JOIN ${USERS} u ON u.sid_code = s.sid_code
+    LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+    LEFT JOIN agg a ON a.sid_code = s.sid_code
+    WHERE NOT (@exclude_inst AND IFNULL(u.is_institution, FALSE))`,
+  params: { start_d: startDate, min_aum: Number(minAum), to, exclude_inst: !!excludeInstitutions },
+});
+
+// Their completed program-relevant transactions in @from..@to on funds of
+// @sam: fresh-fund buys (no manual_bonus / bonus payouts), sells, and
+// switch-outs with whether the money went to another @sam fund (to_sam).
+// day = order date, done_day = date the transaction completed (WIB).
+const hnwiBonusTransactions = ({ userIds, from, to, samManager }) => ({
+  sql: `WITH sin AS (
+      SELECT t2.switching_transaction_id AS sw, LOGICAL_OR(IFNULL(im2.name = @sam, FALSE)) AS to_sam
+      FROM ${TX} t2
+      JOIN ${FUNDS} f2 ON f2.id = t2.fund_id
+      LEFT JOIN ${IM} im2 ON im2.id = f2.investment_manager_id
+      WHERE t2.type = 'SWITCH_IN' AND t2.switching_transaction_id IS NOT NULL
+      GROUP BY 1
+    )
+    SELECT t.id AS tx_id, t.user_id, t.type, f.id AS fund_id, f.name AS fund,
+      FORMAT_DATE('%F', DATE(t.created_at, 'Asia/Jakarta')) AS day,
+      FORMAT_DATE('%F', DATE(COALESCE(t.completed_at, t.created_at), 'Asia/Jakarta')) AS done_day,
+      CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount,
+      IF(t.type = 'SWITCH_OUT', IFNULL(s.to_sam, FALSE), NULL) AS to_sam
+    FROM ${TX} t
+    JOIN ${FUNDS} f ON f.id = t.fund_id
+    JOIN ${IM} im ON im.id = f.investment_manager_id AND im.name = @sam
+    LEFT JOIN sin s ON s.sw = t.switching_transaction_id
+    WHERE t.status = 'completed' AND t.user_id IN UNNEST(@users)
+      AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
+      AND ((t.type = 'buy' AND IFNULL(t.payment_method, '') NOT IN ('manual_bonus', 'bonus')) OR t.type IN ('sell', 'SWITCH_OUT'))
+    ORDER BY t.user_id, t.created_at`,
+  params: { users: userIds, from, to, sam: samManager },
+});
+
 // ---- Promo recap (tab "Promo recap"). A promo buy (transactions.promo_code)
 // locks its units in main.bonus_portfolios until the holding date (status
 // on_going), then they move to main.portfolios (succeeded) where they carry
@@ -5750,6 +5821,7 @@ module.exports = {
   allInvestorsWithAum, allActiveFundInvestors, allRegisteredUsersWithEmail,
   boothEventData,
   promoRecapData,
+  hnwiBonusCandidates, hnwiBonusTransactions,
   userHoldingsFromTx, userHoldingsFromTxAsOf,
   hnwiLatestDate, hnwiTotal, hnwiByFund,
   dormantConversionSummary, dormantRepeatBuyers, dormantTimeToConvert,

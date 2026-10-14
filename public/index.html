@@ -214,6 +214,7 @@
           <button class="nav-link" data-tab="event-code"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Event code tracking</button>
           <button class="nav-link" data-tab="booth-event"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calendar"></use></svg></span>Booth event</button>
           <button class="nav-link" data-tab="promo-recap"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg></span>Promo recap</button>
+          <button class="nav-link" data-tab="hnwi-bonus"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg></span>HNWI bonus</button>
           <button class="nav-link" data-tab="push"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg></span>Push delivery</button>
         </div>
         <div class="nav-group" data-group="product">
@@ -2780,6 +2781,48 @@
     <!-- PUSH DELIVERY: FCM's own send-pipeline health log (own dataset,
          firebase_messaging.data). Delivery/send health only, there is no
          open/click or revenue data in this table, see the callout below. -->
+    <!-- HNWI BONUS: monthly bonus for 500 jt+ customers adding fresh money to
+         SAM funds. Every rule lives in hnwi-bonus-config.js; app.js
+         hnwiCustomer works out lots, FIFO and the monthly payable. -->
+    <section id="hnwi-bonus" class="view">
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="hb_title">HNWI bonus</h2>
+          <button id="hbReload" class="btn-ghost" data-i18n="common_refresh">Refresh</button>
+        </div>
+        <span class="hint" id="hbHint"></span>
+        <div id="hbKpis" class="kpi-grid" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="hb_customers_title">Participants</h2></div>
+        <span class="hint" data-i18n="hb_customers_hint">Every customer with the minimum AUM on the start date: their AUM check, program purchases, redemptions, net subs, when they reached the minimum, and the bonus (months done, this month so far, waiting for the minimum, lost).</span>
+        <div id="hbCustomers" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="hb_monthly_title">Bonus to send per month</h2>
+          <label><span data-i18n="hb_month">Month</span> <select id="hbMonth" aria-label="Month"></select></label>
+        </div>
+        <span class="hint" data-i18n="hb_monthly_hint">One row per customer and month with a bonus: the amount to send in Money Market Fund units and the last day to send it. The current month is an estimate until it ends.</span>
+        <div id="hbMonthly" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="hb_lots_title">Purchases and redemptions (FIFO)</h2></div>
+        <span class="hint" data-i18n="hb_lots_hint">Each program purchase with its rate, the date it completed, what is left after redemptions (oldest purchase first), the date it completes one month, and the bonus it has earned; redemptions are listed with them.</span>
+        <div id="hbLots" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="hb_rules_title">Rules and how it is counted</h2></div>
+        <span class="hint" data-i18n="hb_rules_hint">Written from the same config file the numbers use (hnwi-bonus-config.js).</span>
+        <div id="hbRules" class="be-rules" style="margin-top:12px"></div>
+        <div id="hbRates" class="table-wrap" style="margin-top:16px"></div>
+      </div>
+    </section>
+
     <!-- PROMO RECAP: promo buys, promo participations (bonus_portfolios) with
          holding and fee from portfolio_with_code, and bonuses sent. -->
     <section id="promo-recap" class="view">
@@ -3791,6 +3834,10 @@ ORDER BY n DESC"></textarea>
           <p data-i18n="docs_promo_recap_desc">Everyone who bought with a promo code, and what became of it. A promo buy locks its units in bonus_portfolios until the campaign's holding date (waiting), then the units move to the portfolio (eligible); withdrawing before that date makes it lapse, and a promo buy that got no bonus row did not qualify. Per promo: buys, customers, amount, eligible, waiting and lapsed, the bonus owed by the campaign rule (fixed amount or percentage) and the bonus already sent (manual_bonus or bonus payments under the promo code or BONUS plus the code), what is still held today, average days held, and the management fee and AperD share earned on the promo units. The participant list (filter by status) and the list of promo buys carry name, email, phone, SID, IFUA, product and fund manager for monitoring and bonus distribution; every table exports. Holding and fee come from portfolio_with_code, which is daily from 14 January 2026, so older promos count from that date.</p>
         </div>
         <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg> HNWI bonus</h3>
+          <p data-i18n="docs_hnwi_bonus_desc">Program HNWI Bonus: customers with total AUM of Rp 500 jt or more on 30 September 2026 who buy Sucor Asset Management funds with fresh money between 1 October and 31 December 2026 earn a monthly bonus in Sucorinvest Money Market Fund units until 31 December 2027, at 0.10% to 0.25% a year depending on the product. The tab checks AUM every day (one day under Rp 500 jt and the customer is out), tracks every program purchase with redemptions taken oldest first, waits until net subs reach Rp 100 jt and each purchase has been held one month, caps the bonus at Rp 25 jt, and lists the bonus to send per customer and month with the last day to send it, with name, email, phone, SID and IFUA. Every rule is in one config file (hnwi-bonus-config.js); the Rules panel is written from it.</p>
+        </div>
+        <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-activity"></use></svg> Push delivery</h3>
           <p data-i18n="docs_push_desc">Firebase Cloud Messaging's own delivery log (own dataset, firebase_messaging.data): did FCM accept and hand off each push. This is send-pipeline health only, not an open or click rate. Firebase's standard export has no such engagement events for messaging, and the table carries only an FCM instance ID, not a Sayakaya user ID, so it can't be joined to revenue either. Shows send volume over a date range, a breakdown by platform (Android/iOS/unknown), and a breakdown by campaign (analytics_label), each with total sends, accepted, MISSING_REGISTRATIONS (a stale or invalid device token, the dominant failure reason), other errors, and the resulting delivery rate.</p>
         </div>
@@ -3979,6 +4026,7 @@ ORDER BY n DESC"></textarea>
   <div id="navTooltip" class="nav-tooltip"></div>
   <script src="i18n.js"></script>
   <script src="booth-event-config.js"></script>
+  <script src="hnwi-bonus-config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

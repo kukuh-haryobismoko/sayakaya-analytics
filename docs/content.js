@@ -231,6 +231,12 @@ const TABS = {
     computation: "Endpoint /api/promo-recap/data (promoRecapData) mengirim data mentah, halaman membuat ringkasan per promo (promoSummary). Pembelian promo = transactions.promo_code terisi, tanggal (WIB) di rentang, kecuali pembayaran bonus (payment_method manual_bonus atau bonus). Kode promo tanpa * dicocokkan sebagian, * mengunci posisi (codePatterns). Peserta = baris main.bonus_portfolios dari nasabah dan promo itu (atau dibuat di rentang): on_going = menunggu holding_date, succeeded = layak (unit sudah pindah ke main.portfolios), redeemed = gugur (ditarik sebelum holding_date). Pembelian promo dicocokkan ke baris bonus dengan nasabah, promo, dan fund yang sama, yang waktunya paling dekat; tanpa baris bonus = tidak memenuhi syarat. Bonus harus dikirim per peserta layak = campaigns.bonus_amount, atau bonus_percentage x nilai dikunci (unit x average_nav), atau manual bila campaign tidak mengisi keduanya. Bonus terkirim = transaksi completed manual_bonus atau bonus milik nasabah itu dengan kode promo yang sama atau BONUS + kode (per nasabah dan promo, tidak dobel). Holding dan fee dari mi_fee_logs.portfolio_with_code (harian sejak 14 Jan 2026, tanggal = created_at - 1 hari, sudah termasuk unit yang masih terkunci): bagian promo per hari = amount fund itu x min(1, unit promo / total_unit hari itu), mulai tanggal dikunci, berhenti di redeemed_at untuk yang gugur; hari holding = hari dengan bagian > 0; fee per hari = bagian x management_fee (x aperd_share untuk fee AperD) / jumlah hari setahun, aturan Revenue (PWC); masih dipegang hari ini = bagian di hari portfolio_with_code terbaru. Kalau satu nasabah punya beberapa promo di fund yang sama, masing-masing dibatasi saldo fund itu. Satu kali muat memindai sekitar 5,7 GB portfolio_with_code.",
   },
 
+  "hnwi-bonus": {
+    summary: "Program HNWI Bonus: nasabah perorangan dengan AUM 500 jt+ pada 30 Sep 2026 yang menambah fresh fund ke produk Sucor AM (1 Okt s.d. 31 Des 2026) mendapat bonus bulanan dalam unit Sucorinvest Money Market Fund sampai 31 Des 2027. Peserta, cek AUM harian, pembelian dan redemption FIFO, bonus per nasabah per bulan dengan batas tanggal kirim.",
+    datasets: "mi_fee_logs.portfolio_with_code, main.transactions, main.funds, main.investment_managers, main.users, main.user_profiles",
+    computation: "Semua aturan ada di public/hnwi-bonus-config.js; endpoint /api/hnwi-bonus/data mengirim kandidat (hnwiBonusCandidates) dan transaksinya (hnwiBonusTransactions), halaman menghitung (hnwiCustomer di app.js). Kandidat: AUM total semua produk (SUM amount portfolio_with_code, tanggal = created_at - 1 hari) minimal 500 jt pada 30 Sep 2026, akun institusi (users.is_institution) tidak ikut; lalu dicek setiap hari snapshot sampai 31 Des 2027, sekali di bawah 500 jt = gugur permanen dan bonus yang belum dibayar hangus. Pembelian program = beli completed produk Sucor Asset Management yang diorder 1 Okt s.d. 31 Des 2026, tanpa pembayaran bonus (manual_bonus, bonus) dan tanpa switching masuk. Redemption = jual produk Sucor AM, atau switching (pasangan switching_transaction_id) ke produk manajer lain, 1 Okt 2026 s.d. 31 Des 2027; semuanya memotong pembelian program secara FIFO (pembelian tertua dulu, lintas produk), redemption sebelum ada pembelian memotong pembelian berikutnya; switching antar produk Sucor AM bukan redemption dan rate tetap rate produk awal. Bonus per hari = sisa tiap pembelian x rate per tahun (0,10/0,15/0,20/0,25% sesuai tabel; produk Sucor AM lain 0) / 365 sejak tanggal completed; bagian yang di-redeem sebelum genap 1 bulan tidak dapat; bonus bulan pertama dibayar di bulan saat genap 1 bulan. Nett subs (pembelian program dikurangi redemption) harus mencapai 100 jt paling lambat 31 Des 2026; bonus sebelumnya tertunda dan dirapel ke bulan saat tercapai; tidak tercapai = tidak ada bonus. Maksimal 25 jt per nasabah. Dibayar per bulan dalam unit Sucorinvest Money Market Fund, paling lambat 7 hari bursa setelah bulan selesai (akhir pekan dilewati, libur bursa lain tidak). Satu kali muat memindai sekitar 5,7 GB portfolio_with_code.",
+  },
+
   "ask": {
     summary: "Tanya dalam bahasa biasa (mis. \"top 10 funds by AUM\") dan dapatkan jawaban dengan chart.",
     datasets: "Dataset BigQuery utama, lewat server/ask.js",
@@ -1229,6 +1235,25 @@ const TAB_DETAILS = {
       'Workbook dan export pengguna maksimal 50.000 baris per sheet; sheet Ringkasan mencatat jumlah baris dan filter Detail transaksi yang dipakai.',
       'Heatmap retensi selalu penuh: setiap hari, minggu, atau bulan di periode menjadi baris meskipun ukurannya 0, setiap periode yang sudah lewat diberi nilai termasuk 0%, dan · hanya untuk periode yang belum terjadi.',
       'Funnel dan cohort masih langkah generik; sesuaikan bila event punya aturan sendiri.',
+    ],
+  },
+  'hnwi-bonus': {
+    kpis: [
+      ['Candidates', 'Nasabah perorangan dengan AUM total minimal 500 jt pada 30 Sep 2026.'],
+      ['Out on AUM', 'Kandidat yang AUM-nya pernah di bawah 500 jt sejak 1 Okt (gugur permanen).'],
+      ['Net subs', 'Sisa pembelian program setelah redemption (FIFO), dari total yang dibeli.'],
+      ['Bonus to send', 'Bonus bulan yang sudah selesai untuk peserta yang mencapai 100 jt, setelah batas 25 jt.'],
+      ['This month so far', 'Bonus bulan berjalan (perkiraan), ditambah bonus tertunda yang menunggu 100 jt.'],
+    ],
+    panels: {
+      'Participants': { note: 'Setiap kandidat dengan AUM awal, terendah, dan terbaru, pembelian program, redemption, nett subs, tanggal mencapai 100 jt, bonus per keadaan, dan status.', },
+      'Bonus to send per month': { note: 'Satu baris per nasabah dan bulan yang ada bonusnya, dengan batas tanggal kirim (7 hari bursa setelah bulan selesai).', },
+      'Purchases and redemptions (FIFO)': { note: 'Setiap pembelian program dengan rate, tanggal berhasil, sisa setelah FIFO, tanggal genap 1 bulan, dan bonus terkumpul, serta redemption yang memotongnya.', },
+      'Rules and how it is counted': { note: 'Ditulis otomatis dari hnwi-bonus-config.js, dengan tabel rate per produk.', },
+    },
+    notes: [
+      'Ubah T&C hanya di public/hnwi-bonus-config.js; tabel dan panel aturan mengikuti setelah deploy.',
+      'Batas kirim 7 hari bursa hanya melewati akhir pekan; libur bursa lain perlu dicek manual.',
     ],
   },
   'promo-recap': {

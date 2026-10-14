@@ -6923,6 +6923,221 @@ async function schedConfirmOtp(kind) {
   } catch (e) { toast(e.message); }
 }
 
+// HNWI BONUS: monthly bonus in Sucorinvest Money Market Fund units for
+// customers with 500 jt+ AUM who add fresh money to SAM funds. Every rule is
+// in HNWI_BONUS (public/hnwi-bonus-config.js); the server returns the
+// candidates (with their daily AUM check) and their SAM transactions, and
+// hnwiCustomer below works out lots, FIFO, accrual and the monthly payable.
+const hMonth = (iso) => iso.slice(0, 7);
+const hMonthEnd = (ym) => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+const hNextMonth = (ym) => { const [y, m] = ym.split('-').map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; };
+// Same day n months later, clamped to the month's last day (31 Jan + 1 = 28 Feb).
+function hAddMonths(iso, n) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const target = new Date(Date.UTC(y, m - 1 + n, 1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, last));
+  return target.toISOString().slice(0, 10);
+}
+// n weekdays after iso (exchange holidays other than weekends are not known here).
+function hAddTradingDays(iso, n) {
+  let d = iso;
+  while (n > 0) { d = bAddDays(d, 1); const wd = new Date(`${d}T00:00:00Z`).getUTCDay(); if (wd !== 0 && wd !== 6) n--; }
+  return d;
+}
+
+function hnwiCustomer(c, txs, cfg, today) {
+  const rateOf = new Map(cfg.rates.flatMap((tier) => tier.funds.map((f) => [f.id, tier.pct])));
+  const end = today < cfg.programTo ? today : cfg.programTo;
+  const F = c.first_below || null; // first day under the AUM minimum: out for good from that day
+  const lots = txs.filter((t) => t.type === 'buy' && t.day >= cfg.purchaseFrom && t.day <= cfg.purchaseTo)
+    .map((t) => {
+      const start = t.done_day > t.day ? t.done_day : t.day;
+      return { tx_id: t.tx_id, fund_id: t.fund_id, fund: t.fund, rate: rateOf.get(t.fund_id) || 0, orderDay: t.day, start,
+        amount: Number(t.amount) || 0, remaining: Number(t.amount) || 0, mark: hAddMonths(start, cfg.holdMonths), base: null, bonus: 0 };
+    })
+    .sort((a, b) => (a.orderDay < b.orderDay ? -1 : a.orderDay > b.orderDay ? 1 : 0));
+  const reds = txs.filter((t) => (t.type === 'sell' || (t.type === 'SWITCH_OUT' && !t.to_sam)) && t.day >= cfg.programFrom && t.day <= cfg.programTo);
+  const credits = new Map();
+  const credit = (day, amt, lot) => { if (amt <= 0) return; credits.set(hMonth(day), (credits.get(hMonth(day)) || 0) + amt); lot.bonus += amt; };
+  let debt = 0, subs = 0, redeemed = 0, Q = null;
+  for (let d = cfg.programFrom; d <= end; d = bAddDays(d, 1)) {
+    const live = !F || d < F;
+    // A redemption with no program purchase left to take from waits for the next one (net = subs - redemptions).
+    for (const lot of lots.filter((l) => l.orderDay === d)) {
+      subs += lot.amount;
+      const take = Math.min(debt, lot.remaining); lot.remaining -= take; debt -= take;
+    }
+    // At the one-month mark the first month is paid on what was not redeemed before it.
+    for (const lot of lots) {
+      if (d === lot.mark && live) { lot.base = lot.remaining; credit(d, (lot.remaining * lot.rate) / 100 / 365 * bDays(lot.start, lot.mark), lot); }
+    }
+    for (const r of reds.filter((x) => x.day === d)) {
+      redeemed += Number(r.amount) || 0;
+      let left = Number(r.amount) || 0;
+      for (const lot of lots) {
+        if (left <= 0) break;
+        if (lot.orderDay > d || lot.remaining <= 0) continue;
+        const take = Math.min(left, lot.remaining); lot.remaining -= take; left -= take;
+      }
+      debt += left;
+    }
+    if (!Q && d <= cfg.purchaseTo && subs - redeemed >= cfg.minNetSubs) Q = d;
+    if (live) for (const lot of lots) if (d >= lot.mark && lot.remaining > 0) credit(d, (lot.remaining * lot.rate) / 100 / 365, lot);
+  }
+  // Months of the program, each with what was earned in it after the 100 jt rule
+  // (earlier months paid in the month it was reached), the AUM rule (that
+  // month on is lost) and the overall cap.
+  const months = [];
+  for (let m = hMonth(cfg.programFrom); m <= hMonth(cfg.programTo); m = hNextMonth(m)) months.push(m);
+  const raw = new Map(months.map((m) => [m, credits.get(m) || 0]));
+  const qm = Q ? hMonth(Q) : null;
+  const fm = F ? hMonth(F) : null;
+  let pending = 0, forfeited = 0, paidSoFar = 0;
+  const rows = months.map((m) => {
+    let amount = raw.get(m);
+    if (qm && m === qm) amount += months.filter((x) => x < qm).reduce((a, x) => a + raw.get(x), 0);
+    else if (qm && m < qm) amount = 0;
+    const state = hMonthEnd(m) < today ? 'done' : hMonth(today) === m ? 'running' : 'future';
+    if (!qm) {
+      // Never reached the minimum: waiting until the purchase period ends, lost after it or once out on AUM.
+      if (F || today > cfg.purchaseTo) forfeited += amount; else pending += amount;
+      return { m, amount: 0, state: F ? 'lapsed' : today > cfg.purchaseTo ? 'not_reached' : state === 'future' ? 'future' : 'pending' };
+    }
+    if (fm && m >= fm) { forfeited += amount; return { m, amount: 0, state: 'lapsed' }; }
+    const room = Math.max(0, cfg.maxBonus - paidSoFar);
+    const pay = Math.min(Math.round(amount), room);
+    forfeited += Math.max(0, Math.round(amount) - pay);
+    paidSoFar += pay;
+    return { m, amount: pay, state, due: hAddTradingDays(hMonthEnd(m), cfg.payoutTradingDays) };
+  });
+  const earned = rows.filter((r) => r.state === 'done').reduce((a, r) => a + r.amount, 0);
+  const running = rows.filter((r) => r.state === 'running').reduce((a, r) => a + r.amount, 0);
+  const status = F ? 'lapsed_aum' : Q ? 'active' : !subs ? 'not_joined' : today > cfg.purchaseTo ? 'not_reached' : 'building';
+  return {
+    ...c, lots, reds, subs, redeemed, net: subs - redeemed, netNow: lots.reduce((a, l) => a + l.remaining, 0),
+    qualifiedOn: Q, months: rows, earned, running, pending: Math.round(pending), forfeited: Math.round(forfeited),
+    capReached: paidSoFar >= cfg.maxBonus, status,
+  };
+}
+
+function hnwiCompute({ candidates, transactions }, cfg, today) {
+  const txBy = new Map();
+  for (const t of transactions) { if (!txBy.has(t.user_id)) txBy.set(t.user_id, []); txBy.get(t.user_id).push(t); }
+  return candidates.map((c) => hnwiCustomer(c, txBy.get(c.user_id) || [], cfg, today));
+}
+
+const HB = { data: null, loading: false };
+const hbStatus = (k, x) => ({
+  active: bL('Active', 'Aktif'),
+  building: bL(`Below ${idr(HNWI_BONUS.minNetSubs)} so far`, `Belum ${idr(HNWI_BONUS.minNetSubs)}`),
+  not_reached: bL(`Did not reach ${idr(HNWI_BONUS.minNetSubs)}`, `Tidak mencapai ${idr(HNWI_BONUS.minNetSubs)}`),
+  not_joined: bL('No program purchase', 'Belum ada pembelian program'),
+  lapsed_aum: bL(`Out: AUM under ${idr(HNWI_BONUS.minAum)} on ${x && x.first_below}`, `Gugur: AUM di bawah ${idr(HNWI_BONUS.minAum)} pada ${x && x.first_below}`),
+  done: bL('To send', 'Siap dikirim'), running: bL('Month running (estimate)', 'Bulan berjalan (sementara)'),
+  pending: bL(`Waits for ${idr(HNWI_BONUS.minNetSubs)}`, `Menunggu ${idr(HNWI_BONUS.minNetSubs)}`),
+  lapsed: bL('Lost: out on AUM', 'Hangus: gugur AUM'),
+}[k] || k);
+
+async function loadHnwiBonus() {
+  const cfg = HNWI_BONUS;
+  HB.loading = true;
+  ['#hbKpis', '#hbCustomers', '#hbMonthly', '#hbLots'].forEach((sel) => { $(sel).innerHTML = `<div class="loading">${t('common_loading')}</div>`; });
+  try {
+    const qs = new URLSearchParams({ startDate: cfg.aumStartDate, purchaseFrom: cfg.purchaseFrom, programTo: cfg.programTo, minAum: cfg.minAum, sam: cfg.samManager, excludeInstitutions: cfg.excludeInstitutions ? '1' : '0' });
+    HB.data = await api(`/api/hnwi-bonus/data?${qs}`);
+    renderHnwiBonus();
+  } catch (e) {
+    ['#hbKpis', '#hbCustomers', '#hbMonthly', '#hbLots'].forEach((sel) => { $(sel).innerHTML = `<div class="empty">${bEsc(e.message)}</div>`; });
+  } finally { HB.loading = false; }
+}
+
+function renderHnwiBonus() {
+  if (!HB.data) return;
+  const cfg = HNWI_BONUS;
+  const today = bWibToday();
+  const people = hnwiCompute(HB.data, cfg, today);
+  const joined = people.filter((x) => x.subs > 0);
+  const lastDone = [...new Set(people.flatMap((x) => x.months.filter((r) => r.state === 'done').map((r) => r.m)))].sort().pop();
+  $('#hbHint').textContent = bL(
+    `${cfg.name}: purchases ${cfg.purchaseFrom} to ${cfg.purchaseTo}, bonus until ${cfg.programTo}. Candidates = AUM ${idr(cfg.minAum)}+ on ${cfg.aumStartDate}; AUM checked every day after (data up to ${people[0] ? people[0].last_day || 'n/a' : 'n/a'}). Today ${today} WIB.`,
+    `${cfg.name}: pembelian ${cfg.purchaseFrom} s.d. ${cfg.purchaseTo}, bonus sampai ${cfg.programTo}. Kandidat = AUM ${idr(cfg.minAum)}+ pada ${cfg.aumStartDate}; AUM dicek setiap hari sesudahnya (data s.d. ${people[0] ? people[0].last_day || 'n/a' : 'n/a'}). Hari ini ${today} WIB.`);
+  $('#hbKpis').innerHTML = [
+    kpi(bL('Candidates', 'Kandidat'), num(people.length), bL(`AUM ${idr(cfg.minAum)}+ on ${cfg.aumStartDate}`, `AUM ${idr(cfg.minAum)}+ pada ${cfg.aumStartDate}`), 'accent', ICONS.users),
+    kpi(bL('Bought in the program', 'Beli di program'), num(joined.length), bL(`${num(people.filter((x) => x.status === 'active').length)} reached ${idr(cfg.minNetSubs)}`, `${num(people.filter((x) => x.status === 'active').length)} mencapai ${idr(cfg.minNetSubs)}`), '', ICONS.userPlus),
+    kpi(bL('Out on AUM', 'Gugur AUM'), num(people.filter((x) => x.status === 'lapsed_aum').length), bL(`AUM fell under ${idr(cfg.minAum)}`, `AUM turun di bawah ${idr(cfg.minAum)}`), '', ICONS.xCircle),
+    kpi(bL('Net subs', 'Nett subs'), idr(joined.reduce((a, x) => a + x.netNow, 0)), bL(`of ${idr(joined.reduce((a, x) => a + x.subs, 0))} bought`, `dari ${idr(joined.reduce((a, x) => a + x.subs, 0))} dibeli`), '', ICONS.coin),
+    kpi(bL('Bonus to send', 'Bonus siap dikirim'), idr(people.reduce((a, x) => a + x.earned, 0)), lastDone ? bL(`months done, last ${lastDone}`, `bulan selesai, terakhir ${lastDone}`) : bL('no month finished yet', 'belum ada bulan selesai'), '', ICONS.coin),
+    kpi(bL('This month so far', 'Bulan ini sejauh ini'), idr(people.reduce((a, x) => a + x.running, 0)), bL(`+ ${idr(people.reduce((a, x) => a + x.pending, 0))} waiting for ${idr(cfg.minNetSubs)}`, `+ ${idr(people.reduce((a, x) => a + x.pending, 0))} menunggu ${idr(cfg.minNetSubs)}`), '', ICONS.hourglass),
+  ].join('');
+
+  genTable('#hbCustomers', people.map((x) => ({
+    name: bEsc(x.name || 'n/a'), sid: bEsc(x.sid || ''), ifua: bEsc(x.ifua || ''), email: bEsc(x.email || ''), phone: bEsc(x.phone || ''),
+    start_aum: x.start_aum, lowest_aum: x.lowest_aum, latest_aum: x.latest_aum,
+    subs: x.subs, redeemed: x.redeemed, net: x.netNow, qualified: x.qualifiedOn, earned: x.earned, running: x.running,
+    pending: x.pending, forfeited: x.forfeited, status: hbStatus(x.status, x) + (x.capReached ? bL(', cap reached', ', batas tercapai') : ''),
+  })).sort((a, b) => b.subs - a.subs || b.start_aum - a.start_aum), [
+    { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' }, { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') },
+    { key: 'start_aum', label: bL(`AUM ${cfg.aumStartDate}`, `AUM ${cfg.aumStartDate}`), type: 'idr' }, { key: 'lowest_aum', label: bL('Lowest AUM since', 'AUM terendah sejak itu'), type: 'idr' },
+    { key: 'latest_aum', label: bL('Latest AUM', 'AUM terbaru'), type: 'idr' },
+    { key: 'subs', label: bL('Program buys', 'Beli program'), type: 'idr', sum: true }, { key: 'redeemed', label: bL('SAM redemptions', 'Redemption SAM'), type: 'idr', sum: true },
+    { key: 'net', label: bL('Net subs now', 'Nett subs sekarang'), type: 'idr', sum: true },
+    { key: 'qualified', label: bL(`Reached ${idr(cfg.minNetSubs)} on`, `Capai ${idr(cfg.minNetSubs)}`), type: 'date' },
+    { key: 'earned', label: bL('Bonus, months done', 'Bonus bulan selesai'), type: 'idr', sum: true }, { key: 'running', label: bL('This month so far', 'Bulan ini sejauh ini'), type: 'idr', sum: true },
+    { key: 'pending', label: bL('Waiting', 'Tertunda'), type: 'idr', sum: true }, { key: 'forfeited', label: bL('Lost', 'Hangus'), type: 'idr', sum: true },
+    { key: 'status', label: 'Status' },
+  ], bL('No customer had the minimum AUM on the start date.', 'Tidak ada nasabah dengan AUM minimum pada tanggal awal.'));
+
+  const monthSel = $('#hbMonth');
+  const monthsAll = [...new Set(people.flatMap((x) => x.months.filter((r) => r.amount > 0).map((r) => r.m)))].sort();
+  if (monthSel.dataset.filled !== monthsAll.join()) {
+    const keep = monthSel.value;
+    monthSel.innerHTML = `<option value="">${bL('Every month', 'Semua bulan')}</option>` + monthsAll.map((m) => `<option${m === keep ? ' selected' : ''}>${m}</option>`).join('');
+    monthSel.dataset.filled = monthsAll.join();
+  }
+  const pickM = monthSel.value;
+  genTable('#hbMonthly', people.flatMap((x) => x.months.filter((r) => r.amount > 0 && (!pickM || r.m === pickM)).map((r) => ({
+    m: r.m, name: bEsc(x.name || 'n/a'), sid: bEsc(x.sid || ''), ifua: bEsc(x.ifua || ''), email: bEsc(x.email || ''),
+    amount: r.amount, due: r.due, status: hbStatus(r.state),
+  }))).sort((a, b) => (a.m < b.m ? 1 : a.m > b.m ? -1 : 0)), [
+    { key: 'm', label: bL('Month', 'Bulan') }, { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' }, { key: 'email', label: 'Email' },
+    { key: 'amount', label: bL(`Bonus in ${cfg.bonusFund} units`, `Bonus dalam unit ${cfg.bonusFund}`), type: 'idr', sum: true },
+    { key: 'due', label: bL(`Send by (${cfg.payoutTradingDays} trading days)`, `Kirim paling lambat (${cfg.payoutTradingDays} hari bursa)`), type: 'date' }, { key: 'status', label: 'Status' },
+  ], bL('No bonus to send yet.', 'Belum ada bonus untuk dikirim.'));
+
+  genTable('#hbLots', joined.flatMap((x) => [
+    ...x.lots.map((l) => ({ name: bEsc(x.name || 'n/a'), sid: bEsc(x.sid || ''), kind: bL('Buy', 'Beli'), fund: bEsc(l.fund || ''), rate: l.rate ? `${l.rate}%` : '0%',
+      day: l.orderDay, start: l.start, amount: l.amount, remaining: l.remaining, mark: l.mark, bonus: Math.round(l.bonus) })),
+    ...x.reds.map((r) => ({ name: bEsc(x.name || 'n/a'), sid: bEsc(x.sid || ''), kind: r.type === 'sell' ? bL('Redemption', 'Redemption') : bL('Switch to a non-SAM fund', 'Switching ke non-SAM'),
+      fund: bEsc(r.fund || ''), rate: '', day: r.day, start: null, amount: -r.amount, remaining: null, mark: null, bonus: null })),
+  ]).sort((a, b) => (a.sid < b.sid ? -1 : a.sid > b.sid ? 1 : a.day < b.day ? -1 : 1)), [
+    { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'kind', label: bL('Type', 'Jenis') }, { key: 'fund', label: bL('Product', 'Produk') },
+    { key: 'rate', label: bL('Rate p.a.', 'Rate p.a.') }, { key: 'day', label: bL('Order date', 'Tanggal order'), type: 'date' }, { key: 'start', label: bL('Completed', 'Berhasil'), type: 'date' },
+    { key: 'amount', label: bL('Amount', 'Nominal'), type: 'idr' }, { key: 'remaining', label: bL('Left after FIFO', 'Sisa setelah FIFO'), type: 'idr' },
+    { key: 'mark', label: bL(`${cfg.holdMonths} month held on`, `Genap ${cfg.holdMonths} bulan`), type: 'date' }, { key: 'bonus', label: bL('Bonus accrued', 'Bonus terkumpul'), type: 'idr', sum: true },
+  ], bL('No program purchase yet.', 'Belum ada pembelian program.'));
+
+  renderHnwiRules(cfg);
+}
+
+function renderHnwiRules(cfg) {
+  const li = (en, id) => `<li>${bL(en, id)}</li>`;
+  $('#hbRules').innerHTML = `<ul>
+    ${cfg.excludeInstitutions ? li('Individuals only: institutional accounts (users.is_institution) do not take part.', 'Hanya perorangan: akun institusi (users.is_institution) tidak ikut.') : li('Institutional accounts take part too.', 'Akun institusi ikut juga.')}
+    ${li(`Candidates: total AUM (every product) of ${idr(cfg.minAum)}+ on ${cfg.aumStartDate}, from the daily portfolio_with_code snapshot. AUM is then checked every day; one day under ${idr(cfg.minAum)} and the customer is out for good, and bonus not yet paid is lost.`, `Kandidat: AUM total (semua produk) ${idr(cfg.minAum)}+ pada ${cfg.aumStartDate}, dari snapshot harian portfolio_with_code. Lalu AUM dicek setiap hari; sekali saja di bawah ${idr(cfg.minAum)}, nasabah gugur permanen dan bonus yang belum dibayar hangus.`)}
+    ${li(`Program purchases: completed buys of ${bEsc(cfg.samManager)} funds ordered ${cfg.purchaseFrom} to ${cfg.purchaseTo}, fresh money only (switching in and bonus payouts do not count).`, `Pembelian program: beli completed produk ${bEsc(cfg.samManager)} yang diorder ${cfg.purchaseFrom} s.d. ${cfg.purchaseTo}, hanya fresh fund (switching masuk dan pembayaran bonus tidak dihitung).`)}
+    ${li(`Every redemption of a ${bEsc(cfg.samManager)} fund from ${cfg.programFrom} to ${cfg.programTo} (a sale, or switching to a fund of another manager) reduces the program purchases, oldest first (FIFO), across products; one made before a purchase reduces the next one. Switching between their own funds is not a redemption and keeps the rate of the product first bought.`, `Setiap redemption produk ${bEsc(cfg.samManager)} dari ${cfg.programFrom} s.d. ${cfg.programTo} (jual, atau switching ke produk manajer lain) mengurangi pembelian program, yang tertua dulu (FIFO), lintas produk; redemption sebelum ada pembelian memotong pembelian berikutnya. Switching antar produk mereka sendiri bukan redemption dan rate tetap rate produk pembelian awal.`)}
+    ${li(`Bonus per day = what is left of each purchase x its rate a year / 365, from the day it completed. The part redeemed before ${cfg.holdMonths} month(s) earns nothing; the first month is paid in the month the purchase completes ${cfg.holdMonths} month(s).`, `Bonus per hari = sisa tiap pembelian x rate per tahun / 365, sejak hari transaksi berhasil. Bagian yang di-redeem sebelum ${cfg.holdMonths} bulan tidak dapat bonus; bulan pertama dibayar di bulan saat pembelian genap ${cfg.holdMonths} bulan.`)}
+    ${li(`Net subs (program purchases minus redemptions) must reach ${idr(cfg.minNetSubs)} by ${cfg.purchaseTo}; bonus before that waits and is paid in the month it is reached. Not reached by then: no bonus.`, `Nett subs (pembelian program dikurangi redemption) harus mencapai ${idr(cfg.minNetSubs)} paling lambat ${cfg.purchaseTo}; bonus sebelum itu tertunda dan dibayar di bulan saat tercapai. Tidak tercapai: tidak ada bonus.`)}
+    ${li(`At most ${idrFull(cfg.maxBonus)} per customer over the program. Paid monthly in ${bEsc(cfg.bonusFund)} units, within ${cfg.payoutTradingDays} trading days after the month (weekends skipped; other exchange holidays are not).`, `Maksimal ${idrFull(cfg.maxBonus)} per nasabah selama program. Dibayar tiap bulan dalam unit ${bEsc(cfg.bonusFund)}, paling lambat ${cfg.payoutTradingDays} hari bursa setelah bulan selesai (akhir pekan dilewati; libur bursa lain tidak).`)}
+    ${li(`Funds of ${bEsc(cfg.samManager)} not in the rate table count toward the minimum but earn 0.`, `Produk ${bEsc(cfg.samManager)} yang tidak ada di tabel rate dihitung untuk minimum tapi rate-nya 0.`)}
+  </ul>`;
+  genTable('#hbRates', cfg.rates.flatMap((tier) => tier.funds.map((f) => ({ fund: bEsc(f.name), rate: `${tier.pct}%`, example: Math.round(500000000 * tier.pct / 100) }))), [
+    { key: 'fund', label: bL('Product', 'Produk') }, { key: 'rate', label: bL('Bonus rate a year', 'Rate bonus per tahun') },
+    { key: 'example', label: bL('A year on Rp 500 jt', 'Setahun untuk Rp 500 jt'), type: 'idr' },
+  ], '');
+}
+
 // PROMO RECAP: who bought with a promo code (payouts excluded), every promo
 // participation (bonus_portfolios: on_going = waiting for the holding date,
 // succeeded = eligible, redeemed = withdrawn early) with how long the promo
@@ -8167,6 +8382,7 @@ function switchTab(name) {
   }
   if (name === 'booth-event' && !BOOTH.data && !BOOTH.loading) loadBoothEvent();
   if (name === 'promo-recap' && !PR.data && !PR.loading) loadPromoRecap();
+  if (name === 'hnwi-bonus' && !HB.data && !HB.loading) loadHnwiBonus();
   if (name === 'send-statement') { loadSsLog(); loadSchedules('statement'); loadExclusions(); }
   if (name === 'send-fund-performance') { loadFpeLog(); loadSchedules('fund_performance'); loadExclusions(); }
 }
@@ -8294,6 +8510,7 @@ function repaintActiveTab() {
     case 'portfolio-sinvest': if (psiSelected) loadPsiUser(); break;
     case 'booth-event': renderBoothEvent(); break;
     case 'promo-recap': renderPromoRecap(); break;
+    case 'hnwi-bonus': renderHnwiBonus(); break;
     case 'event-code':
       renderEvcRecap(); renderEvcPortfolio(); renderEvcUsers();
       renderEvcCohort('#evcCohortRegHeatmap', evcCohortRows.reg); renderEvcCohort('#evcCohortTxHeatmap', evcCohortRows.tx);
@@ -8478,6 +8695,8 @@ function wire() {
   $('#beReload').addEventListener('click', loadBoothEvent);
   $('#prApply').addEventListener('click', loadPromoRecap);
   $('#prStatus').addEventListener('change', renderPromoRecap);
+  $('#hbMonth').addEventListener('change', renderHnwiBonus);
+  $('#hbReload').addEventListener('click', loadHnwiBonus);
   $('#ssBatchRecipientType').addEventListener('change', () => batchGroupChanged('statement', 'ssBatch'));
   $('#ssBatchCsv').addEventListener('change', () => loadBatchCsv($('#ssBatchCsv'), $('#ssBatchInput'), true));
   $('#fpeCsv').addEventListener('change', () => loadBatchCsv($('#fpeCsv'), $('#fpePasteEmails'), false));
