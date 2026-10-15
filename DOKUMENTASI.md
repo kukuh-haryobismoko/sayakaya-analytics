@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `3312806 (2026-10-14)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `c1ad276 (2026-10-15)`.
 
 ## Cara membaca dokumen ini
 
@@ -399,6 +399,7 @@ Hasil pipeline perhitungan fee: fee harian per manajer investasi dan snapshot po
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `INFORMATION_SCHEMA` |  | HNWI, Overview, Referral activity |
 | `mi_fee` | Fee harian per fund dan AUM harian platform. | AUM history, Forecast & churn |
 | `portfolio_fix` | Versi portfolio_with_code dengan harga beli rata-rata yang sudah dikoreksi. | Event code tracking, Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Referral program, Referral program (KYC based), Send e-statement & portfolio |
 | `portfolio_with_code` | Snapshot portofolio harian per investor (sumber "PWC"), mulai 14 Januari 2026. | HNWI, Overview, Portfolio (PWC), Portfolio Explorer (GS), Referral activity, Remisier sharing (PWC), Revenue (PWC), Revenue trend, User lifetime |
@@ -497,7 +498,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `overview`
   - Endpoint: `GET /api/overview`, `GET /api/trends`, `GET /api/breakdown/:dimension`, `GET /api/funds/top/latest-date`, `GET /api/funds/top`, `GET /api/users/growth`, `GET /api/users/verification`, `GET /api/users/by-province`, `GET /api/users/top-cities`, `GET /api/users/top-cities-aum`
   - Fungsi query (`server/queries.js`): `breakdownBy`, `largestFundsAum`, `largestFundsLatestDate`, `overviewFunds`, `overviewTx`, `overviewUsers`, `platformAumAsOf`, `topCitiesByAum`, `topCitiesByInvestors`, `trends`, `userGrowth`, `usersByProvince`, `verificationBreakdown`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.geo`, `main.investment_managers`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.geo`, `main.investment_managers`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-aum"></a>
 #### AUM history
@@ -789,7 +790,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `hnwi`
   - Endpoint: `GET /api/hnwi/latest-date`, `GET /api/hnwi/total`, `GET /api/hnwi/by-fund`
   - Fungsi query (`server/queries.js`): `hnwiByFund`, `hnwiLatestDate`, `hnwiTotal`
-  - Tabel BigQuery yang disentuh: `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.user_profiles`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-top-investors"></a>
 #### Top investors
@@ -1254,7 +1255,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `kalcer`
   - Endpoint: `GET /api/kalcer/latest-date`, `GET /api/kalcer/summary`, `GET /api/kalcer/detail`
   - Fungsi query (`server/queries.js`): `kalcerAmbassadorSummary`, `kalcerLatestDate`, `kalcerReferralDetail`
-  - Tabel BigQuery yang disentuh: `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-event-code"></a>
 #### Event code tracking
