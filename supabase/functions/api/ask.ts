@@ -69,7 +69,8 @@ portfolio_with_code (FULL PATH: \`sayakaya.mi_fee_logs.portfolio_with_code\` —
   fund_type STRING, total_unit NUMERIC (units held, > 0 = open position), avg_buy_price NUMERIC,
   buy_amount NUMERIC (cost basis), latest_nav_value NUMERIC, amount NUMERIC (that holding's value on that day),
   created_at TIMESTAMP — the snapshot's actual date is created_at's date MINUS 1 day, so match a
-  specific date with DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date, not DATE(created_at) directly.
+  specific date with DATE(created_at) = DATE_ADD(@date, INTERVAL 1 DAY) (the table is partitioned on
+  DATE(created_at); wrapping the column in DATE_SUB makes BigQuery scan every partition).
   Doesn't distinguish regular vs bonus holdings (unlike portfolios/bonus_portfolios below).
 
 Which holdings/AUM source to use:
@@ -80,7 +81,7 @@ Which holdings/AUM source to use:
     bonus_portfolios only hold today's state. Join users via sid_code (there is no user_id here):
       SELECT ... FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` pwc
       JOIN \`sayakaya.main.users\` u ON u.sid_code = pwc.sid_code
-      WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) = @date AND pwc.total_unit > 0
+      WHERE DATE(pwc.created_at) = DATE_ADD(@date, INTERVAL 1 DAY) AND pwc.total_unit > 0
 
 investment_managers
   id, name STRING

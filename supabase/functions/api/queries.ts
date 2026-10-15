@@ -1096,6 +1096,14 @@ export const goalUserHoldingsByGoal = (userId: string, asOfDate: string): Query 
 // is that holding's value on that day).
 const PORT_WITH_CODE = '`sayakaya.mi_fee_logs.portfolio_with_code`';
 
+// Partitioned by DATE(created_at). Filters shift the parameter, not the
+// column (DATE(created_at) = @date + 1 day), so BigQuery reads one partition
+// instead of the whole table. The newest snapshot date comes from partition
+// metadata (~10 MB billed) rather than a MAX over every row (~0.5 GB).
+const PWC_LATEST_DATE_SQL = `SELECT DATE_SUB(PARSE_DATE('%Y%m%d', MAX(partition_id)), INTERVAL 1 DAY) AS latest_date
+  FROM \`sayakaya.mi_fee_logs.INFORMATION_SCHEMA.PARTITIONS\`
+  WHERE table_name = 'portfolio_with_code' AND partition_id NOT IN ('__NULL__', '__UNPARTITIONED__') AND total_rows > 0`;
+
 // Daily total AUM time series for one user — for the AUM-over-time chart.
 export const userAumHistory = (sid: string): Query => ({
   sql: `SELECT FORMAT_DATE('%Y-%m-%d', DATE(created_at)) AS bucket, SUM(amount) AS amount
@@ -1176,7 +1184,7 @@ export const userHoldingsAsOf = (sid: string, date: string): Query => ({
         buy_amount, latest_nav_value,
         DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS nav_date
       FROM ${PORT_WITH_CODE}
-      WHERE sid_code = @sid AND DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND total_unit > 0
+      WHERE sid_code = @sid AND DATE(created_at) = DATE_ADD(CAST(@date AS DATE), INTERVAL 1 DAY) AND total_unit > 0
     ),
     canon_nav AS (
       SELECT product_id AS fund_id, value AS nav
@@ -1251,7 +1259,7 @@ export const userHoldingsAsOfFix = (sid: string, date: string): Query => ({
         buy_amount, latest_nav_value,
         DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS nav_date
       FROM ${PORT_FIX}
-      WHERE sid_code = @sid AND DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND total_unit > 0
+      WHERE sid_code = @sid AND DATE(created_at) = DATE_ADD(CAST(@date AS DATE), INTERVAL 1 DAY) AND total_unit > 0
     ),
     canon_nav AS (
       SELECT product_id AS fund_id, value AS nav
@@ -1324,7 +1332,7 @@ export const allRegisteredUsersWithEmail = (): Query => ({
 // represents). Two shapes: one row per investor (total AUM across funds), and
 // one row per investor per fund (for a full breakdown export).
 export const hnwiLatestDate = (): Query => ({
-  sql: `SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS latest_date FROM ${PORT_WITH_CODE}`,
+  sql: PWC_LATEST_DATE_SQL,
   params: {},
 });
 
@@ -1344,7 +1352,7 @@ function hnwiBase(date: string) {
         SELECT sid_code, id AS fund_id, fund AS fund_name, amount,
           DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS aum_date
         FROM ${PORT_WITH_CODE}
-        WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND amount > 0
+        WHERE DATE(created_at) = DATE_ADD(CAST(@date AS DATE), INTERVAL 1 DAY) AND amount > 0
       ),
       per_user AS (
         SELECT sid_code, SUM(amount) AS total_aum, ANY_VALUE(aum_date) AS aum_date
@@ -1541,7 +1549,7 @@ export const dormantRepeatBuyers = (): Query => ({
 // guessing at it risks misstating who's owed money. This only reports
 // referral activity and AUM, nothing about what anyone is paid for it.
 export const kalcerLatestDate = (): Query => ({
-  sql: `SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS latest_date FROM ${PORT_WITH_CODE}`,
+  sql: PWC_LATEST_DATE_SQL,
   params: {},
 });
 
@@ -1555,7 +1563,7 @@ function kalcerBase(date: string) {
       invitee_aum AS (
         SELECT sid_code, SUM(amount) AS aum
         FROM ${PORT_WITH_CODE}
-        WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND amount > 0
+        WHERE DATE(created_at) = DATE_ADD(CAST(@date AS DATE), INTERVAL 1 DAY) AND amount > 0
         GROUP BY sid_code
       )`,
     params: { date },
@@ -3329,7 +3337,7 @@ export const aumByManager = (limit: number | string = 15): Query => {
 // (is_total) is the grand total; its investors are counted once even when
 // they hold several funds, which a sum of the rows above would double count.
 export const largestFundsLatestDate = (): Query => ({
-  sql: `SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS latest_date FROM ${PORT_WITH_CODE}`,
+  sql: PWC_LATEST_DATE_SQL,
   params: {},
 });
 
@@ -3343,7 +3351,7 @@ export const largestFundsAum = (groupBy = 'fund', date?: string, excludeFunds: s
     sql: `WITH latest AS (
         SELECT sid_code, id AS fund_id, amount
         FROM ${PORT_WITH_CODE}
-        WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = @date AND total_unit > 0${userFilterClause(params, 'sid_code', userFilter, 'sid_code')}
+        WHERE DATE(created_at) = DATE_ADD(CAST(@date AS DATE), INTERVAL 1 DAY) AND total_unit > 0${userFilterClause(params, 'sid_code', userFilter, 'sid_code')}
       ),
       joined AS (
         SELECT ${label} AS label, l.amount, l.sid_code
@@ -3389,7 +3397,7 @@ export const platformAumAsOf = (date?: string, fundIds: string[] = [], userFilte
         COUNT(DISTINCT p.sid_code) AS investing_users
       FROM ${PORT_WITH_CODE} p
       JOIN ${FUNDS} f ON f.id = p.id
-      WHERE DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY) = @date AND p.total_unit > 0 AND f.listing_status = 'ACTIVE'${fundFilter}`,
+      WHERE DATE(p.created_at) = DATE_ADD(CAST(@date AS DATE), INTERVAL 1 DAY) AND p.total_unit > 0 AND f.listing_status = 'ACTIVE'${fundFilter}`,
     params,
   };
 };
@@ -4091,7 +4099,7 @@ function revenueCTEs(from?: string, to?: string, granularity = 'month', fund = '
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
         LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
-        WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) BETWEEN @from AND @to
+        WHERE DATE(pwc.created_at) BETWEEN DATE_ADD(CAST(@from AS DATE), INTERVAL 1 DAY) AND DATE_ADD(CAST(@to AS DATE), INTERVAL 1 DAY)
           AND ${FUND_MI_FILTER_SQL}
         GROUP BY DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY), pwc.id, f.sinvest_code, f.name,
           COALESCE(im.common_name, im.name)
@@ -4382,7 +4390,7 @@ function remisierRevenuePwcCTEs(field: string, code: string, from?: string, to?:
         JOIN matched_users mu ON mu.sid = pwc.sid_code
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
-        WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) BETWEEN @from AND @to
+        WHERE DATE(pwc.created_at) BETWEEN DATE_ADD(CAST(@from AS DATE), INTERVAL 1 DAY) AND DATE_ADD(CAST(@to AS DATE), INTERVAL 1 DAY)
       ),
       daily AS (
         SELECT created_date AS date, fund_id, sinvest_code,
@@ -4689,7 +4697,7 @@ export const hnwiBonusCandidates = ({ promoCodes, purchaseFrom, purchaseTo, star
     snap AS (
       SELECT sid_code, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS d, SUM(CAST(amount AS FLOAT64)) AS aum
       FROM ${PORT_WITH_CODE}
-      WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) BETWEEN @start_d AND @to
+      WHERE DATE(created_at) BETWEEN DATE_ADD(CAST(@start_d AS DATE), INTERVAL 1 DAY) AND DATE_ADD(CAST(@to AS DATE), INTERVAL 1 DAY)
       GROUP BY 1, 2
     ),
     days AS (SELECT DISTINCT d FROM snap WHERE d > @start_d),
@@ -5460,7 +5468,7 @@ function userLifetimeCTEs(from?: string, to?: string, fund = '', mi = '', sid = 
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
         LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
-        WHERE DATE_SUB(DATE(pwc.created_at), INTERVAL 1 DAY) BETWEEN @from AND @to
+        WHERE DATE(pwc.created_at) BETWEEN DATE_ADD(CAST(@from AS DATE), INTERVAL 1 DAY) AND DATE_ADD(CAST(@to AS DATE), INTERVAL 1 DAY)
           AND pwc.sid_code IS NOT NULL
           AND (@sid = '' OR pwc.sid_code = @sid)
           AND ${FUND_MI_FILTER_SQL}
