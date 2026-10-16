@@ -1059,6 +1059,7 @@ const ANALYSIS_ROUTES: [string, string, Record<string, (from?: string, to?: stri
   }],
   ['product-funnel', 'product-funnel', {
     steps: Q.productFunnelSteps, timing: Q.productFunnelTiming, stops: Q.productFunnelStops, installs: Q.productFunnelInstalls,
+    uninstalls: Q.productFunnelUninstalls,
   }],
 ];
 for (const [tab, prefix, builders] of ANALYSIS_ROUTES) {

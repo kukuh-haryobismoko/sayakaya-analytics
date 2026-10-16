@@ -952,6 +952,7 @@ function createApp({ serveStatic = true } = {}) {
     }],
     ['product-funnel', 'product-funnel', {
       steps: Q.productFunnelSteps, timing: Q.productFunnelTiming, stops: Q.productFunnelStops, installs: Q.productFunnelInstalls,
+      uninstalls: Q.productFunnelUninstalls,
     }],
   ];
   ANALYSIS_ROUTES.forEach(([tab, prefix, builders]) => Object.entries(builders).forEach(([key, build]) => (

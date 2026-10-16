@@ -234,6 +234,19 @@ const pfnTiming = [
 const pfnInstalls = [
   { dimension: 'all', value: 'all', installs: 900, existing_account: 310, new_device: 590, guest: 480, viewed_fund: 70, started_signup: 260, new_account: 190, android: 712, uninstalled: 395, median_min_to_start: 0.6 },
   { dimension: 'platform', value: 'ANDROID', installs: 712, existing_account: 230, new_device: 482, guest: 380, viewed_fund: 55, started_signup: 210, new_account: 139, android: 712, uninstalled: 395, median_min_to_start: 0.6 },
+  { dimension: 'platform', value: 'IOS', installs: 188, existing_account: 80, new_device: 108, guest: 100, viewed_fund: 15, started_signup: 50, new_account: 51, android: 0, uninstalled: 0, median_min_to_start: 0.5 },
+  { dimension: 'day', value: 'ANDROID', day: '2026-10-02', installs: 26, existing_account: 15, new_device: 11, guest: 9, started_signup: 9, new_account: 7, new_verified: 7, new_paid: 0, android: 26, uninstalled: 7 },
+  { dimension: 'day', value: 'IOS', day: '2026-10-02', installs: 12, existing_account: 4, new_device: 8, guest: 8, started_signup: 8, new_account: 8, new_verified: 5, new_paid: 0, android: 0, uninstalled: 0 },
+  { dimension: 'day', value: 'ANDROID', day: '2026-10-01', installs: 6, existing_account: 0, new_device: 6, guest: 5, started_signup: 5, new_account: 4, new_verified: 4, new_paid: 1, android: 6, uninstalled: 2 },
+];
+const pfnUninstalls = [
+  { dimension: 'all', value: 'all', uninstalls: 127, with_account: 61, verified: 33, paid_before: 31, holders: 7, holder_aum: '873997168.97', came_back: 6, median_days_installed: 7.5 },
+  { dimension: 'day', value: '2026-10-08', uninstalls: 21, with_account: 5, verified: 3, paid_before: 2, holders: 2, holder_aum: '25997261.4', came_back: 1, median_days_installed: 0 },
+  { dimension: 'day', value: '2026-10-01', uninstalls: 7, with_account: 3, verified: 2, paid_before: 1, holders: 0, holder_aum: '0', came_back: 0, median_days_installed: 153.8 },
+  { dimension: 'stage', value: 'holder', uninstalls: 7, with_account: 7, verified: 7, paid_before: 7, holders: 7, holder_aum: '873997168.97', came_back: 2, median_days_installed: 923.2 },
+  { dimension: 'stage', value: 'no_account', uninstalls: 66, with_account: 0, verified: 0, paid_before: 0, holders: 0, holder_aum: '0', came_back: 0, median_days_installed: 1.4 },
+  { dimension: 'tenure', value: 'd0_1', uninstalls: 49, with_account: 18, verified: 8, paid_before: 8, holders: 0, holder_aum: '0', came_back: 3, median_days_installed: 0 },
+  { dimension: 'last_screen', value: XSS, uninstalls: 2, with_account: 0, verified: 0, paid_before: 0, holders: 0, holder_aum: '0', came_back: 0, median_days_installed: 0 },
 ];
 const emailSummary = {
   totals: { sent: 12, failed: 1, recipients: 10, delivered: 11, opened: 6, clicked: 2, bounced: 1, complained: 0, opens: 9, clicks: 3 },
@@ -382,6 +395,7 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/product-funnel/stops'))        return pfnStops;
   if (path.startsWith('/api/product-funnel/timing'))       return pfnTiming;
   if (path.startsWith('/api/product-funnel/installs'))     return pfnInstalls;
+  if (path.startsWith('/api/product-funnel/uninstalls'))   return pfnUninstalls;
   if (path.startsWith('/api/email-recap/summary'))         return emailSummary;
   if (path.startsWith('/api/email-recap/log'))             return emailLog;
   if (path.startsWith('/api/engagement/segments'))         return bhSegments;
@@ -445,7 +459,7 @@ sandbox.api = async (path) => {
   if (!get('#evcUsersTable')._html.includes('Sold everything')) errors.push('#evcUsersTable: portfolio status label missing');
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnFunnelTable', '#pfnStopsTable', '#pfnSplitTable', '#pfnWeeksTable', '#pfnTimingTable', '#pfnInstallsTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#egSegmentTable', '#egPushTable', '#egProductTable', '#saIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnFunnelTable', '#pfnStopsTable', '#pfnSplitTable', '#pfnWeeksTable', '#pfnTimingTable', '#pfnInstallsTable', '#pfnDailyTable', '#pfnUninstallsTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#egSegmentTable', '#egPushTable', '#egProductTable', '#saIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -546,6 +560,11 @@ sandbox.api = async (path) => {
     [get('#pfnWeeksTable')._html.includes('2026-10-05') && get('#pfnWeeksStory')._html.includes('2026-09-14'), '#pfnWeeksStory uses the latest week with 7 full days'],
     [get('#pfnTimingTable')._html.includes('14.4 h') && get('#pfnTimingStory')._html.includes('2.3 days'), '#pfnTimingTable formats durations'],
     [get('#pfnInstallsStory')._html.includes('900') && get('#pfnInstallsStory')._html.includes('395'), '#pfnInstallsStory written from the install rows'],
+    [!get('#pfnInstallsTable')._html.includes('2026-10-02'), '#pfnInstallsTable leaves the day rows to the daily panel'],
+    [get('#pfnDailyTable')._html.indexOf('2026-10-01') < get('#pfnDailyTable')._html.indexOf('2026-10-02') && get('#pfnDailyTable')._html.includes('>38<'), '#pfnDailyTable puts Android and iOS side by side per day, in date order'],
+    [get('#pfnDailyStory')._html.includes('2026-10-02') && get('#pfnDailyStory')._html.includes('188'), '#pfnDailyStory names the busiest day and the iOS total'],
+    [get('#pfnUninstallsTable')._html.indexOf('2026-10-01') < get('#pfnUninstallsTable')._html.indexOf('2026-10-08'), '#pfnUninstallsTable lists days in date order'],
+    [get('#pfnUninstallsStory')._html.includes('127') && get('#pfnUninstallsStory')._html.includes('49 (38.6%)'), '#pfnUninstallsStory written from the uninstall rows'],
   ]) {
     if (ok) console.log(`ok    ${label}`);
     else { console.log(`FAIL  ${label}`); errors.push(label); }

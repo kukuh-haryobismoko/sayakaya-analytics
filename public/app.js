@@ -2655,8 +2655,8 @@ EG_TAB.sections = [
 // Phones that started sign-up in the period (GA4), followed into the main
 // database once they log in. The funnel, the groups and the weeks all come
 // from one query (steps); see queries.js productFunnel*.
-const PFN_TAB = { id: 'product-funnel', prefix: 'pfn', cache: {}, loaded: false, coverage: false, charts: ['pfnFunnelChart', 'pfnWeeksChart'] };
-const pfnView = { segment: 'all:all', dim: 'method', weeks: '7d' };
+const PFN_TAB = { id: 'product-funnel', prefix: 'pfn', cache: {}, loaded: false, coverage: false, charts: ['pfnFunnelChart', 'pfnWeeksChart', 'pfnDailyChart'] };
+const pfnView = { segment: 'all:all', dim: 'method', weeks: '7d', daily: 'all', un: 'day' };
 const PFN_STEPS = ['started', 'otp', 'account', 'kyc_started', 'kyc_sent', 'verified', 'ordered', 'paid'].map((k) => [k, `pfn_step_${k}`, `pfn_src_${k}`]);
 const pfnRows = (dim) => (PFN_TAB.cache.steps || []).filter((r) => val(r.dimension) === dim);
 const pfnRow = (dim, v) => pfnRows(dim).find((r) => val(r.value) === v);
@@ -2864,7 +2864,9 @@ function renderPfnTiming() {
 function renderPfnInstalls() {
   const rows = PFN_TAB.cache.installs;
   if (!rows) return;
-  genTable('#pfnInstallsTable', rows.map((r) => ({
+  // Day rows feed the Downloads per day panel, not this table.
+  const groups = rows.filter((r) => val(r.dimension) !== 'day');
+  genTable('#pfnInstallsTable', groups.map((r) => ({
     ...r, value: val(r.dimension) === 'all' ? `<strong>${t('sa_split_all')}</strong>` : pfnLabel(val(r.dimension), val(r.value)),
     new_account_pct: nval(r.new_device) ? pctOf(nval(r.new_account), nval(r.new_device)) : null,
     uninstalled_pct: nval(r.android) ? pctOf(nval(r.uninstalled), nval(r.android)) : null,
@@ -2878,6 +2880,8 @@ function renderPfnInstalls() {
     { key: 'started_signup', label: t('pfn_col_started'), type: 'num' },
     { key: 'new_account', label: t('pfn_col_new_account'), type: 'num' },
     { key: 'new_account_pct', label: t('pfn_col_new_account_pct'), type: 'pct' },
+    { key: 'new_verified', label: t('pfn_col_new_verified'), type: 'num' },
+    { key: 'new_paid', label: t('pfn_col_new_paid'), type: 'num' },
     { key: 'uninstalled_pct', label: t('pfn_col_uninstalled'), type: 'pct' },
     { key: 'median_min_to_start', label: t('pfn_col_min_to_start') },
   ], t('pfn_installs_empty'));
@@ -2894,11 +2898,132 @@ function renderPfnInstalls() {
   ]);
 }
 
+// Downloads per day from the installs query's day rows (one per day and
+// platform). "Everyone" puts Android and iOS side by side, the shape of the
+// daily download report; one platform shows that platform's own funnel.
+// The chart always stacks both platforms. Uninstalls exist for Android only,
+// so the iOS view shows n/a there rather than a misleading 0.
+function renderPfnDaily() {
+  const rows = PFN_TAB.cache.installs;
+  if (!rows) return;
+  const days = new Map();
+  rows.filter((r) => val(r.dimension) === 'day').forEach((r) => {
+    const d = String(val(r.day));
+    if (!days.has(d)) days.set(d, {});
+    days.get(d)[val(r.value)] = r;
+  });
+  const keys = [...days.keys()].sort();
+  const n = (p, k) => (p ? nval(p[k]) : 0);
+  const sum = (g, k) => Object.values(g).reduce((a, r) => a + nval(r[k]), 0);
+  const plat = pfnView.daily;
+  const data = plat === 'all'
+    ? keys.map((d) => {
+      const g = days.get(d);
+      return {
+        day: d, dl_android: n(g.ANDROID, 'installs'), dl_ios: n(g.IOS, 'installs'), dl_total: sum(g, 'installs'),
+        new_android: n(g.ANDROID, 'new_device'), new_ios: n(g.IOS, 'new_device'), new_total: sum(g, 'new_device'),
+        new_account: sum(g, 'new_account'), new_verified: sum(g, 'new_verified'), new_paid: sum(g, 'new_paid'),
+        uninstalled: sum(g, 'uninstalled'),
+      };
+    })
+    : keys.map((d) => {
+      const p = days.get(d)[plat];
+      return {
+        day: d, installs: n(p, 'installs'), existing_account: n(p, 'existing_account'), new_device: n(p, 'new_device'),
+        guest: n(p, 'guest'), started_signup: n(p, 'started_signup'), new_account: n(p, 'new_account'),
+        new_verified: n(p, 'new_verified'), new_paid: n(p, 'new_paid'), uninstalled: plat === 'IOS' ? null : n(p, 'uninstalled'),
+      };
+    });
+  const col = (key, label) => ({ key, label: t(label), type: 'num', sum: true });
+  const tail = [
+    col('new_account', 'pfn_col_new_account'), col('new_verified', 'pfn_col_new_verified'), col('new_paid', 'pfn_col_new_paid'),
+    { ...col('uninstalled', 'pfn_col_uninstalled_n'), sum: plat !== 'IOS' },
+  ];
+  genTable('#pfnDailyTable', data, [
+    { key: 'day', label: t('pfn_col_day'), type: 'date' },
+    ...(plat === 'all' ? [
+      col('dl_android', 'pfn_col_dl_android'), col('dl_ios', 'pfn_col_dl_ios'), col('dl_total', 'pfn_col_dl_total'),
+      col('new_android', 'pfn_col_new_android'), col('new_ios', 'pfn_col_new_ios'), col('new_total', 'pfn_col_new_total'),
+    ] : [
+      col('installs', 'pfn_col_downloads'), col('existing_account', 'pfn_col_existing'), col('new_device', 'pfn_col_new_users'),
+      col('guest', 'pfn_col_guest'), col('started_signup', 'pfn_col_started'),
+    ]),
+    ...tail,
+  ], t('pfn_installs_empty'));
+  paint('pfnDailyChart', {
+    type: 'bar',
+    data: {
+      labels: keys,
+      datasets: [
+        { label: 'Android', data: keys.map((d) => n(days.get(d).ANDROID, 'installs')), backgroundColor: C.indigo, stack: 'dl' },
+        { label: 'iOS', data: keys.map((d) => n(days.get(d).IOS, 'installs')), backgroundColor: C.chartAmber, stack: 'dl' },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: C.grid } } },
+      plugins: { legend: { position: 'bottom' } },
+    },
+  });
+  const all = rows.find((r) => val(r.dimension) === 'all');
+  if (!all || !keys.length) { story('#pfnDailyStory', []); return; }
+  const platRow = (p) => rows.find((r) => val(r.dimension) === 'platform' && val(r.value) === p);
+  const top = keys.reduce((a, d) => (sum(days.get(d), 'installs') > sum(days.get(a), 'installs') ? d : a), keys[0]);
+  story('#pfnDailyStory', [tf('pfn_story_daily', {
+    installs: num(nval(all.installs)), android: num(n(platRow('ANDROID'), 'installs')), ios: num(n(platRow('IOS'), 'installs')),
+    fresh: num(nval(all.new_device)), day: top, top: num(sum(days.get(top), 'installs')),
+  })]);
+}
+
+// Android uninstalls (app_remove) in the period, one cut at a time. Stage and
+// time installed keep a fixed order (earliest to furthest); days run in date
+// order; screens and versions by count, screens capped at the top 15, so
+// that cut gets no total row.
+const PFN_UN_ORDER = {
+  stage: ['no_account', 'account', 'verified', 'paid_no_holdings', 'holder'],
+  tenure: ['d0_1', 'd1_7', 'd8_30', 'd31_90', 'd90_plus', 'unknown'],
+};
+function pfnUnLabel(dim, v) {
+  if (v === 'unknown') return t('an_unknown');
+  if (dim === 'stage') return t(`pfn_stage_${v}`);
+  if (dim === 'tenure') return t(`pfn_tenure_${v}`);
+  if (dim === 'last_screen' && v === '(none)') return t('pfn_un_no_screen');
+  return escapeHtml(v);
+}
+function renderPfnUninstalls() {
+  const rows = PFN_TAB.cache.uninstalls;
+  if (!rows) return;
+  const dim = pfnView.un;
+  let cut = rows.filter((r) => val(r.dimension) === dim);
+  if (dim === 'day') cut.sort((a, b) => String(val(a.value)).localeCompare(String(val(b.value))));
+  if (PFN_UN_ORDER[dim]) cut.sort((a, b) => PFN_UN_ORDER[dim].indexOf(val(a.value)) - PFN_UN_ORDER[dim].indexOf(val(b.value)));
+  if (dim === 'last_screen') cut = cut.slice(0, 15);
+  const sum = dim !== 'last_screen';
+  const col = (key, label, type = 'num') => ({ key, label: t(label), type, sum });
+  genTable('#pfnUninstallsTable', cut.map((r) => ({ ...r, value: pfnUnLabel(dim, String(val(r.value))) })), [
+    { key: 'value', label: t(`pfn_un_dim_${dim}`) },
+    col('uninstalls', 'pfn_col_uninstalls'), col('with_account', 'pfn_col_with_account'), col('verified', 'pfn_col_new_verified'),
+    col('paid_before', 'pfn_col_paid_before'), col('holders', 'pfn_col_holders'), col('holder_aum', 'pfn_col_holder_aum', 'idr'),
+    col('came_back', 'pfn_col_came_back'), { key: 'median_days_installed', label: t('pfn_col_days_installed') },
+  ], t('pfn_un_empty'));
+  const all = rows.find((r) => val(r.dimension) === 'all');
+  if (!all) { story('#pfnUninstallsStory', []); return; }
+  const fast = nval(rows.find((r) => val(r.dimension) === 'tenure' && val(r.value) === 'd0_1')?.uninstalls);
+  story('#pfnUninstallsStory', [
+    tf('pfn_story_un', {
+      n: num(nval(all.uninstalls)), acc: num(nval(all.with_account)), holders: num(nval(all.holders)),
+      aum: idr(nval(all.holder_aum)), back: num(nval(all.came_back)),
+    }),
+    fast ? tf('pfn_story_un_fast', { fast: num(fast), pct: pct(fast, nval(all.uninstalls)) }) : '',
+  ]);
+}
+
 PFN_TAB.sections = [
   ['product-funnel/steps', ['#pfnFunnelTable', '#pfnSplitTable', '#pfnWeeksTable'], () => { renderPfnFunnel(); renderPfnSplit(); renderPfnWeeks(); renderPfnStops(); }],
   ['product-funnel/stops', '#pfnStopsTable', renderPfnStops],
   ['product-funnel/timing', '#pfnTimingTable', renderPfnTiming],
-  ['product-funnel/installs', '#pfnInstallsTable', renderPfnInstalls],
+  ['product-funnel/installs', ['#pfnInstallsTable', '#pfnDailyTable'], () => { renderPfnInstalls(); renderPfnDaily(); }],
+  ['product-funnel/uninstalls', '#pfnUninstallsTable', renderPfnUninstalls],
 ];
 const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB];
 function loadSubscription() { return loadAnalysis(SA_TAB); }
@@ -8930,6 +9055,8 @@ function wire() {
   wireSeg('#pfnSegment', 'segment', (v) => { pfnView.segment = v; renderPfnFunnel(); });
   wireSeg('#pfnDim', 'dim', (v) => { pfnView.dim = v; renderPfnSplit(); });
   wireSeg('#pfnWeeksMode', 'mode', (v) => { pfnView.weeks = v; renderPfnWeeks(); });
+  wireSeg('#pfnDailyPlatform', 'platform', (v) => { pfnView.daily = v; renderPfnDaily(); });
+  wireSeg('#pfnUnDim', 'dim', (v) => { pfnView.un = v; renderPfnUninstalls(); });
   wireSeg('#rdProfileDim', 'dim', (v) => { rdView.dim = v; renderRdProfile(); });
   wireSeg('#egDiscoveryKind', 'kind', (v) => { egView.kind = v; renderEgDiscovery(); });
   $('#bhSearchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchBehaviorUsers(); });

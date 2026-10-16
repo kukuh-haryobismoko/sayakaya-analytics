@@ -3160,6 +3160,38 @@
         <div id="pfnInstallsStory" class="story" aria-live="polite"></div>
         <div id="pfnInstallsTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="pfn_daily_title">Downloads per day</h2>
+          <div class="seg" id="pfnDailyPlatform" role="group" data-i18n-aria-label="pfn_daily_platform_label" aria-label="Platform">
+            <button class="on" data-platform="all" aria-pressed="true" data-i18n="sa_split_all">Everyone</button>
+            <button data-platform="ANDROID" aria-pressed="false">Android</button>
+            <button data-platform="IOS" aria-pressed="false">iOS</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="pfn_daily_hint"></span>
+        <div id="pfnDailyStory" class="story" aria-live="polite"></div>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="pfnDailyChart" aria-label="Downloads per day, Android and iOS"></canvas></div>
+        <div id="pfnDailyTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="pfn_un_title">Uninstalls (Android)</h2>
+          <div class="seg" id="pfnUnDim" role="group" data-i18n-aria-label="pfn_un_dim_label" aria-label="Group by">
+            <button class="on" data-dim="day" aria-pressed="true" data-i18n="pfn_un_dim_day">Day</button>
+            <button data-dim="stage" aria-pressed="false" data-i18n="pfn_un_dim_stage">Account stage</button>
+            <button data-dim="tenure" aria-pressed="false" data-i18n="pfn_un_dim_tenure">Time installed</button>
+            <button data-dim="last_screen" aria-pressed="false" data-i18n="pfn_un_dim_last_screen">Last screen</button>
+            <button data-dim="app_version" aria-pressed="false" data-i18n="pfn_un_dim_app_version">App version</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="pfn_un_hint"></span>
+        <p class="lineage" data-i18n-html="pfn_lineage_un"></p>
+        <div id="pfnUninstallsStory" class="story" aria-live="polite"></div>
+        <div id="pfnUninstallsTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
     </section>
 
     <!-- USER BEHAVIOR: GA4 app events (analytics_266759216, user_id =

@@ -1938,7 +1938,10 @@ export const productFunnelStops = (from?: string, to?: string): Query => ({
 // (first_open) in the period, then with no end date: browsed as a guest,
 // opened a fund before logging in, started sign-up, created a new account,
 // or logged in to an account that existed before the install (a reinstall
-// or a new phone). Everyone, per platform and per first-touch source.
+// or a new phone). New accounts are followed on to KYC verified and a first
+// paid buy in the main database. Everyone, per platform, per first-touch
+// source, and per install day and platform (GA4 event_date, the property's
+// own day) for daily download reports.
 export const productFunnelInstalls = (from?: string, to?: string): Query => ({
   sql: `WITH ev AS (
         SELECT user_pseudo_id, user_id, platform, event_name, event_date, TIMESTAMP_MICROS(event_timestamp) AS ts,
@@ -1947,9 +1950,13 @@ export const productFunnelInstalls = (from?: string, to?: string): Query => ({
         WHERE _TABLE_SUFFIX >= @fromSuffix
       ),
       inst AS (
-        SELECT user_pseudo_id, MIN(ts) AS t_install, ARRAY_AGG(STRUCT(platform, source, medium) ORDER BY ts LIMIT 1)[OFFSET(0)] AS dims
+        SELECT user_pseudo_id, MIN(ts) AS t_install, ARRAY_AGG(STRUCT(platform, source, medium, event_date) ORDER BY ts LIMIT 1)[OFFSET(0)] AS dims
         FROM ev WHERE event_date BETWEEN @fromSuffix AND @toSuffix AND event_name = 'first_open'
         GROUP BY user_pseudo_id
+      ),
+      paid AS (
+        SELECT DISTINCT user_id FROM ${TX}
+        WHERE type = 'buy' AND status IN (${SUB_PAID_STATUSES}) AND IFNULL(payment_method, '') != 'manual_bonus'
       ),
       act AS (
         SELECT i.user_pseudo_id, ANY_VALUE(i.t_install) AS t_install, ANY_VALUE(i.dims) AS dims,
@@ -1963,22 +1970,103 @@ export const productFunnelInstalls = (from?: string, to?: string): Query => ({
       ),
       scored AS (
         SELECT a.*, IFNULL(a.dims.platform, 'unknown') AS platform, ${pfnSource('a.dims')} AS source,
+          FORMAT_DATE('%Y-%m-%d', PARSE_DATE('%Y%m%d', a.dims.event_date)) AS day,
           IFNULL(TIMESTAMP(u.created_at) < TIMESTAMP_SUB(a.t_install, INTERVAL 1 DAY), FALSE) AS existing,
-          IFNULL(TIMESTAMP(u.created_at) >= TIMESTAMP_SUB(a.t_install, INTERVAL 1 DAY), FALSE) AS new_account
-        FROM act a LEFT JOIN ${USERS} u ON u.id = a.uid
+          IFNULL(TIMESTAMP(u.created_at) >= TIMESTAMP_SUB(a.t_install, INTERVAL 1 DAY), FALSE) AS new_account,
+          IFNULL(u.verification_status = 'verified', FALSE) AS verified, p.user_id IS NOT NULL AS has_paid
+        FROM act a LEFT JOIN ${USERS} u ON u.id = a.uid LEFT JOIN paid p ON p.user_id = u.id
       )
-      SELECT CASE WHEN GROUPING(platform) = 0 THEN 'platform' WHEN GROUPING(source) = 0 THEN 'source' ELSE 'all' END AS dimension,
-        COALESCE(platform, source, 'all') AS value,
+      SELECT CASE WHEN GROUPING(day) = 0 THEN 'day' WHEN GROUPING(platform) = 0 THEN 'platform'
+          WHEN GROUPING(source) = 0 THEN 'source' ELSE 'all' END AS dimension,
+        COALESCE(platform, source, 'all') AS value, day,
         COUNT(*) AS installs, COUNTIF(existing) AS existing_account, COUNTIF(NOT existing) AS new_device,
         COUNTIF(NOT existing AND guest) AS guest, COUNTIF(NOT existing AND viewed_fund) AS viewed_fund,
         COUNTIF(NOT existing AND t_start IS NOT NULL) AS started_signup, COUNTIF(new_account) AS new_account,
+        COUNTIF(new_account AND verified) AS new_verified, COUNTIF(new_account AND has_paid) AS new_paid,
         COUNTIF(platform = 'ANDROID') AS android, COUNTIF(removed) AS uninstalled,
+        COUNTIF(NOT existing AND removed) AS new_uninstalled,
         ROUND(APPROX_QUANTILES(IF(existing, NULL, TIMESTAMP_DIFF(t_start, t_install, SECOND) / 60), 2)[OFFSET(1)], 1) AS median_min_to_start
       FROM scored
-      GROUP BY GROUPING SETS ((), (platform), (source))
-      ORDER BY dimension, installs DESC`,
+      GROUP BY GROUPING SETS ((), (platform), (source), (day, platform))
+      ORDER BY dimension, day, installs DESC`,
   params: ga4Range(range(from, to)),
 });
+
+// Uninstalls: every phone that sent app_remove in the period, whenever it
+// was installed. Only Android sends app_remove; iOS reports no uninstalls.
+// Per phone: the account it last used (the user_id on app_remove, else the
+// last user_id the phone logged in the 30 days before), where that account
+// stood (no account, account only, KYC verified, paid before but holds
+// nothing now, or still holds ACTIVE funds today, with their value), how long
+// the app had been installed (GA4 user_first_touch_timestamp), the last
+// screen it showed in those 30 days, and whether the account was used again
+// on any phone after the uninstall. Cut by day, stage, time installed, last
+// screen and app version.
+const PFN_UNINSTALL_LOOKBACK_DAYS = 30;
+export const productFunnelUninstalls = (from?: string, to?: string): Query => {
+  const r = ga4Range(range(from, to));
+  const back = new Date(`${r.from}T00:00:00Z`);
+  back.setUTCDate(back.getUTCDate() - PFN_UNINSTALL_LOOKBACK_DAYS);
+  return {
+    sql: `WITH ev AS (
+        SELECT user_pseudo_id, user_id, event_name, event_date, TIMESTAMP_MICROS(event_timestamp) AS ts,
+          IF(event_name = 'screen_view', ${GA4_SCREEN}, NULL) AS screen,
+          IF(event_name = 'app_remove', STRUCT(app_info.version AS app_version, user_first_touch_timestamp AS first_touch), NULL) AS rm
+        FROM ${GA4_EVENTS}
+        WHERE _TABLE_SUFFIX >= @lookbackSuffix
+      ),
+      removed AS (
+        SELECT user_pseudo_id, MIN(ts) AS t_remove,
+          ARRAY_AGG(STRUCT(event_date, user_id, rm.app_version, rm.first_touch) ORDER BY ts LIMIT 1)[OFFSET(0)] AS d
+        FROM ev WHERE event_name = 'app_remove' AND event_date BETWEEN @fromSuffix AND @toSuffix
+        GROUP BY user_pseudo_id
+      ),
+      dev AS (
+        SELECT r.user_pseudo_id, ANY_VALUE(r.t_remove) AS t_remove, ANY_VALUE(r.d) AS d,
+          ARRAY_AGG(e.user_id IGNORE NULLS ORDER BY e.ts DESC LIMIT 1)[SAFE_OFFSET(0)] AS last_uid,
+          ARRAY_AGG(e.screen IGNORE NULLS ORDER BY e.ts DESC LIMIT 1)[SAFE_OFFSET(0)] AS last_screen
+        FROM removed r LEFT JOIN ev e ON e.user_pseudo_id = r.user_pseudo_id AND e.ts <= r.t_remove
+        GROUP BY r.user_pseudo_id
+      ),
+      linked AS (SELECT *, COALESCE(d.user_id, last_uid) AS uid FROM dev),
+      came_back AS (
+        SELECT l.user_pseudo_id FROM linked l
+        JOIN ev e ON e.user_id = l.uid AND e.ts > l.t_remove AND e.event_name NOT IN (${GA4_PASSIVE_EVENTS})
+        GROUP BY l.user_pseudo_id
+      ),
+      holdings AS (SELECT user_id, SUM(amount) AS aum FROM (${HOLDINGS_NOW_SQL}) GROUP BY user_id),
+      paid AS (
+        SELECT DISTINCT user_id FROM ${TX}
+        WHERE type = 'buy' AND status IN (${SUB_PAID_STATUSES}) AND IFNULL(payment_method, '') != 'manual_bonus'
+      ),
+      base AS (
+        SELECT l.*, u.id AS user_id, IFNULL(u.verification_status = 'verified', FALSE) AS verified,
+          p.user_id IS NOT NULL AS paid_before, IFNULL(h.aum, 0) AS aum, c.user_pseudo_id IS NOT NULL AS returned,
+          TIMESTAMP_DIFF(l.t_remove, TIMESTAMP_MICROS(l.d.first_touch), MINUTE) / 1440 AS days_installed
+        FROM linked l LEFT JOIN ${USERS} u ON u.id = l.uid
+        LEFT JOIN paid p ON p.user_id = u.id LEFT JOIN holdings h ON h.user_id = u.id
+        LEFT JOIN came_back c ON c.user_pseudo_id = l.user_pseudo_id
+      ),
+      staged AS (
+        SELECT *,
+          CASE WHEN user_id IS NULL THEN 'no_account' WHEN aum > 0 THEN 'holder' WHEN paid_before THEN 'paid_no_holdings'
+            WHEN verified THEN 'verified' ELSE 'account' END AS stage,
+          CASE WHEN days_installed IS NULL THEN 'unknown' WHEN days_installed < 1 THEN 'd0_1' WHEN days_installed <= 7 THEN 'd1_7'
+            WHEN days_installed <= 30 THEN 'd8_30' WHEN days_installed <= 90 THEN 'd31_90' ELSE 'd90_plus' END AS tenure
+        FROM base
+      )
+      SELECT dm.dimension, dm.value,
+        COUNT(*) AS uninstalls, COUNT(user_id) AS with_account, COUNTIF(verified) AS verified, COUNTIF(paid_before) AS paid_before,
+        COUNTIF(aum > 0) AS holders, SUM(aum) AS holder_aum, COUNTIF(user_id IS NOT NULL AND returned) AS came_back,
+        ROUND(APPROX_QUANTILES(days_installed, 2)[OFFSET(1)], 1) AS median_days_installed
+      FROM staged, UNNEST([STRUCT('all' AS dimension, 'all' AS value),
+        ('day', FORMAT_DATE('%Y-%m-%d', PARSE_DATE('%Y%m%d', d.event_date))), ('stage', stage), ('tenure', tenure),
+        ('last_screen', IFNULL(last_screen, '(none)')), ('app_version', IFNULL(d.app_version, 'unknown'))]) dm
+      GROUP BY dm.dimension, dm.value
+      ORDER BY dm.dimension, uninstalls DESC`,
+    params: { ...r, lookbackSuffix: back.toISOString().slice(0, 10).replace(/-/g, '') },
+  };
+};
 
 // ---- User behavior: GA4 app events joined to the main database. GA4's
 // user_id is main.users.id (the app sets it at login), so in-app actions can
