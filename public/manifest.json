@@ -1,0 +1,16 @@
+{
+  "name": "Sayakaya Analytics",
+  "short_name": "Sayakaya",
+  "description": "Sayakaya analytics dashboard (BigQuery, live).",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#4d68dc",
+  "theme_color": "#4d68dc",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

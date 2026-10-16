@@ -9750,3 +9750,9 @@ async function init() {
 }
 
 init();
+
+// Installable app (PWA): register the service worker so Chrome/Android offers
+// "Install app"; iOS uses Share > Add to Home Screen. Failure is harmless.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
