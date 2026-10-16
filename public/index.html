@@ -165,7 +165,14 @@
         <div id="changePwErr" class="gate-err" style="margin-top:6px; font-size:11px"></div>
       </div>
 
+      <div class="nav-search" id="navSearch" role="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"></use></svg>
+        <input type="text" id="navSearchInput" data-i18n-placeholder="nav_search_ph" placeholder="Search tabs…  ( / )" data-i18n-aria-label="nav_search_aria" aria-label="Search tabs" autocomplete="off" spellcheck="false" />
+        <button type="button" id="navSearchClear" class="nav-search-clear hidden" data-i18n-aria-label="nav_search_clear" aria-label="Clear search">&times;</button>
+      </div>
+
       <nav class="nav">
+        <div id="navSearchEmpty" class="nav-search-empty hidden" data-i18n="nav_search_empty">No matching tab.</div>
         <div class="nav-group" data-group="dashboards">
           <div class="nav-label"><span data-i18n="nav_group_dashboards">Dashboards</span><span class="nav-group-caret"></span></div>
           <button class="nav-link active" data-tab="overview"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-bar-chart"></use></svg></span>Overview</button>

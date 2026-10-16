@@ -189,6 +189,33 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
 }
 .nav-link.active .nav-icon { opacity: 1; }
 
+/* Sidebar tab search — filters .nav-link live. Uses its own .nav-filtered
+   class (not .hidden) so permission-hidden tabs never reappear, and lets
+   matches inside a folded group show while searching without touching the
+   saved fold state. */
+.nav-search { position: relative; margin: 10px 12px 0; }
+.nav-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--sidebar-text); opacity: .7; pointer-events: none; }
+.nav-search input {
+  width: 100%; box-sizing: border-box; padding: 8px 30px 8px 32px;
+  border: 1px solid var(--sidebar-line); border-radius: 8px;
+  background: var(--sidebar-bg-alt); color: var(--sidebar-text-active);
+  font: inherit; font-size: 13px;
+}
+.nav-search input::placeholder { color: var(--sidebar-text); opacity: .6; }
+.nav-search input:focus { outline: none; border-color: var(--amber); }
+.nav-search-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 22px; border: 0; border-radius: 50%; padding: 0;
+  background: transparent; color: var(--sidebar-text); font-size: 16px; line-height: 1; cursor: pointer;
+}
+.nav-search-clear:hover { background: var(--sidebar-hover); color: var(--sidebar-text-active); }
+.nav-filtered { display: none !important; }
+.nav.nav-searching .nav-group.collapsed .nav-link:not(.nav-filtered) { display: flex; }
+.nav-link.nav-kbd { background: var(--sidebar-hover); color: var(--sidebar-text-active); }
+.nav-link mark { background: rgba(255, 190, 70, .35); color: inherit; border-radius: 2px; padding: 0 1px; }
+.nav-search-empty { padding: 14px 10px; font-size: 12.5px; color: var(--sidebar-text); opacity: .8; }
+.app-shell.sidebar-collapsed .nav-search { display: none; }
+
 .conn-status {
   display: flex; align-items: center; gap: 8px; padding: 0 4px;
   font-size: 12px; color: var(--muted);

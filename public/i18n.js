@@ -44,6 +44,10 @@ const I18N = {
     set_username_ph: `Choose a username`,
     set_username_save: `Save username`,
 
+    nav_search_ph: `Search tabs…  ( / )`,
+    nav_search_aria: `Search tabs`,
+    nav_search_clear: `Clear search`,
+    nav_search_empty: `No matching tab.`,
     nav_group_dashboards: `Dashboards`,
     nav_group_investor: `Investor`,
     nav_group_transactions: `Operations & Transactions`,
@@ -1576,6 +1580,10 @@ const I18N = {
     change_pw_confirm_ph: `Konfirmasi kata sandi baru`,
     change_pw_save: `Perbarui kata sandi`,
 
+    nav_search_ph: `Cari tab…  ( / )`,
+    nav_search_aria: `Cari tab`,
+    nav_search_clear: `Hapus pencarian`,
+    nav_search_empty: `Tidak ada tab yang cocok.`,
     nav_group_dashboards: `Dasbor`,
     nav_group_investor: `Investor`,
     nav_group_transactions: `Operasional & Transaksi`,

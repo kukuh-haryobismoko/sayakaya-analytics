@@ -8702,6 +8702,81 @@ function wireNavGroups() {
   });
 }
 
+// Live sidebar tab search: filters the nav as you type (no Enter/click). Every
+// whitespace-separated word must appear in the tab's name or its group name,
+// ignoring case and punctuation ("estatement" finds "e-statement"). Matches
+// inside folded groups are shown while searching without changing the saved
+// fold state. Up/Down move the highlight, Enter opens it, Esc clears, and "/"
+// focuses the box from anywhere that isn't a text field.
+const navNorm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9\u00c0-\uffff]+/g, '');
+function wireNavSearch() {
+  const input = $('#navSearchInput'), clearBtn = $('#navSearchClear'), nav = document.querySelector('.nav');
+  if (!input || !nav) return;
+  let hits = [], cursor = 0;
+  const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const links = () => $$('.nav-link[data-tab]');
+  const labelOf = (l) => l.querySelector('.nav-label-text') || l;
+  const resetLabel = (l) => { const el = labelOf(l); if (el.querySelector && el.querySelector('mark')) el.textContent = el.textContent; };
+  const mark = (l, words) => {
+    const el = labelOf(l), text = el.textContent;
+    const re = new RegExp('(' + words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'gi');
+    if (re.test(text)) el.innerHTML = text.split(re).map((part, i) => (i % 2 ? '<mark>' + esc(part) + '</mark>' : esc(part))).join('');
+  };
+  const setCursor = (i) => {
+    hits.forEach((l) => l.classList.remove('nav-kbd'));
+    if (!hits.length) return;
+    cursor = (i + hits.length) % hits.length;
+    hits[cursor].classList.add('nav-kbd');
+    hits[cursor].scrollIntoView({ block: 'nearest' });
+  };
+  function run() {
+    const raw = input.value.trim(), words = raw.toLowerCase().split(/\s+/).filter(Boolean);
+    clearBtn.classList.toggle('hidden', !input.value);
+    nav.classList.toggle('nav-searching', words.length > 0);
+    hits = [];
+    links().forEach((l) => { l.classList.remove('nav-kbd'); resetLabel(l); });
+    $$('.nav-group').forEach((g) => {
+      const groupName = g.querySelector('.nav-label span')?.textContent || '';
+      const gl = Array.from(g.querySelectorAll('.nav-link[data-tab]'));
+      let shown = 0;
+      gl.forEach((l) => {
+        const permitted = !l.classList.contains('hidden');
+        const hay = navNorm(labelOf(l).textContent + ' ' + groupName);
+        const ok = permitted && words.every((w) => hay.includes(navNorm(w)));
+        l.classList.toggle('nav-filtered', words.length > 0 && !ok);
+        if (ok && words.length) { shown++; hits.push(l); mark(l, words); }
+      });
+      if (gl.length) g.classList.toggle('nav-filtered', words.length > 0 && shown === 0);
+    });
+    $('#navSearchEmpty').classList.toggle('hidden', !(words.length && !hits.length));
+    cursor = 0; setCursor(0);
+  }
+  function clear(keepFocus) {
+    input.value = ''; run();
+    if (!keepFocus) input.blur();
+    const act = document.querySelector('.nav-link.active');
+    if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest' });
+  }
+  function open(link) { if (!link) return; switchTab(link.dataset.tab); clear(false); }
+  input.addEventListener('input', run);
+  clearBtn.addEventListener('click', () => clear(true));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(cursor + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(cursor - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); open(hits[cursor]); }
+    else if (e.key === 'Escape') { e.preventDefault(); input.value ? clear(true) : input.blur(); }
+  });
+  // Opening a tab by click while a search is active returns the list to normal.
+  links().forEach((l) => l.addEventListener('click', () => { if (input.value) clear(false); }));
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (e.target && e.target.isContentEditable)) return;
+    if (!input.offsetParent) return; // sidebar hidden (icon-only mode / closed mobile drawer)
+    e.preventDefault(); input.focus(); input.select();
+  });
+}
+
 const SIDEBAR_COLLAPSED_KEY = 'sk_sidebar_collapsed';
 function wire() {
   // Modals only close via the explicit X or a Cancel/Close button — an
@@ -8710,6 +8785,7 @@ function wire() {
   document.addEventListener('click', (e) => { e.target.closest('.modal-close')?.closest('dialog')?.close(); });
   wrapNavLabels();
   wireNavGroups();
+  wireNavSearch();
   $$('.nav-link').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
   const presPresentBtn = { presentation: '#presentBtn', 'monthly-review': '#mrPresentBtn' };
   const presPrevBtnId = { presentation: '#presPrevBtn', 'monthly-review': '#mrPrevBtn' };
