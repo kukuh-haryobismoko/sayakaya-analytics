@@ -2934,6 +2934,20 @@
       </div>
 
       <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="be_tx_title">Transactions</h2>
+          <label><span data-i18n="be_tx_kind">Customer type</span> <select id="beTxKind"></select></label>
+          <label><span data-i18n="be_tx_status">Status</span> <select id="beTxStatus"></select></label>
+          <label><span data-i18n="be_tx_type">Type</span> <select id="beTxType"></select></label>
+          <label><span data-i18n="be_tx_min">Min amount (Rp)</span> <input type="number" id="beTxMin" min="0" step="100000" placeholder="0" style="width:140px" /></label>
+          <label><span data-i18n="be_tx_max">Max amount (Rp)</span> <input type="number" id="beTxMax" min="0" step="100000" style="width:140px" /></label>
+        </div>
+        <span class="hint" id="beTxHint"></span>
+        <span class="hint" id="beTxSummary" style="display:block; margin-top:4px"></span>
+        <div id="beTx" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
+      </div>
+
+      <div class="panel">
         <div class="panel-head"><h2 data-i18n="be_welcome_title">Welcome bonus (new customers)</h2></div>
         <span class="hint" data-i18n="be_welcome_hint">New customers who bought: whether the first purchase qualifies, and when the bonus units can be credited after the holding period.</span>
         <div id="beWelcome" class="table-wrap" style="margin-top:12px"></div>

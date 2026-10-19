@@ -5090,6 +5090,92 @@ export const boothEventData = (opts: { codes: string[]; promoCodes?: string[]; f
   };
 };
 
+// Booth event transaction list (panel "Transactions"): every transaction, from the
+// event start on, except expired and cancelled, of the customers who registered with
+// an event code (via = 'code', new customers) and of the existing customers who bought
+// with a sales code as promo code (via = 'promo'), with the customer's contact, IFUA,
+// codes and the promo code of that transaction, so it exports as raw data. Amount is what was paid in or out (final_amount, else amount), the same
+// figure the booth totals use.
+//
+// Holding, for each completed buy (same rule as the referral program, see
+// referralProgramDetail): baseline = the units of that fund on the first daily
+// snapshot (portfolio_fix) on or after the day the buy completed, which is the
+// balance right after the buy. A later day breaks the hold when the fund's units
+// are below that baseline, or the fund is gone from the snapshot (sold out).
+// hold_days = days from the baseline day until the day before the break, or
+// until the latest snapshot, capped at @hold. The snapshot day is
+// DATE(created_at) - 1; portfolio_fix is partitioned by DATE(created_at) and
+// clustered by sid_code, so created_at is only compared bare to keep pruning.
+export const boothEventTransactions = (opts: { codes: string[]; promoCodes?: string[]; from: string; to: string; samManager: string; holdDays?: number }) => {
+  const params = { ...boothParams(opts), hold: Math.max(1, Math.min(365, Math.round(Number(opts.holdDays) || 30))) };
+  return <Query>{
+    sql: `WITH ${boothPeopleCte()},
+      ev_tx AS (
+        SELECT t.id AS tx_id, t.user_id, p.code, p.via, t.type, t.status, t.payment_method, t.fund_id, UPPER(t.promo_code) AS promo,
+          CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount,
+          t.created_at, DATE(COALESCE(t.completed_at, t.created_at), 'Asia/Jakarta') AS done_day
+        FROM ${TX} t
+        JOIN people p ON p.user_id = t.user_id
+        WHERE IFNULL(t.status, '') NOT IN ('expired', 'cancelled')
+          AND DATE(t.created_at, 'Asia/Jakarta') >= @from
+      ),
+      buys AS (
+        SELECT e.tx_id, e.fund_id, e.done_day, u.sid_code
+        FROM ev_tx e
+        JOIN ${USERS} u ON u.id = e.user_id
+        WHERE e.type = 'buy' AND e.status = 'completed' AND e.fund_id IS NOT NULL AND u.sid_code IS NOT NULL
+      ),
+      snaps AS (
+        SELECT sid_code, id AS fund_id, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS snap_date, total_unit
+        FROM ${PORT_FIX}
+        WHERE created_at >= TIMESTAMP(@from) AND sid_code IN (SELECT sid_code FROM buys)
+      ),
+      -- Days the snapshot job ran at all (any customer), so a skipped day is not read as
+      -- every position dropping to zero; one timestamp column, no sid filter.
+      snap_days AS (
+        SELECT DISTINCT DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS snap_date
+        FROM ${PORT_FIX} WHERE created_at >= TIMESTAMP(@from)
+      ),
+      latest AS (SELECT MAX(snap_date) AS d FROM snap_days),
+      base AS (
+        SELECT b.tx_id, b.sid_code, b.fund_id,
+          ARRAY_AGG(STRUCT(s.snap_date AS d, s.total_unit AS unit) ORDER BY s.snap_date LIMIT 1)[OFFSET(0)] AS first_snap
+        FROM buys b
+        JOIN snaps s ON s.sid_code = b.sid_code AND s.fund_id = b.fund_id AND s.snap_date >= b.done_day
+        GROUP BY b.tx_id, b.sid_code, b.fund_id
+      ),
+      broke AS (
+        SELECT bs.tx_id, MIN(IF(IFNULL(s.total_unit, 0) < bs.first_snap.unit, day, NULL)) AS broken_on
+        FROM base bs
+        CROSS JOIN latest l
+        CROSS JOIN UNNEST(GENERATE_DATE_ARRAY(DATE_ADD(bs.first_snap.d, INTERVAL 1 DAY),
+          LEAST(DATE_ADD(bs.first_snap.d, INTERVAL @hold DAY), l.d))) AS day
+        JOIN snap_days sd ON sd.snap_date = day
+        LEFT JOIN snaps s ON s.sid_code = bs.sid_code AND s.fund_id = bs.fund_id AND s.snap_date = day
+        GROUP BY bs.tx_id
+      )
+      SELECT e.tx_id, e.user_id, e.code, e.via, e.promo, e.type, e.status, e.payment_method, e.amount, f.name AS fund,
+        FORMAT_DATE('%F', DATE(DATETIME_ADD(u.created_at, INTERVAL 7 HOUR))) AS registered_on,
+        FORMAT_TIMESTAMP('%F %H:%M', e.created_at, 'Asia/Jakarta') AS created_wib,
+        FORMAT_DATE('%F', e.done_day) AS done_day,
+        u.sid_code AS sid, u.ifua_code AS ifua, u.email, up.name, up.phone_number AS phone,
+        u.referrer_code, u.sales_code,
+        FORMAT_DATE('%F', bs.first_snap.d) AS hold_from,
+        FORMAT_DATE('%F', br.broken_on) AS hold_broken_on,
+        IF(bs.tx_id IS NULL, NULL, GREATEST(0, LEAST(@hold,
+          DATE_DIFF(IF(br.broken_on IS NULL, l.d, DATE_SUB(br.broken_on, INTERVAL 1 DAY)), bs.first_snap.d, DAY)))) AS hold_days
+      FROM ev_tx e
+      JOIN ${USERS} u ON u.id = e.user_id
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = e.user_id
+      LEFT JOIN ${FUNDS} f ON f.id = e.fund_id
+      LEFT JOIN base bs ON bs.tx_id = e.tx_id
+      LEFT JOIN broke br ON br.tx_id = e.tx_id
+      CROSS JOIN latest l
+      ORDER BY e.created_at DESC`,
+    params,
+  };
+};
+
 const eventCodeWhere = (field?: string): string => {
   const col = remisierFieldColumn(field);
   return `u.${col} IS NOT NULL AND EXISTS (SELECT 1 FROM UNNEST(@codes) c WHERE UPPER(u.${col}) LIKE c)`;

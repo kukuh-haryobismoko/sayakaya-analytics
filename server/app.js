@@ -595,6 +595,25 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ customers, transactions, plans, fresh });
   }));
 
+  // Transaction list of the same people (every status except expired and
+  // cancelled) with contact details and holding days per completed buy. It
+  // reads a longer stretch of portfolio_fix, so it is a separate call the page
+  // makes after the main data and gets a higher byte cap.
+  app.get('/api/booth-event/transactions', requireTab('booth-event'), handler(async (req, res) => {
+    const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
+    const promo = req.query.promo == null ? [] : [].concat(req.query.promo);
+    const { from, to, sam } = req.query;
+    const hold = Number(req.query.hold || 30);
+    if (!codes.length || codes.length > 200 || promo.length > 200 || ![...codes, ...promo].every((c) => BOOTH_CODE_RE.test(c))) {
+      return res.status(400).json({ error: 'codes: 1 to 200 codes of letters, digits, - or _.' });
+    }
+    if (!BOOTH_DATE_RE.test(from || '') || !BOOTH_DATE_RE.test(to || '')) return res.status(400).json({ error: 'from and to are required (YYYY-MM-DD).' });
+    if (!sam || String(sam).length > 120) return res.status(400).json({ error: 'sam (investment manager name) is required.' });
+    if (!Number.isInteger(hold) || hold < 1 || hold > 365) return res.status(400).json({ error: 'hold: whole days, 1 to 365.' });
+    const q = Q.boothEventTransactions({ codes, promoCodes: promo, from, to, samManager: String(sam), holdDays: hold });
+    res.json({ rows: await runQuery(q.sql, q.params, { maxBytes: '4000000000' }) });
+  }));
+
   app.get('/api/event-code/users', requireTab('event-code'), handler(async (req, res) => {
     const codes = req.query.codes == null ? [] : [].concat(req.query.codes);
     if (!codes.length) return res.status(400).json({ error: 'At least one code is required.' });

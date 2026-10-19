@@ -9,6 +9,12 @@ const BOOTH_EVENT = {
   start: '2026-10-19', // hari pertama booth buka (WIB)
   end: '2027-01-10',   // hari terakhir; pendaftaran dengan kode sesudah ini tidak dihitung
 
+  // Daftar transaksi (panel Transactions): hari berturut-turut sebuah pembelian completed
+  // ditahan. Unit fund itu di snapshot harian tidak boleh turun di bawah unit tepat
+  // sesudah pembelian (aturan yang sama dengan program referral); sekali turun atau
+  // fund hilang dari snapshot, hitungan berhenti. Dihitung maksimal sampai angka ini.
+  txHoldDays: 30,
+
   booths: { PIM: 'Pondok Indah Mall', GC: 'Gandaria City', CP: 'Central Park' },
 
   // Periode insentif. workDays = hari kerja yang jadi dasar target: 21 per

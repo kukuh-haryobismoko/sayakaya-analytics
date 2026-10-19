@@ -4178,7 +4178,8 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
     // delta: signed difference from a target, green at or above it, red below.
     if (c.type === 'delta') out = v == null ? '' : (v > 0 ? '+' : '') + num(v);
     const tone = c.type === 'delta' && v != null ? (v < 0 ? ' neg' : ' pos') : '';
-    return `<td class="${numTypes.includes(c.type) ? 'num' : ''}${tone}">${out}</td>`;
+    // c.text: keep the cell text in the XLSX export (phone 0812..., SID, timestamps).
+    return `<td class="${numTypes.includes(c.type) ? 'num' : ''}${tone}"${c.text ? ' data-t="s"' : ''}>${out}</td>`;
   };
   // c.sort (true, or the server column name) makes the header a server sort
   // control, see TABLE SORT; the arrow is drawn by CSS from aria-sort so it
@@ -7486,6 +7487,38 @@ function boothCompute({ customers, transactions }, cfg, today) {
   return { people, roster };
 }
 
+// Transaction list (panel "Transactions"): server rows plus the roster's booth and
+// person for the matched code, filtered by the page's booth / sales filters and the
+// panel's own customer kind, status, type and amount filters. amount min / max are
+// inclusive; '' or null means no limit. kind: 'new' = registered with an event code
+// (via 'code'); 'existing' = registered before the event and bought with a sales code
+// as promo code (the top up rule, same test as boothCustomerBonuses); 'other' = signed
+// up during the event without an event code but used one as promo code, which neither
+// bonus counts.
+function boothTxFilter(rows, cfg, f = {}) {
+  const roster = new Map(cfg.roster.map((r) => [r.code.toUpperCase(), r]));
+  const lim = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v));
+  const min = lim(f.min), max = lim(f.max);
+  return rows.map((r) => {
+    const ro = roster.get(String(r.code || '').toUpperCase()) || null;
+    return { ...r, amount: Number(r.amount) || 0, person: ro ? ro.person : null, booth: ro ? ro.booth : null, kind: r.via === 'code' ? 'new' : (r.registered_on || '9999') < cfg.start ? 'existing' : 'other' };
+  }).filter((r) => (!f.booth || r.booth === f.booth) && (!f.person || r.person === f.person)
+    && (!f.kind || r.kind === f.kind) && (!f.status || r.status === f.status) && (!f.type || r.type === f.type)
+    && (min == null || r.amount >= min) && (max == null || r.amount <= max));
+}
+// Holding check of one completed buy (server: hold_days, hold_broken_on; same rule as
+// the referral program). null for any other row. A buy with no snapshot yet is
+// "pending" for a week (the snapshot job runs about a day behind), after that
+// "no_snapshot": most likely sold out before the first daily snapshot.
+function boothHoldState(r, cfg, today) {
+  if (r.type !== 'buy' || r.status !== 'completed') return null;
+  const need = cfg.txHoldDays || 30;
+  if (r.hold_days == null) return { key: bDays(r.done_day, today) <= 7 ? 'pending' : 'no_snapshot', days: null };
+  const days = Number(r.hold_days);
+  if (r.hold_broken_on) return { key: 'broken', days, on: r.hold_broken_on };
+  return { key: days >= need ? 'held' : 'holding', days };
+}
+
 // Incentives for one period: sales and flying team per person, team leads per booth.
 function boothIncentives(people, cfg, period, today) {
   const scale = period.workDays / cfg.fullMonthWorkDays;
@@ -7602,7 +7635,7 @@ function boothFreshText(fresh) {
     `Data per ${at} WIB. Pendaftaran, KYC, dan transaksi dibaca dari salinan database utama yang diperbarui berkala, jadi yang daftar setelah jam itu baru muncul di refresh berikutnya.`);
 }
 
-const BOOTH = { data: null, loading: false };
+const BOOTH = { data: null, loading: false, tx: null, txToken: 0 };
 const bEsc = (v) => escapeHtml(v == null ? '' : v);
 // "Viki Setiadi (Sales PIM 1)" once the roster has the name, else just the
 // position. `person` stays the filter key; this is display only. A flying team
@@ -7642,9 +7675,98 @@ async function loadBoothEvent() {
     cfg.customer.promoCodes.forEach((c) => qs.append('promo', c));
     BOOTH.data = await api(`/api/booth-event/data?${qs}`);
     renderBoothEvent();
+    loadBoothTx(qs);
   } catch (e) {
     $('#beKpis').innerHTML = `<div class="empty">${bEsc(e.message)}</div>`;
   } finally { BOOTH.loading = false; }
+}
+
+// The transaction list is its own call (it reads more of portfolio_fix), so the rest of
+// the tab shows first and this panel fills in when it arrives. A reload that starts
+// while an older call is running makes the older answer get dropped.
+async function loadBoothTx(qs) {
+  const mine = ++BOOTH.txToken;
+  BOOTH.tx = { loading: true };
+  renderBoothTx();
+  const q = new URLSearchParams(qs);
+  q.set('hold', String(BOOTH_EVENT.txHoldDays || 30));
+  try {
+    const res = await api(`/api/booth-event/transactions?${q}`);
+    if (mine !== BOOTH.txToken) return;
+    BOOTH.tx = { rows: res.rows || [] };
+  } catch (e) {
+    if (mine !== BOOTH.txToken) return;
+    BOOTH.tx = { error: e.message };
+  }
+  renderBoothTx();
+}
+
+function renderBoothTx() {
+  const tx = BOOTH.tx;
+  if (!tx || !$('#beTx')) return;
+  const cfg = BOOTH_EVENT;
+  const need = cfg.txHoldDays || 30;
+  $('#beTxHint').textContent = bL(
+    `Every transaction except expired and cancelled, one row each, of the new customers above and of existing users who bought with a sales code as promo code. Customer type: New = registered with an event code during the event; Existing = registered before the event; Other = signed up during the event without an event code (counts for neither bonus). The promo code column is the code typed on that transaction (the top up cashback needs a SAM purchase of ${idr(cfg.customer.topUp.minAmount)}+ with a sales code, see the rules at the top of the tab). Hold days (completed buys only): days in a row the fund's units stayed at or above the units right after the purchase, up to ${need}. Same check as the referral program, read from the daily snapshot, so it runs about a day behind.`,
+    `Semua transaksi kecuali expired dan cancelled, satu baris per transaksi, milik nasabah baru di atas dan user existing yang beli dengan kode sales sebagai kode promo. Tipe nasabah: Baru = daftar dengan kode event selama event; Existing = daftar sebelum event; Lainnya = daftar saat event tanpa kode event (tidak masuk bonus apa pun). Kolom kode promo = kode yang dipakai di transaksi itu (cashback top up butuh pembelian SAM ${idr(cfg.customer.topUp.minAmount)}+ dengan kode sales, aturannya ada di atas tab ini). Hari holding (hanya beli completed): berapa hari berturut-turut unit produk tidak turun di bawah unit sesaat setelah pembelian, maksimal ${need} hari. Pengecekannya sama dengan program referral, dibaca dari snapshot harian, jadi tertinggal sekitar sehari.`);
+  if (tx.loading) {
+    $('#beTx').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
+    $('#beTxSummary').textContent = '';
+    return;
+  }
+  if (tx.error) {
+    $('#beTx').innerHTML = `<div class="empty">${bEsc(tx.error)}</div>`;
+    $('#beTxSummary').textContent = '';
+    return;
+  }
+  // Status and type choices come from the data; keep the pick across re-renders.
+  const fill = (sel, values, all) => {
+    const el = $(sel), keep = el.value;
+    el.innerHTML = `<option value="">${all}</option>` + values.map((v) => `<option value="${bEsc(v)}">${bEsc(v)}</option>`).join('');
+    el.value = values.includes(keep) ? keep : '';
+  };
+  const kindEl = $('#beTxKind'), keepKind = kindEl.value;
+  kindEl.innerHTML = `<option value="">${bL('All customers', 'Semua nasabah')}</option><option value="new">${bL('New customers', 'Nasabah baru')}</option><option value="existing">${bL('Existing users', 'User existing')}</option><option value="other">${bL('Other (signed up in the event, no code)', 'Lainnya (daftar saat event, tanpa kode)')}</option>`;
+  kindEl.value = keepKind;
+  fill('#beTxStatus', [...new Set(tx.rows.map((r) => r.status))].sort(), t('common_all_statuses'));
+  fill('#beTxType', [...new Set(tx.rows.map((r) => r.type))].sort(), t('common_all_types'));
+
+  const today = bWibToday();
+  const rows = boothTxFilter(tx.rows, cfg, {
+    booth: $('#beBooth').value, person: $('#bePerson').value, kind: $('#beTxKind').value,
+    status: $('#beTxStatus').value, type: $('#beTxType').value, min: $('#beTxMin').value, max: $('#beTxMax').value,
+  });
+  const buys = rows.filter((r) => r.type === 'buy');
+  $('#beTxSummary').textContent = bL(
+    `${num(rows.length)} of ${num(tx.rows.length)} transactions from ${num(new Set(rows.map((r) => r.user_id)).size)} ${new Set(rows.map((r) => r.user_id)).size === 1 ? 'customer' : 'customers'}. Buys in this list: ${num(buys.length)}, ${idrFull(buys.reduce((a, r) => a + r.amount, 0))}.`,
+    `${num(rows.length)} dari ${num(tx.rows.length)} transaksi, ${num(new Set(rows.map((r) => r.user_id)).size)} nasabah. Beli di daftar ini: ${num(buys.length)}, ${idrFull(buys.reduce((a, r) => a + r.amount, 0))}.`);
+  const holdText = (r) => {
+    const h = boothHoldState(r, cfg, today);
+    if (!h) return '';
+    return {
+      held: bL(`Held ${need} days`, `Lolos ${need} hari`),
+      holding: bL(`Still holding, day ${h.days} of ${need}`, `Masih menahan, hari ke-${h.days} dari ${need}`),
+      broken: bL(`Units dropped on ${h.on} (held ${h.days} days)`, `Unit turun pada ${h.on} (tertahan ${h.days} hari)`),
+      pending: bL('Waiting for the first snapshot', 'Menunggu snapshot pertama'),
+      no_snapshot: bL('No snapshot found (sold before the first one?)', 'Tidak ada snapshot (dijual sebelum snapshot pertama?)'),
+    }[h.key];
+  };
+  genTable('#beTx', rows.map((r) => ({
+    when: r.created_wib, kind: { new: bL('New', 'Baru'), existing: 'Existing', other: bL('Other', 'Lainnya') }[r.kind], registered: r.registered_on || '',
+    promo: bEsc(r.promo || ''), name: bEsc(r.name || 'n/a'), email: bEsc(r.email), phone: bEsc(r.phone || ''), sid: bEsc(r.sid || ''), ifua: bEsc(r.ifua || ''),
+    booth: bEsc(r.booth || ''), person: bEsc(bWho(cfg, r.person)), referrer: bEsc(r.referrer_code || ''), sales: bEsc(r.sales_code || ''),
+    type: bEsc(r.type), status: bEsc(r.status), payment: bEsc(r.payment_method || ''), fund: bEsc(r.fund || ''), amount: r.amount,
+    hold_days: r.type === 'buy' && r.status === 'completed' && r.hold_days != null ? Number(r.hold_days) : null, hold: bEsc(holdText(r)),
+  })), [
+    { key: 'when', label: bL('Date (WIB)', 'Tanggal (WIB)'), text: true }, { key: 'kind', label: bL('Customer type', 'Tipe nasabah') },
+    { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'email', label: 'Email' },
+    { key: 'phone', label: bL('Phone', 'HP'), text: true }, { key: 'sid', label: 'SID', text: true }, { key: 'ifua', label: 'IFUA', text: true },
+    { key: 'booth', label: 'Booth' }, { key: 'person', label: 'Sales' }, { key: 'referrer', label: bL('Referrer code', 'Kode referrer') }, { key: 'sales', label: bL('Sales code', 'Kode sales') },
+    { key: 'registered', label: bL('Registered', 'Daftar'), text: true }, { key: 'promo', label: bL('Promo code', 'Kode promo') },
+    { key: 'type', label: bL('Type', 'Tipe') }, { key: 'status', label: 'Status' }, { key: 'payment', label: bL('Payment', 'Pembayaran') }, { key: 'fund', label: bL('Fund', 'Produk') },
+    { key: 'amount', label: bL('Amount (Rp)', 'Nominal (Rp)'), type: 'num' },
+    { key: 'hold_days', label: bL('Hold days', 'Hari holding'), type: 'num' }, { key: 'hold', label: bL('Holding', 'Status holding') },
+  ], bL('No transaction matches.', 'Tidak ada transaksi yang cocok.'));
 }
 
 function renderBoothEvent() {
@@ -7764,6 +7886,7 @@ function renderBoothEvent() {
     { key: 'aum_now', label: bL('Balance today', 'Saldo hari ini'), type: 'idr', sum: true }, { key: 'held', label: bL('Days holding', 'Lama menahan (hari)'), type: 'num' },
     { key: 'holding', label: bL('Holding', 'Status dana') },
   ], bL('No customer has registered with an event code yet.', 'Belum ada nasabah yang daftar dengan kode event.'));
+  renderBoothTx();
 
   // Customer bonuses.
   const bon = boothCustomerBonuses(people.filter(pick), BOOTH.data.plans, cfg, today);
@@ -8932,6 +9055,8 @@ function wire() {
   $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
   ['bePeriod', 'beBooth', 'bePerson'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothEvent));
+  ['beTxKind', 'beTxStatus', 'beTxType'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothTx));
+  ['beTxMin', 'beTxMax'].forEach((id) => $(`#${id}`).addEventListener('input', renderBoothTx));
   $('#beReload').addEventListener('click', loadBoothEvent);
   $('#prApply').addEventListener('click', loadPromoRecap);
   $('#prStatus').addEventListener('change', renderPromoRecap);

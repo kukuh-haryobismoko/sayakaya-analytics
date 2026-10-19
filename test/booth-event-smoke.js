@@ -183,4 +183,60 @@ assert.deepStrictEqual(who.nameByCode, {
   TLGC: 'Sandy', SGC1: 'Eka Muhammad Rizki', SGC2: 'Jihan', SGC3: 'Arfan Herdian', SGC4: 'Agus Rinaldi Rusli', SGC5: 'Edi Sudrajat',
 });
 
+// Transaction list: filters (status, type, amount, booth, sales) and the 30-day hold check.
+const txRows = [
+  { tx_id: 't1', via: 'code', registered_on: '2026-10-19', promo: 'SPIM1', user_id: 'u1', code: 'SPIM1', type: 'buy', status: 'completed', amount: 1000000, created_wib: '2026-10-20 10:00', done_day: '2026-10-20', hold_days: 30, hold_broken_on: null },
+  { tx_id: 't2', via: 'code', registered_on: '2026-10-19', promo: null, user_id: 'u2', code: 'SPIM1', type: 'buy', status: 'completed_payment', amount: 25000, created_wib: '2026-10-20 11:00', done_day: '2026-10-20', hold_days: null, hold_broken_on: null },
+  { tx_id: 't3', via: 'promo', registered_on: '2026-03-02', promo: 'SGC1', user_id: 'u3', code: 'SGC1', type: 'buy', status: 'pending_payment', amount: 5000000, created_wib: '2026-10-21 09:00', done_day: '2026-10-21', hold_days: null, hold_broken_on: null },
+  { tx_id: 't4', via: 'code', registered_on: '2026-10-19', promo: null, user_id: 'u1', code: 'SPIM1', type: 'sell', status: 'verified_by_operational', amount: 1000000, created_wib: '2026-10-25 09:00', done_day: '2026-10-25', hold_days: null, hold_broken_on: null },
+  { tx_id: 't5', via: 'promo', registered_on: '2025-12-30', promo: 'FT1GC', user_id: 'u4', code: 'fT1gc', type: 'buy', status: 'completed', amount: 2500000, created_wib: '2026-10-22 09:00', done_day: '2026-10-22', hold_days: 11, hold_broken_on: '2026-11-03' },
+  { tx_id: 't6', via: 'code', registered_on: '2026-10-22', promo: 'SCP1', user_id: 'u5', code: 'SCP1', type: 'buy', status: 'completed', amount: 1500000, created_wib: '2026-10-23 09:00', done_day: '2026-10-23', hold_days: 9, hold_broken_on: null },
+  { tx_id: 't7', via: 'promo', registered_on: '2026-10-30', promo: 'SCP1', user_id: 'u6', code: 'SCP1', type: 'buy', status: 'completed', amount: 1000000, created_wib: '2026-11-18 09:00', done_day: '2026-11-18', hold_days: null, hold_broken_on: null },
+  { tx_id: 't8', via: 'code', registered_on: '2026-11-30', promo: null, user_id: 'u7', code: 'SCP1', type: 'buy', status: 'completed', amount: 1000000, created_wib: '2026-12-01 09:00', done_day: '2026-12-01', hold_days: null, hold_broken_on: null },
+];
+ctx.__tx = txRows;
+const txr = JSON.parse(run(`(() => {
+  const ids = (f) => boothTxFilter(__tx, BOOTH_EVENT, f).map((r) => r.tx_id).join(',');
+  const row = boothTxFilter(__tx, BOOTH_EVENT, {}).find((r) => r.tx_id === 't5');
+  const hs = (id, today) => boothHoldState(__tx.find((r) => r.tx_id === id), BOOTH_EVENT, today);
+  return JSON.stringify({
+    all: ids({}), completed: ids({ status: 'completed' }), sells: ids({ type: 'sell' }),
+    min: ids({ min: '1000000' }), max: ids({ max: 1000000 }), band: ids({ min: 1000000, max: '2500000' }), blank: ids({ min: '', max: null }),
+    kindNew: ids({ kind: 'new' }), kindExisting: ids({ kind: 'existing' }), kindOther: ids({ kind: 'other' }),
+    kinds: boothTxFilter(__tx, BOOTH_EVENT, {}).map((r) => r.tx_id + ':' + r.kind).join(','),
+    existingBig: ids({ kind: 'existing', min: 5000000 }),
+    booth: ids({ booth: 'PIM' }), person: ids({ person: 'Sales PIM 1' }), both: ids({ booth: 'GC', status: 'completed' }),
+    t5: { person: row.person, booth: row.booth, amount: row.amount },
+    held: hs('t1', '2026-12-10'), broken: hs('t5', '2026-12-10'), running: hs('t6', '2026-11-01'),
+    pendingNew: hs('t7', '2026-11-20'), noSnap: hs('t8', '2026-12-20'),
+    notBuy: hs('t4', '2026-12-10'), notDone: hs('t2', '2026-12-10'), pendingPay: hs('t3', '2026-12-10'),
+    need: BOOTH_EVENT.txHoldDays,
+  });
+})()`));
+assert.strictEqual(txr.all, 't1,t2,t3,t4,t5,t6,t7,t8', 'no filter keeps every row the server sent (expired and cancelled are dropped in SQL)');
+assert.strictEqual(txr.completed, 't1,t5,t6,t7,t8');
+assert.strictEqual(txr.sells, 't4');
+assert.strictEqual(txr.min, 't1,t3,t4,t5,t6,t7,t8', 'min is inclusive');
+assert.strictEqual(txr.max, 't1,t2,t4,t7,t8', 'max is inclusive');
+assert.strictEqual(txr.band, 't1,t4,t5,t6,t7,t8');
+assert.strictEqual(txr.blank, txr.all, 'empty amount boxes mean no limit');
+assert.strictEqual(txr.kinds, 't1:new,t2:new,t3:existing,t4:new,t5:existing,t6:new,t7:other,t8:new', 'new = registered with an event code; existing = registered before the event; other = signed up in the event without a code');
+assert.strictEqual(txr.kindNew, 't1,t2,t4,t6,t8');
+assert.strictEqual(txr.kindExisting, 't3,t5');
+assert.strictEqual(txr.kindOther, 't7');
+assert.strictEqual(txr.existingBig, 't3', 'customer type combines with the amount filter (t5 is only 2.5 jt)');
+assert.strictEqual(txr.booth, 't1,t2,t4', 'PIM booth = SPIM1 rows');
+assert.strictEqual(txr.person, 't1,t2,t4');
+assert.strictEqual(txr.both, 't5', 'booth GC plus status: flying team code matched case-insensitively');
+assert.deepStrictEqual(txr.t5, { person: 'Flying Team 1', booth: 'GC', amount: 2500000 });
+assert.deepStrictEqual(txr.held, { key: 'held', days: 30 });
+assert.deepStrictEqual(txr.broken, { key: 'broken', days: 11, on: '2026-11-03' }, 'units dropped on day 12: held 11 days');
+assert.deepStrictEqual(txr.running, { key: 'holding', days: 9 });
+assert.deepStrictEqual(txr.pendingNew, { key: 'pending', days: null }, 'no snapshot yet, bought 2 days ago');
+assert.deepStrictEqual(txr.noSnap, { key: 'no_snapshot', days: null }, 'no snapshot 19 days later');
+assert.strictEqual(txr.notBuy, null, 'a sell has no hold check');
+assert.strictEqual(txr.notDone, null, 'completed_payment is not a completed buy');
+assert.strictEqual(txr.pendingPay, null);
+assert.strictEqual(txr.need, 30);
+
 console.log('booth-event smoke test passed');
