@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `90dd94f (2026-10-16)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `4651da0 (2026-10-19)`.
 
 ## Cara membaca dokumen ini
 
@@ -374,6 +374,7 @@ Salinan database produksi aplikasi Sayakaya di BigQuery: akun dan profil penggun
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `bonus_portfolios` | Unit bonus dari kampanye promo, dengan status on_going, redeemed, atau succeeded. | Campaign revenue, Data explorer, Engagement analysis, Forecast & churn, Growth, Investor journey, Overview, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Product funnel, Redemption analysis, Send e-statement & portfolio, Subscription analysis |
 | `campaigns` | Kampanye promo: kode, kuota, bonus, periode. | Campaign revenue, Data explorer, Growth |
 | `funds` | Daftar reksa dana: nama, jenis, manajer investasi, NAV dan AUM terbaru, fee. | AUM history, Campaign revenue, Data explorer, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI bonus, Investor journey, Overview, Performance, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Product funnel, Redemption analysis, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Revenue (GS), Revenue (PWC), Revenue trend, Send e-statement & portfolio, Subscription analysis, User lifetime, Users transactions |
@@ -1328,6 +1329,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Rules and how it is counted* (Aturan dan cara hitung): Ditulis otomatis dari booth-event-config.js untuk periode terpilih, ditambah roster kode.
 - **Catatan penting**:
   - Ubah aturan atau T&C hanya di public/booth-event-config.js; tabel dan panel aturan langsung mengikuti setelah deploy.
+  - Baris "Data per ... WIB" di bawah judul = waktu salin terlama dari main.users, main.user_profiles, dan main.transactions. Tabel itu disalin dari database utama oleh scheduled query (users-sc, user_profiles-sc, transactions-sc), jadi yang daftar atau beli sesudah jam itu baru muncul setelah salinan berikutnya.
   - Follow media sosial dan rating app store tidak ada di data, dicatat manual di booth.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `booth-event`
