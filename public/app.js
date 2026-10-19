@@ -6649,7 +6649,7 @@ async function loadSchedules(kind) {
 }
 const schedRefreshTimer = {};
 
-const SCHED_RECIPIENT_LABEL = { single_email: null, csv_list: null, all_aum: 'All investors with AUM', active_aum: 'Investors with AUM in active funds', all_registered: 'All registered users' };
+const SCHED_RECIPIENT_LABEL = { single_email: null, csv_list: null, all_aum: 'All investors with AUM', active_aum: 'Investors with AUM in active funds', active_aum_verified: 'Verified investors with AUM in active funds', all_registered: 'All registered users' };
 function schedRecipientSummary(row) {
   if (row.recipient_type === 'single_email') return val(row.recipient_email);
   if (row.recipient_type === 'csv_list') return `${(row.recipient_list || []).length} emails`;

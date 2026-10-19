@@ -4,7 +4,8 @@
 // whole chunk (not 3 times per investor), a throttled email goes back to
 // 'pending', an investor without an email fails, one put on the exclusion list
 // after being queued is skipped, the rest are sent. The preview count leaves
-// excluded people out.
+// excluded people out, and the 'active_aum_verified' pool reads only
+// KYC-verified accounts.
 const assert = require('assert');
 const path = require('path');
 
@@ -19,6 +20,9 @@ const queries = [];
 stub('bigquery', {
   runQuery: async (sql, params) => {
     queries.push(sql);
+    if (sql.includes("u.verification_status = 'verified'")) {
+      return [{ user_id: 'v1', sid: 'SIDV1', email: 'v1@example.com' }, { user_id: 'v4', sid: 'SID4', email: 'v4@example.com' }];
+    }
     if (sql.includes('up.birthdate')) {
       return [
         { user_id: 'u1', sid: 'SID1', email: 'one@example.com', name: 'One', birthdate: { value: '1990-08-17' } },
@@ -72,5 +76,8 @@ const Sched = require('../server/schedules');
   assert.strictEqual(mails[0].log.source, 'batch', 'a group send logs as a batch send');
   const preview = await Sched.previewRecipientCount({ kind: 'fund_performance', recipientType: 'csv_list', recipientList: ['in@example.com', 'OUT@example.com'] });
   assert.deepStrictEqual(preview, { count: 1, excluded: 1 }, 'excluded emails match case-insensitively');
+  const verified = await Sched.previewRecipientCount({ kind: 'statement', recipientType: 'active_aum_verified' });
+  assert.ok(queries[queries.length - 1].includes('a.aum > 0'), 'the verified pool starts from the active-fund holders');
+  assert.deepStrictEqual(verified, { count: 1, excluded: 1 }, 'verified pool, minus the excluded SID4');
   console.log('sched-drain smoke test passed');
 })().catch((e) => { console.error(e); process.exit(1); });

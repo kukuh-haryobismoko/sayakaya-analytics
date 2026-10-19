@@ -1317,6 +1317,18 @@ export const allActiveFundInvestors = (): Query => ({
   params: {},
 });
 
+// allActiveFundInvestors narrowed to KYC-verified accounts
+// (users.verification_status = 'verified'). On 19 Oct 2026 that is 5,208 of
+// the 13,840 active-fund holders; the other 8,632 are still 'unverified'
+// (8,628) or 'failed' (4).
+export const verifiedActiveFundInvestors = (): Query => ({
+  sql: `SELECT u.id AS user_id, u.sid_code AS sid, u.email
+    FROM (${USER_AUM_SQL}) a
+    JOIN ${USERS} u ON u.id = a.user_id
+    WHERE a.aum > 0 AND u.email IS NOT NULL AND u.verification_status = 'verified'`,
+  params: {},
+});
+
 // Every registered user with an email on file — the broadest recipient pool,
 // regardless of whether they hold anything.
 export const allRegisteredUsersWithEmail = (): Query => ({
