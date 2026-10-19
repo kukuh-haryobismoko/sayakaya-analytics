@@ -7604,6 +7604,14 @@ function boothFreshText(fresh) {
 
 const BOOTH = { data: null, loading: false };
 const bEsc = (v) => escapeHtml(v == null ? '' : v);
+// "Viki Setiadi (Sales PIM 1)" once the roster has the name, else just the
+// position. `person` stays the filter key; this is display only. A flying team
+// person has three codes, so the first filled name of that person is used.
+const bWho = (cfg, person) => {
+  if (!person) return '';
+  const r = cfg.roster.find((x) => x.person === person && x.name);
+  return r ? `${r.name} (${person})` : person;
+};
 const bStatusLabel = (k, x) => ({
   running: bL('Running (estimate)', 'Berjalan (sementara)'),
   waiting_m1: bL('Rules 1-3 final, rule 4 waits for M1', 'Rule 1-3 final, rule 4 menunggu M1'),
@@ -7624,7 +7632,7 @@ async function loadBoothEvent() {
     const current = cfg.periods.find((pd) => today >= pd.from && today <= pd.to) || (today < cfg.periods[0].from ? cfg.periods[0] : cfg.periods[cfg.periods.length - 1]);
     $('#bePeriod').innerHTML = cfg.periods.map((pd) => `<option value="${pd.id}"${pd === current ? ' selected' : ''}>${bEsc(pd.label)}</option>`).join('');
     $('#beBooth').innerHTML = `<option value="">${bL('All booths', 'Semua booth')}</option>` + Object.entries(cfg.booths).map(([k, v]) => `<option value="${k}">${bEsc(v)}</option>`).join('');
-    $('#bePerson').innerHTML = `<option value="">${bL('Everyone', 'Semua')}</option>` + [...new Set(cfg.roster.map((r) => r.person))].map((n) => `<option>${bEsc(n)}</option>`).join('');
+    $('#bePerson').innerHTML = `<option value="">${bL('Everyone', 'Semua')}</option>` + [...new Set(cfg.roster.map((r) => r.person))].map((n) => `<option value="${bEsc(n)}">${bEsc(bWho(cfg, n))}</option>`).join('');
   }
   BOOTH.loading = true;
   $('#beKpis').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
@@ -7700,7 +7708,7 @@ function renderBoothEvent() {
   const gateText = (r, sidNeed, sidHave, pctNeed) => (r.gate ? bL('Met', 'Tercapai')
     : bL(`Not yet: SID ${sidHave}/${sidNeed}, funded ${r.fundedPct.toFixed(0)}%/${pctNeed}%`, `Belum: SID ${sidHave}/${sidNeed}, funded ${r.fundedPct.toFixed(0)}%/${pctNeed}%`));
   const salesRows = inc.sales.filter((r) => (!booth || r.booth.split(', ').includes(booth)) && (!person || r.person === person)).map((r) => ({
-    ...r, person: bEsc(r.person), codes: bEsc(r.codes), target: Math.round(r.target * 10) / 10,
+    ...r, person: bEsc(bWho(cfg, r.person)), codes: bEsc(r.codes), target: Math.round(r.target * 10) / 10,
     gate_text: gateText(r, r.gateSid, r.sid, cfg.sales.gate.minFundedPct), status_text: st,
   }));
   genTable('#beSales', salesRows, [
@@ -7717,7 +7725,7 @@ function renderBoothEvent() {
   ], bL('No sales in this filter.', 'Tidak ada sales di filter ini.'));
 
   const leadRows = inc.leads.filter((r) => !booth || r.booth === booth).map((r) => ({
-    ...r, booth: bEsc(cfg.booths[r.booth] || r.booth), person: bEsc(r.person), target: Math.round(r.target * 10) / 10,
+    ...r, booth: bEsc(cfg.booths[r.booth] || r.booth), person: bEsc(bWho(cfg, r.person)), target: Math.round(r.target * 10) / 10,
     gate_text: r.gate ? bL('Met', 'Tercapai') : bL(`Not yet: SID ${r.sidPct.toFixed(0)}%/${cfg.teamLead.gate.minSidPct}%, funded ${r.fundedPct.toFixed(0)}%/${cfg.teamLead.gate.minFundedPct}%`,
       `Belum: SID ${r.sidPct.toFixed(0)}%/${cfg.teamLead.gate.minSidPct}%, funded ${r.fundedPct.toFixed(0)}%/${cfg.teamLead.gate.minFundedPct}%`),
     status_text: st,
@@ -7742,7 +7750,7 @@ function renderBoothEvent() {
   // Customers: who registered, verified, bought, and how long they hold.
   genTable('#beCustomers', mine.map((x) => ({
     name: bEsc(x.name || 'n/a'), sid: bEsc(x.sid || 'n/a'), email: bEsc(x.email), phone: bEsc(x.phone || ''),
-    code: bEsc(x.code), person: bEsc(x.person || ''), booth: bEsc(x.booth || ''),
+    code: bEsc(x.code), person: bEsc(bWho(cfg, x.person)), booth: bEsc(x.booth || ''),
     registered_on: x.registered_on, verified_on: x.verified ? x.verified_on : null,
     first_buy: x.firstBuy ? x.firstBuy.day : null, total_buy: x.totalBuy, net: x.totalBuy - x.totalSell,
     funded: x.fundedOn ? yes : no, aum_now: x.aumNow, held: x.heldDays,
@@ -7761,7 +7769,7 @@ function renderBoothEvent() {
   const bon = boothCustomerBonuses(people.filter(pick), BOOTH.data.plans, cfg, today);
   const C = cfg.customer;
   genTable('#beWelcome', bon.welcome.map((w) => ({
-    name: bEsc(w.x.name || 'n/a'), sid: bEsc(w.x.sid || ''), person: bEsc(w.x.person || ''), day: w.day, fund: bEsc(w.fund || ''),
+    name: bEsc(w.x.name || 'n/a'), sid: bEsc(w.x.sid || ''), person: bEsc(bWho(cfg, w.x.person)), day: w.day, fund: bEsc(w.fund || ''),
     sam: w.sam ? yes : no, amount: w.amount, status: bStatusLabel(w.key, w), bonus: w.bonus,
   })), [
     { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'person', label: 'Sales' },
@@ -7770,7 +7778,7 @@ function renderBoothEvent() {
     { key: 'bonus', label: bL('Bonus units', 'Bonus unit'), type: 'idr', sum: true },
   ], bL('No new customer has bought yet.', 'Belum ada nasabah baru yang beli.'));
   genTable('#bePlans', bon.nabung.map((n) => ({
-    name: bEsc(n.x.name || 'n/a'), sid: bEsc(n.x.sid || ''), person: bEsc(n.x.person || ''), created: n.plan.created_on,
+    name: bEsc(n.x.name || 'n/a'), sid: bEsc(n.x.sid || ''), person: bEsc(bWho(cfg, n.x.person)), created: n.plan.created_on,
     frequency: bEsc(n.plan.frequency), sam_amount: n.samAmount, months: n.months, status: bStatusLabel(n.key), bonus: n.bonus,
   })), [
     { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'person', label: 'Sales' },
@@ -7780,7 +7788,7 @@ function renderBoothEvent() {
     { key: 'status', label: 'Status' }, { key: 'bonus', label: bL('Bonus units', 'Bonus unit'), type: 'idr', sum: true },
   ], bL('No recurring plan started since the event began.', 'Belum ada rencana nabung rutin sejak event mulai.'));
   genTable('#beTopUp', bon.topUp.map((u) => ({
-    name: bEsc(u.x.name || 'n/a'), sid: bEsc(u.x.sid || ''), email: bEsc(u.x.email), promo: bEsc(u.promo), person: bEsc(u.person),
+    name: bEsc(u.x.name || 'n/a'), sid: bEsc(u.x.sid || ''), email: bEsc(u.x.email), promo: bEsc(u.promo), person: bEsc(bWho(cfg, u.person)),
     day: u.day, amount: u.amount, cashback: u.cashback, status: bStatusLabel(u.key, u), payable: u.payable,
   })), [
     { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'sid', label: 'SID' }, { key: 'email', label: 'Email' },
@@ -7834,9 +7842,9 @@ function renderBoothRules(cfg, period, scale) {
       ${li('Social media follow and app store rating (small SAM merchandise) and Sucorwave sign-ups happen outside SayaKaya, so they are not in this data; the Sucorwave table counts the SayaKaya steps of each journey.', 'Follow media sosial dan rating app store (merchandise SAM kecil) serta pendaftaran Sucorwave terjadi di luar SayaKaya, jadi tidak ada di data ini; tabel Sucorwave menghitung langkah SayaKaya dari tiap journey.')}
     </ul>`;
   genTable('#beRoster', cfg.roster.map((r) => ({
-    code: bEsc(r.code), person: bEsc(r.person), role: { sales: 'Sales', team_lead: 'Team lead', flying: 'Flying team' }[r.role] || bEsc(r.role),
+    code: bEsc(r.code), person: bEsc(r.person), name: bEsc(r.name || ''), role: { sales: 'Sales', team_lead: 'Team lead', flying: 'Flying team' }[r.role] || bEsc(r.role),
     booth: bEsc(cfg.booths[r.booth] || r.booth), email: bEsc(r.email),
-  })), [{ key: 'code', label: bL('Code', 'Kode') }, { key: 'person', label: bL('Name', 'Nama') }, { key: 'role', label: bL('Role', 'Peran') },
+  })), [{ key: 'code', label: bL('Code', 'Kode') }, { key: 'person', label: bL('Position', 'Posisi') }, { key: 'name', label: bL('Name', 'Nama') }, { key: 'role', label: bL('Role', 'Peran') },
     { key: 'booth', label: 'Booth' }, { key: 'email', label: bL('Sales account', 'Akun sales') }], '');
 }
 

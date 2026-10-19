@@ -52,8 +52,13 @@ add({ code: 'SGC1', status: 'pending', verified: null });
 times(21, (i) => add({ code: 'SCP1', registered: '2026-10-24', verified: '2026-10-25', buys: i < 11 ? [['2026-10-26', 1000000]] : [] }));
 // SCP2 20 SID all funded: one short of ceil(50 x 0.4194) = 21.
 times(20, () => add({ code: 'SCP2', registered: '2026-10-24', verified: '2026-10-25', buys: [['2026-10-26', 1000000]] }));
-// Registered 2 Jan, KYC verified 10 Jan (after the event): counts in the last period.
-const late = add({ code: 'SCP3', registered: '2027-01-02', verified: '2027-01-10' });
+// Registered 9 Jan, KYC verified 15 Jan (after the event ended on 10 Jan): counts in the last period.
+const late = add({ code: 'SCP3', registered: '2027-01-09', verified: '2027-01-15' });
+// Verified on the last event day itself (10 Jan): also the last period.
+const lastDay = add({ code: 'SCP3', registered: '2027-01-10', verified: '2027-01-10' });
+// Period edges: 31 Dec is December, 1 Jan is January.
+const decEdge = add({ code: 'SCP3', registered: '2026-12-30', verified: '2026-12-31' });
+const janFirst = add({ code: 'SCP3', registered: '2027-01-01', verified: '2027-01-01' });
 
 // Customer bonuses.
 const welcomeOk = add({ code: 'SCP4', buys: [['2026-11-02', 1000000, { sam: true }]] });
@@ -108,7 +113,7 @@ assert.strictEqual(lead('nov', 'GC').aum, 350000000);
 assert.deepStrictEqual(pick(sales('oct', 'Sales CP 1')), { sid: 21, funded: 11, gate: true, r1: 150000, r2: 300000, r3: 0, r4: 0, total: 450000, paid: 450000 });
 assert.strictEqual(sales('oct', 'Sales CP 2').gate, false, '20 SID is one short in October');
 assert.strictEqual(sales('oct', 'Sales CP 1').gateSid, 21);
-assert.strictEqual(res.latePeriod, '2026-12', 'a KYC verified after the event counts in the last period');
+assert.strictEqual(res.latePeriod, '2027-01', 'a KYC verified after the event counts in the last period (January)');
 
 const w = (id) => res.welcome.find((r) => r.user_id === id);
 assert.deepStrictEqual([w(welcomeOk).key, w(welcomeOk).bonus, w(welcomeOk).until], ['eligible', 25000, '2026-12-02']);
@@ -134,5 +139,48 @@ assert.ok(run('boothFreshText(__fresh)').includes('2026-10-19 03:30 WIB'), 'olde
 assert.strictEqual(run('boothFreshText([])'), '');
 assert.strictEqual(run('boothFreshText(undefined)'), '');
 assert.strictEqual(run("boothFreshText([{ table_id: 'users', modified_at: 'nope' }])"), '');
+
+// Event runs to 10 Jan 2027. December and January are separate periods: December is a full
+// month (M1 = January), January is 1-10 Jan prorated 10/31 (M1 = February).
+const cfgInfo = JSON.parse(run(`(() => {
+  const c = BOOTH_EVENT, dec = c.periods.find((p) => p.id === '2026-12'), jan = c.periods.find((p) => p.id === '2027-01');
+  const periodOf = (id) => boothCompute(__data, c, '2027-01-12').people.find((x) => x.user_id === id).sidPeriod.id;
+  return JSON.stringify({ end: c.end, ids: c.periods.map((p) => p.id), dec, jan, decEdge: periodOf('${decEdge}'), janFirst: periodOf('${janFirst}'), lastDay: periodOf('${lastDay}') });
+})()`));
+assert.strictEqual(cfgInfo.end, '2027-01-10');
+assert.deepStrictEqual(cfgInfo.ids, ['2026-10', '2026-11', '2026-12', '2027-01']);
+assert.deepStrictEqual([cfgInfo.dec.from, cfgInfo.dec.to, cfgInfo.dec.workDays], ['2026-12-01', '2026-12-31', 21], 'December is a full month on its own');
+assert.deepStrictEqual(cfgInfo.dec.m1, { from: '2027-01-01', to: '2027-01-31' });
+assert.deepStrictEqual([cfgInfo.jan.from, cfgInfo.jan.to], ['2027-01-01', '2027-01-10']);
+assert.ok(Math.abs(cfgInfo.jan.workDays - 21 * 10 / 31) < 1e-9, 'January 1-10 = 10/31 x 21 working days');
+assert.deepStrictEqual(cfgInfo.jan.m1, { from: '2027-02-01', to: '2027-02-28' });
+assert.strictEqual(cfgInfo.decEdge, '2026-12', 'KYC on 31 Dec is December');
+assert.strictEqual(cfgInfo.janFirst, '2027-01', 'KYC on 1 Jan is January, not December');
+assert.strictEqual(cfgInfo.lastDay, '2027-01', 'KYC on the last event day (10 Jan) is January');
+
+// Sales names from the sheet: the position (person) stays the key, the name is display only.
+const who = JSON.parse(run(`JSON.stringify({
+  named: bWho(BOOTH_EVENT, 'Sales PIM 1'), lead: bWho(BOOTH_EVENT, 'Team Lead GC'), dotted: bWho(BOOTH_EVENT, 'Sales PIM 5'),
+  flying: bWho(BOOTH_EVENT, 'Flying Team 1'), noName: bWho(BOOTH_EVENT, 'Sales GC 6'), emptyLead: bWho(BOOTH_EVENT, 'Team Lead CP'),
+  none: bWho(BOOTH_EVENT, null), unknown: bWho(BOOTH_EVENT, 'Nobody'),
+  filled: BOOTH_EVENT.roster.filter((r) => r.name).length, total: BOOTH_EVENT.roster.length,
+  badName: BOOTH_EVENT.roster.filter((r) => r.name !== null && (typeof r.name !== 'string' || r.name !== r.name.trim() || !r.name)).map((r) => r.code),
+  nameByCode: Object.fromEntries(BOOTH_EVENT.roster.filter((r) => r.name).map((r) => [r.code, r.name])),
+})`));
+assert.strictEqual(who.named, 'Viki Setiadi (Sales PIM 1)');
+assert.strictEqual(who.lead, 'Sandy (Team Lead GC)');
+assert.strictEqual(who.dotted, 'M. Zhafran (Sales PIM 5)');
+assert.strictEqual(who.flying, 'Flying Team 1', 'flying team has no names yet: falls back to the position');
+assert.strictEqual(who.noName, 'Sales GC 6');
+assert.strictEqual(who.emptyLead, 'Team Lead CP');
+assert.strictEqual(who.none, '');
+assert.strictEqual(who.unknown, 'Nobody');
+assert.deepStrictEqual([who.filled, who.total], [19, 27], '19 of 27 codes have a name so far (6 flying team, TLCP and SGC6 are empty)');
+assert.deepStrictEqual(who.badName, []);
+assert.deepStrictEqual(who.nameByCode, {
+  TLPIM: 'Herlangga', SPIM1: 'Viki Setiadi', SPIM2: 'Ilham Ramadhan', SPIM3: 'Gabriel Rizal Pratama', SPIM4: 'Novi Yulianti', SPIM5: 'M. Zhafran', SPIM6: 'Zulham Donni',
+  SCP1: 'Nur Haliza', SCP2: 'Khairy Harianto', SCP3: 'M. Ilham Saputra', SCP4: 'Milza Anindya Putri', SCP5: 'Widya Sartika', SCP6: 'Marlinda',
+  TLGC: 'Sandy', SGC1: 'Eka Muhammad Rizki', SGC2: 'Jihan', SGC3: 'Arfan Herdian', SGC4: 'Agus Rinaldi Rusli', SGC5: 'Edi Sudrajat',
+});
 
 console.log('booth-event smoke test passed');
