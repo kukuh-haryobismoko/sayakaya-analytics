@@ -25,10 +25,59 @@ curl -X POST "$SUPABASE_URL/storage/v1/object/presentation-decks/review-october.
 
 `data.json` holds account identifiers and is gitignored; never commit it.
 
-Before republishing, reread the sentences about the partial month (the
-"Oct · Nd" column, the Rp 50 B account's expected month-end exit, the
-October pace). They were written for data through 7 October; numbers update
-by themselves, claims about what October "is doing" may not hold.
+## Rules for a refresh
+
+The generator takes today's date as the cut-off, so step 1 defines what the
+deck says: "Data through <today minus 1>", the "Oct · Nd" column, pace rows
+and every partial-month claim. Decide the cut-off before running it. It takes
+about half a minute.
+
+Numbers, dates and the sentences that depend on them are computed in
+`build-deck.py` from `data.json`, so a plain re-run keeps them right:
+
+- the cover date and the version line;
+- the days the Rp 50 B account was out (from that account's own moves) and
+  the day it came back;
+- the "highest since <month>" registration pace;
+- weeks since the referral program launched (31 Aug 2026);
+- the fall in the last closes with no order behind it.
+
+These do NOT update by themselves and have to be reread at each refresh,
+because they compare against what the *previous* PDF said, or describe what
+the dashboard could do at that time:
+
+- `prev_top_bought` in `build-deck.py` (what the last deck said about the
+  busiest referrer) — currently 0, from the 8 Oct 2026 run (41 signups, none
+  bought);
+- the `NEW` list on "06 · New in the dashboard": add what shipped since the
+  last version's date; drop rows the audience has already seen if they push
+  the list over one slide;
+- the claims about the partial month ("October is doing X") were written for
+  the data of that run; reread them before presenting.
+
+Slide height is a hard 720px with `overflow: hidden`, so long copy is cut
+off silently, not wrapped. After any text or chart edit, check it by running
+Chrome headless and measuring every slide (adjust the path):
+
+```bash
+node -e "
+const {spawn}=require('child_process');
+const p=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  ['--headless=new','--disable-gpu','--remote-debugging-port=9333','--window-size=1280,720','about:blank'],{stdio:'ignore'});
+setTimeout(async()=>{
+  const t=await (await fetch('http://127.0.0.1:9333/json/new?'+encodeURIComponent('file://'+process.env.PWD+'/presentation-docs/design-deck-october/deck-print.html'),{method:'PUT'})).json();
+  const w=new WebSocket(t.webSocketDebuggerUrl); let i=0; const pend={};
+  const send=(m,pr)=>new Promise(r=>{const n=++i;pend[n]=r;w.send(JSON.stringify({id:n,method:m,params:pr}))});
+  w.onmessage=e=>{const m=JSON.parse(e.data); if(m.id&&pend[m.id])pend[m.id](m.result)};
+  await new Promise(r=>w.onopen=r); await new Promise(r=>setTimeout(r,2500));
+  const r=await send('Runtime.evaluate',{returnByValue:true,expression:\`(()=>{const o=[];document.querySelectorAll('.slide').forEach((s,i)=>{const rc=s.getBoundingClientRect();let worst=null;s.querySelectorAll('*').forEach(el=>{const b=el.getBoundingClientRect();if(b.height>0){const over=Math.round(b.bottom-(rc.bottom-68));if(worst===null||over>worst)worst=over}});if(worst>0)o.push({page:i+1,overflowPx:worst})});return JSON.stringify(o)})()\`});
+  console.log(r.result.value); p.kill(); process.exit(0);
+},1800)"
+```
+
+Anything above 0 means text sitting past the printable area; trim or shrink
+it, re-run, then reprint the PDF. The same probe with `.click()`-style edits
+is the quickest way to tell whether a slide change fits before presenting.
 
 For a new month: copy `design-deck-october/` to a new folder, run the data
 script with the new review month, and rewrite the narrative in

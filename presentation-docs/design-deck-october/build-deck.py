@@ -5,10 +5,13 @@
     python3 presentation-docs/design-deck-october/build-deck.py
     -> deck-print.html (print to PDF with headless Chrome, see README-monthly-review.md)
 
-Every number and chart comes from data.json, so the mid-October refresh is
-the two commands above plus a PDF print. The sentences are written for the
-data as of 8 Oct 2026; reread the ones marked REVIEW AT REFRESH when the
-October figures change (they make claims about the partial month).
+Every number and chart comes from data.json. The dates and the sentences that
+depend on them (cover date, version line, the days the Rp 50 B account was
+out, "highest since <month>", weeks since the referral launch, the last-close
+fall) are derived from it too, so a re-run keeps them right. What does NOT
+update by itself, and how to check it, is in README-monthly-review.md
+("Rules for a refresh"): prev_top_bought below, the NEW list on slide 06,
+and any sentence about the partial month.
 Same visual system as the September deck (design-deck-september/).
 """
 import html, json, pathlib, sys
@@ -71,6 +74,22 @@ def mon(ym):
     return MONTHS[int(ym[5:7]) - 1]
 
 
+def ym_add(ym, n):
+    y, m = int(ym[:4]), int(ym[5:])
+    m += n
+    return f"{y + (m - 1) // 12}-{(m - 1) % 12 + 1:02d}"
+
+
+def words(n):
+    """Small integers as English words, for copy like 'six of the 18 days'."""
+    ones = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+            "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+    if int(n) < 20:
+        return ones[int(n)]
+    tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+    return tens[int(n) // 10] + ("" if int(n) % 10 == 0 else "-" + ones[int(n) % 10])
+
+
 def dlabel(iso):
     dt = date.fromisoformat(str(v(iso))[:10])
     return f"{dt.day} {MONTHS[dt.month - 1]}"
@@ -92,12 +111,53 @@ net = {k: num(tx[k]["buy_volume"]) - num(tx[k]["sell_volume"]) for k in tx}
 nf = {r["ym"]: r for r in d["netFlowByMonth"]}
 pace = lambda x: num(x) / part_days * part_month_days
 
-# Daily AUM, shifted one day: a portfolio_with_code row dated D holds the
-# balance at the close of D-1 (same correction as the dashboard's HNWI tab).
-daily = [(date.fromisoformat(str(v(r["d"]))) - timedelta(days=1), num(r["aum"])) for r in d["dailyAum"]]
+# Daily AUM. The row dated D is treated as the close of D: the raw rows carry
+# the same value twice at the end of the series (17, 18 and 19 Oct all read
+# 253.01 B), so a one-day shift would relabel the same balance three times.
+# The 8 Oct version shifted by one; the dates here read one day later.
+daily = [(date.fromisoformat(str(v(r["d"]))), num(r["aum"])) for r in d["dailyAum"] if date.fromisoformat(str(v(r["d"]))).isoformat() < d["partialThrough"]]
 close_today = daily[-1]
-close_review_end = next((x for x in daily if x[0].isoformat() == f"{rev_ym}-30" or x[0].isoformat() == f"{rev_ym}-31"), None)
-close_cmp_end = daily[0] if daily[0][0].month != int(rev_ym[5:]) else None
+# Last close of each full month, straight from the generator's daily rows: the
+# row dated the 1st of the next month holds the previous month's close (the
+# 1 Sep row, 264.6 B, is August's close; the 1 Oct row, 207.1 B, is September's,
+# taken while the Rp 50 B account was out). This is the definition the 8 Oct
+# version used; the chart's one-day shift is separate.
+close_review_end = next((x for x in daily if x[0].isoformat() == f"{ym_add(rev_ym, 1)}-01"), None)
+close_cmp_end = next((x for x in daily if x[0].isoformat() == f"{ym_add(cmp_ym, 1)}-01"), None)
+
+# A balance that large leaving or returning moves the book by about that amount
+# in one day, which nothing else in the daily series does. A day counts as "out"
+# when the book sits well below its level ten days earlier; counting those days
+# keeps the copy right on every refresh instead of hard-coding "six of the
+# seven days" (written for the 8 Oct run).
+STEP = 40e9
+part_days_list = [(day, a) for day, a in daily if f"{day:%Y-%m}" == part_ym and day.isoformat() < d["partialThrough"]]
+# Days of the partial month the Rp 50 B account was out, from the trade dates
+# the generator returns (sold 29 Sep, bought back 6 Oct): on the 8 Oct data
+# that was "30 Sep to 6 Oct", six of the seven days then and six of the 18
+# days now. Also compute the day the balance returns, for the KPI line.
+def iso(x):
+    return date.fromisoformat(str(v(x))) if isinstance(x, dict) else (x if isinstance(x, date) else date.fromisoformat(str(x)))
+
+
+_moves = sorted(d["largestAccount"]["moves"], key=lambda m: iso(m["d"]).isoformat())
+_starts = [iso(m["d"]) for m in _moves if m["type"] in ("sell", "SWITCH_OUT") and num(m["amount"]) >= STEP]
+_ends = [iso(m["d"]) for m in _moves if m["type"] in ("buy", "SWITCH_IN") and num(m["amount"]) >= STEP]
+_out_start = next((t for t in reversed(_starts) if t <= through), None)
+_back = next((t for t in _ends if _out_start and t > _out_start and t <= through), None)
+if _out_start and _back:
+    out_days = max(0, (_back - _out_start).days - 1)  # sold 29 Sep, back 6 Oct -> out 30 Sep to 5 Oct
+    out_range = f"{dlabel(_out_start + timedelta(days=1))} to {dlabel(_back - timedelta(days=1))}"
+back_label = dlabel(_back) if _back else None
+# A retreat in the last three closes that no visible order explains. The
+# transaction table shows no redemption past Rp 0.7 B, so a fall this size is
+# worth naming rather than leaving for the meeting to spot.
+last_gap = None
+for back in range(2, min(4, len(daily)) + 1):
+    drop = daily[-back][1] - daily[-1][1]
+    if drop >= 3e9:
+        last_gap = (dlabel(daily[-back][0]), drop)
+        break
 
 acct = d["largestAccount"]
 acct_aum = num(acct["profile"]["aum_today"])
@@ -189,7 +249,7 @@ slide(f"""
     <div class="eb" style="color:#8a99e8;font-size:14px">Monthly meeting · {PART} 2026</div>
     <div class="big">SayaKaya<br>{PART} Review</div>
     <div style="font-size:21px;color:#b7bdd2;line-height:1.5">{REV} 2026 performance, with {CMP} for comparison. Data through {THROUGH}.</div>
-    <div class="eb" style="color:#b7bdd2;font-size:12.5px">Version 1 · an update with {PART} figures through about 21 {PART} follows</div>
+    <div class="eb" style="color:#b7bdd2;font-size:12.5px">Version 2 · refreshed from the version of 8 Oct, now through {THROUGH}. Figures update themselves; claims about {PART} are checked at each refresh.</div>
   </div>
   {callout('The <strong>RAIZ user segment is excluded from every figure in this deck</strong>, including app behaviour: accounts with a RAIZ or RAIZKAYA referrer code. Every AUM and holdings figure also excludes <strong>Avrist Liquid Fund and Avrist Indeks LQ45</strong>, same as last month. Numbers here will be lower than the dashboard, which counts the full book. <strong>New this month:</strong> app activity from Google Analytics now joins investor records (' + intc(gam["matched"]) + ' of ' + intc(gam["ga_users"]) + ' app user IDs in ' + REV + ' match an account).', "#ffc531", "Read this before the first number", dark=True)}
 </div>""", dark=True)
@@ -203,9 +263,9 @@ slide(head(f"01 · Where we ended {REV}", "The month in six numbers") + f"""
   {kpi("Net flow", b(net['review'], True), f"{b(excl_rev, True)} without one account", color=signc(net['review']), sub_color=MUTED)}
   {kpi("New registrations", intc(reg[rev_ym]['registered']), f"{chg(reg[rev_ym]['registered'], reg[cmp_ym]['registered'])} vs {mon(cmp_ym)}, first rise since January", sub_color=GREEN)}
   {kpi("Active investors (bought in month)", intc(tx['review']['active_investors']), f"down from {intc(tx['comparison']['active_investors'])} in {CMP}; {intc(rh['ever_bought'])} ever bought", sub_color=RED)}
-  {kpi(f"AUM · close {dlabel(close_today[0].isoformat())}", b(close_today[1]), f"back after a week at {b(min(x[1] for x in daily))}", sub_color=MUTED)}
+  {kpi(f"AUM · close {dlabel(close_today[0].isoformat())}", b(close_today[1]), f"the Rp 50 B account was out {out_range}, back on {back_label}; lowest close in {PART} {b(min([x[1] for x in part_days_list] or [0]))}", sub_color=MUTED)}
 </div>
-{callout(f"Three of these six numbers are <strong>one account</strong>. It switched Rp 50.7 B into a lower-fee fund on 4 Sep, sold Rp 50.0 B on 29 Sep and bought it back on 6 Oct. Without it, {REV}'s net flow was <strong>{b(excl_rev, True)}</strong>, the second month in a row close to zero after five months of broad outflow. Registrations rose for the first time this year.", "#14c687")}
+{callout(f"Three of these six numbers are <strong>one account</strong>. It switched Rp 50.7 B into a lower-fee fund on 4 Sep, sold Rp 50.0 B on 29 Sep and bought it back on 6 Oct. Without it, {REV}'s net flow was <strong>{b(excl_rev, True)}</strong>, the second month in a row close to zero after five months of broad outflow. Registrations rose for the first time since January.", "#14c687")}
 """)
 
 # ---- 02 trajectory ----------------------------------------------------------
@@ -228,7 +288,7 @@ everyone_aug = num(tx["comparison"]["buy_volume"]) - max(num(nf[cmp_ym]["largest
 slide(f"""
 <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:40px">
   {head("02 · Trajectory", f"{CMP} → {REV} → {PART}")}
-  <div class="note" style="max-width:380px;text-align:right">{PART} is {part_days} of {part_month_days} days. Pace scales the {part_days}-day total to a full month; balances and people counts are never projected. Buys, sells and total flow get no pace: one Rp 50 B order makes a projection meaningless. *The Rp 50 B account was out for six of the seven days.</div>
+  <div class="note" style="max-width:380px;text-align:right">{PART} is {part_days} of {part_month_days} days. Pace scales the {part_days}-day total to a full month; balances and people counts are never projected. Buys, sells and total flow get no pace: one Rp 50 B order makes a projection meaningless. *The Rp 50 B account was out for {out_days} of the {part_days} days ({out_range}), back since.</div>
 </div>
 <div class="card" style="padding:0;overflow:hidden">{table(["Metric", CMP, REV, f"{mon(part_ym)} · {part_days}d", f"{mon(part_ym)} pace"], traj, "t traj")}</div>
 {callout(f"Everyone except that account bought <strong>{b(everyone_aug)}</strong> in {CMP} and <strong>{b(tx['review']['buy_volume'])}</strong> in {REV}, {abs((num(tx['review']['buy_volume']) / everyone_aug - 1) * 100):.0f}% less, from almost the same number of buy orders ({intc(tx['comparison']['buy_count'])} → {intc(tx['review']['buy_count'])}). The larger buyers paused; small buying carried on.", "#14c687", "The number nobody will spot on their own")}
@@ -257,8 +317,8 @@ svg = f"""<svg viewBox="0 0 {W} {H}" class="chart">{grid}
 <line x1="{X0}" y1="{Y1}" x2="{X1}" y2="{Y1}" stroke="#8a90a3" stroke-width="1.5"/></svg>"""
 slide(head(f"01 · Where we ended {REV}", f"AUM has held at 250 to 260 B for three months") + f"""
 <div class="card chart-card"><div class="c-lab">Platform AUM, average daily balance per month · Rp billion · excl. RAIZ, 2 funds · last point: close on {dlabel(close_today[0].isoformat())}</div>{svg}</div>
-<div class="note">{REV} averaged {b(aum[rev_ym])} ({chg(aum[rev_ym], aum[cmp_ym])}). {PART}'s {part_days}-day average ({b(aum[part_ym])}) is left off the line: the Rp 50 B account was out for six of those days. Its close on {dlabel(close_today[0].isoformat())}, {b(close_today[1])}, is plotted instead.</div>
-{callout(f"One account is <strong>{top1_share:.1f}% of AUM today</strong> (Rp {acct_aum/1e9:.1f} B of {conc_total/1e9:.1f} B). Every month-level AUM, flow and fee figure moves with it, so from this deck on, flows are shown with and without the largest account.", "#3a50ab", "Why the line is flat but the month was not")}
+<div class="note">{REV} averaged {b(aum[rev_ym])} ({chg(aum[rev_ym], aum[cmp_ym])}). {PART}'s {part_days}-day average ({b(aum[part_ym])}) is left off the line: the Rp 50 B account was out for {out_days} of those days ({out_range}), back since. Its close on {dlabel(close_today[0].isoformat())}, {b(close_today[1])}, is plotted instead.{f" The last closes sit {b(last_gap[1])} lower than {last_gap[0]} with no order behind it; ask the MI before the meeting." if last_gap else ""}</div>
+<div class="tight">{callout(f"One account is <strong>{top1_share:.1f}% of AUM today</strong> (Rp {acct_aum/1e9:.1f} B of {conc_total/1e9:.1f} B), so every month-level figure moves with it. From this deck on, flows are shown with and without it.", "#3a50ab", "Why the line is flat but the month was not")}</div>
 """)
 
 # ---- 04 the account -----------------------------------------------------------
@@ -361,7 +421,7 @@ gl4 = "".join(f'<line class="gl" x1="{X0}" y1="{sy4(t*1e6):.1f}" x2="{X1}" y2="{
 svg4 = f'<svg viewBox="0 0 {W4} {H4+10}" class="chart">{gl4}{rb}<line x1="{X0}" y1="{Y1}" x2="{X1}" y2="{Y1}" stroke="#8a90a3" stroke-width="1.5"/></svg>'
 slide(head(f"01 · Where we ended {REV}", f"AUM up {chg(aum[rev_ym], aum[cmp_ym])[1:]}, fee revenue down {chg(revenue[rev_ym], revenue[cmp_ym])[1:]}") + f"""
 <div class="card chart-card"><div class="c-lab">Platform fee revenue, AperD share · Rp million per month · excl. RAIZ, 2 funds</div>{svg4}</div>
-<div class="note">{REV} earned <strong>{m(revenue[rev_ym])}</strong>, {m(abs(revenue[rev_ym]-revenue[cmp_ym]))} less than {CMP}, even though average AUM rose. {PART}'s {part_days}-day pace ({m(pace(revenue[part_ym]))}) understates the month: the Rp 50 B account was out for six of the seven days. Next: where the money went.</div>
+<div class="note">{REV} earned <strong>{m(revenue[rev_ym])}</strong>, {m(abs(revenue[rev_ym]-revenue[cmp_ym]))} less than {CMP}, even though average AUM rose. {PART}'s {part_days}-day pace ({m(pace(revenue[part_ym]))}) understates the month: the Rp 50 B account was out for {out_days} of the {part_days} days ({out_range}), back since. Next: where the money went.</div>
 """)
 
 # ---- 07 revenue cause -------------------------------------------------------------
@@ -428,12 +488,18 @@ for k in regs:
                      intc(r2b[k]["bought_within_30d"]) + (" *" if k >= rev_ym else ""), f"{intc(refm[k]['via_referral'])} ({pct(refm[k]['via_referral'], rr, 0)})"))
 org = adj.get("Organic", {})
 mgm = adj.get("MGM program", {})
+# "highest since X" is computed, not hard-coded: the label ages as the month
+# fills in (it read "since April" on 8 Oct and is wrong two weeks later).
+_pace_now = pace(reg[part_ym]["registered"])
+_better = [k for k in sorted(reg) if k < part_ym and reg[k]["registered"] >= _pace_now]
+reg_rank = (f"the highest since {mon(_better[-1])} 2026" if _better
+            else "the highest of the year so far, ahead of January's 471")
 slide(head("03 · Acquisition", "Registrations rose for the first time this year") + f"""
 <div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px">
   <div class="card" style="padding:0;overflow:hidden">{table(["Month", "Registered", "Verified (now)", "Bought ≤30d", "Via referral"], reg_rows, "t small")}</div>
   <div style="display:flex;flex-direction:column;gap:14px">
     <div class="card text-card"><div class="k-lab">{REV} funnel</div><div class="k-val sm">{intc(reg[rev_ym]['registered'])} → {intc(reg[rev_ym]['verified_ever'])} → {intc(r2b[rev_ym]['bought_within_30d'])}</div><div class="tx sm">{pct(reg[rev_ym]['verified_ever'], reg[rev_ym]['registered'], 0)} verified, {pct(r2b[rev_ym]['bought_within_30d'], reg[rev_ym]['registered'], 0)} bought so far. *The 30-day window is still open for late-{REV} signups.</div></div>
-    <div class="card text-card"><div class="k-lab">{PART} so far</div><div class="k-val sm" style="color:{GREEN}">{intc(reg[part_ym]['registered'])} in {part_days} days</div><div class="tx sm">Pace {intc(pace(reg[part_ym]['registered']))} for the month, the highest since April. {intc(refm[part_ym]['via_referral'])} came via referral.</div></div>
+    <div class="card text-card"><div class="k-lab">{PART} so far</div><div class="k-val sm" style="color:{GREEN}">{intc(reg[part_ym]['registered'])} in {part_days} days</div><div class="tx sm">Pace {intc(pace(reg[part_ym]['registered']))} for the month, {reg_rank}. {intc(refm[part_ym]['via_referral'])} came via referral.</div></div>
     <div class="card text-card" style="border-color:#f3c7d3"><div class="k-lab" style="color:{RED}">Channel, partly visible</div><div class="tx sm">Adjust shows install channels: {intc(org.get('installs', 0))} organic and {intc(mgm.get('installs', 0))} from the MGM program in {REV}. Still nothing on the user record, so registrations can't be split by campaign.</div></div>
   </div>
 </div>
@@ -443,7 +509,9 @@ slide(head("03 · Acquisition", "Registrations rose for the first time this year
 via, orgn = rp.get(True, {}), rp.get(False, {})
 act_via = num(via.get("activated", 0)) / max(num(via.get("registered", 1)), 1) * 100
 act_org = num(orgn.get("activated", 0)) / max(num(orgn.get("registered", 1)), 1) * 100
-slide(head("03 · Acquisition", "The referral program, five weeks in", color="#07724d", sub=f"Scoped to the program's launch, 31 Aug through {THROUGH}.") + f"""
+# Weeks since the 31 Aug launch, so the title stays true on every refresh.
+weeks_in = words(max(1, (date.fromisoformat(d["partialThrough"]) - date(2026, 8, 31)).days // 7))
+slide(head("03 · Acquisition", f"The referral program, {weeks_in} weeks in", color="#07724d", sub=f"Scoped to the program's launch, 31 Aug through {THROUGH}.") + f"""
 <div class="card" style="padding:0;overflow:hidden">{table(["Since launch", "Registered", "Activated", "Rate", "Median invested"], [
     ("Via referral", intc(via.get('registered', 0)), intc(via.get('activated', 0)), f'<span style="color:{GREEN};font-weight:700">{act_via:.1f}%</span>', f"Rp {num(via.get('median_invested', 0))/1e6:.2f} M"),
     ("Organic", intc(orgn.get('registered', 0)), intc(orgn.get('activated', 0)), f"{act_org:.1f}%", f"Rp {num(orgn.get('median_invested', 0))/1e6:.2f} M")], "t big")}</div>
@@ -452,7 +520,7 @@ slide(head("03 · Acquisition", "The referral program, five weeks in", color="#0
   <div class="card kpi dark-card"><div class="k-val" style="color:#fff">{act_via/act_org:.1f}×</div><div class="k-sub" style="color:#b7bdd2">more likely to activate than an organic signup over the same weeks</div></div>
   <div class="card kpi dark-card"><div class="k-val" style="color:#fff">{num(via.get('median_invested', 0))/max(num(orgn.get('median_invested', 1)), 1):.1f}×</div><div class="k-sub" style="color:#b7bdd2">more invested at the median</div></div>
 </div>
-{callout(f"Still small: {intc(via.get('registered', 0))} referred signups in five weeks, {intc(via.get('activated', 0))} of them funded. Strong enough to keep, and the next slide shows it rests on a handful of referrers.", "#ffc531")}
+{callout(f"Still small: {intc(via.get('registered', 0))} referred signups in {weeks_in} weeks, {intc(via.get('activated', 0))} of them funded. Strong enough to keep, and the next slide shows it rests on a handful of referrers.", "#ffc531")}
 """)
 
 # ---- 11 referrer quality ----------------------------------------------------------
@@ -461,6 +529,15 @@ rest = rq[6:]
 if rest:
     rq_rows.append((f"Everyone else · {len(rest)} referrers", intc(sum(r['referred'] for r in rest)), intc(sum(r['bought'] for r in rest)), pct(sum(r['bought'] for r in rest), sum(r['referred'] for r in rest), 0)))
 internal = sum(1 for r in rq if r["internal_domain"])
+# What the 8 Oct PDF said about the busiest referrer (from that run's data.json:
+# 41 signups, none bought). Update this constant when the deck is rewritten.
+prev_top_bought = 0
+top_ref_note = ""
+if rq and rq[0]["bought"] == 0 and rq[0]["referred"] > 41:
+    top_ref_note = (f"The busiest referrer, #1, has now brought {intc(rq[0]['referred'])} signups and "
+                    f"still nobody who bought. Worth asking who they are before the next meeting.")
+elif prev_top_bought > 0 and rq and rq[0]["bought"] > prev_top_bought:
+    top_ref_note = f"Referrer #1 gained a buyer since the last deck's data ({intc(prev_top_bought)} before, {intc(rq[0]['bought'])} now)."
 slide(head("03 · Acquisition, the caution", "Who brings signups is not who brings investors", color="#c00d3f") + f"""
 <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px">
   <div class="card" style="padding:0;overflow:hidden">{table(["Since launch", "Referred", "Bought", "Rate"], rq_rows, "t small")}</div>
@@ -469,7 +546,10 @@ slide(head("03 · Acquisition, the caution", "Who brings signups is not who brin
     <div class="card kpi dark-card"><div class="k-lab" style="color:#8a99e8">Three referrers</div><div class="k-val" style="color:#fff">{rq_top3_buyers} of {rq_bought}</div><div class="k-sub" style="color:#b7bdd2">investors came from three referrers. The busiest referrer brought {rq[0]['referred']} signups and {rq[0]['bought']} investors.</div></div>
   </div>
 </div>
-{callout(f"Last month's question about the #2 referrer being an internal account: <strong>{'none' if internal == 0 else internal} of the {len(rq)} referrers uses a sayakaya.id email</strong>, and the top six all hold verified accounts with their own buying history. The bonus only pays on a funded first purchase, so signups that never fund cost nothing; the gap between referrers is about who they reach, not fraud.", "#3a50ab", "Closed from last month")}
+<div class="grid2">
+  {callout(top_ref_note, "#b07400", "Watched at this refresh") if top_ref_note else ""}
+  {callout(f"<strong>{'none' if internal == 0 else internal} of the {len(rq)} referrers uses a sayakaya.id email</strong>, and the top six all hold verified accounts with their own buying history. The bonus pays only on a funded first purchase, so unfunded signups cost nothing: the gap is who they reach, not fraud.", "#3a50ab", "Closed from last month" + (" · #2 was an internal-account worry" if False else ""))}
+</div>
 """)
 
 # ---- 12 app behaviour --------------------------------------------------------------
@@ -516,7 +596,7 @@ for i, (lab, f) in enumerate(frows):
 fl += f'<text class="ax" x="{bx(baseline)+6:.1f}" y="{H6-2}" style="fill:#b07400">every app user {baseline:.0f}%</text>'
 slide(head("04 · New: app behaviour", "What buyers do before they buy", color="#b07400",
            sub=f"Share of people who completed a buy within 7 days of first doing each action in {REV}. Steps inside the buy flow itself are left out.") + f"""
-<div class="card chart-card"><svg viewBox="0 0 {W6} {H6}" class="chart">{fl}</svg></div>
+<div class="card chart-card"><svg viewBox="0 0 {W6} {H6 - 34}" class="chart">{fl}</svg></div>
 <div class="grid2">
   {callout(f"Completing the risk profile is the strongest signal outside the buy flow: <strong>{num(fx['risk_profile_gate_completed']['buy_rate_pct']):.1f}%</strong> went on to buy, {num(fx['risk_profile_gate_completed']['lift']):.1f}× the average. Opening a push notification sits <strong>below</strong> average ({num(fx['notification_open']['buy_rate_pct']):.1f}%).", "#3a50ab")}
   {callout("These are habits of people who buy, not proof of what makes them buy. They are useful for choosing who to talk to, not for claiming a feature drives sales.", "#8a90a3", "Read with care")}
@@ -606,6 +686,10 @@ slide(head("05 · Product & revenue mix", "The money moved to the cheapest funds
 
 # ---- 19 new in the dashboard --------------------------------------------------------------
 NEW = [
+    ("16 Oct", "Product funnel", "Every phone that starts signing up: account, KYC, first purchase, where they stop, installs per platform, Android uninstalls. Details in Onboarding analysis."),
+    ("16 Oct", "Mobile app (PWA)", "The dashboard installs on a phone home screen and opens full-screen. Anyone who needs it in a meeting can keep it there."),
+    ("14 Oct", "Booth event, Promo recap, HNWI bonus", "The PIM, Gandaria and Central Park booths (19 Oct to 10 Jan): per-sales daily recap, incentives and customer bonuses. Promo recap: who used a code, bonus owed and sent. HNWI bonus: the SYKYPRIO program's monthly money-market bonus."),
+    ("9 to 12 Oct", "Analysis tabs, investor tools", "Onboarding, Subscription, Engagement and Redemption analysis (app side of the funnel); event code tracking; bulk portfolio export; sortable tables; sidebar tab search; Overview include/exclude filter."),
     ("8 Oct", "Email recap", f"Every email the dashboard sends: {intc(emails.get('totals', {}).get('sent', 0))} in {REV} ({intc(email_cats.get('statement', 0))} e-statements, {intc(email_cats.get('fund_performance', 0))} fund performance). Delivered, opened and clicked switch on once SES event publishing is set up."),
     ("8 Oct", "User behavior", "App activity next to transactions and holdings: the app behaviour section of this deck comes from it, plus a timeline for any single investor."),
     ("6 Oct", "Revenue trend", "Revenue by day, week or month, with the days, AUM and fee-mix split used in this deck, and a per-fund drill."),
@@ -646,6 +730,7 @@ def srow(label, value, color="#14161f"):
 
 
 actions = [
+    f"<strong>Top line</strong>: the book fell {b(last_gap[1])} between {last_gap[0]} and the last close with no visible order; ask the MI whether it is a switch or pricing." if last_gap else "",
     f"<strong>Rp 50 B account</strong>: ask whoever looks after it whether the month-end exits are planned. Three so far, all on the 29th to 31st; the next would land around 29 to 31 Oct.",
     f"<strong>Sharia Balanced → Money Market</strong>: {b(top_sw['amount'])} across {intc(top_sw['accounts'])} accounts cut the fee rate from {rc['annualYieldPct']['comparison']:.3f}% to {rc['annualYieldPct']['review']:.3f}%. Find out whether it was advised.",
     f"<strong>Use the app data</strong>: message the {intc(vnb.get('app_users', 0))} verified non-buyers and the {intent['people']} who started buying (lists in User behavior) instead of broadcast campaign pushes.",
@@ -690,7 +775,7 @@ CSS = """
 html, body { margin: 0; padding: 0; background: #ffffff; }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .slide { width: 1280px; height: 720px; overflow: hidden; page-break-after: always; break-after: page; position: relative;
-  font-family: "Inter", system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; gap: 20px; padding: 52px 64px; }
+  font-family: "Inter", system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; gap: 20px; padding: 52px 64px 68px; }
 .slide:last-child { page-break-after: auto; break-after: auto; }
 .slide.light { background: #f2f4f9; color: #14161f; }
 .slide.dark { background: #2c3348; color: #ffffff; padding: 72px; }
@@ -753,6 +838,10 @@ table.t.moves td:nth-child(3), table.t.moves th:nth-child(3), table.t.moves2 td:
 .sbar small { font-size: 12.5px; white-space: nowrap; }
 .mut { color: #8a90a3; font-weight: 500; }
 .new-row { display: grid; grid-template-columns: 110px 1fr; gap: 18px; padding: 13px 0; border-bottom: 1px solid #e6e9f2; }
+.slide .new-row { padding: 5px 0; }
+.slide .new-name { font-size: 15px; }
+.slide .new-tx { font-size: 12.5px; line-height: 1.35; }
+.slide .new-date { font-size: 12px; }
 .new-row:last-child { border-bottom: 0; }
 .new-date { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; color: #3a50ab; font-weight: 600; padding-top: 3px; }
 .new-name { font-size: 18px; font-weight: 650; }
@@ -764,9 +853,10 @@ table.t.moves td:nth-child(3), table.t.moves th:nth-child(3), table.t.moves2 td:
 .k-body { font-size: 14px; color: #3d4252; line-height: 1.45; }
 .sum-card { padding: 18px 22px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
 .s-h { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; letter-spacing: 1.3px; text-transform: uppercase; color: #3a50ab; font-weight: 700; margin-top: 8px; }
-.srow { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.srow { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 1px 0; }
+.s-h { margin-top: 5px; }
 .srow span:last-child { font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 700; text-align: right; }
-.act { display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 13px; line-height: 1.4; padding: 5px 0; border-bottom: 1px solid #eef0f5; }
+.act { display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 12.5px; line-height: 1.35; padding: 3px 0; border-bottom: 1px solid #eef0f5; }
 .act-n { font-family: "JetBrains Mono", ui-monospace, monospace; color: #c00d3f; font-weight: 700; }
 .act.done .act-n { color: #07724d; }
 """
