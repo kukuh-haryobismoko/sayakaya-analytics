@@ -586,12 +586,13 @@ function createApp({ serveStatic = true } = {}) {
     if (!BOOTH_DATE_RE.test(from || '') || !BOOTH_DATE_RE.test(to || '')) return res.status(400).json({ error: 'from and to are required (YYYY-MM-DD).' });
     if (!sam || String(sam).length > 120) return res.status(400).json({ error: 'sam (investment manager name) is required.' });
     const q = Q.boothEventData({ codes, promoCodes: promo, from, to, samManager: String(sam) });
-    const [customers, transactions, plans] = await Promise.all([
+    const [customers, transactions, plans, fresh] = await Promise.all([
       runQuery(q.customers.sql, q.customers.params, { redact: false }),
       runQuery(q.transactions.sql, q.transactions.params),
       runQuery(q.plans.sql, q.plans.params),
+      runQuery(q.fresh.sql, q.fresh.params),
     ]);
-    res.json({ customers, transactions, plans });
+    res.json({ customers, transactions, plans, fresh });
   }));
 
   app.get('/api/event-code/users', requireTab('event-code'), handler(async (req, res) => {

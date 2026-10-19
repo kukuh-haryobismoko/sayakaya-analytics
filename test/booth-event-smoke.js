@@ -123,4 +123,16 @@ const plan = (id) => res.nabung.find((r) => r.plan.plan_id === id);
 assert.deepStrictEqual([plan('p1').months, plan('p1').key, plan('p1').bonus], [3, 'eligible', 100000]);
 assert.strictEqual(plan('p2').key, 'not_eligible', '400 rb a month is below the 500 rb minimum');
 
+// "Data as of" line: oldest copy time, shown in WIB (UTC + 7), in both languages.
+const fresh = [
+  { table_id: 'transactions', modified_at: '2026-10-19T01:17:14Z' },
+  { table_id: 'users', modified_at: '2026-10-19T02:02:11Z' },
+  { table_id: 'user_profiles', modified_at: '2026-10-18T20:30:00Z' },
+];
+ctx.__fresh = fresh;
+assert.ok(run('boothFreshText(__fresh)').includes('2026-10-19 03:30 WIB'), 'oldest copy (20:30 UTC) = 03:30 WIB next day');
+assert.strictEqual(run('boothFreshText([])'), '');
+assert.strictEqual(run('boothFreshText(undefined)'), '');
+assert.strictEqual(run("boothFreshText([{ table_id: 'users', modified_at: 'nope' }])"), '');
+
 console.log('booth-event smoke test passed');

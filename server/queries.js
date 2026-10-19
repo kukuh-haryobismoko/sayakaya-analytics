@@ -5610,6 +5610,15 @@ const boothEventData = (opts) => {
         GROUP BY 1, 2, 3, 4, 5, 6`,
       params,
     },
+    // When each source table was last copied from the main database by its
+    // scheduled query (users-sc, user_profiles-sc, transactions-sc), so the
+    // page can say how fresh the registrations are. Metadata only, no scan.
+    fresh: {
+      sql: `SELECT table_id, FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%SZ', TIMESTAMP_MILLIS(last_modified_time)) AS modified_at
+        FROM \`sayakaya.main.__TABLES__\`
+        WHERE table_id IN ('users', 'user_profiles', 'transactions')`,
+      params: {},
+    },
   };
 };
 

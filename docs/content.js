@@ -1307,6 +1307,7 @@ const TAB_DETAILS = {
     },
     notes: [
       'Ubah aturan atau T&C hanya di public/booth-event-config.js; tabel dan panel aturan langsung mengikuti setelah deploy.',
+      'Baris "Data per ... WIB" di bawah judul = waktu salin terlama dari main.users, main.user_profiles, dan main.transactions. Tabel itu disalin dari database utama oleh scheduled query (users-sc, user_profiles-sc, transactions-sc), jadi yang daftar atau beli sesudah jam itu baru muncul setelah salinan berikutnya.',
       'Follow media sosial dan rating app store tidak ada di data, dicatat manual di booth.',
     ],
   },

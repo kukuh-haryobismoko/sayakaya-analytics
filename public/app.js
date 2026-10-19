@@ -7588,6 +7588,20 @@ function boothCustomerBonuses(people, plans, cfg, today) {
   return { welcome, nabung, topUp };
 }
 
+// "Data as of" line: the warehouse copies of users, user_profiles and
+// transactions are refreshed by scheduled queries, so the oldest copy time is
+// the moment up to which registrations and purchases are guaranteed to show.
+// `fresh` is [{ table_id, modified_at (UTC ISO) }]; returns '' when unknown.
+function boothFreshText(fresh) {
+  const times = (fresh || []).map((r) => Date.parse(r.modified_at)).filter((n) => !Number.isNaN(n));
+  if (!times.length) return '';
+  const wib = new Date(Math.min(...times) + 7 * 3600000).toISOString();
+  const at = `${wib.slice(0, 10)} ${wib.slice(11, 16)}`;
+  return bL(
+    `Data as of ${at} WIB. Registrations, KYC and purchases come from copies of the main database that refresh on a schedule, so anyone who signed up after that time appears after the next refresh.`,
+    `Data per ${at} WIB. Pendaftaran, KYC, dan transaksi dibaca dari salinan database utama yang diperbarui berkala, jadi yang daftar setelah jam itu baru muncul di refresh berikutnya.`);
+}
+
 const BOOTH = { data: null, loading: false };
 const bEsc = (v) => escapeHtml(v == null ? '' : v);
 const bStatusLabel = (k, x) => ({
@@ -7641,6 +7655,8 @@ function renderBoothEvent() {
   $('#beHint').textContent = bL(
     `${cfg.name}, ${cfg.start} to ${cfg.end}. New customers = registered with one of the ${cfg.roster.length} codes (referral or sales code). Today ${today} WIB. Rules: see "Rules and how it's counted" at the bottom.`,
     `${cfg.name}, ${cfg.start} s.d. ${cfg.end}. Nasabah baru = daftar dengan salah satu dari ${cfg.roster.length} kode (kode referral atau sales). Hari ini ${today} WIB. Aturan: lihat "Aturan dan cara hitung" di bawah.`);
+
+  $('#beFresh').textContent = boothFreshText(BOOTH.data.fresh);
 
   const held = mine.filter((x) => x.heldDays != null);
   $('#beKpis').innerHTML = [

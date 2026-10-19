@@ -701,12 +701,13 @@ on('GET', '/api/booth-event/data', requireTab('booth-event', async (_req, _param
   if (!BOOTH_DATE_RE.test(from) || !BOOTH_DATE_RE.test(to)) return json({ error: 'from and to are required (YYYY-MM-DD).' }, 400);
   if (!sam || sam.length > 120) return json({ error: 'sam (investment manager name) is required.' }, 400);
   const q = Q.boothEventData({ codes, promoCodes: promo, from, to, samManager: sam });
-  const [customers, transactions, plans] = await Promise.all([
+  const [customers, transactions, plans, fresh] = await Promise.all([
     runQuery(q.customers.sql, q.customers.params, { redact: false }),
     runQuery(q.transactions.sql, q.transactions.params),
     runQuery(q.plans.sql, q.plans.params),
+    runQuery(q.fresh.sql, q.fresh.params),
   ]);
-  return json({ customers, transactions, plans });
+  return json({ customers, transactions, plans, fresh });
 }));
 
 on('GET', '/api/event-code/users', requireTab('event-code', async (_req, _params, url) => {
