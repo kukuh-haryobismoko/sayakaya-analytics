@@ -25,7 +25,9 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      # The deck names Inter and JetBrains Mono; without them Chrome falls back
+      # to DejaVu and every slide reflows.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils fonts-inter fonts-jetbrains-mono
 
       - uses: browser-actions/setup-chrome@v1
         id: chrome
