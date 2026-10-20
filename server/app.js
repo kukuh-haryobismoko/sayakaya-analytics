@@ -527,7 +527,6 @@ function createApp({ serveStatic = true } = {}) {
   // ---- Users transactions (any investor, by SID/email/name) -----------------
   app.get('/api/users-transactions', requireTab('users-tx'), handler(async (req, res) => {
     const { q, type, status, fundId, fundName, promo, from, to, limit, offset, sort, dir } = req.query;
-    if (!q && !fundName && !promo) return res.status(400).json({ error: 'A SID, email, name, fund name, or promo code search is required.' });
     const query = Q.usersTransactions({ q, type, status, fundId, fundName, promo, from, to, limit: limit || 50, offset: offset || 0, sort, dir });
     const [rows, countRows] = await Promise.all([
       runQuery(query.sql, query.params),
@@ -1654,11 +1653,11 @@ function createApp({ serveStatic = true } = {}) {
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'users_transactions') {
       const { q: searchQ, type, status, fundId, fundName, promo, from, to, sort, dir } = req.body;
-      if (!searchQ && !fundName && !promo) return res.status(400).json({ error: 'A SID, email, name, fund name, or promo code search is required.' });
       const q = Q.usersTransactions({ q: searchQ, type, status, fundId, fundName, promo, from, to, limit: limit || 100000, offset: 0, sort, dir });
       rows = await runQuery(q.sql, q.params);
       if (format === 'pdf') {
-        const label = [searchQ, fundName && `fund ${fundName}`, promo && `promo ${promo}`].filter(Boolean).join(', ');
+        const label = [searchQ, fundName && `fund ${fundName}`, promo && `promo ${promo}`].filter(Boolean).join(', ')
+          || ['all investors', type, from && to ? `${from} to ${to}` : from ? `from ${from}` : to ? `until ${to}` : ''].filter(Boolean).join(', ');
         const buf = await PDF.usersTransactionsReport(rows, { username, query: label });
         return sendPdf(res, buf, filename, username);
       }

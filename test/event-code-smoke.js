@@ -79,4 +79,10 @@ assert.deepStrictEqual([ut.params.fundPats, ut.params.promoPats, ut.params.q], [
 assert.ok(/UPPER\(f\.name\) LIKE fp/.test(ut.countSql), 'count joins funds for the fund-name filter');
 assert.ok(!('fundPats' in Q.usersTransactions({ q: 'x', fundName: ' , ' }).params), 'blank terms add no filter');
 
+// Users transactions with no search term at all: only the date range (and type) narrow the list.
+const utAll = Q.usersTransactions({ type: 'sell', from: '2026-10-01', to: '2026-10-20' });
+assert.deepStrictEqual([utAll.params.from, utAll.params.to, utAll.params.type], ['2026-10-01', '2026-10-20', 'sell']);
+assert.ok(!('q' in utAll.params) && !('fundPats' in utAll.params) && !('promoPats' in utAll.params), 'no search term adds no investor filter');
+assert.ok(/WHERE DATE\(t\.created_at\) BETWEEN @from AND @to AND t\.type = @type\s/.test(utAll.sql), 'date range + type only');
+
 console.log('event-code smoke test passed');

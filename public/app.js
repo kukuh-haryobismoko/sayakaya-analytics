@@ -5021,7 +5021,6 @@ function utxParams() {
 
 async function loadUtx() {
   const p = utxParams();
-  if (!p.q && !p.fundName && !p.promo) { toast('Enter a SID, email, name, fund name, or promo code to search.'); return; }
   $('#utxTable').innerHTML = '<div class="loading">Loading…</div>';
   const qs = new URLSearchParams();
   for (const k of ['q', 'fundName', 'promo']) if (p[k]) qs.set(k, p[k]);

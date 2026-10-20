@@ -629,7 +629,6 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
   const q2 = qp(url, 'q');
   const fundName = qp(url, 'fundName');
   const promo = qp(url, 'promo');
-  if (!q2 && !fundName && !promo) return json({ error: 'A SID, email, name, fund name, or promo code search is required.' }, 400);
   const q = Q.usersTransactions({
     q: q2, type: qp(url, 'type'), status: qp(url, 'status'), fundId: qp(url, 'fundId'), fundName, promo,
     from: qp(url, 'from'), to: qp(url, 'to'),
@@ -1779,11 +1778,11 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const searchQ = body.q as string;
     const fundName = body.fundName as string;
     const promo = body.promo as string;
-    if (!searchQ && !fundName && !promo) return json({ error: 'A SID, email, name, fund name, or promo code search is required.' }, 400);
     const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, fundName, promo, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
     rows = await runQuery(q.sql, q.params);
     if (format === 'pdf') {
-      const label = [searchQ, fundName && `fund ${fundName}`, promo && `promo ${promo}`].filter(Boolean).join(', ');
+      const label = [searchQ, fundName && `fund ${fundName}`, promo && `promo ${promo}`].filter(Boolean).join(', ')
+        || ['all investors', body.type, body.from && body.to ? `${body.from} to ${body.to}` : body.from ? `from ${body.from}` : body.to ? `until ${body.to}` : ''].filter(Boolean).join(', ');
       const buf = await usersTransactionsReport(rows, { username, query: label });
       return new Response(new Uint8Array(buf), {
         headers: {
