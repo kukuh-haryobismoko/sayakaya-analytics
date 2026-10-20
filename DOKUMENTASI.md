@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `d2b3ca1 (2026-10-20)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `10155d1 (2026-10-21)`.
 
 ## Cara membaca dokumen ini
 
@@ -319,7 +319,7 @@ Diambil dari `.env.example`. Nilai rahasia disimpan di `.env` (lokal) atau sebag
 | Run due e-statement schedules (`cron-run-schedules.yml`) | cron `3,18,33,48 * * * *` (UTC); manual | Memanggil endpoint cron untuk mengirim email terjadwal yang sudah jatuh tempo. Dalam praktik GitHub menjalankannya tiap beberapa jam, bukan tiap 15 menit. |
 | Deploy to Cloud Run (`deploy-cloud-run.yml`) | manual | Deploy server Node ke Cloud Run (pemicu push sedang dimatikan, hanya manual). |
 | Deploy GitHub Pages (`gh-pages.yml`) | push ke main yang mengubah path tertentu; manual | Menerbitkan folder public/ ke GitHub Pages saat ada perubahan di public/. |
-| Monthly review deck (`monthly-review-refresh.yml`) | cron `5 20 * * *` (UTC); manual |  |
+| Monthly review deck (`monthly-review-refresh.yml`) | cron `30 22 * * *` (UTC); manual |  |
 
 ## 5. Sumber data
 
@@ -1327,7 +1327,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Funded**: Yang dana bersihnya (beli dikurangi jual) pernah mencapai minimum funded sales (Rp 1 jt).
     - **Net money in**: Total beli dikurangi jual nasabah baru.
     - **Avg days holding**: Rata-rata hari dari beli pertama sampai hari ini, atau sampai jual terakhir bagi yang sudah jual semua.
-  - *Daily recap* (Rekap harian): Satu baris per hari event (WIB): daftar, KYC verified, transaksi pertama, mencapai minimum funded, beli, dan jual. Mengikuti filter booth dan sales.
+  - *Recap per booth* (Rekap per booth): Satu baris per booth untuk rentang tanggal sendiri (bawaan: seluruh event), plus baris semua booth. Tidak mengikuti filter booth, sales, dan periode. Daftar = daftar di rentang; KYC (tgl verifikasi) = verifikasi di rentang, jadi bisa lebih besar dari Daftar; KYC dari yang daftar = dari yang daftar di rentang, berapa yang sudah verified (tidak mungkin lebih besar dari Daftar), dengan persentasenya. Transaksi pertama = beli completed pertama di rentang; Capai minimum = dana bersih pertama kali mencapai minimum funded di rentang; Beli dan Jual = transaksi completed di rentang. Pembelian yang belum settle tidak masuk kolom nominal, jumlah dan nominalnya disebut di bawah tabel. Kalau tanggal akhir = hari terakhir event, verifikasi dan pembelian sesudah event ikut dihitung supaya totalnya sama dengan kartu KPI.
+  - *Recap per booth, per day* (Rekap per booth per hari): Satu blok per hari (terbaru dulu) berisi semua booth dan baris gabungan, ditambah blok Total kalau tanggal awal dan akhir berbeda. Tanggalnya terpisah dari tabel lain, bawaan hari ini. Aturan hitungnya sama dengan rekap di atas.
   - *Sales and flying team incentive* (Insentif sales dan flying team): Satu baris per orang untuk periode terpilih: target SID, SID, funded, syarat (rule 1+2), rule 1 sampai 4, total, dan yang dibayar setelah batas maksimal. Status: berjalan (sementara), rule 1-3 final menunggu M1, atau final.
   - *Team lead incentive* (Insentif team lead): Satu baris per booth: semua kode booth dijumlah, minimum funded 1,5 jt.
   - *Customers* (Nasabah): Setiap nasabah baru dengan kontak, kode, tanggal daftar dan KYC, beli pertama, total beli, dana bersih, saldo hari ini, lama menahan, dan status dana.
