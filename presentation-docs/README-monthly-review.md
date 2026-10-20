@@ -50,7 +50,7 @@ Scheduled queries in BigQuery Data Transfer (`asia-southeast2`, hours UTC):
 | `users-sc`, `transactions-sc` | hourly | `main.users`, `main.transactions` |
 
 A snapshot written at 02:05 WIB on day D carries the close of D-1, so a run at
-03:05 WIB shows yesterday's close.
+05:30 WIB shows yesterday's close.
 
 ## Rules for a refresh
 
