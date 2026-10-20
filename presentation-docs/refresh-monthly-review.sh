@@ -80,7 +80,8 @@ else
 fi
 
 python3 "$DECK_DIR/build-deck.py"
-"$(chrome)" --headless --disable-gpu --no-pdf-header-footer --virtual-time-budget=8000 \
+# --no-sandbox is needed on CI runners (root in a container); harmless elsewhere.
+"$(chrome)" --headless --no-sandbox --disable-gpu --no-pdf-header-footer --virtual-time-budget=8000 \
   --print-to-pdf="$PDF" "$DECK_DIR/deck-print.html" 2>/dev/null
 echo "pdf: $(python3 -c 'import os,sys;print(os.path.getsize(sys.argv[1]))' "$PDF") bytes, $(pdfinfo "$PDF" | awk '/^Pages/{print $2}') pages"
 
