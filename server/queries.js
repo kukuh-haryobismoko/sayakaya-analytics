@@ -5250,7 +5250,7 @@ function usersTransactions({ q, type, status, fundId, fundName, promo, from, to,
     limit: parseInt(limit, 10),
     offset: parseInt(offset, 10),
   };
-  let where = 'DATE(t.created_at) BETWEEN @from AND @to' + usersTxFilterSql(params, { q, fundId, fundName, promo });
+  let where = "DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to" + usersTxFilterSql(params, { q, fundId, fundName, promo });
   if (type) { where += ' AND t.type = @type'; params.type = type; }
   if (status) { where += ' AND t.status = @status'; params.status = status; }
   return {
@@ -5278,7 +5278,10 @@ function usersTransactions({ q, type, status, fundId, fundName, promo, from, to,
 
 // ---- Users transactions summary: subscription (buy) vs redemption (sell) and
 // the net flow between them, one row per day, Monday-based week or calendar
-// month. Type and status are not parameters: both sides always count. The rule
+// month. Days are Jakarta (WIB) days, like Metabase and the rest of this file;
+// DATE(created_at) alone is a UTC day and moves every order placed between
+// 00:00 and 07:00 WIB to the day before. Type and status are not parameters:
+// both sides always count. The rule
 // is the finance check people run by hand on Metabase, so the numbers match it
 // to the rupiah: settled orders only (verified_by_operational, verified,
 // completed, completed_payment), no bonus top-ups (payment_method 'bonus' or
@@ -5296,7 +5299,7 @@ const usersTransactionsSummary = ({ q, fundId, fundName, promo, from, to, granul
   // row cannot inflate the order counts; no paid row has a null number today.
   return {
     sql: `SELECT
-        FORMAT_DATE('${fmt}', DATE_TRUNC(DATE(t.created_at), ${part})) AS bucket,
+        FORMAT_DATE('${fmt}', DATE_TRUNC(DATE(t.created_at, 'Asia/Jakarta'), ${part})) AS bucket,
         ROUND(SUM(IF(t.type = 'buy', t.amount, 0))) AS subscriptions,
         COUNT(DISTINCT IF(t.type = 'buy', t.transaction_number, NULL)) AS buys,
         ROUND(SUM(IF(t.type = 'sell', t.amount, 0))) AS redemptions,
@@ -5306,7 +5309,7 @@ const usersTransactionsSummary = ({ q, fundId, fundName, promo, from, to, granul
       JOIN ${USERS} u ON u.id = t.user_id
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
       LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
-      WHERE DATE(t.created_at) BETWEEN @from AND @to
+      WHERE DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
         AND t.type IN ('buy', 'sell')
         AND t.status IN (${UTX_SUMMARY_STATUSES})
         AND t.transaction_number IS NOT NULL

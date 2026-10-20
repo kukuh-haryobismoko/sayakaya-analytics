@@ -83,12 +83,14 @@ assert.ok(!('fundPats' in Q.usersTransactions({ q: 'x', fundName: ' , ' }).param
 const utAll = Q.usersTransactions({ type: 'sell', from: '2026-10-01', to: '2026-10-20' });
 assert.deepStrictEqual([utAll.params.from, utAll.params.to, utAll.params.type], ['2026-10-01', '2026-10-20', 'sell']);
 assert.ok(!('q' in utAll.params) && !('fundPats' in utAll.params) && !('promoPats' in utAll.params), 'no search term adds no investor filter');
-assert.ok(/WHERE DATE\(t\.created_at\) BETWEEN @from AND @to AND t\.type = @type\s/.test(utAll.sql), 'date range + type only');
+assert.ok(/WHERE DATE\(t\.created_at, 'Asia\/Jakarta'\) BETWEEN @from AND @to AND t\.type = @type\s/.test(utAll.sql), 'date range + type only');
 
 // Users transactions summary: both types always count, expired/cancelled never,
 // Monday weeks by default, and it inherits the list's investor/fund/promo filter.
 const sums = Q.usersTransactionsSummary({ from: '2026-10-01', to: '2026-10-19', granularity: 'nope' });
-assert.ok(sums.sql.includes('DATE_TRUNC(DATE(t.created_at), WEEK(MONDAY))'), 'unknown granularity falls back to the Monday week');
+assert.ok(sums.sql.includes("DATE_TRUNC(DATE(t.created_at, 'Asia/Jakarta'), WEEK(MONDAY))"), 'unknown granularity falls back to the Monday week, in Jakarta days');
+assert.ok(sums.sql.includes("WHERE DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to"), 'summary range is in Jakarta days, not UTC');
+assert.ok(Q.usersTransactions({ q: 'a' }).sql.includes("DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to"), 'list range is in Jakarta days too');
 assert.ok(sums.sql.includes("FORMAT_DATE('%Y-%m-%d'"));
 assert.ok(sums.sql.includes("AND t.type IN ('buy', 'sell')"));
 assert.ok(!sums.sql.includes('@type') && !sums.sql.includes('@status'), 'type and status are not parameters');
@@ -99,7 +101,7 @@ assert.ok(sums.sql.includes('ROUND(SUM(IF(t.type = \'buy\', t.amount, 0))) AS su
 assert.ok(!sums.sql.includes('final_amount'), 'final_amount would not match the Metabase check');
 assert.ok(sums.sql.includes('COUNT(DISTINCT IF(t.type = \'buy\', t.transaction_number, NULL)) AS buys'), 'order count, not row count');
 const sumM = Q.usersTransactionsSummary({ from: '2026-10-01', to: '2026-10-31', granularity: 'month', q: 'kukuh', promo: 'THR*', fundName: 'sucor*' });
-assert.ok(sumM.sql.includes("FORMAT_DATE('%Y-%m', DATE_TRUNC(DATE(t.created_at), MONTH))"));
+assert.ok(sumM.sql.includes("FORMAT_DATE('%Y-%m', DATE_TRUNC(DATE(t.created_at, 'Asia/Jakarta'), MONTH))"));
 assert.deepStrictEqual([sumM.params.q, sumM.params.promoPats, sumM.params.fundPats], ['%kukuh%', ['THR%'], ['SUCOR%']]);
 assert.ok(sumM.sql.includes('LOWER(up.name) LIKE @q') && sumM.sql.includes('UPPER(f.name) LIKE fp'), 'same joins and filters as the list');
 assert.ok(!('q' in Q.usersTransactionsSummary({ from: '2026-10-01', to: '2026-10-31' }).params), 'blank search adds no filter');

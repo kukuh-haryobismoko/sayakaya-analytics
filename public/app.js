@@ -5037,8 +5037,9 @@ async function loadUtx() {
   try {
     const { rows, total } = await api(`/api/users-transactions?${qs}`);
     utx.total = total;
-    genTable('#utxTable', rows, [
-      { key: 'created_at', label: 'Date', type: 'date', sort: true },
+    // created_at is a UTC instant; show it as Jakarta time so the day matches the summary above.
+    genTable('#utxTable', rows.map((r) => ({ ...r, created_at: toJakartaTime(val(r.created_at)) })), [
+      { key: 'created_at', label: 'Date (WIB)', sort: true, text: true },
       { key: 'transaction_number', label: 'Trx #', sort: true },
       { key: 'type', label: 'Type', sort: true }, { key: 'status', label: 'Status', sort: true },
       { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: 'Name', sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: 'Phone', sort: true },
