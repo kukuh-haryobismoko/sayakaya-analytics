@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `bfb4a57 (2026-10-19)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `4087f69 (2026-10-20)`.
 
 ## Cara membaca dokumen ini
 
@@ -96,7 +96,7 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 
 | Tab | Untuk apa |
 |---|---|
-| [Users transactions](#tab-users-tx) | Telusuri transaksi investor mana pun lewat SID, email, nama, nama produk, atau kode promo. |
+| [Users transactions](#tab-users-tx) | Telusuri transaksi investor mana pun lewat SID, email, nama, nama produk, atau kode promo, atau lihat semua transaksi satu periode tanpa filter investor. |
 | [SInvest transactions](#tab-sinvest-tx) | Browse mentah feed KSEI/SInvest, per baris, bisa difilter dan di-export. |
 | [Remisier transactions](#tab-remisier-tx) | Detail transaksi di balik angka remisier. |
 | [Reconciliation](#tab-reconciliation) | Cek harian apakah angka ledger aplikasi sama dengan feed kustodian. |
@@ -872,12 +872,12 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 <a id="tab-users-tx"></a>
 #### Users transactions
 
-- **Untuk apa**: Telusuri transaksi investor mana pun lewat SID, email, nama, nama produk, atau kode promo.
+- **Untuk apa**: Telusuri transaksi investor mana pun lewat SID, email, nama, nama produk, atau kode promo, atau lihat semua transaksi satu periode tanpa filter investor.
 - **Penjelasan sederhana**: Telusuri transaksi investor mana pun berdasarkan kode SID, email, atau nama (kecocokan sebagian, wajib diisi), lengkap dengan info kontak pembeli dan nama produk di setiap barisnya: join yang sama dengan Remisier transactions, tapi dicari berdasarkan identitas investor, bukan kode referrer/sales. Persempit lebih lanjut dengan jenis transaksi, status, produk, atau rentang tanggal. Bisa diekspor ke CSV, Excel, atau PDF. Klik judul kolom mana pun untuk mengurutkan semua transaksi yang cocok, bukan hanya halaman yang terlihat; unduhan mengikuti urutan yang sama.
 - **Data yang dibaca**: main.transactions, main.users, main.user_profiles, main.funds
-- **Cara hitung**: Isi minimal satu dari: SID/email/nama (pencarian parsial), nama produk (funds.name), atau kode promo (transactions.promo_code). Nama produk dan kode promo memakai pola codePatterns: tanpa * = mengandung kata itu, * mengunci posisi (sucor* = diawali Sucor), koma untuk beberapa kata (digabung OR), tidak peka huruf besar/kecil. Filter tipe, status, fund, dan tanggal. Tiap baris memuat kontak pembeli, nama fund, dan kode promo. Export CSV, Excel, PDF. Semua kolom bisa diurutkan dengan klik judul kolom; pengurutan dijalankan di BigQuery (pagedOrder, hanya nama kolom output yang diizinkan, teks tanpa membedakan huruf besar/kecil, NULL di akhir) sehingga berlaku untuk semua baris dan ikut ke export. Di tab lain, export server dari tabel yang diurutkan di layar dikirim beserta kolom urutannya (sortExportRows di report-helpers): diurutkan menurut field kolom itu, atau mengikuti urutan kolom pertama di layar untuk pivot dan kolom yang dihitung di halaman.
+- **Cara hitung**: Semua kolom pencarian opsional: SID/email/nama (pencarian parsial), nama produk (funds.name), dan kode promo (transactions.promo_code). Kalau semuanya kosong, tampil transaksi seluruh investor pada rentang tanggal (mis. jenis sell + satu periode = semua redeem); tanpa tanggal, seluruh riwayat. Nama produk dan kode promo memakai pola codePatterns: tanpa * = mengandung kata itu, * mengunci posisi (sucor* = diawali Sucor), koma untuk beberapa kata (digabung OR), tidak peka huruf besar/kecil. Filter tipe, status, fund, dan tanggal. Tiap baris memuat kontak pembeli, nama fund, dan kode promo. Export CSV, Excel, PDF. Semua kolom bisa diurutkan dengan klik judul kolom; pengurutan dijalankan di BigQuery (pagedOrder, hanya nama kolom output yang diizinkan, teks tanpa membedakan huruf besar/kecil, NULL di akhir) sehingga berlaku untuk semua baris dan ikut ke export. Di tab lain, export server dari tabel yang diurutkan di layar dikirim beserta kolom urutannya (sortExportRows di report-helpers): diurutkan menurut field kolom itu, atau mengikuti urutan kolom pertama di layar untuk pivot dan kolom yang dihitung di halaman.
 - **Isi tab**:
-  - *Users transactions* (Transaksi pengguna): Cari lewat investor (SID, email, atau nama, sebagian kata cukup), nama produk, atau kode promo; isi minimal satu. Nama produk dan kode promo: tanpa * cocok di bagian mana pun, sucor* = diawali Sucor, koma untuk beberapa kata. Saring juga menurut tipe, status, fund, dan tanggal. Ekspor CSV, Excel, atau PDF.
+  - *Users transactions* (Transaksi pengguna): Cari lewat investor (SID, email, atau nama, sebagian kata cukup), nama produk, atau kode promo; semuanya opsional. Kosongkan semua dan pilih rentang tanggal untuk melihat transaksi seluruh investor (jenis sell = redeem). Nama produk dan kode promo: tanpa * cocok di bagian mana pun, sucor* = diawali Sucor, koma untuk beberapa kata. Saring juga menurut tipe, status, fund, dan tanggal. Ekspor CSV, Excel, atau PDF.
   - *Transaction detail* (Detail transaksi): Satu baris per transaksi, terbaru di atas, dengan kontak pembeli.
     - **Type / Tipe**: buy (pembelian), sell (penjualan), SWITCH_IN dan SWITCH_OUT (dua sisi switching), reinvestment (pembagian hasil yang diinvestasikan ulang).
     - **Status**: completed (selesai), expired (batas bayar habis), cancelled (dibatalkan), completed_payment (uang diterima, unit belum dialokasikan), verified, verified_by_operational, dan lainnya.
