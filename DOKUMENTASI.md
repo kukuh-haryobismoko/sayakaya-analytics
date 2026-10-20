@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `d609cd9 (2026-10-20)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `d2b3ca1 (2026-10-20)`.
 
 ## Cara membaca dokumen ini
 
@@ -319,6 +319,7 @@ Diambil dari `.env.example`. Nilai rahasia disimpan di `.env` (lokal) atau sebag
 | Run due e-statement schedules (`cron-run-schedules.yml`) | cron `3,18,33,48 * * * *` (UTC); manual | Memanggil endpoint cron untuk mengirim email terjadwal yang sudah jatuh tempo. Dalam praktik GitHub menjalankannya tiap beberapa jam, bukan tiap 15 menit. |
 | Deploy to Cloud Run (`deploy-cloud-run.yml`) | manual | Deploy server Node ke Cloud Run (pemicu push sedang dimatikan, hanya manual). |
 | Deploy GitHub Pages (`gh-pages.yml`) | push ke main yang mengubah path tertentu; manual | Menerbitkan folder public/ ke GitHub Pages saat ada perubahan di public/. |
+| Monthly review deck (`monthly-review-refresh.yml`) | cron `5 20 * * *` (UTC); manual |  |
 
 ## 5. Sumber data
 
