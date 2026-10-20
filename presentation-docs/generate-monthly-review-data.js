@@ -683,6 +683,201 @@ async function main() {
     intent: { people: intentRows.length, byOutcome: intentBy, withAum: intentRows.filter((r) => Number(r.aum_now) > 0).length },
   };
 
+  // ---- App funnel vs the source of truth, joined per user_id ----------------
+  // GA4 carries main.users.id, so each step can be matched person by person
+  // (both / only backoffice / only app) instead of comparing two totals.
+  console.error('Querying app vs backoffice funnel reconciliation...');
+  const PAID_SQL = "('completed','completed_payment','verified','verified_by_operational')";
+  const gaSuffixes = (from, to) => ({
+    gaFrom: new Date(new Date(from) - 86400000).toISOString().slice(0, 10).replace(/-/g, ''),
+    gaTo: new Date(new Date(to) - 86400000).toISOString().slice(0, 10).replace(/-/g, ''),
+  });
+  const reconcile = async (from, to) => {
+    const { gaFrom, gaTo } = gaSuffixes(from, to);
+    return runQuery(`
+      WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
+      ga AS (
+        SELECT user_id, event_name FROM \`sayakaya.analytics_266759216.events_*\`
+        WHERE _TABLE_SUFFIX BETWEEN @gaFrom AND @gaTo AND user_id IS NOT NULL
+          AND event_name IN ('register_success','kyc_success','payment_complete')
+          AND TIMESTAMP_MICROS(event_timestamp) >= TIMESTAMP(@from)
+          AND TIMESTAMP_MICROS(event_timestamp) < TIMESTAMP(@to)
+        GROUP BY 1, 2),
+      bo_reg AS (SELECT id user_id FROM \`sayakaya.main.users\` WHERE created_at >= DATETIME(@from) AND created_at < DATETIME(@to) AND id NOT IN (SELECT id FROM raiz)),
+      bo_kyc AS (SELECT id user_id FROM \`sayakaya.main.users\` WHERE verified_at >= DATETIME(@from) AND verified_at < DATETIME(@to) AND id NOT IN (SELECT id FROM raiz)),
+      bo_pay AS (SELECT DISTINCT user_id FROM \`sayakaya.main.transactions\`
+        WHERE type = 'buy' AND status IN ${PAID_SQL} AND IFNULL(payment_method,'') != 'manual_bonus'
+          AND created_at >= TIMESTAMP(@from) AND created_at < TIMESTAMP(@to)
+          AND user_id NOT IN (SELECT id FROM raiz)),
+      g_reg AS (SELECT DISTINCT user_id FROM ga WHERE event_name = 'register_success'),
+      g_kyc AS (SELECT DISTINCT user_id FROM ga WHERE event_name = 'kyc_success'),
+      g_pay AS (SELECT DISTINCT user_id FROM ga WHERE event_name = 'payment_complete')
+      SELECT 'Registered' step, (SELECT COUNT(*) FROM bo_reg) backoffice, (SELECT COUNT(*) FROM g_reg) app,
+        (SELECT COUNT(*) FROM bo_reg JOIN g_reg USING(user_id)) both,
+        (SELECT COUNT(*) FROM bo_reg WHERE user_id NOT IN (SELECT user_id FROM g_reg)) only_backoffice,
+        (SELECT COUNT(*) FROM g_reg WHERE user_id NOT IN (SELECT user_id FROM bo_reg)) only_app
+      UNION ALL
+      SELECT 'Verified (KYC)', (SELECT COUNT(*) FROM bo_kyc), (SELECT COUNT(*) FROM g_kyc),
+        (SELECT COUNT(*) FROM bo_kyc JOIN g_kyc USING(user_id)),
+        (SELECT COUNT(*) FROM bo_kyc WHERE user_id NOT IN (SELECT user_id FROM g_kyc)),
+        (SELECT COUNT(*) FROM g_kyc WHERE user_id NOT IN (SELECT user_id FROM bo_kyc))
+      UNION ALL
+      SELECT 'Paid a buy', (SELECT COUNT(*) FROM bo_pay), (SELECT COUNT(*) FROM g_pay),
+        (SELECT COUNT(*) FROM bo_pay JOIN g_pay USING(user_id)),
+        (SELECT COUNT(*) FROM bo_pay WHERE user_id NOT IN (SELECT user_id FROM g_pay)),
+        (SELECT COUNT(*) FROM g_pay WHERE user_id NOT IN (SELECT user_id FROM bo_pay))`,
+      { from, to, gaFrom, gaTo, raizCodes: RAIZ_CODES });
+  };
+  out.appReconcile = {
+    review: await reconcile(rStart, rEnd),
+    partial: await reconcile(pStart, pEnd),
+  };
+
+  // Which payment methods lose the payment_complete event: the app cannot be
+  // the source for paid buys if a channel misses it systematically.
+  console.error('Querying paid-without-event gap by payment method...');
+  const gapSuffix = gaSuffixes(pStart, pEnd);
+  out.paymentGap = await runQuery(`
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
+    g AS (SELECT DISTINCT user_id FROM \`sayakaya.analytics_266759216.events_*\`
+      WHERE _TABLE_SUFFIX BETWEEN @gaFrom AND @gaTo AND event_name = 'payment_complete' AND user_id IS NOT NULL),
+    t AS (SELECT user_id,
+        ARRAY_AGG(IFNULL(payment_method,'(blank)') ORDER BY created_at LIMIT 1)[OFFSET(0)] pm
+      FROM \`sayakaya.main.transactions\`
+      WHERE type = 'buy' AND status IN ${PAID_SQL} AND IFNULL(payment_method,'') != 'manual_bonus'
+        AND created_at >= TIMESTAMP(@from) AND created_at < TIMESTAMP(@to)
+        AND user_id NOT IN (SELECT id FROM raiz)
+      GROUP BY 1)
+    SELECT t.pm, COUNT(*) paid_users, COUNTIF(g.user_id IS NOT NULL) has_event,
+      COUNTIF(g.user_id IS NULL) no_event
+    FROM t LEFT JOIN g USING(user_id) GROUP BY 1 ORDER BY 2 DESC`,
+    { ...gapSuffix, from: pStart, to: pEnd, raizCodes: RAIZ_CODES });
+
+  // Users whose app fired kyc_success, by what backoffice says today: an app
+  // event is not an approval.
+  console.error('Querying kyc_success vs backoffice verification status...');
+  out.kycQuality = await runQuery(`
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
+    g AS (SELECT DISTINCT user_id FROM \`sayakaya.analytics_266759216.events_*\`
+      WHERE _TABLE_SUFFIX BETWEEN @gaFrom AND @gaTo AND event_name = 'kyc_success' AND user_id IS NOT NULL
+        AND TIMESTAMP_MICROS(event_timestamp) >= TIMESTAMP(@from) AND TIMESTAMP_MICROS(event_timestamp) < TIMESTAMP(@to))
+    SELECT IFNULL(u.verification_status,'(null)') verification_status,
+      IF(u.verified_at IS NULL,'no verified_at','has verified_at') verified_bucket, COUNT(*) n
+    FROM g JOIN \`sayakaya.main.users\` u ON u.id = g.user_id
+    WHERE g.user_id NOT IN (SELECT id FROM raiz) GROUP BY 1, 2 ORDER BY 3 DESC`,
+    { ...gapSuffix, from: pStart, to: pEnd, raizCodes: RAIZ_CODES });
+
+  // Does register_success mean a new account? Compare each event's day with
+  // the day the account was created: an event on an older account is a
+  // re-fire, not a signup, and must not be counted as acquisition.
+  console.error('Querying register_success re-fire rate...');
+  const refires = async (from, to) => {
+    const { gaFrom, gaTo } = gaSuffixes(from, to);
+    const rows = await runQuery(`
+      WITH ga AS (SELECT user_id, MIN(TIMESTAMP_MICROS(event_timestamp)) ts
+        FROM \`sayakaya.analytics_266759216.events_*\`
+        WHERE _TABLE_SUFFIX BETWEEN @gaFrom AND @gaTo AND user_id IS NOT NULL
+          AND event_name = 'register_success'
+          AND TIMESTAMP_MICROS(event_timestamp) >= TIMESTAMP(@from)
+          AND TIMESTAMP_MICROS(event_timestamp) < TIMESTAMP(@to)
+        GROUP BY 1)
+      SELECT DATE(ga.ts, 'Asia/Jakarta') d, COUNT(*) n,
+        COUNTIF(DATE(u.created_at) = DATE(ga.ts, 'Asia/Jakarta')) same_day,
+        COUNTIF(DATE(u.created_at) < DATE(ga.ts, 'Asia/Jakarta')) refire
+      FROM ga JOIN \`sayakaya.main.users\` u ON u.id = ga.user_id
+      GROUP BY 1 ORDER BY 1`, { from, to, gaFrom, gaTo });
+    const tot = rows.reduce((a, r) => ({
+      n: a.n + Number(r.n),
+      same_day: a.same_day + Number(r.same_day),
+      refire: a.refire + Number(r.refire),
+    }), { n: 0, same_day: 0, refire: 0 });
+    const worst = rows.slice().sort((x, y) => Number(y.refire) - Number(x.refire))[0];
+    return { ...tot, worst_day: worst ? (worst.d.value || worst.d) : null, worst_refire: worst ? Number(worst.refire) : 0 };
+  };
+  out.eventQuality = { review: await refires(rStart, rEnd), partial: await refires(pStart, pEnd) };
+
+  // This month's signups, followed step by step: registered -> opened the app
+  // -> started KYC -> verified -> opened the buy form -> ordered -> paid.
+  console.error('Querying partial-month signup cohort funnel...');
+  out.cohortFunnel = (await runQuery(`
+    WITH raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
+    c AS (SELECT id user_id, created_at, verified_at, verification_status FROM \`sayakaya.main.users\`
+      WHERE created_at >= DATETIME(@from) AND created_at < DATETIME(@to) AND id NOT IN (SELECT id FROM raiz)),
+    ev AS (SELECT user_id, event_name FROM \`sayakaya.analytics_266759216.events_*\`
+      WHERE _TABLE_SUFFIX BETWEEN @gaFrom AND @gaTo AND user_id IN (SELECT user_id FROM c)
+        AND event_name IN ('kyc_start','kyc_success','buy_bottom_sheet','order_button','order_created','payment_complete','screen_view')
+      GROUP BY 1, 2),
+    seen AS (SELECT DISTINCT user_id FROM ev),
+    ord AS (SELECT user_id, COUNT(*) n_orders, LOGICAL_OR(status IN ${PAID_SQL} AND IFNULL(payment_method,'') != 'manual_bonus') paid
+      FROM \`sayakaya.main.transactions\`
+      WHERE type = 'buy' AND created_at >= TIMESTAMP(@from) AND created_at < TIMESTAMP(@to)
+        AND user_id IN (SELECT user_id FROM c) GROUP BY 1)
+    SELECT COUNT(*) registered, COUNTIF(s.user_id IS NOT NULL) seen_in_app,
+      COUNTIF(EXISTS(SELECT 1 FROM ev WHERE ev.user_id = c.user_id AND event_name = 'kyc_start')) kyc_started_app,
+      COUNTIF(c.verified_at IS NOT NULL) kyc_verified_bo,
+      COUNTIF(c.verification_status = 'failed') kyc_failed_bo,
+      COUNTIF(EXISTS(SELECT 1 FROM ev WHERE ev.user_id = c.user_id AND event_name IN ('buy_bottom_sheet','order_button'))) opened_buy_app,
+      COUNTIF(o.user_id IS NOT NULL) ordered_bo, COUNTIF(o.paid) paid_bo,
+      COUNTIF(EXISTS(SELECT 1 FROM ev WHERE ev.user_id = c.user_id AND event_name = 'payment_complete')) paid_app
+    FROM c LEFT JOIN seen s USING(user_id) LEFT JOIN ord o USING(user_id)`,
+    { ...gapSuffix, from: pStart, to: pEnd, raizCodes: RAIZ_CODES }))[0];
+
+  // AUM bridge: split each day's change into market (units held x NAV move)
+  // and flow (units bought or sold x NAV), per fund, same exclusions as the
+  // headline. Explains a fall with no order behind it.
+  console.error('Querying AUM bridge (market vs flow)...');
+  const bridgeRows = (await runQuery(`
+    WITH raiz AS (SELECT DISTINCT sid_code FROM \`sayakaya.main.users\`
+      WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) AND sid_code IS NOT NULL)
+    SELECT DATE(p.created_at,'Asia/Jakarta') d, p.sinvest_code sc, ANY_VALUE(p.fund) fund,
+      SUM(p.total_unit) u, MAX(p.latest_nav_value) nav, SUM(p.amount) a
+    FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` p
+    LEFT JOIN raiz r ON p.sid_code = r.sid_code
+    WHERE r.sid_code IS NULL AND p.created_at >= TIMESTAMP(@rStart)
+      AND p.created_at < TIMESTAMP_ADD(TIMESTAMP(@pEnd), INTERVAL 1 DAY)
+      AND p.sinvest_code NOT IN UNNEST(@fundExcludeSinvest)
+    GROUP BY 1, 2`, { raizCodes: RAIZ_CODES, rStart, pEnd, fundExcludeSinvest: FUND_EXCLUDE_SINVEST }))
+    .map((r) => ({ d: r.d.value || r.d, sc: r.sc, fund: r.fund, u: Number(r.u), nav: Number(r.nav), a: Number(r.a) }));
+  {
+    const byDay = {};
+    for (const r of bridgeRows) (byDay[r.d] = byDay[r.d] || {})[r.sc] = r;
+    const days = Object.keys(byDay).sort();
+    const rows = [];
+    for (let i = 1; i < days.length; i++) {
+      const prev = byDay[days[i - 1]], cur = byDay[days[i]];
+      let market = 0, flow = 0, aum = 0;
+      for (const k of new Set([...Object.keys(prev), ...Object.keys(cur)])) {
+        const a = prev[k], z = cur[k];
+        const nav0 = a ? a.nav : (z ? z.nav : 0);
+        const nav1 = z ? z.nav : nav0;
+        const u0 = a ? a.u : 0;
+        const mk = u0 * (nav1 - nav0);
+        market += mk;
+        flow += ((z ? z.a : 0) - (a ? a.a : 0)) - mk;
+        aum += z ? z.a : 0;
+      }
+      rows.push({ d: days[i], aum, market, flow });
+    }
+    const worst = rows.slice().sort((x, y) => x.market - y.market)[0];
+    const iw = rows.findIndex((r) => r.d === worst.d);
+    const prevDay = byDay[rows[iw - 1].d], curDay = byDay[worst.d];
+    const movers = Object.keys(curDay)
+      .filter((k) => prevDay[k])
+      .map((k) => ({
+        fund: curDay[k].fund,
+        nav_pct: (curDay[k].nav / prevDay[k].nav - 1) * 100,
+        market: prevDay[k].u * (curDay[k].nav - prevDay[k].nav),
+        aum: prevDay[k].a,
+      }))
+      .sort((x, y) => x.market - y.market)
+      .slice(0, 6);
+    out.aumBridge = {
+      days: rows,
+      total: { market: rows.reduce((s, r) => s + r.market, 0), flow: rows.reduce((s, r) => s + r.flow, 0) },
+      worst: { ...worst, movers },
+    };
+  }
+
   // Referral links created since the program launched, per referrer, with
   // how many of each referrer's invitees went on to buy. Identities stay out
   // of the output; internal_domain flags a sayakaya.id email.

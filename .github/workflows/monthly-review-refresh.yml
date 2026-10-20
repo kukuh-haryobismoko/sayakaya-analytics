@@ -1,0 +1,54 @@
+name: Monthly review deck
+
+# Refresh the deck after the 02:05 WIB AUM snapshot lands. The script exits 3
+# when today's partition is missing, so a failed scheduled query leaves the
+# published PDF untouched instead of shipping a stale date.
+on:
+  schedule:
+    - cron: "5 20 * * *" # 03:05 WIB (UTC+7), 60 minutes after portfolio_with_code
+  workflow_dispatch:
+
+concurrency:
+  group: monthly-review
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+
+      - name: Write the BigQuery key
+        env:
+          BQ_SA_KEY: ${{ secrets.BQ_SA_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$BQ_SA_KEY" > "$RUNNER_TEMP/sa.json"
+
+      - name: Refresh and publish
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: ./presentation-docs/refresh-monthly-review.sh
+
+      - name: Keep the PDF from the run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monthly-review-pdf
+          path: presentation-docs/sayakaya-october-review-deck.pdf
+          if-no-files-found: ignore

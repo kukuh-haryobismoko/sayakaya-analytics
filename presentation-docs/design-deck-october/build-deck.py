@@ -111,19 +111,19 @@ net = {k: num(tx[k]["buy_volume"]) - num(tx[k]["sell_volume"]) for k in tx}
 nf = {r["ym"]: r for r in d["netFlowByMonth"]}
 pace = lambda x: num(x) / part_days * part_month_days
 
-# Daily AUM. The row dated D is treated as the close of D: the raw rows carry
-# the same value twice at the end of the series (17, 18 and 19 Oct all read
-# 253.01 B), so a one-day shift would relabel the same balance three times.
-# The 8 Oct version shifted by one; the dates here read one day later.
-daily = [(date.fromisoformat(str(v(r["d"]))), num(r["aum"])) for r in d["dailyAum"] if date.fromisoformat(str(v(r["d"]))).isoformat() < d["partialThrough"]]
+# Daily AUM, labelled by the close it carries. The scheduled query writes one
+# row per run and the run dated D lands at 02:05 WIB on D, so a row is the
+# close of D-1: 17, 18 and 19 Oct all read 253.01 B because no NAV prints at
+# the weekend, and the 20 Oct row (251.42) is Monday's close.
+daily = [(date.fromisoformat(str(v(r["d"]))) - timedelta(days=1), num(r["aum"])) for r in d["dailyAum"]]
+daily = [x for x in daily if x[0].isoformat() < d["partialThrough"]]
 close_today = daily[-1]
-# Last close of each full month, straight from the generator's daily rows: the
-# row dated the 1st of the next month holds the previous month's close (the
-# 1 Sep row, 264.6 B, is August's close; the 1 Oct row, 207.1 B, is September's,
-# taken while the Rp 50 B account was out). This is the definition the 8 Oct
-# version used; the chart's one-day shift is separate.
-close_review_end = next((x for x in daily if x[0].isoformat() == f"{ym_add(rev_ym, 1)}-01"), None)
-close_cmp_end = next((x for x in daily if x[0].isoformat() == f"{ym_add(cmp_ym, 1)}-01"), None)
+# Last close of each full month: the newest row inside the month. The query
+# starts at the review month, and its first row (1 Sep) carries 31 Aug, so the
+# comparison month has an end too. September ends on the day the Rp 50 B
+# account was out, which is why its close sits far below its average.
+close_review_end = max((x for x in daily if f"{x[0]:%Y-%m}" == rev_ym), default=None, key=lambda x: x[0])
+close_cmp_end = max((x for x in daily if f"{x[0]:%Y-%m}" == cmp_ym), default=None, key=lambda x: x[0])
 
 # A balance that large leaving or returning moves the book by about that amount
 # in one day, which nothing else in the daily series does. A day counts as "out"
@@ -249,7 +249,7 @@ slide(f"""
     <div class="eb" style="color:#8a99e8;font-size:14px">Monthly meeting · {PART} 2026</div>
     <div class="big">SayaKaya<br>{PART} Review</div>
     <div style="font-size:21px;color:#b7bdd2;line-height:1.5">{REV} 2026 performance, with {CMP} for comparison. Data through {THROUGH}.</div>
-    <div class="eb" style="color:#b7bdd2;font-size:12.5px">Version 2 · refreshed from the version of 8 Oct, now through {THROUGH}. Figures update themselves; claims about {PART} are checked at each refresh.</div>
+    <div class="eb" style="color:#b7bdd2;font-size:12.5px">Version 3 · refreshed from the version of 8 Oct, now through {THROUGH}. Figures update themselves; claims about {PART} are checked at each refresh.</div>
   </div>
   {callout('The <strong>RAIZ user segment is excluded from every figure in this deck</strong>, including app behaviour: accounts with a RAIZ or RAIZKAYA referrer code. Every AUM and holdings figure also excludes <strong>Avrist Liquid Fund and Avrist Indeks LQ45</strong>, same as last month. Numbers here will be lower than the dashboard, which counts the full book. <strong>New this month:</strong> app activity from Google Analytics now joins investor records (' + intc(gam["matched"]) + ' of ' + intc(gam["ga_users"]) + ' app user IDs in ' + REV + ' match an account).', "#ffc531", "Read this before the first number", dark=True)}
 </div>""", dark=True)
@@ -494,6 +494,44 @@ _pace_now = pace(reg[part_ym]["registered"])
 _better = [k for k in sorted(reg) if k < part_ym and reg[k]["registered"] >= _pace_now]
 reg_rank = (f"the highest since {mon(_better[-1])} 2026" if _better
             else "the highest of the year so far, ahead of January's 471")
+# ---- 02 cause: split the last week's change into market and flow --------------
+brg = d.get("aumBridge") or {}
+bwd = brg.get("worst")
+if brg.get("days"):
+    _bd = brg["days"]
+    _w = _bd[-7:]
+    _wbase = _bd[-8]["aum"] if len(_bd) >= 8 else _w[0]["aum"]
+    _wm = sum(r["market"] for r in _w)
+    _wf = sum(r["flow"] for r in _w)
+    # The bridge is keyed by snapshot date, which is written at 02:05 WIB and
+    # carries the previous day's close. Show closes, or the table disagrees
+    # with the KPI above it by one day.
+    _cd = lambda iso_s: date.fromisoformat(str(iso_s)) - timedelta(days=1)
+    _minus = lambda t: str(t).replace("-", MINUS)
+    _brow = [(dlabel(_cd(r["d"])), b(r["aum"]), b(r["market"], True), b(r["flow"], True)) for r in _w]
+    _navp = [m_["nav_pct"] for m_ in bwd["movers"]]
+    _mvrow = [(m_["fund"], _minus(f"{m_['nav_pct']:.1f}%"), b(m_["market"], True), b(m_["aum"])) for m_ in bwd["movers"][:4]]
+    _nav_range = _minus("%.0f%%" % min(_navp)) + " to " + _minus("%.0f%%" % max(_navp))
+    slide(head("02 · Cause", "The fall in the last week was pricing, not redemptions") + f"""
+<div class="grid3">
+  {kpi("Book at the last close", b(_bd[-1]["aum"]), f"{b(_bd[-1]['aum'] - _wbase, True)} over seven closes", sub_color=MUTED)}
+  {kpi("Market move, same window", b(_wm, True), "fund NAVs on units already held", color=signc(_wm), sub_color=MUTED)}
+  {kpi("Net flow, same window", b(_wf, True), "buys minus sells, same basis", color=signc(_wf), sub_color=MUTED)}
+</div>
+<div class="grid2">
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="c-lab" style="padding:12px 20px 2px">Last seven closes</div>
+    {table(["Close", "AUM", "Market", "Flow"], _brow, "t tiny")}
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="c-lab" style="padding:12px 20px 2px">What moved on {dlabel(_cd(bwd['d']))}, by fund</div>
+    {table(["Fund", "NAV", "Market", "AUM"], _mvrow, "t tiny")}
+  </div>
+</div>
+{callout(f"<strong>No order explains it.</strong> Units held were unchanged that day and net flow was {b(bwd['flow'], True)}, yet the book fell {b(abs(bwd['market']))}. The funds repriced instead: {_nav_range} in one day. A redemption moves units; a repricing does not.", "#b07400")}
+<div style="font-size:12px;color:#565b6b;line-height:1.45">Every date here is a close date: the snapshot is written at 02:05 WIB and carries the previous day's close.</div>
+""")
+
 slide(head("03 · Acquisition", "Registrations rose for the first time this year") + f"""
 <div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px">
   <div class="card" style="padding:0;overflow:hidden">{table(["Month", "Registered", "Verified (now)", "Bought ≤30d", "Via referral"], reg_rows, "t small")}</div>
@@ -651,6 +689,72 @@ for r in coh:
     crow.append((f"{mon(r['cohort_month'])} 2026", intc(n), *cells))
 aug = next((r for r in coh if r["cohort_month"] == cmp_ym), None)
 sepc = next((r for r in coh if r["cohort_month"] == rev_ym), None)
+# ---- 04 cross-check: app funnel vs the books, and this month's signup cohort ---
+rec_r = (d.get("appReconcile") or {}).get("review") or []
+if rec_r:
+    _rcol = ["Step", REV, "In the app", "Both", "Only backoffice", "Only app"]
+    _rrow = [(r["step"], intc(num(r["backoffice"])), intc(num(r["app"])), intc(num(r["both"])),
+              intc(num(r["only_backoffice"])), intc(num(r["only_app"]))) for r in rec_r]
+    _pay = next((r for r in rec_r if str(r["step"]).startswith("Paid")), None)
+    _paycov = pct(num(_pay["both"]), num(_pay["backoffice"])) if _pay else "-"
+    _pg = d.get("paymentGap") or []
+    _pgt = sum(num(r["paid_users"]) for r in _pg) or 1
+    _pgm = sum(num(r["no_event"]) for r in _pg)
+    _pgtxt = []
+    for _r in sorted(_pg, key=lambda r: -num(r["no_event"]))[:3]:
+        _pgtxt.append(str(_r["pm"]).replace("_", " ") + " " + intc(num(_r["no_event"])) + " of " + intc(num(_r["paid_users"])))
+    _pgtxt = ", ".join(_pgtxt)
+    _kq = d.get("kycQuality") or []
+    _kqf = sum(num(r["n"]) for r in _kq if r["verification_status"] == "failed")
+    _kqn = sum(num(r["n"]) for r in _kq) or 1
+    _eqr = (d.get("eventQuality") or {}).get("review") or {}
+    _eqp = (d.get("eventQuality") or {}).get("partial") or {}
+    slide(head("04 · Cross-check", "The app agrees with the books below the signup, not at it") + f"""
+<div class="grid3">
+  {kpi("Paid buyers seen in the app", _paycov, "of " + REV + "'s payers sent payment_complete", sub_color=MUTED)}
+  {kpi("KYC events, no approval", intc(_kqf), "of " + intc(_kqn) + " kyc_success events; backoffice says failed", color=RED, sub_color=MUTED)}
+  {kpi("Paid with no event", intc(_pgm), "of " + intc(_pgt) + " this month; the app never returns from the bank", color=RED, sub_color=MUTED)}
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+  <div class="c-lab" style="padding:16px 20px 4px">{REV} 2026, person by person</div>
+  {table(_rcol, _rrow, "t")}
+</div>
+{callout(f"<strong>The app is a funnel instrument, not the ledger.</strong> Where it fires it matches the account: {_paycov} of the month's payers sent payment_complete, and the gap is a channel problem rather than a data problem ({_pgtxt}). Virtual accounts finish on the bank's page, so the app never sees the return. Backoffice stays the source for paid; GA4 is the source for intent.", "#3a50ab")}
+<div style="font-size:12px;color:#565b6b;line-height:1.45">Joined on <code>user_id</code> = <code>main.users.id</code>, events read by the Asia/Jakarta day they happened. <strong>register_success is not a signup count:</strong> {intc(num(_eqr.get("refire", 0)))} of its {intc(num(_eqr.get("n", 0)))} events in {REV} belong to accounts created before that day, {intc(num(_eqr.get("worst_refire", 0)))} of them on {dlabel(_eqr.get("worst_day"))} alone, when a release re-fired the event. By {PART} it is clean: {pct(num(_eqp.get("same_day", 0)), num(_eqp.get("n", 1)))} of events land on the account's own day. The paid and KYC rows are unaffected.</div>
+""")
+
+cf = d.get("cohortFunnel") or {}
+if cf.get("registered"):
+    _cn = num(cf["registered"])
+    _cv = num(cf["kyc_verified_bo"])
+    _cfail = num(cf["kyc_failed_bo"])
+    _cp = num(cf["paid_bo"])
+    _crows = [
+        ("Registered", _cn, "main.users, excl. RAIZ"),
+        ("Opened the app", num(cf["seen_in_app"]), "any GA4 event"),
+        ("Started KYC in the app", num(cf["kyc_started_app"]), "kyc_start"),
+        ("Verified", _cv, "backoffice verified_at"),
+        ("Failed KYC", _cfail, "backoffice"),
+        ("Opened the buy form", num(cf["opened_buy_app"]), "buy_bottom_sheet or order_button"),
+        ("Created an order", num(cf["ordered_bo"]), "transactions"),
+        ("Paid", _cp, "paid status, backoffice"),
+    ]
+    _crow = [(a, intc(bb), pct(bb, _cn, 0), c) for a, bb, c in _crows]
+    _prev_rate = pct(r2b[rev_ym]["bought_within_30d"], r2b[rev_ym]["registered"], 0)
+    slide(head("04 · New", f"{intc(_cn)} signed up in {PART}, {intc(_cp)} have paid") + f"""
+<div class="grid3">
+  {kpi("Signed up", intc(_cn), f"day {part_days} of {PART}", sub_color=MUTED)}
+  {kpi("Verified, never opened the buy form", intc(_cv - num(cf["opened_buy_app"])), "the largest block after verification", color="#b07400", sub_color=MUTED)}
+  {kpi("Not verified at all", intc(_cn - _cv - _cfail), "no verified_at, no failure: they stopped", color=RED, sub_color=MUTED)}
+</div>
+<div class="card" style="padding:0;overflow:hidden">
+  <div class="c-lab" style="padding:16px 20px 4px">{PART} cohort, from signup to paid</div>
+  {table(["Step", "People", "% of signups", "Source"], _crow, "t small")}
+</div>
+{callout(f"<strong>The funnel is front-heavy.</strong> {pct(num(cf['seen_in_app']), _cn, 0)} of signups opened the app and {pct(_cv, _cn, 0)} verified, but only {intc(num(cf['opened_buy_app']))} reached the buy form. {intc(_cn - _cv - _cfail)} never finished KYC, a bigger block than everything after verification combined. For scale: {_prev_rate} of {REV}'s cohort bought within 30 days.", "#14c687")}
+<div style="font-size:12px;color:#565b6b;line-height:1.45">Signups are the backoffice records created in {PART}; each later step is that same set of people, so the rows are comparable. "Verified" and "Paid" come from backoffice, "opened" and "started KYC" from GA4: the app steps are a floor, they only count people the app could see.</div>
+""")
+
 slide(head("05 · Retention", "Repeat buying held; dormancy crept up") + f"""
 <div class="grid4">
   {kpi("Registered users", intc(rh['registered']), "excl. RAIZ")}
@@ -730,7 +834,7 @@ def srow(label, value, color="#14161f"):
 
 
 actions = [
-    f"<strong>Top line</strong>: the book fell {b(last_gap[1])} between {last_gap[0]} and the last close with no visible order; ask the MI whether it is a switch or pricing." if last_gap else "",
+    (f"<strong>Top line</strong>: the {b(abs(bwd['market']))} the book lost on {dlabel(date.fromisoformat(str(bwd['d'])) - timedelta(days=1))} was fund pricing, not a redemption: units held were unchanged and flow that day was {b(bwd['flow'], True)}. Confirm the NAV print with the MI." if bwd else ""),
     f"<strong>Rp 50 B account</strong>: ask whoever looks after it whether the month-end exits are planned. Three so far, all on the 29th to 31st; the next would land around 29 to 31 Oct.",
     f"<strong>Sharia Balanced → Money Market</strong>: {b(top_sw['amount'])} across {intc(top_sw['accounts'])} accounts cut the fee rate from {rc['annualYieldPct']['comparison']:.3f}% to {rc['annualYieldPct']['review']:.3f}%. Find out whether it was advised.",
     f"<strong>Use the app data</strong>: message the {intc(vnb.get('app_users', 0))} verified non-buyers and the {intent['people']} who started buying (lists in User behavior) instead of broadcast campaign pushes.",
@@ -825,7 +929,8 @@ table.t td:first-child { font-family: "Inter", system-ui, sans-serif; font-weigh
 table.t tr:last-child td { border-bottom: 0; }
 table.t.small td { font-size: 13.5px; padding: 6px 14px; }
 table.t.small td:nth-child(2), table.t.small td:nth-child(3) { font-family: "Inter", system-ui, sans-serif; }
-table.t.tiny td { font-size: 13px; padding: 5px 14px; }
+table.t.tiny td { font-size: 13px; padding: 4px 14px; }
+table.t.tiny th { padding: 5px 14px; }
 table.t.big td { font-size: 20px; padding: 14px 18px; }
 table.t.traj td { padding: 5px 16px; font-size: 14.5px; }
 table.t.moves td:first-child { white-space: nowrap; }

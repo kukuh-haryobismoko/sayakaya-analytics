@@ -25,6 +25,33 @@ curl -X POST "$SUPABASE_URL/storage/v1/object/presentation-decks/review-october.
 
 `data.json` holds account identifiers and is gitignored; never commit it.
 
+The four steps are wrapped in one script, which refuses to run before the
+day's snapshot exists:
+
+```bash
+./presentation-docs/refresh-monthly-review.sh              # data -> build -> pdf -> Storage
+./presentation-docs/refresh-monthly-review.sh --no-upload   # stop before publishing
+```
+
+It checks that `portfolio_with_code` has today's partition (written at 02:05
+WIB) and exits 3 if not, skips the work when `data.json` is already through
+today, and takes `CHROME=` for the browser path on Linux.
+
+## When the numbers arrive
+
+Scheduled queries in BigQuery Data Transfer (`asia-southeast2`, hours UTC):
+
+| job | schedule | writes |
+| --- | --- | --- |
+| `portfolio_fix-sc` | 19:00, i.e. 02:00 WIB | `mi_fee_logs.portfolio_fix` |
+| `portfolio_with_code` | 19:05, i.e. 02:05 WIB | `mi_fee_logs.portfolio_with_code` |
+| `mi_fee`, `mi_fee_per_sales`, `portfolio` | 01:00, i.e. 08:00 WIB | `mi_fee_logs.*` |
+| `revenue_apps` | 12:00, i.e. 19:00 WIB | `mi_fee_logs.revenue` |
+| `users-sc`, `transactions-sc` | hourly | `main.users`, `main.transactions` |
+
+A snapshot written at 02:05 WIB on day D carries the close of D-1, so a run at
+03:05 WIB shows yesterday's close.
+
 ## Rules for a refresh
 
 The generator takes today's date as the cut-off, so step 1 defines what the
