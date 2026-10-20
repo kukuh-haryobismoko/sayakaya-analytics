@@ -535,6 +535,15 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
 
+  // Summary panel above that list: subscription/redemption/net flow per
+  // day, Monday week or month. Type and status stay out of it — both sides
+  // always count and expired/cancelled rows never do.
+  app.get('/api/users-transactions/summary', requireTab('users-tx'), handler(async (req, res) => {
+    const { q, fundId, fundName, promo, from, to, granularity } = req.query;
+    const query = Q.usersTransactionsSummary({ q, fundId, fundName, promo, from, to, granularity });
+    res.json({ rows: await runQuery(query.sql, query.params) });
+  }));
+
   // ---- Event code tracking (generic — see queries.js:eventCodeWhere for why
   // `field` still picks referrer_code vs sales_code instead of a real event
   // column) — funnel, tagged users, cohort, and transaction detail for

@@ -5225,27 +5225,34 @@ function remisierTransactions({ referrerCodes = [], salesCodes = [], type, statu
 // by investor identity instead of referrer/sales code.
 const USERS_TX_SORT = ['created_at', 'transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone',
   'fund_name', 'promo_code', 'unit', 'value_per_unit', 'amount', 'final_amount'];
-// Fund name and promo code take comma-separated wildcard terms (codePatterns:
-// no * = contains, * pins the position, e.g. "sucor*" = starts with Sucor).
+// The investor, fund and promo predicates the users-transactions list and its
+// summary panel share: partial SID/email/name, one fund id, or comma-separated
+// wildcard fund names and promo codes (codePatterns: no * = contains, * pins
+// the position, e.g. "sucor*" = starts with Sucor). Writes its params into the
+// caller's object and returns the AND-ed clauses ('' when nothing is set).
+function usersTxFilterSql(params, { q, fundId, fundName, promo }) {
+  let where = '';
+  const term = String(q || '').trim();
+  if (term) {
+    where += ' AND (LOWER(u.sid_code) LIKE @q OR LOWER(u.email) LIKE @q OR LOWER(up.name) LIKE @q)';
+    params.q = `%${term.toLowerCase()}%`;
+  }
+  if (fundId) { where += ' AND t.fund_id = @fundId'; params.fundId = fundId; }
+  const fundPats = codePatterns(String(fundName || '').split(','));
+  if (fundPats.length) { where += ' AND EXISTS (SELECT 1 FROM UNNEST(@fundPats) fp WHERE UPPER(f.name) LIKE fp)'; params.fundPats = fundPats; }
+  const promoPats = codePatterns(String(promo || '').split(','));
+  if (promoPats.length) { where += ' AND EXISTS (SELECT 1 FROM UNNEST(@promoPats) pp WHERE UPPER(t.promo_code) LIKE pp)'; params.promoPats = promoPats; }
+  return where;
+}
 function usersTransactions({ q, type, status, fundId, fundName, promo, from, to, limit = 100, offset = 0, sort, dir }) {
   const params = {
     ...range(from, to),
     limit: parseInt(limit, 10),
     offset: parseInt(offset, 10),
   };
-  let where = 'DATE(t.created_at) BETWEEN @from AND @to';
-  const term = String(q || '').trim();
-  if (term) {
-    where += ' AND (LOWER(u.sid_code) LIKE @q OR LOWER(u.email) LIKE @q OR LOWER(up.name) LIKE @q)';
-    params.q = `%${term.toLowerCase()}%`;
-  }
+  let where = 'DATE(t.created_at) BETWEEN @from AND @to' + usersTxFilterSql(params, { q, fundId, fundName, promo });
   if (type) { where += ' AND t.type = @type'; params.type = type; }
   if (status) { where += ' AND t.status = @status'; params.status = status; }
-  if (fundId) { where += ' AND t.fund_id = @fundId'; params.fundId = fundId; }
-  const fundPats = codePatterns(String(fundName || '').split(','));
-  if (fundPats.length) { where += ' AND EXISTS (SELECT 1 FROM UNNEST(@fundPats) fp WHERE UPPER(f.name) LIKE fp)'; params.fundPats = fundPats; }
-  const promoPats = codePatterns(String(promo || '').split(','));
-  if (promoPats.length) { where += ' AND EXISTS (SELECT 1 FROM UNNEST(@promoPats) pp WHERE UPPER(t.promo_code) LIKE pp)'; params.promoPats = promoPats; }
   return {
     sql: `SELECT
         t.id, t.transaction_number, t.type, t.status, t.created_at,
@@ -5268,6 +5275,40 @@ function usersTransactions({ q, type, status, fundId, fundName, promo, from, to,
       WHERE ${where}`,
   };
 }
+
+// ---- Users transactions summary: subscription (buy) vs redemption (sell) and
+// the net flow between them, one row per day, Monday-based week or calendar
+// month. Type and status are not parameters: both sides always count, and
+// expired or cancelled transactions never do. Amount is final_amount, with
+// amount as the fallback while a transaction is still in flight (final_amount
+// stays 0 until completion), so a pending buy lands in the week it was made.
+const UTX_SUMMARY_PART = { day: 'DAY', week: 'WEEK(MONDAY)', month: 'MONTH' };
+const usersTransactionsSummary = ({ q, fundId, fundName, promo, from, to, granularity = 'week' }) => {
+  const params = range(from, to);
+  const part = UTX_SUMMARY_PART[granularity] || UTX_SUMMARY_PART.week;
+  const fmt = part === 'MONTH' ? '%Y-%m' : '%Y-%m-%d';
+  const amount = 'IFNULL(NULLIF(t.final_amount, 0), t.amount)';
+  const filter = usersTxFilterSql(params, { q, fundId, fundName, promo });
+  return {
+    sql: `SELECT
+        FORMAT_DATE('${fmt}', DATE_TRUNC(DATE(t.created_at), ${part})) AS bucket,
+        ROUND(SUM(IF(t.type = 'buy', ${amount}, 0))) AS subscriptions,
+        COUNTIF(t.type = 'buy') AS buys,
+        ROUND(SUM(IF(t.type = 'sell', ${amount}, 0))) AS redemptions,
+        COUNTIF(t.type = 'sell') AS sells,
+        ROUND(SUM(IF(t.type = 'buy', ${amount}, -${amount}))) AS net_flow
+      FROM ${TX} t
+      JOIN ${USERS} u ON u.id = t.user_id
+      LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
+      LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
+      WHERE DATE(t.created_at) BETWEEN @from AND @to
+        AND t.type IN ('buy', 'sell')
+        AND IFNULL(t.status, '') NOT IN ('expired', 'cancelled')${filter}
+      GROUP BY bucket
+      ORDER BY bucket`,
+    params,
+  };
+};
 
 // ---- Top investors: biggest subscribers / redeemers / net depositors -----
 // Completed buy/sell only, bucketed by transaction date (created_at) like the
@@ -6069,6 +6110,6 @@ module.exports = {
   campaignRevenueDetail, campaignRevenueByCampaign, campaignRevenueSummary,
   remisierUsers, remisierRevenueDetail, remisierRevenueSummary,
   remisierRevenuePwcDetail, remisierRevenuePwcSummary, remisierTransactions,
-  usersTransactions,
+  usersTransactions, usersTransactionsSummary,
   codePatterns, eventCodeUsers, eventCodeFunnel, eventCodeCohort, eventCodeRecap, eventCodePortfolio,
 };

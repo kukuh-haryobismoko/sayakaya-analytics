@@ -96,7 +96,7 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 
 | Tab | Untuk apa |
 |---|---|
-| [Users transactions](#tab-users-tx) | Telusuri transaksi investor mana pun lewat SID, email, nama, nama produk, atau kode promo, atau lihat semua transaksi satu periode tanpa filter investor. |
+| [Users transactions](#tab-users-tx) | Telusuri transaksi investor mana pun lewat SID, email, nama, nama produk, atau kode promo, atau lihat semua transaksi satu periode tanpa filter investor. Panel ringkasan di atas tabel menjumlahkan subscription, redemption, dan net flow per hari, minggu, atau bulan. |
 | [SInvest transactions](#tab-sinvest-tx) | Browse mentah feed KSEI/SInvest, per baris, bisa difilter dan di-export. |
 | [Remisier transactions](#tab-remisier-tx) | Detail transaksi di balik angka remisier. |
 | [Reconciliation](#tab-reconciliation) | Cek harian apakah angka ledger aplikasi sama dengan feed kustodian. |
@@ -872,12 +872,20 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 <a id="tab-users-tx"></a>
 #### Users transactions
 
-- **Untuk apa**: Telusuri transaksi investor mana pun lewat SID, email, nama, nama produk, atau kode promo, atau lihat semua transaksi satu periode tanpa filter investor.
+- **Untuk apa**: Telusuri transaksi investor mana pun lewat SID, email, nama, nama produk, atau kode promo, atau lihat semua transaksi satu periode tanpa filter investor. Panel ringkasan di atas tabel menjumlahkan subscription, redemption, dan net flow per hari, minggu, atau bulan.
 - **Penjelasan sederhana**: Telusuri transaksi investor mana pun berdasarkan kode SID, email, atau nama (kecocokan sebagian, wajib diisi), lengkap dengan info kontak pembeli dan nama produk di setiap barisnya: join yang sama dengan Remisier transactions, tapi dicari berdasarkan identitas investor, bukan kode referrer/sales. Persempit lebih lanjut dengan jenis transaksi, status, produk, atau rentang tanggal. Bisa diekspor ke CSV, Excel, atau PDF. Klik judul kolom mana pun untuk mengurutkan semua transaksi yang cocok, bukan hanya halaman yang terlihat; unduhan mengikuti urutan yang sama.
 - **Data yang dibaca**: main.transactions, main.users, main.user_profiles, main.funds
-- **Cara hitung**: Semua kolom pencarian opsional: SID/email/nama (pencarian parsial), nama produk (funds.name), dan kode promo (transactions.promo_code). Kalau semuanya kosong, tampil transaksi seluruh investor pada rentang tanggal (mis. jenis sell + satu periode = semua redeem); tanpa tanggal, seluruh riwayat. Nama produk dan kode promo memakai pola codePatterns: tanpa * = mengandung kata itu, * mengunci posisi (sucor* = diawali Sucor), koma untuk beberapa kata (digabung OR), tidak peka huruf besar/kecil. Filter tipe, status, fund, dan tanggal. Tiap baris memuat kontak pembeli, nama fund, dan kode promo. Export CSV, Excel, PDF. Semua kolom bisa diurutkan dengan klik judul kolom; pengurutan dijalankan di BigQuery (pagedOrder, hanya nama kolom output yang diizinkan, teks tanpa membedakan huruf besar/kecil, NULL di akhir) sehingga berlaku untuk semua baris dan ikut ke export. Di tab lain, export server dari tabel yang diurutkan di layar dikirim beserta kolom urutannya (sortExportRows di report-helpers): diurutkan menurut field kolom itu, atau mengikuti urutan kolom pertama di layar untuk pivot dan kolom yang dihitung di halaman.
+- **Cara hitung**: Semua kolom pencarian opsional: SID/email/nama (pencarian parsial), nama produk (funds.name), dan kode promo (transactions.promo_code). Kalau semuanya kosong, tampil transaksi seluruh investor pada rentang tanggal (mis. jenis sell + satu periode = semua redeem); tanpa tanggal, seluruh riwayat. Panel ringkasan di atas tabel memakai filter investor, produk, dan promo yang sama, tetapi tidak memakai filter tipe dan status: subscription = transactions.type 'buy', redemption = 'sell', net flow = subscription − redemption, per hari, minggu Senin–Minggu (WEEK(MONDAY)), atau bulan, dan transaksi berstatus expired atau cancelled tidak pernah dihitung. Nominalnya final_amount, dengan amount sebagai cadangan selama final_amount masih 0 (transaksi yang belum selesai), jadi order yang masih berjalan ikut terhitung sebesar nominal ordernya. Nama produk dan kode promo memakai pola codePatterns: tanpa * = mengandung kata itu, * mengunci posisi (sucor* = diawali Sucor), koma untuk beberapa kata (digabung OR), tidak peka huruf besar/kecil. Filter tipe, status, fund, dan tanggal. Tiap baris memuat kontak pembeli, nama fund, dan kode promo. Export CSV, Excel, PDF. Semua kolom bisa diurutkan dengan klik judul kolom; pengurutan dijalankan di BigQuery (pagedOrder, hanya nama kolom output yang diizinkan, teks tanpa membedakan huruf besar/kecil, NULL di akhir) sehingga berlaku untuk semua baris dan ikut ke export. Di tab lain, export server dari tabel yang diurutkan di layar dikirim beserta kolom urutannya (sortExportRows di report-helpers): diurutkan menurut field kolom itu, atau mengikuti urutan kolom pertama di layar untuk pivot dan kolom yang dihitung di halaman.
 - **Isi tab**:
   - *Users transactions* (Transaksi pengguna): Cari lewat investor (SID, email, atau nama, sebagian kata cukup), nama produk, atau kode promo; semuanya opsional. Kosongkan semua dan pilih rentang tanggal untuk melihat transaksi seluruh investor (jenis sell = redeem). Nama produk dan kode promo: tanpa * cocok di bagian mana pun, sucor* = diawali Sucor, koma untuk beberapa kata. Saring juga menurut tipe, status, fund, dan tanggal. Ekspor CSV, Excel, atau PDF.
+  - *Subscription and redemption summary* (Ringkasan subscription dan redemption): Ringkasan rentang tanggal di atas: subscription (buy), redemption (sell), dan net flow = subscription − redemption, dengan filter investor, produk, dan promo yang sama seperti panel di atasnya. Filter tipe dan status tidak berlaku di sini: kedua sisi selalu dijumlahkan dan transaksi expired atau cancelled tidak pernah dihitung. Pilih per hari, per minggu (Senin–Minggu), atau per bulan; default per minggu. Tombol Run di panel atas memuat ulang ringkasan ini juga.
+    - **Date / Tanggal**: Tanggal transaksi (created_at, zona Asia/Jakarta) saat ringkasan per hari.
+    - **Month / Bulan**: Bulan transaksi (YYYY-MM) saat ringkasan per bulan.
+    - **Subscriptions / Subscription**: Jumlah nominal transaksi buy pada bucket itu.
+    - **# buys**: Jumlah transaksi buy pada bucket itu.
+    - **Redemptions / Redemption**: Jumlah nominal transaksi sell pada bucket itu.
+    - **# sells**: Jumlah transaksi sell pada bucket itu.
+    - **Net flow**: Subscriptions dikurangi redemptions: positif berarti dana masuk bersih, negatif dana keluar bersih.
   - *Transaction detail* (Detail transaksi): Satu baris per transaksi, terbaru di atas, dengan kontak pembeli.
     - **Type / Tipe**: buy (pembelian), sell (penjualan), SWITCH_IN dan SWITCH_OUT (dua sisi switching), reinvestment (pembagian hasil yang diinvestasikan ulang).
     - **Status**: completed (selesai), expired (batas bayar habis), cancelled (dibatalkan), completed_payment (uang diterima, unit belum dialokasikan), verified, verified_by_operational, dan lainnya.
@@ -888,8 +896,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Semua status ikut tampil kecuali disaring. Untuk angka bisnis (volume, revenue) biasanya hanya status completed yang dihitung.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `users-tx`
-  - Endpoint: `GET /api/users-transactions`
-  - Fungsi query (`server/queries.js`): `usersTransactions`
+  - Endpoint: `GET /api/users-transactions`, `GET /api/users-transactions/summary`
+  - Fungsi query (`server/queries.js`): `usersTransactions`, `usersTransactionsSummary`
   - Tabel BigQuery yang disentuh: `main.funds`, `main.transactions`, `main.user_profiles`, `main.users`
 
 <a id="tab-sinvest-tx"></a>

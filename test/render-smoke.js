@@ -248,6 +248,11 @@ const pfnUninstalls = [
   { dimension: 'tenure', value: 'd0_1', uninstalls: 49, with_account: 18, verified: 8, paid_before: 8, holders: 0, holder_aum: '0', came_back: 3, median_days_installed: 0 },
   { dimension: 'last_screen', value: XSS, uninstalls: 2, with_account: 0, verified: 0, paid_before: 0, holders: 0, holder_aum: '0', came_back: 0, median_days_installed: 0 },
 ];
+// Users transactions summary: weekly buckets, oldest first like the API.
+const utxSummary = [
+  { bucket: '2026-09-21', subscriptions: 1500000000, buys: 12, redemptions: 500000000, sells: 3, net_flow: 1000000000 },
+  { bucket: '2026-09-28', subscriptions: 2000000000, buys: 9, redemptions: 2500000000, sells: 7, net_flow: -500000000 },
+];
 const emailSummary = {
   totals: { sent: 12, failed: 1, recipients: 10, delivered: 11, opened: 6, clicked: 2, bounced: 1, complained: 0, opens: 9, clicks: 3 },
   by_category: [{ category: 'statement', sent: 10, failed: 1, delivered: 9, opened: 5, clicked: 0, bounced: 1, complained: 0 },
@@ -378,6 +383,12 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/aum-history'))            return aumHistory;
   if (path.startsWith('/api/revenue-trend/drill'))    return revenueTrendDrill;
   if (path.startsWith('/api/revenue-trend'))          return revenueTrend;
+  if (path.startsWith('/api/users-transactions/summary')) {
+    // The panel must not pass type or status: both sides always count.
+    if (/[?&](type|status)=/.test(path)) throw new Error('summary got a type/status filter: ' + path);
+    if (!path.includes('granularity=week')) throw new Error('summary missing granularity: ' + path);
+    return { rows: utxSummary };
+  }
   if (path.startsWith('/api/top-investors?') && path.includes('from=') && path.includes('to=')) return topInvestors;
   if (path.startsWith('/api/dormant/conversion-summary')) return dormantConversionSummary;
   if (path.startsWith('/api/dormant/repeat-buyers'))      return dormantRepeatBuyers;
@@ -448,6 +459,8 @@ sandbox.api = async (path) => {
   for (const fn of ['loadEvcPortfolio', 'loadEvcUsers', 'loadEvcCohort']) {
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
+  get('#utxFrom').value = '2026-09-01'; get('#utxTo').value = '2026-09-30';
+  try { await sandbox.loadUtxSummary(); } catch (e) { errors.push(`loadUtxSummary: ${e.message}`); }
   // Calendar columns for portfolio (50% in October), offsets sorted numerically for cohorts (W10 after W0).
   if (!/2026-09<\/th><th>2026-10<\/th>/.test(get('#evcPfHeatmap')._html) || !get('#evcPfHeatmap')._html.includes('>50%<')) errors.push('#evcPfHeatmap: calendar columns missing');
   // Full grid: every week of January is a row (2025-12-28 .. 2026-01-25), offsets W0..W12 contiguous, 0% where nobody bought.
@@ -459,7 +472,7 @@ sandbox.api = async (path) => {
   if (!get('#evcUsersTable')._html.includes('Sold everything')) errors.push('#evcUsersTable: portfolio status label missing');
   // The loaders swallow exceptions into the table div, so "did it throw?" is
   // not enough — assert each target actually became a <table>.
-  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnFunnelTable', '#pfnStopsTable', '#pfnSplitTable', '#pfnWeeksTable', '#pfnTimingTable', '#pfnInstallsTable', '#pfnDailyTable', '#pfnUninstallsTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#egSegmentTable', '#egPushTable', '#egProductTable', '#saIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap']) {
+  for (const sel of ['#ulUsersTable', '#ulSummaryTable', '#crCampaignsTable', '#crDetailTable', '#crSummaryTable', '#refProgTable', '#refProgLeaderboardTable', '#refProgAltTable', '#refProgAltLeaderboardTable', '#aumTable', '#revTrendTable', '#aumDrillTable', '#tiTable', '#topFunds', '#dwConversionTable', '#dwRepeatTable', '#dwTtcTable', '#kalcerSummaryTable', '#kalcerDetailTable', '#pushPlatformTable', '#pushCampaignTable', '#mktTable', '#ahCrashTable', '#ahPerfTable', '#pfnFunnelTable', '#pfnStopsTable', '#pfnSplitTable', '#pfnWeeksTable', '#pfnTimingTable', '#pfnInstallsTable', '#pfnDailyTable', '#pfnUninstallsTable', '#erCategoryTable', '#erSubjectTable', '#erLinksTable', '#erLogTable', '#egSegmentTable', '#egPushTable', '#egProductTable', '#saIntentTable', '#saFunnelTable', '#saEntryTable', '#saDropTable', '#saPayTable', '#saDriverTable', '#saChipTable', '#saProfileTable', '#obFunnelTable', '#obOutcomeTable', '#obRejectedTable', '#rdFunnelTable', '#rdProfileTable', '#rdSignalTable', '#rdSwitchTable', '#egFeatureTable', '#egActivityTable', '#egSearchTable', '#egDiscoveryTable', '#evcDailyTable', '#evcCodeTable', '#evcPfSummary', '#evcPfHeatmap', '#evcUsersTable', '#evcCohortRegHeatmap', '#evcCohortTxHeatmap', '#utxSumTable']) {
     const html = get(sel)._html;
     if (html.includes('<table')) { console.log(`ok    ${sel}`); continue; }
     const why = html.replace(/<[^>]*>/g, '').trim() || '(never rendered)';
@@ -474,6 +487,17 @@ sandbox.api = async (path) => {
     console.log(`FAIL  #kpis -> ${kpisHtml.slice(0, 200) || '(never rendered)'}`);
     errors.push('#kpis did not render KPI cards');
   }
+  // idr() uses Intl compact notation, which puts a no-break space before the unit.
+  const utxKpisHtml = get('#utxSumKpis')._html.replace(/\u00a0/g, ' ');
+  if (!utxKpisHtml.includes('Rp 3,5 M') || !utxKpisHtml.includes('Rp 3 M') || !utxKpisHtml.includes('Rp 500 jt')) {
+    errors.push(`#utxSumKpis: subscription/redemption/net totals missing -> ${utxKpisHtml.replace(/<[^>]*>/g, ' ').slice(0, 200)}`);
+  } else {
+    console.log('ok    #utxSumKpis');
+  }
+  const utxSumHtml = get('#utxSumTable')._html;
+  if (!utxSumHtml.includes('Week of (Mon)')) errors.push('#utxSumTable: week bucket label missing');
+  if (!utxSumHtml.includes('+Rp 1.000.000.000') || !utxSumHtml.includes('-Rp 500.000.000')) errors.push('#utxSumTable: net flow not signed per row');
+  if (utxSumHtml.indexOf('2026-09-28') > utxSumHtml.indexOf('2026-09-21')) errors.push('#utxSumTable: newest week is not on top');
   const dwKpisHtml = get('#dwKpis')._html;
   if (dwKpisHtml.includes('kpi-value')) {
     console.log('ok    #dwKpis');

@@ -1105,6 +1105,25 @@
         <span class="hint" data-i18n="utx_hint">Search by SID code, email, or name, by fund name, or by promo code: fill at least one. Fund name and promo code match anywhere in the text; use * to pin the position (sucor* = starts with Sucor, *fund = ends with Fund) and commas for several terms (THR*, SYKYPRIO). Type, status, fund, and the date range (on transaction date) narrow the result.</span>
       </div>
 
+      <!-- Summary of the range above: subscription (buy) vs redemption (sell)
+           and the net flow, per day, Monday week or month. Type and status are
+           not part of it — both sides always count and expired/cancelled rows
+           never do — so it answers "how much came in and went out" without
+           the table's type/status filters. -->
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="utx_sum_title">Subscription and redemption summary</h2>
+          <div class="seg" id="utxSumGran">
+            <button data-g="day" data-i18n="common_day">Day</button>
+            <button data-g="week" class="on" data-i18n="common_week">Week</button>
+            <button data-g="month" data-i18n="common_month">Month</button>
+          </div>
+        </div>
+        <span class="hint" data-i18n="utx_sum_hint">Subscription = buy, redemption = sell, net flow = subscription − redemption, using the same investor, fund, and promo filters as above (type and status only narrow the table below). Expired and cancelled transactions never count, and money still in flight counts at its order amount. One row per day, Monday–Sunday week, or calendar month, newest first; the first and last bucket can be partial.</span>
+        <div id="utxSumKpis" class="kpi-grid cols-3" style="margin-top:14px"></div>
+        <div id="utxSumTable" class="table-wrap" style="margin-top:14px"></div>
+      </div>
+
       <div class="panel">
         <div class="panel-head wrap">
           <h2 data-i18n="common_tx_detail">Transaction detail</h2>

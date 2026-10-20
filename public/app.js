@@ -4177,6 +4177,9 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
     if (c.type === 'date') out = v == null ? 'n/a' : String(v).slice(0, 10);
     // delta: signed difference from a target, green at or above it, red below.
     if (c.type === 'delta') out = v == null ? '' : (v > 0 ? '+' : '') + num(v);
+    // c.fmt: draw the cell yourself (a signed net flow in red/green), last so
+    // it wins; c.type still supplies the column class and the footer sum.
+    if (c.fmt) out = c.fmt(v);
     const tone = c.type === 'delta' && v != null ? (v < 0 ? ' neg' : ' pos') : '';
     // c.text: keep the cell text in the XLSX export (phone 0812..., SID, timestamps).
     return `<td class="${numTypes.includes(c.type) ? 'num' : ''}${tone}"${c.text ? ' data-t="s"' : ''}>${out}</td>`;
@@ -5050,6 +5053,71 @@ async function loadUtx() {
     $('#utxPrev').disabled = utx.offset === 0;
     $('#utxNext').disabled = end >= total;
   } catch (e) { $('#utxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+// ---- Users transactions summary (panel above the list) --------------------
+// Subscription (buy), redemption (sell) and net flow per day, Monday week or
+// month, over the same investor/fund/promo filters as the list. Type and
+// status are deliberately not sent: the panel always counts both sides and
+// never expired or cancelled rows, so it stays a whole-of-range picture even
+// while the table below is filtered to one type.
+const utxSum = { granularity: 'week', loaded: false };
+
+function utxSumGranLabel() {
+  if (utxSum.granularity === 'day') return 'Date';
+  if (utxSum.granularity === 'month') return 'Month';
+  return 'Week of (Mon)';
+}
+
+// Net flow cell: green with a plus when money came in, red with a minus when
+// it went out; the footer total goes through the same formatter.
+function signedIdr(v) {
+  if (v == null) return 'n/a';
+  const n = Number(v) || 0;
+  return `<span style="color:${n >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}">${n >= 0 ? '+' : '-'}${idrFull(Math.abs(n))}</span>`;
+}
+
+async function loadUtxSummary() {
+  const p = utxParams();
+  if (!p.from || !p.to) {
+    utxSum.loaded = false;
+    $('#utxSumKpis').innerHTML = '';
+    $('#utxSumTable').innerHTML = `<div class="empty">${t('utx_sum_pick_range')}</div>`;
+    return;
+  }
+  const qs = new URLSearchParams();
+  for (const k of ['q', 'fundName', 'promo', 'fundId', 'from', 'to']) if (p[k]) qs.set(k, p[k]);
+  qs.set('granularity', utxSum.granularity);
+  $('#utxSumKpis').innerHTML = '';
+  $('#utxSumTable').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const { rows } = await api(`/api/users-transactions/summary?${qs}`);
+    utxSum.loaded = true;
+    const total = (k) => rows.reduce((a, r) => a + (Number(val(r[k])) || 0), 0);
+    const subs = total('subscriptions');
+    const reds = total('redemptions');
+    const net = subs - reds;
+    if (rows.length) {
+      $('#utxSumKpis').innerHTML = [
+        kpi(t('utx_sum_subscriptions'), idr(subs), `${num(total('buys'))} ${t('utx_sum_buys')}`, 'accent', ICONS.trendUp),
+        kpi(t('utx_sum_redemptions'), idr(reds), `${num(total('sells'))} ${t('utx_sum_sells')}`, 'warn', ICONS.trendDown),
+        kpi(t('utx_sum_net'), idr(net), `${idr(subs)} − ${idr(reds)}`, net < 0 ? 'warn' : 'accent', ICONS.activity),
+      ].join('');
+    }
+    // Newest bucket first, like the table below it; the query returns them oldest first.
+    genTable('#utxSumTable', rows.slice().reverse(), [
+      { key: 'bucket', label: utxSumGranLabel() },
+      { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true },
+      { key: 'buys', label: '# buys', type: 'num', sum: true },
+      { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true },
+      { key: 'sells', label: '# sells', type: 'num', sum: true },
+      { key: 'net_flow', label: 'Net flow', type: 'idr', sum: true, fmt: signedIdr },
+    ], t('utx_sum_empty'));
+  } catch (e) {
+    utxSum.loaded = false;
+    $('#utxSumKpis').innerHTML = '';
+    $('#utxSumTable').innerHTML = `<div class="empty">${e.message}</div>`;
+  }
 }
 
 // TOP INVESTORS — Day/Week/Month resolve to the day, Mon–Sun week, or
@@ -8638,6 +8706,7 @@ function switchTab(name) {
   if (name === 'growth' && !growthLoaded) loadGrowth();
   if (name === 'reconciliation') loadReconciliation();
   if (name === 'sinvest-tx' && !sitxLoaded) loadSitx();
+  if (name === 'users-tx' && !utxSum.loaded) loadUtxSummary();
   if (name === 'top-investors' && !tiLoaded) loadTopInvestors();
   if (name === 'revenue') loadRevenue();
   if (name === 'revenue2') loadRevenue2();
@@ -9558,11 +9627,14 @@ function wire() {
   $('#sitxXlsx').addEventListener('click', () => download(
     { source: 'sinvest_transactions', format: 'xlsx', filename: 'sinvest_transactions', ...sitxParams() }, 'sinvest_transactions.xlsx'));
 
-  // users transactions
-  $('#utxRun').addEventListener('click', () => { utx.offset = 0; loadUtx(); });
+  // users transactions — Run drives the summary panel above the list too, so
+  // both always describe the same filters and date range.
+  const runUtx = () => { utx.offset = 0; loadUtx(); loadUtxSummary(); };
+  $('#utxRun').addEventListener('click', runUtx);
   for (const id of ['#utxSearch', '#utxFundName', '#utxPromo']) {
-    $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { utx.offset = 0; loadUtx(); } });
+    $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') runUtx(); });
   }
+  wireSeg('#utxSumGran', 'g', (v) => { utxSum.granularity = v; loadUtxSummary(); });
   $('#tiDate').value = isoDate(new Date());
   $('#tiMetric').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
