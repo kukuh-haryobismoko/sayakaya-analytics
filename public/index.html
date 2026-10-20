@@ -2929,8 +2929,33 @@
       </div>
 
       <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="be_recap_all_title">Recap per booth</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="beRecapAllFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="beRecapAllTo" /></label>
+          </div>
+        </div>
+        <span class="hint" data-i18n="be_recap_all_hint">Every booth side by side for the dates above, plus a row with all booths together, whatever the booth, sales and period filters say. A customer counts for the booth of the code they registered with. Registered = registrations in the dates. KYC (verification day) = verifications in the dates, so it can be higher than Registered when people verify days after signing up. KYC of those who registered = of the people who registered in the dates, how many have verified, so it is never above Registered. First purchase = their first completed buy falls in the dates. Reached the minimum = their net purchases first reached it in the dates. Bought and Sold = completed transactions in the dates, amount paid in or out; buys that are still waiting for settlement are not counted.</span>
+        <div id="beRecapAll" class="table-wrap" style="margin-top:12px"></div>
+        <span class="hint" id="beRecapNote" style="display:block; margin-top:6px"></span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head wrap">
+          <h2 data-i18n="be_recap_day_title">Recap per booth, per day</h2>
+          <div class="range">
+            <label><span data-i18n="range_from">From</span> <input type="date" id="beRecapDayFrom" /></label>
+            <label><span data-i18n="range_to">To</span> <input type="date" id="beRecapDayTo" /></label>
+          </div>
+        </div>
+        <span class="hint" data-i18n="be_recap_day_hint">One block per day (newest first) with every booth and a row for all booths, plus a Total block for the whole range when the two dates differ. Same counting rules as the recap above, one day at a time. The dates here are separate from the other tables; they default to today.</span>
+        <div id="beRecapDay" class="table-wrap" style="margin-top:12px; max-height:70vh"></div>
+      </div>
+
+      <div class="panel">
         <div class="panel-head"><h2 data-i18n="be_daily_title">Daily recap</h2></div>
-        <span class="hint" data-i18n="be_daily_hint">New customers per day (WIB): registrations, KYC verifications, first purchases, customers whose net purchases reached the funded minimum, and money in and out. Follows the booth and sales filters.</span>
+        <span class="hint" data-i18n="be_daily_hint">New customers per day (WIB): registrations, KYC verifications, first purchases, customers whose net purchases reached the funded minimum, and money in and out. Follows the booth and sales filters. KYC has two columns because verifications are counted on the day they happen, not on the day the customer signed up: "verification day" can be higher than Registered, the "that day's sign-ups" column cannot.</span>
         <div id="beDaily" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
       </div>
 
