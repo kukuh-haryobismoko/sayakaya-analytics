@@ -5058,9 +5058,9 @@ async function loadUtx() {
 // ---- Users transactions summary (panel above the list) --------------------
 // Subscription (buy), redemption (sell) and net flow per day, Monday week or
 // month, over the same investor/fund/promo filters as the list. Type and
-// status are deliberately not sent: the panel always counts both sides and
-// never expired or cancelled rows, so it stays a whole-of-range picture even
-// while the table below is filtered to one type.
+// status are deliberately not sent: the panel always counts both sides, and
+// the server keeps only settled orders without bonus top-ups, so it stays a
+// whole-of-range picture even while the table below is filtered to one type.
 const utxSum = { granularity: 'week', loaded: false };
 
 function utxSumGranLabel() {

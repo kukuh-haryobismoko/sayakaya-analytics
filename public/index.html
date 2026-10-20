@@ -1119,7 +1119,7 @@
             <button data-g="month" data-i18n="common_month">Month</button>
           </div>
         </div>
-        <span class="hint" data-i18n="utx_sum_hint">Subscription = buy, redemption = sell, net flow = subscription − redemption, using the same investor, fund, and promo filters as above (type and status only narrow the table below). Expired and cancelled transactions never count, and money still in flight counts at its order amount. One row per day, Monday–Sunday week, or calendar month, newest first; the first and last bucket can be partial.</span>
+        <span class="hint" data-i18n="utx_sum_hint">Subscription = buy, redemption = sell, net flow = subscription − redemption, using the same investor, fund, and promo filters as above (type and status only narrow the table below). Only settled orders count — verified_by_operational, verified, completed, completed_payment — at their order amount, with no bonus top-ups (payment_method bonus or manual_bonus); in-flight, expired, and cancelled transactions never count. This is the same rule as the finance check on Metabase, so the totals match it. One row per day, Monday–Sunday week, or calendar month, newest first; the first and last bucket can be partial.</span>
         <div id="utxSumKpis" class="kpi-grid cols-3" style="margin-top:14px"></div>
         <div id="utxSumTable" class="table-wrap" style="margin-top:14px"></div>
       </div>

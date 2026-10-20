@@ -90,9 +90,14 @@ assert.ok(/WHERE DATE\(t\.created_at\) BETWEEN @from AND @to AND t\.type = @type
 const sums = Q.usersTransactionsSummary({ from: '2026-10-01', to: '2026-10-19', granularity: 'nope' });
 assert.ok(sums.sql.includes('DATE_TRUNC(DATE(t.created_at), WEEK(MONDAY))'), 'unknown granularity falls back to the Monday week');
 assert.ok(sums.sql.includes("FORMAT_DATE('%Y-%m-%d'"));
-assert.ok(sums.sql.includes("AND t.type IN ('buy', 'sell')") && sums.sql.includes("NOT IN ('expired', 'cancelled')"));
+assert.ok(sums.sql.includes("AND t.type IN ('buy', 'sell')"));
 assert.ok(!sums.sql.includes('@type') && !sums.sql.includes('@status'), 'type and status are not parameters');
-assert.ok(sums.sql.includes('IFNULL(NULLIF(t.final_amount, 0), t.amount)'), 'in-flight rows count at their order amount');
+assert.ok(sums.sql.includes("t.status IN ('verified_by_operational', 'verified', 'completed', 'completed_payment')"), 'settled orders only, as on Metabase');
+assert.ok(sums.sql.includes("LOWER(IFNULL(t.payment_method, '')) NOT LIKE '%bonus%'"), 'bonus top-ups are not money in');
+assert.ok(sums.sql.includes('t.transaction_number IS NOT NULL'));
+assert.ok(sums.sql.includes('ROUND(SUM(IF(t.type = \'buy\', t.amount, 0))) AS subscriptions'), 'order amount, not final_amount');
+assert.ok(!sums.sql.includes('final_amount'), 'final_amount would not match the Metabase check');
+assert.ok(sums.sql.includes('COUNT(DISTINCT IF(t.type = \'buy\', t.transaction_number, NULL)) AS buys'), 'order count, not row count');
 const sumM = Q.usersTransactionsSummary({ from: '2026-10-01', to: '2026-10-31', granularity: 'month', q: 'kukuh', promo: 'THR*', fundName: 'sucor*' });
 assert.ok(sumM.sql.includes("FORMAT_DATE('%Y-%m', DATE_TRUNC(DATE(t.created_at), MONTH))"));
 assert.deepStrictEqual([sumM.params.q, sumM.params.promoPats, sumM.params.fundPats], ['%kukuh%', ['THR%'], ['SUCOR%']]);

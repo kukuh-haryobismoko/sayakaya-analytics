@@ -5278,32 +5278,39 @@ function usersTransactions({ q, type, status, fundId, fundName, promo, from, to,
 
 // ---- Users transactions summary: subscription (buy) vs redemption (sell) and
 // the net flow between them, one row per day, Monday-based week or calendar
-// month. Type and status are not parameters: both sides always count, and
-// expired or cancelled transactions never do. Amount is final_amount, with
-// amount as the fallback while a transaction is still in flight (final_amount
-// stays 0 until completion), so a pending buy lands in the week it was made.
+// month. Type and status are not parameters: both sides always count. The rule
+// is the finance check people run by hand on Metabase, so the numbers match it
+// to the rupiah: settled orders only (verified_by_operational, verified,
+// completed, completed_payment), no bonus top-ups (payment_method 'bonus' or
+// 'manual_bonus', which are not money in), a real transaction_number, and the
+// order amount rather than final_amount. Orders still in flight, expired and
+// cancelled rows therefore never count.
+const UTX_SUMMARY_STATUSES = `'verified_by_operational', 'verified', 'completed', 'completed_payment'`;
 const UTX_SUMMARY_PART = { day: 'DAY', week: 'WEEK(MONDAY)', month: 'MONTH' };
 const usersTransactionsSummary = ({ q, fundId, fundName, promo, from, to, granularity = 'week' }) => {
   const params = range(from, to);
   const part = UTX_SUMMARY_PART[granularity] || UTX_SUMMARY_PART.week;
   const fmt = part === 'MONTH' ? '%Y-%m' : '%Y-%m-%d';
-  const amount = 'IFNULL(NULLIF(t.final_amount, 0), t.amount)';
   const filter = usersTxFilterSql(params, { q, fundId, fundName, promo });
+  // COUNT(DISTINCT transaction_number), not COUNT(*), so a duplicated or split
+  // row cannot inflate the order counts; no paid row has a null number today.
   return {
     sql: `SELECT
         FORMAT_DATE('${fmt}', DATE_TRUNC(DATE(t.created_at), ${part})) AS bucket,
-        ROUND(SUM(IF(t.type = 'buy', ${amount}, 0))) AS subscriptions,
-        COUNTIF(t.type = 'buy') AS buys,
-        ROUND(SUM(IF(t.type = 'sell', ${amount}, 0))) AS redemptions,
-        COUNTIF(t.type = 'sell') AS sells,
-        ROUND(SUM(IF(t.type = 'buy', ${amount}, -${amount}))) AS net_flow
+        ROUND(SUM(IF(t.type = 'buy', t.amount, 0))) AS subscriptions,
+        COUNT(DISTINCT IF(t.type = 'buy', t.transaction_number, NULL)) AS buys,
+        ROUND(SUM(IF(t.type = 'sell', t.amount, 0))) AS redemptions,
+        COUNT(DISTINCT IF(t.type = 'sell', t.transaction_number, NULL)) AS sells,
+        ROUND(SUM(IF(t.type = 'buy', t.amount, -t.amount))) AS net_flow
       FROM ${TX} t
       JOIN ${USERS} u ON u.id = t.user_id
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
       LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
       WHERE DATE(t.created_at) BETWEEN @from AND @to
         AND t.type IN ('buy', 'sell')
-        AND IFNULL(t.status, '') NOT IN ('expired', 'cancelled')${filter}
+        AND t.status IN (${UTX_SUMMARY_STATUSES})
+        AND t.transaction_number IS NOT NULL
+        AND LOWER(IFNULL(t.payment_method, '')) NOT LIKE '%bonus%'${filter}
       GROUP BY bucket
       ORDER BY bucket`,
     params,
