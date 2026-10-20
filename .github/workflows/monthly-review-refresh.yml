@@ -42,6 +42,9 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # The generator's heaviest scan needs about 4.3 GB; bigquery.js
+          # caps a single query at 2 GB unless this is raised.
+          MAX_BYTES_BILLED: "15000000000"
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: ./presentation-docs/refresh-monthly-review.sh
 
