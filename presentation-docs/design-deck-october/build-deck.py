@@ -14,7 +14,7 @@ update by itself, and how to check it, is in README-monthly-review.md
 and any sentence about the partial month.
 Same visual system as the September deck (design-deck-september/).
 """
-import html, json, pathlib, sys
+import html, json, os, pathlib, sys
 from datetime import date, timedelta
 
 here = pathlib.Path(__file__).parent
@@ -966,11 +966,17 @@ table.t.moves td:nth-child(3), table.t.moves th:nth-child(3), table.t.moves2 td:
 .act.done .act-n { color: #07724d; }
 """
 
+# refresh-monthly-review.sh sets this when no committed folder exists for the month yet:
+# the figures are fresh, the sentences are the previous deck's.
+DRAFT = os.environ.get("DECK_DRAFT") == "1"
+if DRAFT:
+    CSS += ".draft .slide::after { content: %s; position: absolute; top: 6px; right: 10px; z-index: 99; background: #c00d3f; color: #fff; font: 700 10px/1 \"JetBrains Mono\", monospace; letter-spacing: .6px; padding: 4px 8px; border-radius: 3px; }" % json.dumps("AUTO DRAFT · figures refresh daily · text carried over from the " + os.environ.get("DECK_DRAFT_FROM", "previous") + " deck")
+
 out = here / "deck-print.html"
 out.write_text(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>SayaKaya {PART} Review</title>
 <style>{CSS}</style></head>
-<body>
+<body{' class="draft"' if DRAFT else ''}>
 {chr(10).join(slides)}
 </body></html>
 """)

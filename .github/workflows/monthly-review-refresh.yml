@@ -55,5 +55,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: monthly-review-pdf
-          path: presentation-docs/sayakaya-october-review-deck.pdf
+          path: presentation-docs/sayakaya-*-review-deck.pdf
           if-no-files-found: ignore

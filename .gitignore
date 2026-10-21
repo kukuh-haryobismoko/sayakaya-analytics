@@ -4,3 +4,7 @@ node_modules/
 service-account.json
 .claude/settings.local.json
 presentation-docs/design-deck-*/data.json
+presentation-docs/.draft-deck-*/
+presentation-docs/design-deck-20??-??/deck-print.html
+presentation-docs/sayakaya-20??-??-review-deck.pdf
+__pycache__/

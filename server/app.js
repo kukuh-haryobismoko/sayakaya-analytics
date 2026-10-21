@@ -320,8 +320,16 @@ function createApp({ serveStatic = true } = {}) {
     'review-september': { label: 'September 2026', file: 'sayakaya-september-review-deck.pdf', tab: 'monthly-review' },
     'review-october': { label: 'October 2026', file: 'sayakaya-october-review-deck.pdf', tab: 'monthly-review' },
   };
+  // The daily refresh publishes later months as review-YYYY-MM with no entry above.
+  const REVIEW_KEY = /^review-(\d{4}-(?:0[1-9]|1[0-2]))$/;
+  const presentationFor = (key) => PRESENTATIONS[key] || (REVIEW_KEY.test(key) && { tab: 'monthly-review', file: `sayakaya-${key.slice(7)}-review-deck.pdf` });
+  app.get('/api/presentations', handler(async (req, res) => {
+    if (!Auth.userCan(req.user, 'monthly-review')) return res.json({ decks: [] });
+    const files = await fs.promises.readdir(path.join(__dirname, '..', 'presentation-docs'));
+    res.json({ decks: files.map((f) => /^sayakaya-(\d{4}-(?:0[1-9]|1[0-2]))-review-deck\.pdf$/.exec(f)).filter(Boolean).map((m) => `review-${m[1]}`).sort() });
+  }));
   app.get('/api/presentations/:month', handler(async (req, res) => {
-    const deck = PRESENTATIONS[req.params.month];
+    const deck = presentationFor(req.params.month);
     if (!deck) return res.status(404).json({ error: 'No deck for that month.' });
     if (!Auth.userCan(req.user, deck.tab)) return res.status(403).json({ error: `You do not have access to this section (${deck.tab}).` });
     const pdf = await fs.promises.readFile(path.join(__dirname, '..', 'presentation-docs', deck.file));

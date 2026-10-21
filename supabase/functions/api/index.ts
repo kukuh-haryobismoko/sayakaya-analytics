@@ -424,8 +424,22 @@ const PRESENTATIONS: Record<string, { tab: string }> = {
   'review-september': { tab: 'monthly-review' },
   'review-october': { tab: 'monthly-review' },
 };
+// The daily refresh uploads later months as review-YYYY-MM.pdf; list them so the
+// Monthly Review tab can grow a button without a code change.
+const REVIEW_KEY = /^review-\d{4}-(0[1-9]|1[0-2])$/;
+on('GET', '/api/presentations', async (_req, _params, _url, user) => {
+  if (!A.userCan(user, 'monthly-review')) return json({ decks: [] });
+  const res = await fetch(`${PRESENTATIONS_SUPABASE_URL}/storage/v1/object/list/presentation-decks`, {
+    method: 'POST',
+    headers: { apikey: PRESENTATIONS_SERVICE_ROLE_KEY, Authorization: `Bearer ${PRESENTATIONS_SERVICE_ROLE_KEY}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ prefix: '', limit: 200 }),
+  });
+  if (!res.ok) return json({ decks: [] });
+  const files: { name: string }[] = await res.json();
+  return json({ decks: files.map((f) => f.name.replace(/\.pdf$/, '')).filter((k) => REVIEW_KEY.test(k)).sort() });
+});
 on('GET', '/api/presentations/:month', async (_req, params, _url, user) => {
-  const deck = PRESENTATIONS[params.month];
+  const deck = PRESENTATIONS[params.month] ?? (REVIEW_KEY.test(params.month) ? { tab: 'monthly-review' } : undefined);
   if (!deck) return json({ error: 'No deck for that month.' }, 404);
   if (!A.userCan(user, deck.tab)) return json({ error: `You do not have access to this section (${deck.tab}).` }, 403);
   const res = await fetch(`${PRESENTATIONS_SUPABASE_URL}/storage/v1/object/presentation-decks/${params.month}.pdf`, {

@@ -74,6 +74,7 @@ function monthBounds(ym) {
 // "Today" in WIB (UTC+7), so a run started right after midnight WIB doesn't
 // accidentally treat yesterday as the partial month.
 function todayJakarta() {
+  if (process.env.REVIEW_TODAY) return process.env.REVIEW_TODAY; // set by refresh-monthly-review.sh so both agree on today
   const d = new Date(Date.now() + 7 * 60 * 60 * 1000);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 }

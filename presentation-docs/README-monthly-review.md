@@ -106,8 +106,25 @@ Anything above 0 means text sitting past the printable area; trim or shrink
 it, re-run, then reprint the PDF. The same probe with `.click()`-style edits
 is the quickest way to tell whether a slide change fits before presenting.
 
-For a new month: copy `design-deck-october/` to a new folder, run the data
-script with the new review month, and rewrite the narrative in
-`build-deck.py` for what that month's data shows. Then add the month to
-`PRESENTATIONS` in `server/app.js` and `supabase/functions/api/index.ts`, and
-a button to `#monthlyReviewMonthSeg` in `public/index.html`.
+## New month (automatic)
+
+The daily refresh follows the Jakarta calendar. On 1 November it stops touching
+`review-october.pdf` and builds the November deck instead:
+
+1. The current month is the partial one; the month before it is the review
+   month (`REVIEW_MONTH` overrides).
+2. If `design-deck-2026-11/` is committed, it builds from there. If not, it
+   copies the newest committed deck's `build-deck.py` into the git-ignored
+   `.draft-deck-2026-11/`. Figures, charts and every sentence computed from
+   data update; the hand-written English sentences are the old month's, and a
+   red `AUTO DRAFT` banner marks every slide.
+3. It uploads `review-2026-11.pdf`. `GET /api/presentations` lists the
+   `review-YYYY-MM` objects (Storage on the Edge Function, `sayakaya-*-review-deck.pdf`
+   in `presentation-docs/` on the Node server) and the Monthly Review tab adds a
+   button per month, newest selected. No code change, no `deploy:all`.
+
+To replace the draft with a real deck: copy `design-deck-october/` to
+`design-deck-2026-11/`, rewrite the narrative in its `build-deck.py`, commit.
+The next refresh uses it and the banner is gone. Past months are never rebuilt.
+`REVIEW_TODAY=2026-11-03 ./refresh-monthly-review.sh --no-upload` tests a month
+change without waiting for it.

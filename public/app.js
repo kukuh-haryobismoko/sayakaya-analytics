@@ -8844,7 +8844,7 @@ function switchTab(name) {
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
   if (name === 'presentation' || name === 'monthly-review') {
     const cfg = PRES_VIEWS[name];
-    loadPresentation(name, $(`${cfg.seg} .on`)?.dataset.month || cfg.defaultMonth);
+    (name === 'monthly-review' ? loadReviewMonths() : Promise.resolve()).then(() => loadPresentation(name, $(`${cfg.seg} .on`)?.dataset.month || cfg.defaultMonth));
   }
   if (name === 'booth-event' && !BOOTH.data && !BOOTH.loading) loadBoothEvent();
   if (name === 'promo-recap' && !PR.data && !PR.loading) loadPromoRecap();
@@ -8879,6 +8879,35 @@ function loadPdfJs() {
     lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.3.289/pdf.worker.min.mjs';
     return lib;
   }, (err) => { pdfJsLoad = null; throw err; });
+}
+function bindPresSeg(view, b) {
+  b.addEventListener('click', () => {
+    $$(`${PRES_VIEWS[view].seg} button`).forEach((x) => x.classList.toggle('on', x === b));
+    loadPresentation(view, b.dataset.month);
+  });
+}
+// Months published by the daily refresh (review-YYYY-MM) become buttons here; the
+// newest one opens first. A failed request leaves the buttons in index.html as is.
+let reviewMonthsLoad = null;
+function loadReviewMonths() {
+  return reviewMonthsLoad ||= fetch(`${API_BASE}/api/presentations`, { headers: authHeaders() })
+    .then((res) => (res.ok ? res.json() : { decks: [] }))
+    .then(({ decks = [] }) => {
+      const seg = $(PRES_VIEWS['monthly-review'].seg);
+      decks.forEach((key) => {
+        if (seg.querySelector(`[data-month="${key}"]`)) return;
+        const [y, m] = key.slice(7).split('-').map(Number);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.month = key;
+        b.textContent = new Date(Date.UTC(y, m - 1, 1)).toLocaleString(getLang() === 'id' ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+        bindPresSeg('monthly-review', b);
+        seg.append(b);
+      });
+      const newest = decks.at(-1);
+      if (newest) $$(`${PRES_VIEWS['monthly-review'].seg} button`).forEach((x) => x.classList.toggle('on', x.dataset.month === newest));
+    })
+    .catch(() => { reviewMonthsLoad = null; });
 }
 async function loadPresentation(view, month) {
   presActiveView = view;
@@ -9118,10 +9147,7 @@ function wire() {
   const presNextBtnId = { presentation: '#presNextBtn', 'monthly-review': '#mrNextBtn' };
   Object.keys(PRES_VIEWS).forEach((view) => {
     const cfg = PRES_VIEWS[view];
-    $$(`${cfg.seg} button`).forEach((b) => b.addEventListener('click', () => {
-      $$(`${cfg.seg} button`).forEach((x) => x.classList.toggle('on', x === b));
-      loadPresentation(view, b.dataset.month);
-    }));
+    $$(`${cfg.seg} button`).forEach((b) => bindPresSeg(view, b));
     $(presPresentBtn[view]).addEventListener('click', () => {
       const stage = $(cfg.stage);
       (stage.requestFullscreen || stage.webkitRequestFullscreen)?.call(stage);

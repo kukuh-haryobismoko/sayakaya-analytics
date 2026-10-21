@@ -10,17 +10,45 @@
 #   ./presentation-docs/refresh-monthly-review.sh --force       # rebuild even if the date is unchanged
 #   ./presentation-docs/refresh-monthly-review.sh --skip-generate
 #
-# REVIEW_MONTH selects the month under review (default 2026-09). A new month
-# needs its own design-deck directory; see README-monthly-review.md.
+# The deck follows the calendar. Each month has its own deck: the current month
+# is the partial one and the month before it is the one under review. October
+# lives in design-deck-october/; any later month builds from
+# design-deck-YYYY-MM/ if that is committed, otherwise from an auto-draft copy
+# of the newest committed deck in .draft-deck-YYYY-MM/ (git-ignored, banner on
+# every slide). Its PDF goes to Storage as review-YYYY-MM.pdf, which adds the
+# month's tab to the dashboard. A past month's deck is never touched again.
+# REVIEW_TODAY=YYYY-MM-DD fakes the date, for tests. See README-monthly-review.md.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-DECK_DIR="presentation-docs/design-deck-october"
+export REVIEW_TODAY="${REVIEW_TODAY:-$(TZ=Asia/Jakarta date +%F)}"
+PART="${REVIEW_TODAY:0:7}"
+py=${PART:0:4}; pm=$((10#${PART:5:2}))
+if [ "$pm" -eq 1 ]; then py=$((py - 1)); pm=12; else pm=$((pm - 1)); fi
+REVIEW_MONTH="${REVIEW_MONTH:-$(printf '%04d-%02d' "$py" "$pm")}"
+
+if [ "$PART" = "2026-10" ]; then
+  DECK_DIR="presentation-docs/design-deck-october"
+  PDF="presentation-docs/sayakaya-october-review-deck.pdf"
+  OBJECT="presentation-decks/review-october.pdf"
+else
+  DECK_DIR="presentation-docs/design-deck-$PART"
+  PDF="presentation-docs/sayakaya-$PART-review-deck.pdf"
+  OBJECT="presentation-decks/review-$PART.pdf"
+fi
+export DECK_DRAFT=0
+if [ ! -d "$DECK_DIR" ]; then
+  src="$(ls -d presentation-docs/design-deck-20??-??/ 2>/dev/null | sort | tail -1 || true)"
+  src="${src:-presentation-docs/design-deck-october/}"
+  src="${src%/}"
+  DECK_DIR="presentation-docs/.draft-deck-$PART"
+  mkdir -p "$DECK_DIR"
+  cp "$src/build-deck.py" "$DECK_DIR/build-deck.py"
+  export DECK_DRAFT=1 DECK_DRAFT_FROM="${src##*design-deck-}"
+  echo "no design-deck-$PART yet: building an auto-draft from $src"
+fi
 DATA="$DECK_DIR/data.json"
-PDF="presentation-docs/sayakaya-october-review-deck.pdf"
-OBJECT="presentation-decks/review-october.pdf"
-REVIEW_MONTH="${REVIEW_MONTH:-2026-09}"
 
 NO_UPLOAD=0
 FORCE=0
@@ -49,15 +77,17 @@ if [ "$SKIP_GEN" -eq 0 ]; then
   tmp="$(mktemp "${TMPDIR:-/tmp}/review-data.XXXXXX")"
   echo "generating data for $REVIEW_MONTH (about 2 minutes)..."
   node presentation-docs/generate-monthly-review-data.js "$REVIEW_MONTH" > "$tmp"
+  # node exits 0 with no output when a query never returns (e.g. the Mac slept mid-run)
+  [ -s "$tmp" ] || { echo "generator wrote no data (cut off mid-run?). Nothing written; retry later." >&2; rm -f "$tmp"; exit 3; }
 
   # GATE: the newest snapshot row must be today's partition, otherwise the
   # 02:05 job has not run and the deck would claim a date it does not have.
   gate="$(python3 - "$tmp" <<'PY'
-import json, sys, datetime
+import json, os, sys
 d = json.load(open(sys.argv[1]))
 rows = d.get("dailyAum") or []
 last = str((rows[-1]["d"] or {}).get("value") if isinstance(rows[-1]["d"], dict) else rows[-1]["d"])[:10] if rows else ""
-today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7))).date().isoformat()
+today = os.environ["REVIEW_TODAY"]
 print(("OK" if last == today else "STALE") + " " + last + " " + today + " " + str(d.get("partialThrough")))
 PY
 )"
