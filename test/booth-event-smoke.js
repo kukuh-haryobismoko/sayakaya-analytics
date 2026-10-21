@@ -239,23 +239,24 @@ assert.strictEqual(txr.notDone, null, 'completed_payment is not a completed buy'
 assert.strictEqual(txr.pendingPay, null);
 assert.strictEqual(txr.need, 30);
 
-// Recap per booth: a customer counts under the code's booth, each column on its own
-// dates (so KYC on a verification day can be above Registered), plus an all-booths row.
+// Recap per booth: a customer counts under the code's booth; KYC is the share of the
+// range's registrations that verified, so it never exceeds Registered, plus an all-booths row.
 const rc = JSON.parse(run(`(() => {
   const { people } = boothCompute(__data, BOOTH_EVENT, '2026-11-20');
   const at = (from, to) => boothRecap(people, BOOTH_EVENT, from, to)
-    .map((r) => ({ b: r.booth || 'ALL', reg: r.registered, kyc: r.kyc, coh: r.kycCohort, fb: r.firstBuy, fu: r.funded, buy: r.buy, sell: r.sell }));
+    .map((r) => ({ b: r.booth || 'ALL', reg: r.registered, kyc: r.kyc, fb: r.firstBuy, fu: r.funded, buy: r.buy, sell: r.sell }));
   return JSON.stringify({ nov: at('2026-11-03', '2026-11-30'), first: at('2026-11-03', '2026-11-03'), d25: at('2026-10-25', '2026-10-25') });
 })()`));
 const rcRow = (set, b) => rc[set].find((r) => r.b === b);
 assert.deepStrictEqual(rc.nov.map((r) => r.b), ['PIM', 'GC', 'CP', 'ALL'], 'every booth in config order, then all booths');
-assert.deepStrictEqual(rcRow('nov', 'PIM'), { b: 'PIM', reg: 142, kyc: 142, coh: 142, fb: 120, fu: 120, buy: 199000000, sell: 500000 });
-assert.deepStrictEqual(rcRow('nov', 'GC'), { b: 'GC', reg: 306, kyc: 305, coh: 305, fb: 225, fu: 225, buy: 350000000, sell: 0 }, 'one pending KYC is registered but not verified');
-assert.deepStrictEqual(rcRow('nov', 'CP'), { b: 'CP', reg: 3, kyc: 3, coh: 3, fb: 0, fu: 1, buy: 500000, sell: 1000000 }, 'a booth with only a few rows still gets its own line');
+assert.deepStrictEqual(rcRow('nov', 'PIM'), { b: 'PIM', reg: 142, kyc: 142, fb: 120, fu: 120, buy: 199000000, sell: 500000 });
+assert.deepStrictEqual(rcRow('nov', 'GC'), { b: 'GC', reg: 306, kyc: 305, fb: 225, fu: 225, buy: 350000000, sell: 0 }, 'one pending KYC is registered but not verified');
+assert.deepStrictEqual(rcRow('nov', 'CP'), { b: 'CP', reg: 3, kyc: 3, fb: 0, fu: 1, buy: 500000, sell: 1000000 }, 'a booth with only a few rows still gets its own line');
 const sumNov = (k) => rc.nov.filter((r) => r.b !== 'ALL').reduce((a, r) => a + r[k], 0);
 assert.deepStrictEqual(['reg', 'kyc', 'fb', 'fu', 'buy', 'sell'].map(sumNov), ['reg', 'kyc', 'fb', 'fu', 'buy', 'sell'].map((k) => rcRow('nov', 'ALL')[k]), 'the all-booths row is the sum of the booths');
+assert.ok(rc.nov.every((r) => r.kyc <= r.reg), 'KYC never exceeds Registered');
 assert.deepStrictEqual([rcRow('first', 'PIM').reg, rcRow('first', 'PIM').fb], [142, 0], 'one-day range: registered that day, first purchase only that day');
-assert.deepStrictEqual(rcRow('d25', 'CP'), { b: 'CP', reg: 0, kyc: 41, coh: 0, fb: 1, fu: 0, buy: 500000, sell: 0 },
-  'verifications of people who registered the day before: KYC above Registered, cohort stays 0');
+assert.deepStrictEqual(rcRow('d25', 'CP'), { b: 'CP', reg: 0, kyc: 0, fb: 1, fu: 0, buy: 500000, sell: 0 },
+  'verifications of people who registered the day before stay out of that day: KYC 0, never above Registered');
 
 console.log('booth-event smoke test passed');

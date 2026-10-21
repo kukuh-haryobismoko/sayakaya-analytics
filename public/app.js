@@ -7560,23 +7560,21 @@ function boothCompute({ customers, transactions }, cfg, today) {
 // booth, whatever the page's booth and sales filters say. Returns one row per booth in
 // the config's order plus a last row with booth '' for all booths together.
 //   registered = registered_on in range.
-//   kyc        = verified_on in range, the same rule as the Daily recap, so it can exceed
-//                registered when people verify days after signing up.
-//   kycCohort  = registered in range AND verified (any day): never above registered.
+//   kyc        = of those registered in range, how many verified (any day), so it never
+//                exceeds registered.
 //   firstBuy   = first completed buy in range, funded = net purchases first reached the
 //                funded minimum in range (each customer once, on that day).
 //   buy / sell = completed transactions in range. Amounts are what was paid in or out.
 const BOOTH_RECAP_OPEN = '9999-12-31';
 function boothRecap(people, cfg, from, to) {
-  const blank = () => ({ registered: 0, kyc: 0, kycCohort: 0, firstBuy: 0, funded: 0, buy: 0, sell: 0 });
+  const blank = () => ({ registered: 0, kyc: 0, firstBuy: 0, funded: 0, buy: 0, sell: 0 });
   const by = new Map(Object.keys(cfg.booths).map((k) => [k, blank()]));
   const all = blank();
   const inR = (d) => d != null && d >= from && d <= to;
   const bump = (booth, field, n = 1) => { by.get(booth)[field] += n; all[field] += n; };
   for (const x of people) {
     if (!x.isNew || !by.has(x.booth)) continue;
-    if (inR(x.registered_on)) { bump(x.booth, 'registered'); if (x.verified) bump(x.booth, 'kycCohort'); }
-    if (x.verified && inR(x.verified_on)) bump(x.booth, 'kyc');
+    if (inR(x.registered_on)) { bump(x.booth, 'registered'); if (x.verified) bump(x.booth, 'kyc'); }
     if (x.firstBuy && inR(x.firstBuy.day)) bump(x.booth, 'firstBuy');
     if (inR(x.fundedOn)) bump(x.booth, 'funded');
     for (const tx of x.txs) if (inR(tx.day)) bump(x.booth, tx.type === 'buy' ? 'buy' : 'sell', tx.amount);
@@ -7885,16 +7883,15 @@ function renderBoothRecap(people) {
   };
   const label = (r) => (r.booth ? bEsc(r.name) : `<strong>${bL('All booths', 'Semua booth')}</strong>`);
   const line = (r, extra) => ({
-    ...extra, booth: label(r), registered: r.registered, kyc: r.kyc, kycOf: r.kycCohort,
-    kycPct: r.registered ? (r.kycCohort / r.registered) * 100 : null,
+    ...extra, booth: label(r), registered: r.registered, kyc: r.kyc,
+    kycPct: r.registered ? (r.kyc / r.registered) * 100 : null,
     firstBuy: r.firstBuy, funded: r.funded, buy: r.buy, sell: r.sell, net: r.buy - r.sell,
   });
   const cols = (withDay) => [
     ...(withDay ? [{ key: 'day', label: bL('Day (WIB)', 'Tanggal (WIB)') }] : []),
     { key: 'booth', label: 'Booth' },
     { key: 'registered', label: bL('Registered', 'Daftar'), type: 'num' },
-    { key: 'kyc', label: bL('KYC verified (on verification day)', 'KYC verified (tgl verifikasi)'), type: 'num' },
-    { key: 'kycOf', label: bL('KYC of those who registered', 'KYC dari yang daftar'), type: 'num' },
+    { key: 'kyc', label: bL('KYC verified', 'KYC verified'), type: 'num' },
     ...(withDay ? [] : [{ key: 'kycPct', label: bL('% KYC of registered', '% KYC dari daftar'), type: 'pct' }]),
     { key: 'firstBuy', label: bL('First purchase', 'Transaksi pertama'), type: 'num' },
     { key: 'funded', label: bL(`Reached ${idr(cfg.sales.minFunded)}`, `Capai ${idr(cfg.sales.minFunded)}`), type: 'num' },
@@ -7982,8 +7979,7 @@ function renderBoothEvent() {
     return {
       day: d,
       registered: mine.filter((x) => x.registered_on === d).length,
-      verified: mine.filter((x) => x.verified && x.verified_on === d).length,
-      verified_same: mine.filter((x) => x.verified && x.registered_on === d).length,
+      verified: mine.filter((x) => x.verified && x.registered_on === d).length,
       first_buy: mine.filter((x) => x.firstBuy && x.firstBuy.day === d).length,
       funded: mine.filter((x) => x.fundedOn === d).length,
       buy: txs.filter((tx) => tx.type === 'buy').reduce((a, tx) => a + tx.amount, 0),
@@ -7993,8 +7989,7 @@ function renderBoothEvent() {
   genTable('#beDaily', daily, [
     { key: 'day', label: bL('Day (WIB)', 'Tanggal (WIB)'), type: 'date' },
     { key: 'registered', label: bL('Registered', 'Daftar'), type: 'num', sum: true },
-    { key: 'verified', label: bL('KYC verified (on verification day)', 'KYC verified (tgl verifikasi)'), type: 'num', sum: true },
-    { key: 'verified_same', label: bL('KYC of that day\'s sign-ups', 'KYC dari yang daftar hari itu'), type: 'num', sum: true },
+    { key: 'verified', label: bL('KYC verified', 'KYC verified'), type: 'num', sum: true },
     { key: 'first_buy', label: bL('First purchase', 'Transaksi pertama'), type: 'num', sum: true },
     { key: 'funded', label: bL(`Reached ${idr(cfg.sales.minFunded)}`, `Capai ${idr(cfg.sales.minFunded)}`), type: 'num', sum: true },
     { key: 'buy', label: bL('Bought', 'Beli'), type: 'idr', sum: true },
@@ -8121,7 +8116,7 @@ function renderBoothRules(cfg, period, scale) {
       ${li('Transactions: completed buys and sells only; bonus units given by admin (manual_bonus) do not count. Net money in = buys minus sells from registration to the end of the period.', 'Transaksi: hanya beli dan jual berstatus completed; bonus unit dari admin (manual_bonus) tidak dihitung. Dana bersih = beli dikurangi jual dari daftar sampai akhir periode.')}
       ${li(`Working days are each sales person's shift days, ${cfg.fullMonthWorkDays} in a full month, weekends included; which dates are shifts does not change the count. A month that is not full is scaled by calendar days.`, `Hari kerja = hari shift tiap sales, ${cfg.fullMonthWorkDays} di bulan penuh, termasuk akhir pekan; tanggal mana yang jadi shift tidak memengaruhi hitungan. Bulan yang tidak penuh diprorate per hari kalender.`)}
       ${li('Flying team: one person, three codes (one per mall). Their SID add up for their own incentive and count in the team target of the mall the code belongs to. A team lead\'s own code counts for the team.', 'Flying team: satu orang, tiga kode (satu per mall). SID ketiganya dijumlah untuk insentif sendiri dan masuk target tim mall pemilik kode. Kode team lead sendiri dihitung ke tim.')}
-      ${li('Recap per booth: a customer counts under the booth of the code they registered with. Registered, KYC and first purchase are counted on their own dates, so KYC can be higher than Registered when a customer verifies on a later day; the "KYC of those who registered" column only counts people who registered in the same dates, so it never is. Bought and Sold only include completed transactions, so a payment that has not settled yet is named under the overall table.', 'Rekap per booth: nasabah dihitung ke booth dari kode yang dipakai saat daftar. Daftar, KYC, dan transaksi pertama dihitung pada tanggalnya masing-masing, jadi KYC bisa lebih besar dari Daftar kalau nasabah verifikasi di hari lain; kolom "KYC dari yang daftar" hanya menghitung yang daftar di tanggal yang sama, jadi tidak mungkin lebih besar. Beli dan Jual hanya transaksi completed, jadi pembayaran yang belum settle disebutkan di bawah tabel overall.')}
+      ${li('Recap per booth: a customer counts under the booth of the code they registered with. KYC = of the customers who registered in the dates, how many have verified, whatever the verification day, so it never exceeds Registered. Bought and Sold only include completed transactions, so a payment that has not settled yet is named under the overall table.', 'Rekap per booth: nasabah dihitung ke booth dari kode yang dipakai saat daftar. KYC = dari nasabah yang daftar di tanggal itu, berapa yang sudah verified, kapan pun hari verifikasinya, jadi tidak mungkin lebih besar dari Daftar. Beli dan Jual hanya transaksi completed, jadi pembayaran yang belum settle disebutkan di bawah tabel overall.')}
     </ul>
     <h3>${bL('Sales and flying team, this period', 'Sales dan flying team, periode ini')} (${bEsc(period.label)})</h3><ul>
       ${li(`Threshold: at least ${need(S.gate.minSid)} SID (${S.gate.minSid} in a full month) AND at least ${S.gate.minFundedPct}% of them funded ${idr(S.minFunded)}+. Missing either means no incentive for the period.`, `Syarat: minimal ${need(S.gate.minSid)} SID (${S.gate.minSid} di bulan penuh) DAN minimal ${S.gate.minFundedPct}% di antaranya funded ${idr(S.minFunded)}+. Salah satu tidak tercapai = tidak ada insentif periode itu.`)}
