@@ -7579,7 +7579,8 @@ function boothRecap(people, cfg, from, to) {
     if (inR(x.fundedOn)) bump(x.booth, 'funded');
     for (const tx of x.txs) if (inR(tx.day)) bump(x.booth, tx.type === 'buy' ? 'buy' : 'sell', tx.amount);
   }
-  return [...by].map(([booth, r]) => ({ booth, name: cfg.booths[booth], ...r })).concat({ booth: '', name: '', ...all });
+  const rows = [...by].map(([booth, r]) => ({ booth, name: cfg.booths[booth], ...r }));
+  return by.size > 1 ? rows.concat({ booth: '', name: '', ...all }) : rows;
 }
 
 // Transaction list (panel "Transactions"): server rows plus the roster's booth and
@@ -7865,13 +7866,21 @@ function renderBoothTx() {
   renderBoothRecapNote();
 }
 
-// Both recap tables have their own dates and ignore the booth, sales and period
-// filters above. The overall table starts as the whole event and, when its end date
-// is the event's last day, also takes verifications and purchases after the event, so
-// the totals match the KPI cards. The daily table starts as today, one block per day,
-// and stays inside the event days.
+// Both recap tables have their own dates and follow the booth and sales filters above,
+// so they only list the booths those filters leave. The overall table starts as the
+// whole event and, when its end date is the event's last day, also takes verifications
+// and purchases after the event, so the totals match the KPI cards. The daily table
+// starts as today, one block per day, and stays inside the event days.
 function renderBoothRecap(people) {
   const cfg = BOOTH_EVENT;
+  const view = { booth: $('#beBooth').value, person: $('#bePerson').value };
+  const pick = (x) => (!view.booth || x.booth === view.booth) && (!view.person || x.person === view.person);
+  const ppl = people.filter(pick);
+  const shown = view.booth ? { [view.booth]: cfg.booths[view.booth] }
+    : view.person
+      ? Object.fromEntries([...new Set(cfg.roster.filter((r) => r.person === view.person).map((r) => r.booth))].map((b) => [b, cfg.booths[b]]))
+      : cfg.booths;
+  const rcfg = { ...cfg, booths: shown };
   const today = bWibToday();
   const lastDay = today < cfg.end ? today : cfg.end;
   const dates = (fromSel, toSel, dFrom, dTo) => {
@@ -7901,17 +7910,17 @@ function renderBoothRecap(people) {
   ];
 
   const [aFrom, aTo] = dates('#beRecapAllFrom', '#beRecapAllTo', cfg.start, cfg.end);
-  genTable('#beRecapAll', boothRecap(people, cfg, aFrom, aTo >= cfg.end ? BOOTH_RECAP_OPEN : aTo).map((r) => line(r, {})),
+  genTable('#beRecapAll', boothRecap(ppl, rcfg, aFrom, aTo >= cfg.end ? BOOTH_RECAP_OPEN : aTo).map((r) => line(r, {})),
     cols(false), bL('No data.', 'Tidak ada data.'));
 
   const [dFrom, dTo] = dates('#beRecapDayFrom', '#beRecapDayTo', today < cfg.start ? cfg.start : lastDay, today < cfg.start ? cfg.start : lastDay);
   const upto = dTo < lastDay ? dTo : lastDay;
   const rows = [];
   if (dFrom <= upto && dFrom !== upto) {
-    boothRecap(people, cfg, dFrom, upto).forEach((r) => rows.push(line(r, { day: `<strong>${bL('Total', 'Total')} ${dFrom} s.d. ${upto}</strong>` })));
+    boothRecap(ppl, rcfg, dFrom, upto).forEach((r) => rows.push(line(r, { day: `<strong>${bL('Total', 'Total')} ${dFrom} s.d. ${upto}</strong>` })));
   }
   for (let d = upto; d >= dFrom; d = bAddDays(d, -1)) {
-    boothRecap(people, cfg, d, d).forEach((r) => rows.push(line(r, { day: d })));
+    boothRecap(ppl, rcfg, d, d).forEach((r) => rows.push(line(r, { day: d })));
   }
   genTable('#beRecapDay', rows, cols(true), bL('No event day in these dates yet.', 'Belum ada hari event di tanggal ini.'));
   renderBoothRecapNote();
@@ -7929,7 +7938,7 @@ function renderBoothRecapNote() {
   if (!tx || !tx.rows) return;
   const from = $('#beRecapAllFrom').value, to = $('#beRecapAllTo').value;
   if (!from || !to) return;
-  const pending = boothTxFilter(tx.rows, BOOTH_EVENT, { kind: 'new' })
+  const pending = boothTxFilter(tx.rows, BOOTH_EVENT, { kind: 'new', booth: $('#beBooth').value, person: $('#bePerson').value })
     .filter((r) => r.type === 'buy' && r.status !== 'completed' && r.created_wib.slice(0, 10) >= from && r.created_wib.slice(0, 10) <= to);
   if (!pending.length) return;
   const money = pending.reduce((a, r) => a + r.amount, 0);
@@ -8018,7 +8027,8 @@ function renderBoothEvent() {
     { key: 'status_text', label: 'Status' },
   ], bL('No sales in this filter.', 'Tidak ada sales di filter ini.'));
 
-  const leadRows = inc.leads.filter((r) => !booth || r.booth === booth).map((r) => ({
+  const personBooths = person ? new Set(cfg.roster.filter((r) => r.person === person).map((r) => r.booth)) : null;
+  const leadRows = inc.leads.filter((r) => (!booth || r.booth === booth) && (!personBooths || personBooths.has(r.booth))).map((r) => ({
     ...r, booth: bEsc(cfg.booths[r.booth] || r.booth), person: bEsc(bWho(cfg, r.person)), target: Math.round(r.target * 10) / 10,
     gate_text: r.gate ? bL('Met', 'Tercapai') : bL(`Not yet: SID ${r.sidPct.toFixed(0)}%/${cfg.teamLead.gate.minSidPct}%, funded ${r.fundedPct.toFixed(0)}%/${cfg.teamLead.gate.minFundedPct}%`,
       `Belum: SID ${r.sidPct.toFixed(0)}%/${cfg.teamLead.gate.minSidPct}%, funded ${r.fundedPct.toFixed(0)}%/${cfg.teamLead.gate.minFundedPct}%`),
@@ -8116,7 +8126,7 @@ function renderBoothRules(cfg, period, scale) {
       ${li('Transactions: completed buys and sells only; bonus units given by admin (manual_bonus) do not count. Net money in = buys minus sells from registration to the end of the period.', 'Transaksi: hanya beli dan jual berstatus completed; bonus unit dari admin (manual_bonus) tidak dihitung. Dana bersih = beli dikurangi jual dari daftar sampai akhir periode.')}
       ${li(`Working days are each sales person's shift days, ${cfg.fullMonthWorkDays} in a full month, weekends included; which dates are shifts does not change the count. A month that is not full is scaled by calendar days.`, `Hari kerja = hari shift tiap sales, ${cfg.fullMonthWorkDays} di bulan penuh, termasuk akhir pekan; tanggal mana yang jadi shift tidak memengaruhi hitungan. Bulan yang tidak penuh diprorate per hari kalender.`)}
       ${li('Flying team: one person, three codes (one per mall). Their SID add up for their own incentive and count in the team target of the mall the code belongs to. A team lead\'s own code counts for the team.', 'Flying team: satu orang, tiga kode (satu per mall). SID ketiganya dijumlah untuk insentif sendiri dan masuk target tim mall pemilik kode. Kode team lead sendiri dihitung ke tim.')}
-      ${li('Recap per booth: a customer counts under the booth of the code they registered with. KYC = of the customers who registered in the dates, how many have verified, whatever the verification day, so it never exceeds Registered. Bought and Sold only include completed transactions, so a payment that has not settled yet is named under the overall table.', 'Rekap per booth: nasabah dihitung ke booth dari kode yang dipakai saat daftar. KYC = dari nasabah yang daftar di tanggal itu, berapa yang sudah verified, kapan pun hari verifikasinya, jadi tidak mungkin lebih besar dari Daftar. Beli dan Jual hanya transaksi completed, jadi pembayaran yang belum settle disebutkan di bawah tabel overall.')}
+      ${li('Recap per booth: a customer counts under the booth of the code they registered with, and the tables follow the booth and sales filters. KYC = of the customers who registered in the dates, how many have verified, whatever the verification day, so it never exceeds Registered. Bought and Sold only include completed transactions, so a payment that has not settled yet is named under the overall table.', 'Rekap per booth: nasabah dihitung ke booth dari kode yang dipakai saat daftar, dan tabelnya mengikuti filter booth dan sales. KYC = dari nasabah yang daftar di tanggal itu, berapa yang sudah verified, kapan pun hari verifikasinya, jadi tidak mungkin lebih besar dari Daftar. Beli dan Jual hanya transaksi completed, jadi pembayaran yang belum settle disebutkan di bawah tabel overall.')}
     </ul>
     <h3>${bL('Sales and flying team, this period', 'Sales dan flying team, periode ini')} (${bEsc(period.label)})</h3><ul>
       ${li(`Threshold: at least ${need(S.gate.minSid)} SID (${S.gate.minSid} in a full month) AND at least ${S.gate.minFundedPct}% of them funded ${idr(S.minFunded)}+. Missing either means no incentive for the period.`, `Syarat: minimal ${need(S.gate.minSid)} SID (${S.gate.minSid} di bulan penuh) DAN minimal ${S.gate.minFundedPct}% di antaranya funded ${idr(S.minFunded)}+. Salah satu tidak tercapai = tidak ada insentif periode itu.`)}

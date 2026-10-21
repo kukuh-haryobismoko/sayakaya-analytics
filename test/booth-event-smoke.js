@@ -259,4 +259,12 @@ assert.deepStrictEqual([rcRow('first', 'PIM').reg, rcRow('first', 'PIM').fb], [1
 assert.deepStrictEqual(rcRow('d25', 'CP'), { b: 'CP', reg: 0, kyc: 0, fb: 1, fu: 0, buy: 500000, sell: 0 },
   'verifications of people who registered the day before stay out of that day: KYC 0, never above Registered');
 
+// A filtered recap (booth or sales filter on the page) lists only the booths left,
+// with no all-booths row repeating the same numbers.
+const oneBooth = JSON.parse(run(`(() => {
+  const { people } = boothCompute(__data, BOOTH_EVENT, '2026-11-20');
+  return JSON.stringify(boothRecap(people, { ...BOOTH_EVENT, booths: { PIM: BOOTH_EVENT.booths.PIM } }, '2026-11-03', '2026-11-30').map((r) => r.booth));
+})()`));
+assert.deepStrictEqual(oneBooth, ['PIM'], 'one booth: that row only, no all-booths row');
+
 console.log('booth-event smoke test passed');
