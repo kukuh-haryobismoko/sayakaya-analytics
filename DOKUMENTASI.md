@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `10155d1 (2026-10-21)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `fa7a073 (2026-10-21)`.
 
 ## Cara membaca dokumen ini
 
@@ -1671,7 +1671,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Cara hitung**: Hanya tampil untuk akun yang diberi akses tab ini. Dua sidebar tab diberi akses terpisah.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `monthly-review`
-  - Endpoint: `GET /api/presentations/:month`
+  - Endpoint: `GET /api/presentations`, `GET /api/presentations/:month`
 
 <a id="tab-admin"></a>
 #### Manage users
