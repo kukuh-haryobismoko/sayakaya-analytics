@@ -37,6 +37,9 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes, same order as dashboard_password_resets
 const JAKARTA_OFFSET_MIN = 7 * 60; // WIB, UTC+7, no DST, same convention as the rest of the dashboard
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Message safe to show the user (the API's generic 500 line hides everything else).
+const userError = (m) => Object.assign(new Error(m), { expose: true });
+
 function jktDateStr(d) { return new Date(d.getTime() + JAKARTA_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
 
 // Queue rows one runner claims per call (dashboard_claim_queue): a statement
@@ -238,7 +241,7 @@ async function previewRecipientCount(spec) {
 //   runTime, confirmationEmail, userId, username }
 async function requestOtp(payload) {
   if (!payload.confirmationEmail || !EMAIL_RE.test(payload.confirmationEmail)) {
-    throw new Error('A valid confirmation email is required.');
+    throw userError('A valid confirmation email is required.');
   }
   const code = genOtpCode();
   const [row] = await rest('/dashboard_schedule_otps', {
@@ -260,12 +263,12 @@ async function requestOtp(payload) {
 async function confirmOtp(otpId, code) {
   const rows = await rest(`/dashboard_schedule_otps?id=eq.${otpId}&select=*`);
   const otp = rows[0];
-  if (!otp) throw new Error('Confirmation code not found or already used.');
+  if (!otp) throw userError('Confirmation code not found or already used.');
   if (new Date(otp.expires_at) < new Date()) {
     await rest(`/dashboard_schedule_otps?id=eq.${otpId}`, { method: 'DELETE' });
-    throw new Error('Confirmation code expired, request a new one.');
+    throw userError('Confirmation code expired, request a new one.');
   }
-  if (sha256Hex(String(code || '').trim()) !== otp.code_hash) throw new Error('Incorrect confirmation code.');
+  if (sha256Hex(String(code || '').trim()) !== otp.code_hash) throw userError('Incorrect confirmation code.');
 
   const p = otp.payload;
   const seed = { frequency: p.frequency, day_of_week: p.dayOfWeek, day_of_month: p.dayOfMonth, run_time: p.runTime };

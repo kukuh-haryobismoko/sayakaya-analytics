@@ -23,6 +23,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // is answered 503 so SNS redelivers it once record() below has written the row.
 const LOG_ROW_GRACE_MS = 30 * 1000;
 
+// Message safe to show the user (the API's generic 500 line hides everything else).
+const userError = (m) => Object.assign(new Error(m), { expose: true });
+
 async function rest(path, { withTotal, ...opts } = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     ...opts,
@@ -260,7 +263,7 @@ function list({ from, to, category, source, outcome, search, limit, offset, sort
 }
 
 function events(logId) {
-  if (!UUID_RE.test(logId || '')) throw new Error('Invalid email id.');
+  if (!UUID_RE.test(logId || '')) throw userError('Invalid email id.');
   return rest(`/dashboard_email_events?log_id=eq.${logId}&select=event_type,occurred_at,link,user_agent,ip,detail&order=occurred_at.asc`);
 }
 

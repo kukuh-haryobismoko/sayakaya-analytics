@@ -192,7 +192,9 @@ function createApp({ serveStatic = true } = {}) {
       await fn(req, res);
     } catch (err) {
       console.error(`[${req.method} ${req.path}]`, err.message);
-      res.status(500).json({ error: err.message || 'Query failed.' });
+      // BigQuery/Supabase messages carry project, table and SQL text. Only the
+      // SQL lab and Ask need them, to fix a query; everything else gets a generic line.
+      res.status(500).json({ error: err.expose || /^\/api\/(sql|ask)/.test(req.path) ? err.message || 'Query failed.' : 'Request failed. Try again, or check the server log.' });
     }
   };
 
@@ -280,6 +282,7 @@ function createApp({ serveStatic = true } = {}) {
       const existingUsername = await Auth.findUserByUsername(req.body.username);
       if (existingUsername && existingUsername.id !== target.id) return res.status(409).json({ error: 'That username is already taken.' });
     }
+    if (req.body.password && Auth.passwordProblem(req.body.password)) return res.status(400).json({ error: Auth.passwordProblem(req.body.password) });
     const updated = await Auth.updateUser(req.params.id, req.body || {});
     if (req.body.password) await Auth.deleteSessionsByUser(target.id);
     const changes = [];
@@ -343,6 +346,7 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/auth/change-password', handler(async (req, res) => {
     const { currentPassword, newPassword } = req.body || {};
     if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password are required.' });
+    if (Auth.passwordProblem(newPassword)) return res.status(400).json({ error: Auth.passwordProblem(newPassword) });
     if (!Auth.verifyPassword(currentPassword, req.user.password_hash)) {
       // 400, not 401 — the session itself is still valid, only the typed
       // password is wrong. The frontend's api() helper force-logs-out on any
@@ -395,6 +399,8 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/auth/reset-password', handler(async (req, res) => {
     const { token, newPassword } = req.body || {};
     if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required.' });
+    // Checked before the token is consumed so a too-short password doesn't burn the link.
+    if (Auth.passwordProblem(newPassword)) return res.status(400).json({ error: Auth.passwordProblem(newPassword) });
     const userId = await Auth.consumePasswordReset(token);
     if (!userId) return res.status(400).json({ error: 'This reset link is invalid or has expired. Request a new one.' });
     const user = await Auth.findUserById(userId);
@@ -1914,6 +1920,8 @@ function createApp({ serveStatic = true } = {}) {
     } = req.body || {};
     const idList = [...new Set((Array.isArray(identifiers) ? identifiers : []).map((s) => String(s).trim()).filter(Boolean))];
     if (!idList.length) return res.status(400).json({ error: 'At least one email or SID is required.' });
+    // The UI sends more than 10 through the queue; a direct call has no retry or timeout cover.
+    if (idList.length > 50) return res.status(400).json({ error: 'At most 50 recipients per direct send. Use a scheduled or queued send for more.' });
     if (!sendPortfolio && !sendStatement) return res.status(400).json({ error: 'Pick at least one document to send.' });
     if (sendStatement && !/^\d{4}-\d{2}$/.test(statementMonth || '')) return res.status(400).json({ error: 'statementMonth is required (YYYY-MM).' });
 

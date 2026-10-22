@@ -366,6 +366,7 @@ on('PATCH', '/api/admin/users/:id', requireSuperuser(async (req, params, _url, u
     const existingUsername = await A.findUserByUsername(username);
     if (existingUsername && existingUsername.id !== target.id) return json({ error: 'That username is already taken.' }, 409);
   }
+  if (body.password && A.passwordProblem(body.password)) return json({ error: A.passwordProblem(body.password) }, 400);
   const updated = await A.updateUser(params.id, {
     password: body.password as string | undefined,
     email: body.email as string | undefined,
@@ -461,6 +462,7 @@ on('POST', '/api/auth/change-password', async (req, _params, _url, user) => {
   const currentPassword = body.currentPassword as string;
   const newPassword = body.newPassword as string;
   if (!currentPassword || !newPassword) return json({ error: 'Current and new password are required.' }, 400);
+  if (A.passwordProblem(newPassword)) return json({ error: A.passwordProblem(newPassword) }, 400);
   if (!A.verifyPassword(currentPassword, user!.password_hash)) {
     // 400, not 401 — the session itself is still valid, only the typed
     // password is wrong. The frontend's api() helper force-logs-out on any
@@ -517,6 +519,8 @@ on('POST', '/api/auth/reset-password', async (req) => {
   const token = body.token as string;
   const newPassword = body.newPassword as string;
   if (!token || !newPassword) return json({ error: 'Token and new password are required.' }, 400);
+  // Checked before the token is consumed so a too-short password doesn't burn the link.
+  if (A.passwordProblem(newPassword)) return json({ error: A.passwordProblem(newPassword) }, 400);
   const userId = await A.consumePasswordReset(token);
   if (!userId) return json({ error: 'This reset link is invalid or has expired. Request a new one.' }, 400);
   const user = await A.findUserById(userId);
@@ -2085,6 +2089,8 @@ on('POST', '/api/statement/email-batch', requireTab('send-statement', async (req
 
   const idList = [...new Set((Array.isArray(identifiers) ? identifiers : []).map((s) => String(s).trim()).filter(Boolean))];
   if (!idList.length) return json({ error: 'At least one email or SID is required.' }, 400);
+  // The UI sends more than 10 through the queue; a direct call has no retry or timeout cover.
+  if (idList.length > 50) return json({ error: 'At most 50 recipients per direct send. Use a scheduled or queued send for more.' }, 400);
   if (!sendPortfolio && !sendStatement) return json({ error: 'Pick at least one document to send.' }, 400);
   if (sendStatement && !/^\d{4}-\d{2}$/.test(statementMonth || '')) return json({ error: 'statementMonth is required (YYYY-MM).' }, 400);
 
@@ -2497,7 +2503,9 @@ Deno.serve(async (req) => {
       return withCors(await r.handler(req, params, url, user));
     } catch (err) {
       console.error(`[${req.method} ${pathname}]`, (err as Error).message);
-      return withCors(json({ error: (err as Error).message || 'Query failed.' }, 500));
+      // BigQuery/Supabase messages carry project, table and SQL text. Only the
+      // SQL lab and Ask need them, to fix a query; everything else gets a generic line.
+      return withCors(json({ error: (err as { expose?: boolean }).expose || /^\/api\/(sql|ask)/.test(pathname) ? (err as Error).message || 'Query failed.' : 'Request failed. Try again, or check the server log.' }, 500));
     }
   }
   return withCors(json({ error: 'Not found' }, 404));

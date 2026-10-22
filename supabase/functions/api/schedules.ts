@@ -19,6 +19,9 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '
 const OTP_TTL_MS = 10 * 60 * 1000;
 const JAKARTA_OFFSET_MIN = 7 * 60;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Message safe to show the user (the API's generic 500 line hides everything else).
+const userError = (m: string) => Object.assign(new Error(m), { expose: true });
+
 function jktDateStr(d: Date): string { return new Date(d.getTime() + JAKARTA_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
 
 // Queue rows one runner claims per call (dashboard_claim_queue). A statement
@@ -255,7 +258,7 @@ export async function previewRecipientCount(spec: RecipientSpec): Promise<{ coun
 // deno-lint-ignore no-explicit-any
 export async function requestOtp(payload: any): Promise<string> {
   if (!payload.confirmationEmail || !EMAIL_RE.test(payload.confirmationEmail)) {
-    throw new Error('A valid confirmation email is required.');
+    throw userError('A valid confirmation email is required.');
   }
   const code = genOtpCode();
   const [row] = await rest('/dashboard_schedule_otps', {
@@ -277,12 +280,12 @@ export async function requestOtp(payload: any): Promise<string> {
 export async function confirmOtp(otpId: string, code: string): Promise<ScheduledJob> {
   const rows = await rest(`/dashboard_schedule_otps?id=eq.${otpId}&select=*`);
   const otp = rows[0];
-  if (!otp) throw new Error('Confirmation code not found or already used.');
+  if (!otp) throw userError('Confirmation code not found or already used.');
   if (new Date(otp.expires_at) < new Date()) {
     await rest(`/dashboard_schedule_otps?id=eq.${otpId}`, { method: 'DELETE' });
-    throw new Error('Confirmation code expired, request a new one.');
+    throw userError('Confirmation code expired, request a new one.');
   }
-  if (sha256Hex(String(code || '').trim()) !== otp.code_hash) throw new Error('Incorrect confirmation code.');
+  if (sha256Hex(String(code || '').trim()) !== otp.code_hash) throw userError('Incorrect confirmation code.');
 
   const p = otp.payload;
   const seed: NextRunSpec = { frequency: p.frequency, day_of_week: p.dayOfWeek, day_of_month: p.dayOfMonth, run_time: p.runTime };

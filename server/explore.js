@@ -321,6 +321,9 @@ const DATASETS = {
   },
 };
 
+// Message safe to show the user (the API's generic 500 line hides everything else).
+const userError = (m) => Object.assign(new Error(m), { expose: true });
+
 function meta() {
   return Object.entries(DATASETS).map(([key, d]) => ({
     key, label: d.label, columns: d.columns,
@@ -353,7 +356,7 @@ function buildWhere(d, q, params) {
 
 function buildExplore(datasetKey, q) {
   const d = DATASETS[datasetKey];
-  if (!d) throw new Error('Unknown dataset.');
+  if (!d) throw userError('Unknown dataset.');
   const params = {};
   const where = buildWhere(d, q, params);
   const limit = Math.min(parseInt(q.limit, 10) || 50, 100000);
@@ -372,7 +375,7 @@ function buildExplore(datasetKey, q) {
 
 function filterValuesSql(datasetKey, filterKey) {
   const d = DATASETS[datasetKey];
-  if (!d) throw new Error('Unknown dataset.');
+  if (!d) throw userError('Unknown dataset.');
   const f = d.filters.find((x) => x.key === filterKey);
   if (!f || f.bool || f.values) return null; // bool/preset filters need no query
   return `SELECT DISTINCT ${f.col} AS v FROM ${d.from}

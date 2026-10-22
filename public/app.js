@@ -186,7 +186,7 @@ function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 // Every <tr> in document order (thead + tbody + tfoot), so a Total row in
 // tfoot comes out the same as any other row.
@@ -194,7 +194,9 @@ function tableToAoa(table) {
   return [...table.querySelectorAll('tr')].map((tr) => [...tr.children].map((c) => c.textContent.trim()));
 }
 function aoaToCsv(aoa) {
-  const esc = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  // Cells that start like a formula get a leading ' so Excel shows them as text;
+  // plain numbers (-1,000.5, 12%) are left alone.
+  const esc = (v) => { let s = String(v ?? ''); if (/^[=+\-@\t\r]/.test(s) && !/^[-+]?[\d.,]+%?$/.test(s)) s = "'" + s; return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   return '﻿' + aoa.map((r) => r.map(esc).join(',')).join('\n');
 }
 function exportTableCsv(table, name) {
@@ -484,6 +486,8 @@ async function selectPortfolioUser(userId, sid, name, email) {
 // by repaintActiveTab (theme toggle) so a toggle doesn't reset the date back to live.
 async function loadPortfolioUser() {
   if (!pfSelected) return;
+  // A newer click or date change supersedes this load; drop its late response.
+  const sel = pfSelected, reqId = (sel.reqId = (sel.reqId || 0) + 1);
   const { userId, sid } = pfSelected;
   const dateVal = $('#pfDate').value;
   $('#pfKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
@@ -494,6 +498,7 @@ async function loadPortfolioUser() {
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
     const { holdings, split, performance, history, recentTx, asOfDate, latestDate } = await api(`/api/portfolio?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    if (pfSelected !== sel || sel.reqId !== reqId) return;
     pfSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate), latest = val(latestDate);
     $('#pfSnapshotInfo').textContent = asOf
@@ -653,6 +658,7 @@ async function selectPfxUser(userId, sid, name, email) {
 
 async function loadPfxUser() {
   if (!pfxSelected) return;
+  const sel = pfxSelected, reqId = (sel.reqId = (sel.reqId || 0) + 1);
   const { userId, sid } = pfxSelected;
   const dateVal = $('#pfxDate').value;
   $('#pfxKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
@@ -664,6 +670,7 @@ async function loadPfxUser() {
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
     const { holdings, split, performance, history, recentTx, asOfDate, latestDate } = await api(`/api/portfolio-fix?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    if (pfxSelected !== sel || sel.reqId !== reqId) return;
     pfxSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate), latest = val(latestDate);
     $('#pfxSnapshotInfo').textContent = asOf
@@ -774,6 +781,7 @@ async function selectPtxUser(userId, sid, name, email) {
 
 async function loadPtxUser() {
   if (!ptxSelected) return;
+  const sel = ptxSelected, reqId = (sel.reqId = (sel.reqId || 0) + 1);
   const { userId, sid } = ptxSelected;
   const dateVal = $('#ptxDate').value;
   $('#ptxKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
@@ -785,6 +793,7 @@ async function loadPtxUser() {
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
     const { holdings, split, performance, history, recentTx, asOfDate } = await api(`/api/portfolio-tx?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    if (ptxSelected !== sel || sel.reqId !== reqId) return;
     ptxSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate);
     $('#ptxSnapshotInfo').textContent = asOf
@@ -895,6 +904,7 @@ async function selectPsiUser(userId, sid, name, email) {
 
 async function loadPsiUser() {
   if (!psiSelected) return;
+  const sel = psiSelected, reqId = (sel.reqId = (sel.reqId || 0) + 1);
   const { userId, sid } = psiSelected;
   const dateVal = $('#psiDate').value;
   $('#psiKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
@@ -906,6 +916,7 @@ async function loadPsiUser() {
   try {
     const dateParam = dateVal ? `&date=${dateVal}` : '';
     const { holdings, split, performance, history, recentTx, asOfDate } = await api(`/api/portfolio-sinvest?userId=${encodeURIComponent(userId)}&sid=${encodeURIComponent(sid)}${dateParam}`);
+    if (psiSelected !== sel || sel.reqId !== reqId) return;
     psiSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate);
     $('#psiSnapshotInfo').textContent = asOf
@@ -1013,10 +1024,12 @@ async function selectExplorerUser(userId, sid, name, email) {
 
 async function loadExplorerPortfolio() {
   if (!peSelected) return;
+  const sel = peSelected, reqId = (sel.reqId = (sel.reqId || 0) + 1);
   $('#peFinding').hidden = true;
   const dateParam = $('#peDate').value ? `&date=${$('#peDate').value}` : '';
   try {
     const { asOfDate, latestDate, holdings, byGoal } = await api(`/api/portfolio-explorer?userId=${encodeURIComponent(peSelected.userId)}&sid=${encodeURIComponent(peSelected.sid)}${dateParam}`);
+    if (peSelected !== sel || sel.reqId !== reqId) return;
     const asOf = val(asOfDate), latest = val(latestDate);
     peSelected.date = asOf || '';
     $('#peDate').value = asOf || '';
@@ -6059,18 +6072,20 @@ function filenameFromResponse(res, fallback) {
 }
 
 async function download(body, filename) {
-  const res = await fetch(API_BASE + '/api/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ ...body, ...screenSortFor(lastClickTarget) }),
-  });
-  if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.error || 'Export failed'); return; }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filenameFromResponse(res, filename); a.click();
-  URL.revokeObjectURL(url);
-  toast('Export ready');
+  try {
+    const res = await fetch(API_BASE + '/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ ...body, ...screenSortFor(lastClickTarget) }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); toast(e.error || 'Export failed'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filenameFromResponse(res, filename); a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Export ready');
+  } catch (e) { toast(`Export failed: ${e.message}`); }
 }
 
 // Google Sheet export has no file to hand the browser — the server creates
@@ -6084,19 +6099,24 @@ async function download(body, filename) {
 // "popup blocked" warning.
 async function pushToSheet(body) {
   const tab = window.open('', '_blank');
-  const res = await fetch(API_BASE + '/api/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ ...body, format: 'gsheet' }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  try {
+    const res = await fetch(API_BASE + '/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ ...body, format: 'gsheet' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (tab) tab.close();
+      toast(data.error || 'Google Sheets export failed');
+      return;
+    }
+    if (tab) tab.location.href = data.url; else window.open(data.url, '_blank');
+    toast('Google Sheet ready');
+  } catch (e) {
     if (tab) tab.close();
-    toast(data.error || 'Google Sheets export failed');
-    return;
+    toast(`Google Sheets export failed: ${e.message}`);
   }
-  if (tab) tab.location.href = data.url; else window.open(data.url, '_blank');
-  toast('Google Sheet ready');
 }
 
 // Runs up to `limit` of these async calls at once instead of one after

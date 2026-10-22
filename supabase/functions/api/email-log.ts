@@ -18,6 +18,9 @@ export interface EmailLogMeta {
 }
 
 // deno-lint-ignore no-explicit-any
+// Message safe to show the user (the API's generic 500 line hides everything else).
+const userError = (m: string) => Object.assign(new Error(m), { expose: true });
+
 async function rest(path: string, opts: RequestInit & { withTotal?: boolean } = {}): Promise<any> {
   const { withTotal, ...init } = opts;
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
@@ -242,6 +245,6 @@ export function list({ from, to, category, source, outcome, search, limit, offse
 }
 
 export function events(logId: string) {
-  if (!UUID_RE.test(logId || '')) throw new Error('Invalid email id.');
+  if (!UUID_RE.test(logId || '')) throw userError('Invalid email id.');
   return rest(`/dashboard_email_events?log_id=eq.${logId}&select=event_type,occurred_at,link,user_agent,ip,detail&order=occurred_at.asc`);
 }

@@ -98,6 +98,8 @@ export function linkOrigin(reqOrigin: string | null): string {
 // PostgREST filter value: quoted so , ( ) in user input cannot add conditions.
 const pgq = (v: string) => encodeURIComponent(`"${String(v).replace(/[\\"]/g, '\\$&')}"`);
 
+export function passwordProblem(pw: unknown): string | null { return typeof pw === 'string' && pw.length >= 8 ? null : 'Password must be at least 8 characters.'; }
+
 function sha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }

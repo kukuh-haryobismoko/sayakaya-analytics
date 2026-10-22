@@ -81,6 +81,8 @@ function linkOrigin(reqOrigin) {
 // PostgREST filter value: quoted so , ( ) in user input cannot add conditions.
 const pgq = (v) => encodeURIComponent(`"${String(v).replace(/[\\"]/g, '\\$&')}"`);
 
+function passwordProblem(pw) { return typeof pw === 'string' && pw.length >= 8 ? null : 'Password must be at least 8 characters.'; }
+
 function sha256Hex(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -276,7 +278,7 @@ function userCan(user, tab) {
 }
 
 module.exports = {
-  hashPassword, verifyPassword, verifyOrBurn, tooManyAttempts, linkOrigin,
+  hashPassword, verifyPassword, passwordProblem, verifyOrBurn, tooManyAttempts, linkOrigin,
   findUserByUsername, findUserByEmail, findUserByIdentifier, findUserById,
   listUsers, countSuperusers, createUser, updateUser, deleteUser,
   createSession, findUserByToken, deleteSessionByToken, deleteSessionsByUser,
