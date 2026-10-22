@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `29ac94f (2026-10-22)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `7def154 (2026-10-22)`.
 
 ## Cara membaca dokumen ini
 
@@ -524,11 +524,11 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **AUM**: AUM platform pada hari terakhir periode itu (bukan jumlah harian).
     - **Δ AUM**: Perubahan AUM dibanding periode sebelumnya.
     - **Net flow**: Pembelian completed dikurangi penjualan completed pada periode itu. Tanggal transaksi digeser +1 hari karena baris mi_fee hari D sudah memuat transaksi hari D-1.
-    - **Market effect**: Δ AUM dikurangi Net flow: pergerakan NAV, reinvestasi, dan unit bonus. Kosong di baris pertama karena tidak ada periode pembanding.
+    - **Market effect / Efek pasar**: Δ AUM dikurangi Net flow: pergerakan NAV, reinvestasi, dan unit bonus. Kosong di baris pertama karena tidak ada periode pembanding.
     - **Revenue / Pendapatan**: Jumlah aperd_share_per_day: bagian fee manajemen yang menjadi hak Sayakaya sebagai agen penjual.
   - *Rincian, per, fund, (setelah, klik, batang)*: Fund mana yang menggerakkan AUM pada periode yang diklik, diurutkan dari perubahan terbesar.
-    - **Switch (net)**: Switch masuk dikurangi switch keluar. Secara platform hampir nol, tetapi per fund bisa besar.
-    - **Market effect**: Sisa perubahan setelah dikurangi beli, jual, dan switch: efek NAV.
+    - **Switch (net) / Switch (bersih)**: Switch masuk dikurangi switch keluar. Secara platform hampir nol, tetapi per fund bisa besar.
+    - **Market effect / Efek pasar**: Sisa perubahan setelah dikurangi beli, jual, dan switch: efek NAV.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `aum`
   - Endpoint: `GET /api/aum-history`, `GET /api/aum-history/drill`
@@ -547,9 +547,9 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *What, moved, revenue* (Penyebab, perubahan, pendapatan): Memecah perubahan revenue dibanding periode sebelumnya menjadi tiga efek. Klik baris atau batang untuk rincian per fund.
   - *Detail*: Angka per periode di balik grafik. Klik baris untuk melihat fund penyebab perubahannya.
     - **vs previous**: Persen perubahan revenue dibanding periode sebelumnya.
-    - **Days effect**: Bagian perubahan yang datang dari beda jumlah hari (misalnya Februari lebih pendek, atau periode terpotong).
-    - **AUM effect**: Bagian perubahan dari naik turunnya rata-rata AUM, dihitung dengan rate periode sebelumnya.
-    - **Rate & mix effect**: Sisanya: perubahan rate fee dan pergeseran dana ke fund dengan fee lebih tinggi atau rendah.
+    - **Days effect / Efek hari**: Bagian perubahan yang datang dari beda jumlah hari (misalnya Februari lebih pendek, atau periode terpotong).
+    - **AUM effect / Efek AUM**: Bagian perubahan dari naik turunnya rata-rata AUM, dihitung dengan rate periode sebelumnya.
+    - **Rate & mix effect / Efek tarif & campuran**: Sisanya: perubahan rate fee dan pergeseran dana ke fund dengan fee lebih tinggi atau rendah.
 - **Catatan penting**:
   - Ketiga efek selalu berjumlah persis sama dengan perubahan revenue, sehingga bisa dibaca sebagai "penyebab" perubahan.
 - **Detail teknis** (otomatis dari kode):
@@ -590,10 +590,10 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Isi tab**:
   - *Campaign, performance* (Performa, kampanye): Pemakaian dan perkiraan biaya setiap kampanye promo.
     - **Redemption**: Used dibagi Quota, dalam persen.
-    - **Est. cost**: Perkiraan biaya: Used dikali Bonus/redemption.
+    - **Est. cost / Estimasi biaya**: Perkiraan biaya: Used dikali Bonus/redemption.
   - *Top, referrers* (Perekomendasi, teratas): Pengajak yang membawa volume pembelian terbesar.
-    - **Referred**: Jumlah akun yang mendaftar dengan kode itu (users.referrer_code), terverifikasi atau belum.
-    - **Volume brought**: Total seluruh pembelian completed sepanjang masa dari akun-akun yang diajak.
+    - **Referred / Direferensikan**: Jumlah akun yang mendaftar dengan kode itu (users.referrer_code), terverifikasi atau belum.
+    - **Volume brought / Volume yang dibawa**: Total seluruh pembelian completed sepanjang masa dari akun-akun yang diajak.
   - *AUM, by, investment, manager* (AUM, berdasarkan, manajer, investasi): Dana nasabah Sayakaya per manajer investasi (15 teratas): unit yang dipegang hari ini, termasuk unit kampanye yang masih terkunci, dikali NAV terbaru. Persentase tiap irisan dihitung dari total manajer yang tampil.
   - *Platform, AUM, by, risk, tolerance* (AUM, platform, berdasarkan, toleransi, risiko): Kepemilikan live nasabah Sayakaya dikelompokkan menurut user_profiles.investment_risk_tolerance.
 - **Catatan penting**:
@@ -651,8 +651,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Bulk, export* (Ekspor, massal): Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.
   - *AUM, over, time* (AUM, dari, waktu, ke, waktu): AUM harian investor ini dari mi_fee_logs.portfolio_with_code (data mulai 14 Januari 2026).
   - *Holdings* (Kepemilikan): Tanpa tanggal: kepemilikan live (unit bonus ikut) dengan harga beli dari portfolios.initial_price. Dengan tanggal: snapshot portfolio_with_code pada tanggal itu.
-    - **Average NAV**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
-    - **Fund Value**: Modal: Unit Balance dikali Average NAV.
+    - **Average NAV / NAV rata-rata**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
+    - **Fund Value / Nilai reksa dana**: Modal: Unit Balance dikali Average NAV.
     - **Unrealized G/L**: Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.
     - **%**: Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.
   - *AUM, performance* (Performa, AUM): Persen perubahan total AUM investor ini dibanding 1 hari, 1 minggu, 1, 3 bulan, awal tahun, 1, 3, dan 5 tahun sebelum data terakhirnya.
@@ -679,8 +679,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Goals / Goal**: Jumlah goal (tujuan investasi di aplikasi) yang punya kepemilikan pada tanggal itu.
   - *Bulk, export* (Ekspor, massal): Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.
   - *Holdings, by, fund* (Kepemilikan, per, produk): Kepemilikan digabung per fund dari semua goal, pada tanggal snapshot terpilih (default: terbaru).
-    - **Average NAV**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
-    - **Fund Value**: Modal: Unit Balance dikali Average NAV.
+    - **Average NAV / NAV rata-rata**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
+    - **Fund Value / Nilai reksa dana**: Modal: Unit Balance dikali Average NAV.
     - **Unrealized G/L**: Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.
     - **%**: Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.
   - *Holdings, by, goal* (Kepemilikan, per, goal): Kepemilikan yang sama dipisah per goal (tujuan investasi yang dibuat investor di aplikasi). Hanya tampilan; ekspor tetap digabung.
@@ -708,8 +708,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Bulk, export* (Ekspor, massal): Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.
   - *AUM, over, time* (AUM, dari, waktu, ke, waktu): AUM harian investor ini dari mi_fee_logs.portfolio_fix (data mulai awal Agustus 2026).
   - *Holdings* (Kepemilikan): Dengan tanggal: snapshot portfolio_fix, yang harga beli rata-ratanya sudah dikoreksi. Tanpa tanggal: kepemilikan live. Centang Export memilih fund yang ikut file ekspor.
-    - **Average NAV**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
-    - **Fund Value**: Modal: Unit Balance dikali Average NAV.
+    - **Average NAV / NAV rata-rata**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
+    - **Fund Value / Nilai reksa dana**: Modal: Unit Balance dikali Average NAV.
     - **Unrealized G/L**: Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.
     - **%**: Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.
   - *AUM, performance* (Performa, AUM): Persen perubahan total AUM investor ini dibanding 1 hari, 1 minggu, 1, 3 bulan, awal tahun, 1, 3, dan 5 tahun sebelum data terakhirnya.
@@ -737,8 +737,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Bulk, export* (Ekspor, massal): Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.
   - *AUM, over, time* (AUM, dari, waktu, ke, waktu): AUM harian investor ini dari mi_fee_logs.portfolio_fix.
   - *Holdings* (Kepemilikan): Harga beli rata-rata dihitung ulang dari riwayat transaksi: hanya pembelian dan switch masuk yang mengubah rata-rata, penjualan hanya mengurangi unit. Centang Export memilih fund yang ikut file ekspor.
-    - **Average NAV**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
-    - **Fund Value**: Modal: Unit Balance dikali Average NAV.
+    - **Average NAV / NAV rata-rata**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
+    - **Fund Value / Nilai reksa dana**: Modal: Unit Balance dikali Average NAV.
     - **Unrealized G/L**: Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.
     - **%**: Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.
   - *AUM, performance* (Performa, AUM): Persen perubahan total AUM investor ini dibanding 1 hari, 1 minggu, 1, 3 bulan, awal tahun, 1, 3, dan 5 tahun sebelum data terakhirnya.
@@ -767,8 +767,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Bulk, export* (Ekspor, massal): Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.
   - *AUM, over, time* (AUM, dari, waktu, ke, waktu): AUM harian investor ini dari mi_fee_logs.portfolio_fix.
   - *Holdings* (Kepemilikan): Kepemilikan dihitung dari catatan kustodian (S-INVEST) dengan aturan yang sama seperti Portfolio (TX), untuk mengecek apakah catatan aplikasi cocok dengan kustodian.
-    - **Average NAV**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
-    - **Fund Value**: Modal: Unit Balance dikali Average NAV.
+    - **Average NAV / NAV rata-rata**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
+    - **Fund Value / Nilai reksa dana**: Modal: Unit Balance dikali Average NAV.
     - **Unrealized G/L**: Untung atau rugi yang belum direalisasikan: Market Value dikurangi Fund Value. Hijau untung, merah rugi.
     - **%**: Unrealized G/L dibagi Fund Value. Di baris Total hanya menghitung fund yang harga beli rata-ratanya diketahui.
   - *AUM, performance* (Performa, AUM): Persen perubahan total AUM investor ini dibanding 1 hari, 1 minggu, 1, 3 bulan, awal tahun, 1, 3, dan 5 tahun sebelum data terakhirnya.
@@ -793,7 +793,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Filters* (Filter): Pilih tanggal AUM dan rentang AUM minimum dan maksimum. Panel per fund punya filter AUM per fund sendiri.
   - *AUM, per, investor, (total)*: Investor dengan total AUM dalam rentang pilihan, dari yang terbesar (maksimal 500), lengkap dengan kontak dan profil risiko.
     - **Risk level / Level risiko**: Hasil kuesioner profil risiko di aplikasi (user_profiles.risk_level, 1 sampai 6).
-    - **Investment risk tolerance**: Toleransi risiko yang diisi saat KYC (sering kosong).
+    - **Investment risk tolerance / Toleransi risiko investasi**: Toleransi risiko yang diisi saat KYC (sering kosong).
 - **Catatan penting**:
   - Sumber AUM: mi_fee_logs.portfolio_with_code. Kolom kontak (nama sampai tanggal lahir) juga ada di tabel per fund.
 - **Detail teknis** (otomatis dari kode):
@@ -811,10 +811,10 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Cara hitung**: Hanya buy dan sell completed, dibucket per tanggal created_at. Net = buy dikurangi sell. Share % dihitung terhadap total semua investor di periode itu, bukan hanya baris yang ditampilkan. Urutan menurun atau menaik, jumlah baris diketik manual (1 sampai 1.000). Untuk Net deposit, menurun hanya memuat net positif dan menaik hanya net negatif (penarik bersih terbesar). Di bawahnya ada versi singkat (Name, Buys, Sell, Net increase; Buys dan Sell adalah nominal rupiah, Net increase = Buys dikurangi Sell) yang bisa diurutkan per kolom dari baris yang sudah diambil. Semua tabel punya tombol Copy (tab-separated plus HTML) untuk menyalin tanpa mengunduh.
 - **Isi tab**:
   - *Top, investors* (Investor, teratas): Peringkat investor menurut pembelian, penjualan, atau net deposit dalam rentang tanggal.
-    - **% of all subscriptions**: Porsi investor ini dari total pembelian semua investor dalam rentang (bukan hanya baris yang tampil).
+    - **% of all subscriptions / % dari semua subscription**: Porsi investor ini dari total pembelian semua investor dalam rentang (bukan hanya baris yang tampil).
     - **Net deposit**: Subscriptions dikurangi Redemptions. Positif = uang masuk bersih, negatif = uang keluar bersih.
   - *Short, version* (Versi, singkat): Versi ringkas dari tabel di atas yang bisa diurutkan per kolom, untuk disalin ke laporan.
-    - **Net increase**: Buys dikurangi Sell.
+    - **Net increase / Kenaikan bersih**: Buys dikurangi Sell.
 - **Catatan penting**:
   - Mode Net deposit menurun hanya menampilkan net positif (penabung terbesar); menaik hanya net negatif (penarik terbesar).
 - **Detail teknis** (otomatis dari kode):
@@ -833,12 +833,12 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Isi tab**:
   - *Revenue, &, investors, over, time* (Pendapatan, &, jumlah, nasabah, dari, waktu, ke, waktu): Revenue fee (mgmt fee, AperD, MI) dan jumlah investor per periode.
   - *Revenue, &, lifetime, per, investor* (Pendapatan, &, lifetime, per, nasabah): Satu baris per investor (maksimal 200), diurutkan dari Total AperD terbesar. Klik baris untuk rincian per bulan dan fund.
-    - **Transacting span (d)**: Hari dari transaksi pertama sampai terakhir.
-    - **Holding lifetime (d)**: Hari dari pembelian pertama sampai hari ini (bila masih memegang) atau sampai penjualan terakhir.
-    - **First hold (feed)**: Hari pertama investor ini muncul di snapshot portfolio_with_code dalam rentang.
+    - **Transacting span (d) / Rentang transaksi (hari)**: Hari dari transaksi pertama sampai terakhir.
+    - **Holding lifetime (d) / Lama kepemilikan (hari)**: Hari dari pembelian pertama sampai hari ini (bila masih memegang) atau sampai penjualan terakhir.
+    - **First hold (feed) / Kepemilikan pertama (feed)**: Hari pertama investor ini muncul di snapshot portfolio_with_code dalam rentang.
     - **Total AperD**: Bagian fee untuk Sayakaya (agen penjual).
   - *Investor*: Rincian investor yang diklik, per periode dan fund.
-    - **Mgmt fee rate**: Rate fee manajemen tahunan yang berlaku.
+    - **Mgmt fee rate / Tarif biaya manajemen**: Rate fee manajemen tahunan yang berlaku.
   - *Period, summary, (all, funds)* (Ringkasan, periode, (semua, produk)): Rekap revenue fee semua investor per periode.
     - **AperD per investor**: Total AperD dibagi jumlah investor.
 - **Catatan penting**:
@@ -863,11 +863,11 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Conversion rate / Tingkat konversi**: Episodes converted dibagi Dormancy episodes.
     - **Reactivation revenue / Pendapatan reaktivasi**: Total nominal pembelian yang menutup setiap jeda.
   - *Conversion, by, dormancy, length* (Konversi, berdasarkan, lama, tidak, aktif): Berapa jeda pembelian yang akhirnya ditutup pembelian baru, per panjang jeda.
-    - **Dormancy length**: Kelompok panjang jeda: 2 Weeks, 1 Month, 2 Month, 3 Month. Jeda 180 hari ke atas dibuang karena dianggap churn.
-    - **Conversion**: Converted dibagi Episodes.
+    - **Dormancy length / Lama dormant**: Kelompok panjang jeda: 2 Weeks, 1 Month, 2 Month, 3 Month. Jeda 180 hari ke atas dibuang karena dianggap churn.
+    - **Conversion / Konversi**: Converted dibagi Episodes.
   - *Repeat, buyers* (Pembeli, berulang): Investor yang pernah kembali membeli setelah jeda, beserta seberapa sering mereka membeli.
-    - **Longest dormancy recovered**: Kelompok jeda terpanjang yang pernah dia tutup dengan membeli lagi.
-    - **Buyer type**: One-time (1 pembelian), Light (2 sampai 3), atau Power (4 ke atas), dihitung dari pembelian completed sepanjang masa.
+    - **Longest dormancy recovered / Dormant terlama yang pulih**: Kelompok jeda terpanjang yang pernah dia tutup dengan membeli lagi.
+    - **Buyer type / Tipe pembeli**: One-time (1 pembelian), Light (2 sampai 3), atau Power (4 ke atas), dihitung dari pembelian completed sepanjang masa.
 - **Catatan penting**:
   - Tab ini tidak punya filter tanggal: dihitung dari seluruh riwayat pembelian completed. Tabel daftar maksimal 1.000 baris.
 - **Detail teknis** (otomatis dari kode):
@@ -891,16 +891,16 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Date / Tanggal**: Tanggal transaksi (created_at, zona Asia/Jakarta) saat ringkasan per hari.
     - **Month / Bulan**: Bulan transaksi (YYYY-MM) saat ringkasan per bulan.
     - **Subscriptions / Subscription**: Jumlah nominal transaksi buy pada bucket itu.
-    - **# buys**: Jumlah transaksi buy pada bucket itu.
+    - **# buys / # pembelian**: Jumlah transaksi buy pada bucket itu.
     - **Redemptions / Redemption**: Jumlah nominal transaksi sell pada bucket itu.
-    - **# sells**: Jumlah transaksi sell pada bucket itu.
+    - **# sells / # penjualan**: Jumlah transaksi sell pada bucket itu.
     - **Net flow**: Subscriptions dikurangi redemptions: positif berarti dana masuk bersih, negatif dana keluar bersih.
   - *Transaction, detail* (Detail, transaksi): Satu baris per transaksi, terbaru di atas, dengan kontak pembeli.
     - **Type / Tipe**: buy (pembelian), sell (penjualan), SWITCH_IN dan SWITCH_OUT (dua sisi switching), reinvestment (pembagian hasil yang diinvestasikan ulang).
     - **Status**: completed (selesai), expired (batas bayar habis), cancelled (dibatalkan), completed_payment (uang diterima, unit belum dialokasikan), verified, verified_by_operational, dan lainnya.
     - **Promo**: Kode promo yang dipakai saat transaksi (transactions.promo_code), kosong kalau tanpa promo.
     - **NAV**: Harga per unit yang dipakai untuk transaksi itu (value_per_unit).
-    - **Final amount**: Nominal akhir setelah fee dan promo. Untuk order yang tidak dibayar biasanya 0.
+    - **Final amount / Jumlah akhir**: Nominal akhir setelah fee dan promo. Untuk order yang tidak dibayar biasanya 0.
 - **Catatan penting**:
   - Semua status ikut tampil kecuali disaring. Untuk angka bisnis (volume, revenue) biasanya hanya status completed yang dihitung.
 - **Detail teknis** (otomatis dari kode):
@@ -920,7 +920,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *SInvest, transactions* (Transaksi, SInvest): Data mentah dari kustodian (sinvest.trx_history), bisa disaring per SID, kata kunci, tipe, dan tanggal.
   - *Transaction, detail* (Detail, transaksi): Satu baris per transaksi di feed kustodian.
     - **Type / Tipe**: Tipe transaksi kustodian: BUY, SELL, SWITCH_IN, SWITCH_OUT, REINVESTMENT, LIQUIDATION, TRANSFER_IN, TRANSFER_OUT, UNIT_ADJUSTMENT (kode 1 sampai 9 di data asli).
-    - **Input date**: Tanggal transaksi diinput ke sistem kustodian (dipakai tab Reconciliation).
+    - **Input date / Tanggal input**: Tanggal transaksi diinput ke sistem kustodian (dipakai tab Reconciliation).
 - **Catatan penting**:
   - Semua kolom di sumbernya bertipe teks; tanggal dan nominal diubah formatnya hanya untuk tampilan.
 - **Detail teknis** (otomatis dari kode):
@@ -940,8 +940,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Remisier, transactions* (Transaksi, remisier): Transaksi milik nasabah seorang remisier, dipilih lewat referrer_code atau sales_code, plus filter tipe, status, dan tanggal.
   - *Transaction, detail* (Detail, transaksi): Satu baris per transaksi nasabah remisier.
     - **Status**: completed (selesai), expired (batas bayar habis), cancelled (dibatalkan), completed_payment (uang diterima, unit belum dialokasikan), verified, verified_by_operational, dan lainnya.
-    - **Final amount**: Nominal akhir setelah fee dan promo. Untuk order yang tidak dibayar biasanya 0.
-    - **Realized G/L**: Untung atau rugi yang terealisasi saat menjual (dari main.transactions.realized_gain_loss).
+    - **Final amount / Jumlah akhir**: Nominal akhir setelah fee dan promo. Untuk order yang tidak dibayar biasanya 0.
+    - **Realized G/L / Untung/rugi terealisasi**: Untung atau rugi yang terealisasi saat menjual (dari main.transactions.realized_gain_loss).
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `remisier-tx`
   - Endpoint: `GET /api/transactions/filters`, `GET /api/transactions`, `GET /api/remisier/transactions`
@@ -959,7 +959,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *App, ledger, vs, custodian, feed* (Buku, besar, aplikasi, vs, feed, kustodian): Perbandingan harian jumlah dan nominal transaksi antara aplikasi dan kustodian, per tipe.
     - **Date / Tanggal**: Tanggal. Sisi aplikasi memakai tanggal transaksi selesai (completed_at); sisi kustodian memakai Input_Date.
     - **Type / Tipe**: Tipe transaksi. Baris ALL menjumlah semua tipe di tanggal itu.
-    - **Diff**: App amount dikurangi Custodian amount. Nol berarti cocok.
+    - **Diff / Selisih**: App amount dikurangi Custodian amount. Nol berarti cocok.
 - **Catatan penting**:
   - Liquidation, transfer, dan unit adjustment belum dibukukan di aplikasi, jadi tipe-tipe itu hanya punya angka di sisi kustodian; selisihnya bukan berarti salah.
 - **Detail teknis** (otomatis dari kode):
@@ -980,7 +980,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Transaction, e-statement, preview*: Transaksi berstatus completed, verified, atau completed_payment pada bulan terpilih yang akan masuk e-statement.
   - *Batch, send*: Kirim dokumen yang sama ke banyak investor sekaligus: cari per nama (* sebagai wildcard), SID, email, atau nomor HP, atau tempel daftar email/SID. Satu email per penerima. Recipients juga bisa satu kelompok (investor dengan AUM di fund aktif, semua investor dengan AUM, semua pengguna terdaftar): dikirim sekali lewat antrean jadwal setelah kode OTP, portofolio selalu live.
   - *Automated, sending*: Jadwal kirim berulang. Membuat jadwal meminta kode OTP lewat email. Jadwal selalu memakai portofolio live dan e-statement bulan lalu. Penerima: satu email, daftar tempel/CSV, investor dengan AUM di fund aktif (holding live ACTIVE, sama dengan tab Product, ~13,8 rb per Okt 2026), semua investor dengan AUM (snapshot portfolio_fix terakhir, termasuk sisa unit fund nonaktif, ~232 rb), atau semua pengguna terdaftar. Jumlah penerima tampil sebelum OTP.
-    - **Sends**: Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.
+    - **Sends / Pengiriman**: Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.
     - **Status**: Active (berjalan), Paused (dijeda), Ended (melewati tanggal akhir).
     - **Emails / Email**: Email dari jadwal ini, semua putaran: terkirim, menunggu di antrean, gagal, dilewati (daftar pengecualian).
   - *Excluded, recipients*: Daftar pengecualian bersama untuk kedua tab Send: email atau SID yang selalu dilewati jadwal, kiriman ke kelompok, dan kirim batch, untuk semua kiriman atau satu jenis saja, beserta alasan dan siapa yang menambahkan.
@@ -1005,7 +1005,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Recipients* (Penerima): Daftar penerima: cari investor per nama, SID, email, atau nomor HP, atau tempel daftar email. Bisa juga satu kelompok penerima, dikirim sekali lewat antrean jadwal setelah kode OTP.
   - *Fund, performance, report* (Laporan, performa, produk): PDF "Reksa Dana Update": persen perubahan NAV per periode (sama dengan tab Performance) untuk semua fund, kategori tertentu, atau fund pilihan, dengan NAV per tanggal terpilih.
   - *Automated, sending*: Jadwal kirim laporan performa fund berulang. Penerima: satu email, daftar tempel/CSV, investor dengan AUM di fund aktif (holding live ACTIVE, sama dengan tab Product, ~13,8 rb per Okt 2026), semua investor dengan AUM (snapshot portfolio_fix terakhir, termasuk sisa unit fund nonaktif, ~232 rb), atau semua pengguna terdaftar. Jumlah penerima tampil sebelum OTP.
-    - **Sends**: Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.
+    - **Sends / Pengiriman**: Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.
     - **Status**: Active (berjalan), Paused (dijeda), Ended (melewati tanggal akhir).
     - **Emails / Email**: Email dari jadwal ini, semua putaran: terkirim, menunggu di antrean, gagal, dilewati (daftar pengecualian).
   - *Excluded, recipients*: Daftar pengecualian bersama untuk kedua tab Send: email atau SID yang selalu dilewati jadwal, kiriman ke kelompok, dan kirim batch, untuk semua kiriman atau satu jenis saja, beserta alasan dan siapa yang menambahkan.
@@ -1062,10 +1062,10 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Isi tab**:
   - *Revenue, trend* (Tren, pendapatan): Total fee manajemen, bagian AperD, dan bagian MI per periode.
   - *Management, fee, revenue, (per, fund, per, period)* (Pendapatan, management, fee, (per, produk, per, periode)): Fee dihitung per hari: AUM fund hari itu (mi_fee_logs.portfolio_with_code, dengan koreksi -1 hari) dikali rate tahunan, dibagi jumlah hari dalam tahun itu, lalu dibagi menjadi bagian AperD dan MI.
-    - **Mgmt fee rate**: Rate fee manajemen per tahun yang dibebankan fund (misalnya 1,5%).
-    - **AperD share**: Porsi fee manajemen yang menjadi hak Sayakaya sebagai agen penjual.
-    - **MI share**: Porsi fee manajemen yang menjadi hak manajer investasi.
-    - **AUM EOM**: AUM pada hari terakhir periode (end of month).
+    - **Mgmt fee rate / Tarif biaya manajemen**: Rate fee manajemen per tahun yang dibebankan fund (misalnya 1,5%).
+    - **AperD share / Porsi AperD**: Porsi fee manajemen yang menjadi hak Sayakaya sebagai agen penjual.
+    - **MI share / Porsi MI**: Porsi fee manajemen yang menjadi hak manajer investasi.
+    - **AUM EOM / AUM akhir bulan**: AUM pada hari terakhir periode (end of month).
     - **Total AperD**: Revenue Sayakaya: jumlah fee harian bagian AperD selama periode.
   - *Period, summary, (all, funds)* (Ringkasan, periode, (semua, produk)): Rekap semua fund per periode; Total AUM (EOM) adalah AUM platform di hari terakhir periode.
 - **Catatan penting**:
@@ -1086,10 +1086,10 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Isi tab**:
   - *Revenue, trend* (Tren, pendapatan): Total fee manajemen, bagian AperD, dan bagian MI per periode.
   - *Management, fee, revenue, (per, fund, per, period)* (Pendapatan, management, fee, (per, produk, per, periode)): Fee dihitung per hari: AUM fund hari itu (main.goal_snapshots, tanpa koreksi tanggal) dikali rate tahunan, dibagi jumlah hari dalam tahun itu, lalu dibagi menjadi bagian AperD dan MI.
-    - **Mgmt fee rate**: Rate fee manajemen per tahun yang dibebankan fund (misalnya 1,5%).
-    - **AperD share**: Porsi fee manajemen yang menjadi hak Sayakaya sebagai agen penjual.
-    - **MI share**: Porsi fee manajemen yang menjadi hak manajer investasi.
-    - **AUM EOM**: AUM pada hari terakhir periode (end of month).
+    - **Mgmt fee rate / Tarif biaya manajemen**: Rate fee manajemen per tahun yang dibebankan fund (misalnya 1,5%).
+    - **AperD share / Porsi AperD**: Porsi fee manajemen yang menjadi hak Sayakaya sebagai agen penjual.
+    - **MI share / Porsi MI**: Porsi fee manajemen yang menjadi hak manajer investasi.
+    - **AUM EOM / AUM akhir bulan**: AUM pada hari terakhir periode (end of month).
     - **Total AperD**: Revenue Sayakaya: jumlah fee harian bagian AperD selama periode.
   - *Period, summary, (all, funds)* (Ringkasan, periode, (semua, produk)): Rekap semua fund per periode; Total AUM (EOM) adalah AUM platform di hari terakhir periode.
 - **Catatan penting**:
@@ -1110,13 +1110,13 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Isi tab**:
   - *Campaign, revenue, trend* (Tren, pendapatan, campaign): Fee yang dihasilkan unit-unit yang terkunci kampanye promo, per periode.
   - *Per, campaign, (whole, range)* (Per, campaign, (seluruh, rentang)): Satu baris per kampanye untuk seluruh rentang.
-    - **Participations**: Jumlah pembelian yang ikut kampanye (baris bonus_portfolios).
-    - **Still locked**: Partisipasi yang unitnya masih terkunci masa tahan (status on_going).
+    - **Participations / Partisipasi**: Jumlah pembelian yang ikut kampanye (baris bonus_portfolios).
+    - **Still locked / Masih terkunci**: Partisipasi yang unitnya masih terkunci masa tahan (status on_going).
     - **Total AperD (alt)**: Total AperD bila penjualan dianggap memakai unit milik investor dulu, unit kampanye terakhir (atribusi optimis).
-    - **Est. cost**: Biaya kampanye: bonus per pemakaian dikali kuota terpakai.
-    - **Net vs cost**: Total AperD dikurangi Est. cost. Negatif berarti fee belum menutup biaya bonus.
+    - **Est. cost / Estimasi biaya**: Biaya kampanye: bonus per pemakaian dikali kuota terpakai.
+    - **Net vs cost / Bersih vs biaya**: Total AperD dikurangi Est. cost. Negatif berarti fee belum menutup biaya bonus.
   - *Per, campaign, per, period* (Per, campaign, per, periode): Fee setiap kampanye dipecah per periode.
-    - **Avg locked AUM**: Rata-rata nilai unit kampanye per hari.
+    - **Avg locked AUM / AUM terkunci rata-rata**: Rata-rata nilai unit kampanye per hari.
   - *Period, summary, (all, funds)* (Ringkasan, periode, (semua, produk)): Rekap semua kampanye per periode.
 - **Catatan penting**:
   - Unit kampanye menghasilkan fee selama masih dipegang. Kolom utama menganggap penjualan memakai unit kampanye dulu (konservatif); kolom "(alt)" menganggap unit kampanye dipakai terakhir (optimis).
@@ -1136,10 +1136,10 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Isi tab**:
   - *Users, under, this, remisier* (Pengguna, di, bawah, remisier, ini): Daftar nasabah yang referrer_code atau sales_code-nya cocok dengan kode remisier (pencarian sebagian kata). Cek daftar ini dulu sebelum menghitung.
   - *Revenue, detail, (per, fund)* (Detail, pendapatan, (per, produk)): Fee AperD dari dana setiap nasabah remisier per fund (AUM dari main.goal_snapshots), lalu dibagi antara remisier dan Sayakaya.
-    - **Remisier fee (gross)**: Porsi remisier dari bagian AperD (porsinya diisi di form, misalnya 50%).
+    - **Remisier fee (gross) / Fee remisier (bruto)**: Porsi remisier dari bagian AperD (porsinya diisi di form, misalnya 50%).
     - **PPh 2.5%**: Potongan pajak PPh 23 sebesar 2,5% dari fee remisier.
-    - **Remisier fee (net)**: Fee remisier setelah dipotong PPh.
-    - **Sayakaya fee**: Sisa bagian AperD untuk Sayakaya: AperD dikali (1 dikurangi porsi remisier).
+    - **Remisier fee (net) / Fee remisier (bersih)**: Fee remisier setelah dipotong PPh.
+    - **Sayakaya fee / Fee Sayakaya**: Sisa bagian AperD untuk Sayakaya: AperD dikali (1 dikurangi porsi remisier).
   - *Revenue, summary, (all, funds)* (Ringkasan, pendapatan, (semua, produk)): Rekap per periode dari tabel detail.
 - **Catatan penting**:
   - Fee remisier selalu dihitung dari bagian AperD, bukan dari fee manajemen kotor.
@@ -1159,10 +1159,10 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Isi tab**:
   - *Users, under, this, remisier* (Pengguna, di, bawah, remisier, ini): Daftar nasabah yang referrer_code atau sales_code-nya cocok dengan kode remisier (pencarian sebagian kata). Cek daftar ini dulu sebelum menghitung.
   - *Revenue, detail, (per, fund)* (Detail, pendapatan, (per, produk)): Fee AperD dari dana setiap nasabah remisier per fund (AUM dari mi_fee_logs.portfolio_with_code, dengan koreksi -1 hari), lalu dibagi antara remisier dan Sayakaya.
-    - **Remisier fee (gross)**: Porsi remisier dari bagian AperD (porsinya diisi di form, misalnya 50%).
+    - **Remisier fee (gross) / Fee remisier (bruto)**: Porsi remisier dari bagian AperD (porsinya diisi di form, misalnya 50%).
     - **PPh 2.5%**: Potongan pajak PPh 23 sebesar 2,5% dari fee remisier.
-    - **Remisier fee (net)**: Fee remisier setelah dipotong PPh.
-    - **Sayakaya fee**: Sisa bagian AperD untuk Sayakaya: AperD dikali (1 dikurangi porsi remisier).
+    - **Remisier fee (net) / Fee remisier (bersih)**: Fee remisier setelah dipotong PPh.
+    - **Sayakaya fee / Fee Sayakaya**: Sisa bagian AperD untuk Sayakaya: AperD dikali (1 dikurangi porsi remisier).
   - *Revenue, summary, (all, funds)* (Ringkasan, pendapatan, (semua, produk)): Rekap per periode dari tabel detail.
 - **Catatan penting**:
   - Fee remisier selalu dihitung dari bagian AperD, bukan dari fee manajemen kotor.
@@ -1186,8 +1186,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Total installs / Total instal**: Install aplikasi dari semua channel iklan menurut Adjust.
     - **Revenue / Pendapatan**: Jumlah nominal pembayaran yang dilaporkan aplikasi ke Adjust (event payment_completed).
   - *Funnel, by, channel* (Funnel, per, channel): Satu baris per channel atau tracker iklan Adjust, dari klik sampai pembayaran.
-    - **Channel**: Nama tracker Adjust (sumber iklan atau kampanye).
-    - **OTP verified**: Pengguna yang memverifikasi nomor HP lewat OTP.
+    - **Channel / Kanal**: Nama tracker Adjust (sumber iklan atau kampanye).
+    - **OTP verified / OTP terverifikasi**: Pengguna yang memverifikasi nomor HP lewat OTP.
 - **Catatan penting**:
   - Hanya nama event polos yang dihitung; varian seperti payment_completed_1M_plus dibuang supaya satu pembayaran tidak terhitung dua atau tiga kali. Angka Adjust bisa berbeda dengan database utama karena atribusi iklan punya aturannya sendiri.
 - **Detail teknis** (otomatis dari kode):
@@ -1209,13 +1209,13 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Pending**: Memenuhi syarat pembelian tetapi masa tahan 30 harinya belum selesai.
     - **Est. bonus payable / Estimasi bonus dibayarkan**: Perkiraan bonus yang harus dibayar: Rp25.000 untuk pengajak dan Rp25.000 untuk yang diajak, per referral Eligible.
   - *Inviter, leaderboard* (Leaderboard, pengundang): Satu baris per pengajak. "Invited" dihitung dari tanggal invitee mendaftar di periode program.
-    - **Transacted ≥ Rp1jt**: Yang transaksi pertamanya memenuhi syarat program: beli fund Sucor Asset Management minimal Rp1.000.000.
+    - **Transacted ≥ Rp1jt / Bertransaksi ≥ Rp1jt**: Yang transaksi pertamanya memenuhi syarat program: beli fund Sucor Asset Management minimal Rp1.000.000.
     - **Not eligible / Tidak eligible**: Bertransaksi tetapi gagal salah satu syarat; alasannya ada di tabel Referral detail.
   - *Invited, users* (Pengguna, yang, diundang): Semua orang yang diajak, beserta tanggal daftar dan verifikasi.
   - *Referral, detail* (Detail, referral): Satu baris per referral yang transaksi pertamanya masuk periode program.
-    - **Baseline units**: Saldo unit fund itu tepat setelah pembelian selesai.
-    - **Min units seen**: Saldo unit terendah selama 30 hari setelahnya. Bila lebih kecil dari Baseline units, investor sudah menjual sebagian dan bonus gugur.
-    - **Reason**: Alasan bila tidak eligible (misalnya transaksi pertama bukan fund Sucor, nominal di bawah Rp1 juta, unit dijual sebelum 30 hari).
+    - **Baseline units / Unit dasar**: Saldo unit fund itu tepat setelah pembelian selesai.
+    - **Min units seen / Unit minimum**: Saldo unit terendah selama 30 hari setelahnya. Bila lebih kecil dari Baseline units, investor sudah menjual sebagian dan bonus gugur.
+    - **Reason / Alasan**: Alasan bila tidak eligible (misalnya transaksi pertama bukan fund Sucor, nominal di bawah Rp1 juta, unit dijual sebelum 30 hari).
 - **Catatan penting**:
   - Syarat bonus Rp25.000 per pihak: transaksi pertama si invitee adalah pembelian fund Sucor Asset Management minimal Rp1.000.000 dengan kode referral, dan unitnya ditahan 30 hari.
 - **Detail teknis** (otomatis dari kode):
@@ -1237,13 +1237,13 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Pending**: Memenuhi syarat pembelian tetapi masa tahan 30 harinya belum selesai.
     - **Est. bonus payable / Estimasi bonus dibayarkan**: Perkiraan bonus yang harus dibayar: Rp25.000 untuk pengajak dan Rp25.000 untuk yang diajak, per referral Eligible.
   - *Inviter, leaderboard* (Leaderboard, pengundang): Satu baris per pengajak. "Invited" dihitung dari tanggal KYC invitee terverifikasi (dengan kelonggaran 1 hari), bukan tanggal daftar.
-    - **Transacted ≥ Rp1jt**: Yang transaksi pertamanya memenuhi syarat program: beli fund Sucor Asset Management minimal Rp1.000.000.
+    - **Transacted ≥ Rp1jt / Bertransaksi ≥ Rp1jt**: Yang transaksi pertamanya memenuhi syarat program: beli fund Sucor Asset Management minimal Rp1.000.000.
     - **Not eligible / Tidak eligible**: Bertransaksi tetapi gagal salah satu syarat; alasannya ada di tabel Referral detail.
   - *Invited, users* (Pengguna, yang, diundang): Semua orang yang diajak, beserta tanggal daftar dan verifikasi.
   - *Referral, detail* (Detail, referral): Satu baris per referral yang transaksi pertamanya masuk periode program.
-    - **Baseline units**: Saldo unit fund itu tepat setelah pembelian selesai.
-    - **Min units seen**: Saldo unit terendah selama 30 hari setelahnya. Bila lebih kecil dari Baseline units, investor sudah menjual sebagian dan bonus gugur.
-    - **Reason**: Alasan bila tidak eligible (misalnya transaksi pertama bukan fund Sucor, nominal di bawah Rp1 juta, unit dijual sebelum 30 hari).
+    - **Baseline units / Unit dasar**: Saldo unit fund itu tepat setelah pembelian selesai.
+    - **Min units seen / Unit minimum**: Saldo unit terendah selama 30 hari setelahnya. Bila lebih kecil dari Baseline units, investor sudah menjual sebagian dan bonus gugur.
+    - **Reason / Alasan**: Alasan bila tidak eligible (misalnya transaksi pertama bukan fund Sucor, nominal di bawah Rp1 juta, unit dijual sebelum 30 hari).
 - **Catatan penting**:
   - Syarat bonus Rp25.000 per pihak: transaksi pertama si invitee adalah pembelian fund Sucor Asset Management minimal Rp1.000.000 dengan kode referral, dan unitnya ditahan 30 hari.
 - **Detail teknis** (otomatis dari kode):
@@ -1266,7 +1266,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Referrers* (Referrer): Satu baris per pengajak, beserta jumlah dan nilai orang yang dia ajak.
     - **AUM referred / AUM dari referral**: Total AUM orang-orang yang dia ajak pada tanggal terpilih.
   - *Referrals* (Referral): Satu baris per hubungan pengajak dan yang diajak.
-    - **Investor AUM**: AUM orang yang diajak pada tanggal terpilih (snapshot portfolio_with_code, koreksi -1 hari).
+    - **Investor AUM / AUM investor**: AUM orang yang diajak pada tanggal terpilih (snapshot portfolio_with_code, koreksi -1 hari).
 - **Catatan penting**:
   - Tab ini mencakup semua referral antar pengguna, bukan hanya ambassador satu program, dan tidak menghitung bonus.
 - **Detail teknis** (otomatis dari kode):
@@ -1420,8 +1420,8 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Delivery rate / Tingkat keberhasilan kirim**: Pesan yang diterima server Firebase untuk dikirim dibagi semua pesan.
   - *Send, volume* (Volume, pengiriman): Jumlah pesan push per hari.
   - *By, campaign* (Berdasarkan, campaign): Keberhasilan pengiriman per nama kampanye push.
-    - **Accepted**: Pesan dengan status MESSAGE_ACCEPTED.
-    - **Missing registrations**: Gagal karena token perangkat sudah tidak berlaku (aplikasi dihapus atau token kedaluwarsa).
+    - **Accepted / Diterima**: Pesan dengan status MESSAGE_ACCEPTED.
+    - **Missing registrations / Registrasi hilang**: Gagal karena token perangkat sudah tidak berlaku (aplikasi dihapus atau token kedaluwarsa).
 - **Catatan penting**:
   - Data ini hanya kesehatan pengiriman, bukan dibuka atau diklik, dan tidak punya user_id. Untuk push yang dibuka lalu membeli, lihat tab User behavior.
 - **Detail teknis** (otomatis dari kode):
@@ -1442,7 +1442,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Isi tab**:
   - *Crash, &, error, issues* (Issue, crash, &, error): Satu baris per masalah, platform, dan jenis (fatal atau tidak).
     - **Fatal**: Ya bila aplikasi tertutup paksa (crash), tidak bila hanya error yang tercatat.
-    - **Affected devices**: Jumlah perangkat berbeda yang mengalaminya (installation_uuid).
+    - **Affected devices / Perangkat terdampak**: Jumlah perangkat berbeda yang mengalaminya (installation_uuid).
   - *Slowest, operations* (Operasi, paling, lambat): Pemanggilan API GraphQL dan pemuatan layar, minimal 20 sampel.
     - **Median (ms)**: Durasi tengah dalam milidetik; lebih mewakili pengalaman pengguna daripada rata-rata.
 - **Catatan penting**:
