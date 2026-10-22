@@ -32,18 +32,18 @@ export function val(v: unknown): unknown {
 
 const numFmt = (n: unknown, digits = 4): string => {
   const v = val(n);
-  return v == null ? '—' : Number(v).toFixed(digits);
+  return v == null ? 'n/a' : Number(v).toFixed(digits);
 };
 // Indonesian number format, as on the official statement: 51.038,7052 / 100.239.429
 export const idNum = (n: unknown, digits = 0): string => {
   const v = val(n);
-  if (v == null) return '—';
+  if (v == null) return 'n/a';
   return new Intl.NumberFormat('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(v));
 };
 // Accountant-style negatives for gain/loss cells: (214.800.256)
 export const idParen = (n: unknown): string => {
   const v = val(n);
-  if (v == null) return '—';
+  if (v == null) return 'n/a';
   const num = Number(v);
   return num < 0 ? `(${idNum(-num)})` : idNum(num);
 };
@@ -51,7 +51,7 @@ export const idParen = (n: unknown): string => {
 const FUND_TYPE_LABELS: Record<string, string> = { MIXED: 'Balanced Fund' };
 export const fundTypeLabel = (t: unknown): string => {
   const v = val(t);
-  if (!v) return '—';
+  if (!v) return 'n/a';
   return FUND_TYPE_LABELS[String(v)] || String(v).split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ') + ' Fund';
 };
 // funds.type enum → Indonesian label, matching the official "Reksa Dana
@@ -65,12 +65,12 @@ const FUND_TYPE_LABELS_ID: Record<string, string> = {
 };
 const fundTypeLabelID = (t: unknown): string => {
   const v = val(t);
-  if (!v) return '—';
+  if (!v) return 'n/a';
   return FUND_TYPE_LABELS_ID[String(v)] || String(v).split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ');
 };
 export const pctFmt = (n: unknown): string => {
   const v = val(n);
-  if (v == null) return '—';
+  if (v == null) return 'n/a';
   const num = Number(v);
   return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
 };
@@ -126,7 +126,7 @@ function printLetterhead(doc: any, { left, width, contact, title, dateLabel, dat
   let y = blockY;
   ([['NAME', contact?.name], ['SID', contact?.sid], ['IFUA', contact?.ifua], ['Address', contact?.address]] as [string, unknown][]).forEach(([label, v]) => {
     doc.font('Helvetica-Bold').fontSize(9).fillColor(INK).text(label, left, y, { width: labelW });
-    const text = String(val(v) || '—');
+    const text = String(val(v) || 'n/a');
     doc.font('Helvetica').fontSize(9).fillColor(INK).text(text, left + labelW, y, { width: valueW });
     y += Math.max(13, doc.heightOfString(text, { width: valueW }) + 2);
   });
@@ -183,7 +183,7 @@ function table(doc: any, columns: Column[], rows: Record<string, unknown>[], {
   rows.forEach((r, i) => {
     const texts = columns.map((c) => {
       const raw = r[c.key];
-      return String(c.format ? c.format(raw) : (val(raw) ?? '—'));
+      return String(c.format ? c.format(raw) : (val(raw) ?? 'n/a'));
     });
     const h = measure(texts);
     if (doc.y + h > bottom) {
@@ -212,7 +212,7 @@ export const HOLDINGS_COLS = (width: number): Column[] => [
   { key: 'fund_value', label: 'Fund Value', width: width * 0.13, align: 'right', format: idNum },
   { key: 'value', label: 'Market Value', width: width * 0.13, align: 'right', format: idNum },
   { key: 'gain_loss', label: 'Unrealized Gain/Loss', width: width * 0.12, align: 'right', format: idParen },
-  { key: 'gain_pct', label: '%', width: width * 0.07, align: 'right', format: (v) => (val(v) == null ? '—' : idNum(v, 2) + '%') },
+  { key: 'gain_pct', label: '%', width: width * 0.07, align: 'right', format: (v) => (val(v) == null ? 'n/a' : idNum(v, 2) + '%') },
 ];
 
 // Drops columns not in `keys` (if given), keeping 'fund' always, and renormalizes
@@ -232,7 +232,7 @@ const PERF_PERIOD_LABELS_ID: Record<string, string> = {
 };
 export const PERF_COLS = (width: number): Column[] => [
   { key: 'Fund', label: 'Nama Produk', width: width * 0.19 },
-  { key: 'ipoDate', label: 'Tanggal Emisi', width: width * 0.09, format: (v) => formatDateStrID(v as string) || '—' },
+  { key: 'ipoDate', label: 'Tanggal Emisi', width: width * 0.09, format: (v) => formatDateStrID(v as string) || 'n/a' },
   { key: 'NAV', label: 'NAB/UP', width: width * 0.09, align: 'right', format: (v) => numFmt(v, 2) },
   ...PERF_PERIODS.map((p) => ({ key: p, label: PERF_PERIOD_LABELS_ID[p] || p, width: (width * 0.63) / PERF_PERIODS.length, align: 'right', format: pctFmt })),
 ];
@@ -261,7 +261,7 @@ const MONTHS_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli
 // H-1, so "today's" statement is dated yesterday). Formatted like "4 Agustus 2025".
 export function statementDate(holdings: Record<string, unknown>[]): string {
   const latest = holdings.map((h) => String(val(h.nav_date) || '')).filter(Boolean).sort().pop();
-  if (!latest) return '—';
+  if (!latest) return 'n/a';
   const [y, m, d] = latest.slice(0, 10).split('-').map(Number);
   return `${d} ${MONTHS_ID[m - 1]} ${y}`;
 }
@@ -303,7 +303,7 @@ function estimateTableHeight(doc: any, columns: Column[], rows: Record<string, u
   let total = measure(columns.map((c) => c.label));
   doc.font('Helvetica').fontSize(fontSize);
   for (const r of rows) {
-    const texts = columns.map((c) => String(c.format ? c.format(r[c.key]) : (val(r[c.key]) ?? '—')));
+    const texts = columns.map((c) => String(c.format ? c.format(r[c.key]) : (val(r[c.key]) ?? 'n/a')));
     total += measure(texts);
   }
   return total;
@@ -418,7 +418,7 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: 
     cell('fund_value', idNum(totalFund));
     cell('value', idNum(totalMarket));
     cell('gain_loss', idNum(totalGain));
-    cell('gain_pct', totalPct == null ? '—' : idNum(totalPct, 2) + '%');
+    cell('gain_pct', totalPct == null ? 'n/a' : idNum(totalPct, 2) + '%');
     doc.y = rowY + 15;
     doc.strokeColor(INK).moveTo(totX, doc.y).lineTo(left + width, doc.y).stroke();
     doc.y += 12;
@@ -481,11 +481,11 @@ export async function portfolioReportBatch(
 }
 
 export const TX_COLS = (width: number): Column[] => [
-  { key: 'created_at', label: 'Date', width: width * 0.14, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : '—'; } },
+  { key: 'created_at', label: 'Date', width: width * 0.14, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : 'n/a'; } },
   { key: 'fund', label: 'Fund', width: width * 0.30 },
   { key: 'type', label: 'Type', width: width * 0.16 },
   { key: 'status', label: 'Status', width: width * 0.14 },
-  { key: 'unit', label: 'Unit', width: width * 0.12, align: 'right', format: (v) => (val(v) == null ? '—' : idNum(v, 4)) },
+  { key: 'unit', label: 'Unit', width: width * 0.12, align: 'right', format: (v) => (val(v) == null ? 'n/a' : idNum(v, 4)) },
   { key: 'amount', label: 'Amount', width: width * 0.14, align: 'right', format: idNum },
 ];
 
@@ -523,7 +523,7 @@ export async function transactionStatement(
 // so each row carries its own SID/name/email/phone. Landscape for the extra
 // columns, same as fundPerformanceReport.
 export const USERS_TX_COLS = (width: number): Column[] => [
-  { key: 'created_at', label: 'Date', width: width * 0.08, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : '—'; } },
+  { key: 'created_at', label: 'Date', width: width * 0.08, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : 'n/a'; } },
   { key: 'type', label: 'Type', width: width * 0.08 },
   { key: 'status', label: 'Status', width: width * 0.10 },
   { key: 'sid', label: 'SID', width: width * 0.10 },

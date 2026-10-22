@@ -74,6 +74,20 @@ const ICONS = {
 };
 
 function val(x) { return x && typeof x === 'object' && 'value' in x ? x.value : x; }
+// Cell text from data: keep our own span/strong markup, escape everything else
+// (so a name like <img onerror=...> renders as text). Attributes other than
+// class/style never pass.
+const SAFE_TAG = /<(\/?)(span|strong|b|em|small|code|br)((?:\s+(?:class|style)="[^"<>]*")*)\s*\/?>/gi;
+function safeCell(v) {
+  const keep = [];
+  const marked = String(v).replace(SAFE_TAG, (m) => `\u0000${keep.push(m) - 1}\u0000`);
+  return escapeHtml(marked).replace(/\u0000(\d+)\u0000/g, (_, i) => keep[i]);
+}
+// Clickable table rows (tabindex=0) act on Enter/Space like a button.
+document.addEventListener('keydown', (e) => {
+  const tr = e.target.closest && e.target.closest('tr[tabindex="0"]');
+  if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); tr.click(); }
+});
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // ---------- date range ----------
@@ -439,13 +453,13 @@ async function searchPortfolioUsers() {
   try {
     const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
     renderPfResults(rows);
-  } catch (e) { $('#pfResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#pfResults').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPfResults(rows) {
   if (!rows.length) { $('#pfResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
-  const body = rows.map((r) => `<tr class="pf-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
+  const body = rows.map((r) => `<tr class="pf-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
+      <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
   $('#pfResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#pfResults .pf-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -453,7 +467,7 @@ function renderPfResults(rows) {
   wireBulkAddButtons('#pfResults', pfBulk);
 }
 
-let pfSelected = null; // { userId, sid, name, date } — used by the export buttons
+let pfSelected = null; // { userId, sid, name, date }, used by the export buttons
 
 // New user picked from search results — resets the date filter to live.
 async function selectPortfolioUser(userId, sid, name, email) {
@@ -483,7 +497,7 @@ async function loadPortfolioUser() {
     pfSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate), latest = val(latestDate);
     $('#pfSnapshotInfo').textContent = asOf
-      ? `Snapshot date: ${asOf}${latest && latest !== asOf ? ` (latest available: ${latest})` : ''} — from mi_fee_logs.portfolio_with_code.`
+      ? `Snapshot date: ${asOf}${latest && latest !== asOf ? ` (latest available: ${latest})` : ''}, from mi_fee_logs.portfolio_with_code.`
       : `Live holdings (current units × today's NAV).${latest ? ` Latest historical snapshot available: ${latest}.` : ''}`;
     renderPfKpis(holdings, split);
     renderPfHoldings(holdings);
@@ -494,7 +508,7 @@ async function loadPortfolioUser() {
       { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
       { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
     ], 'No transactions yet.');
-  } catch (e) { $('#pfKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#pfKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPfAumChart(rows) {
@@ -558,12 +572,12 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = 
     if (fundValue != null) { tot.fund += fundValue; tot.gain += gain; }
     const fund = val(h.fund);
     const chkTd = selectable
-      ? `<td><input type="checkbox" class="hld-export-chk" data-fund="${String(fund).replace(/"/g, '&quot;')}" ${excluded.has(fund) ? '' : 'checked'}></td>`
+      ? `<td><input type="checkbox" class="hld-export-chk" data-fund="${escapeHtml(fund)}" ${excluded.has(fund) ? '' : 'checked'}></td>`
       : '';
     return `<tr>
       ${chkTd}
-      <td>${fund}</td>
-      <td><span class="tag other">${val(h.fund_type)}</span></td>
+      <td>${escapeHtml(fund)}</td>
+      <td><span class="tag other">${escapeHtml(val(h.fund_type))}</span></td>
       <td class="num">${Number(val(h.unit)).toFixed(4)}</td>
       <td class="num">${avg == null ? 'n/a' : num(avg)}</td>
       <td class="num">${num(val(h.nav))}</td>
@@ -612,13 +626,13 @@ async function searchPfxUsers() {
   try {
     const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
     renderPfxResults(rows);
-  } catch (e) { $('#pfxResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#pfxResults').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPfxResults(rows) {
   if (!rows.length) { $('#pfxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
-  const body = rows.map((r) => `<tr class="pfx-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
+  const body = rows.map((r) => `<tr class="pfx-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
+      <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
   $('#pfxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#pfxResults .pfx-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -626,7 +640,7 @@ function renderPfxResults(rows) {
   wireBulkAddButtons('#pfxResults', pfxBulk);
 }
 
-let pfxSelected = null; // { userId, sid, name, date } — used by the export buttons
+let pfxSelected = null; // { userId, sid, name, date }, used by the export buttons
 
 async function selectPfxUser(userId, sid, name, email) {
   pfxSelected = { userId, sid, name: name || sid, date: '' };
@@ -653,7 +667,7 @@ async function loadPfxUser() {
     pfxSelected.date = val(asOfDate) || '';
     const asOf = val(asOfDate), latest = val(latestDate);
     $('#pfxSnapshotInfo').textContent = asOf
-      ? `Snapshot date: ${asOf}${latest && latest !== asOf ? ` (latest available: ${latest})` : ''} — from mi_fee_logs.portfolio_fix.`
+      ? `Snapshot date: ${asOf}${latest && latest !== asOf ? ` (latest available: ${latest})` : ''}, from mi_fee_logs.portfolio_fix.`
       : `Live holdings (current units × today's NAV).${latest ? ` Latest historical snapshot available: ${latest}.` : ''}`;
     renderPfxKpis(holdings, split);
     renderPfxHoldings(holdings);
@@ -664,7 +678,7 @@ async function loadPfxUser() {
       { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
       { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
     ], 'No transactions yet.');
-  } catch (e) { $('#pfxKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#pfxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPfxAumChart(rows) {
@@ -733,13 +747,13 @@ async function searchPtxUsers() {
   try {
     const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
     renderPtxResults(rows);
-  } catch (e) { $('#ptxResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#ptxResults').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPtxResults(rows) {
   if (!rows.length) { $('#ptxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
-  const body = rows.map((r) => `<tr class="ptx-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
+  const body = rows.map((r) => `<tr class="ptx-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
+      <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
   $('#ptxResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#ptxResults .ptx-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -747,7 +761,7 @@ function renderPtxResults(rows) {
   wireBulkAddButtons('#ptxResults', ptxBulk);
 }
 
-let ptxSelected = null; // { userId, sid, name, excludedFunds } — used by the export buttons
+let ptxSelected = null; // { userId, sid, name, excludedFunds }, used by the export buttons
 
 async function selectPtxUser(userId, sid, name, email) {
   ptxSelected = { userId, sid, name: name || sid, date: '', excludedFunds: null };
@@ -775,7 +789,7 @@ async function loadPtxUser() {
     const asOf = val(asOfDate);
     $('#ptxSnapshotInfo').textContent = asOf
       ? `As of ${asOf}: units and average buy price reconstructed from transactions up to that date; bonus holdings excluded (no historical data). Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.`
-      : `Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).`;
+      : `Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions, sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).`;
     renderPtxKpis(holdings, split);
     renderPtxHoldings(holdings);
     renderPtxPerformance(performance);
@@ -785,7 +799,7 @@ async function loadPtxUser() {
       { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
       { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
     ], 'No transactions yet.');
-  } catch (e) { $('#ptxKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#ptxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPtxAumChart(rows) {
@@ -854,13 +868,13 @@ async function searchPsiUsers() {
   try {
     const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
     renderPsiResults(rows);
-  } catch (e) { $('#psiResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#psiResults').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPsiResults(rows) {
   if (!rows.length) { $('#psiResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
-  const body = rows.map((r) => `<tr class="psi-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
+  const body = rows.map((r) => `<tr class="psi-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
+      <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
   $('#psiResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#psiResults .psi-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -868,7 +882,7 @@ function renderPsiResults(rows) {
   wireBulkAddButtons('#psiResults', psiBulk);
 }
 
-let psiSelected = null; // { userId, sid, name, date, excludedFunds } — used by the export buttons
+let psiSelected = null; // { userId, sid, name, date, excludedFunds }, used by the export buttons
 
 async function selectPsiUser(userId, sid, name, email) {
   psiSelected = { userId, sid, name: name || sid, date: '', excludedFunds: null };
@@ -896,7 +910,7 @@ async function loadPsiUser() {
     const asOf = val(asOfDate);
     $('#psiSnapshotInfo').textContent = asOf
       ? `As of ${asOf}: units and average buy price reconstructed from the SInvest custodian feed up to that date; bonus holdings excluded (no historical data). Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.`
-      : `Live holdings (current units × today's NAV), built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table. Average buy price only reflects completed BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN rows — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.`;
+      : `Live holdings (current units × today's NAV), built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table. Average buy price only reflects completed BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN rows, sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.`;
     renderPsiKpis(holdings, split);
     renderPsiHoldings(holdings);
     renderPsiPerformance(performance);
@@ -906,7 +920,7 @@ async function loadPsiUser() {
       { key: 'transaction_date', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
       { key: 'fund_name', label: 'Fund' }, { key: 'net_amount', label: 'Amount', type: 'idr' },
     ], 'No transactions yet.');
-  } catch (e) { $('#psiKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#psiKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPsiAumChart(rows) {
@@ -969,13 +983,13 @@ async function searchExplorerUsers() {
   try {
     const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
     renderPeResults(rows);
-  } catch (e) { $('#peResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#peResults').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPeResults(rows) {
   if (!rows.length) { $('#peResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
-  const body = rows.map((r) => `<tr class="pe-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>${bulkAddCell(r)}
+  const body = rows.map((r) => `<tr class="pe-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
+      <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
   $('#peResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#peResults .pe-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -983,7 +997,7 @@ function renderPeResults(rows) {
   wireBulkAddButtons('#peResults', peBulk);
 }
 
-let peSelected = null; // { userId, sid, name, date } — used by the export buttons
+let peSelected = null; // { userId, sid, name, date }, used by the export buttons
 
 async function selectExplorerUser(userId, sid, name, email) {
   peSelected = { userId, sid, name: name || sid, date: '' };
@@ -1013,7 +1027,7 @@ async function loadExplorerPortfolio() {
     renderPeHoldings(holdings);
     renderPeByGoal(byGoal);
     renderPeFinding(holdings);
-  } catch (e) { $('#peKpis').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#peKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // Live best/worst gain headline from this snapshot's own held funds —
@@ -1104,7 +1118,7 @@ async function hnwiEnsureDate() {
         hnwiDateDefaulted = true;
         if (!$('#hnwiDate').value) $('#hnwiDate').value = val(latestDate);
       }
-    } catch { /* leave blank and retry on next load — user can still pick a date manually */ }
+    } catch { /* leave blank and retry on next load, user can still pick a date manually */ }
   }
   return !!$('#hnwiDate').value;
 }
@@ -1120,7 +1134,7 @@ async function loadHnwiTotal() {
     ], 'No investors at or above this AUM threshold.');
     renderHnwiFinding(totals);
   } catch (e) {
-    $('#hnwiTotalTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#hnwiTotalTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#hnwiFinding').hidden = true;
   }
 }
@@ -1131,7 +1145,7 @@ function renderHnwiFinding(rows) {
   if (!rows.length) { el.hidden = true; return; }
   const totalAum = rows.reduce((s, r) => s + (Number(val(r.total_aum)) || 0), 0);
   el.className = 'trend-finding';
-  el.textContent = `${rows.length} investor${rows.length === 1 ? '' : 's'} qualify — ${idrFull(totalAum)} combined AUM.`;
+  el.textContent = `${rows.length} investor${rows.length === 1 ? '' : 's'} qualify, ${idrFull(totalAum)} combined AUM.`;
   el.hidden = false;
 }
 async function loadHnwiByFund(useOwnFilter = hnwiByFundOwnFilter) {
@@ -1147,7 +1161,7 @@ async function loadHnwiByFund(useOwnFilter = hnwiByFundOwnFilter) {
       { key: 'aum_date', label: 'AUM date', type: 'date' }, { key: 'total_aum', label: 'Total AUM', type: 'idr' },
     ], 'No fund holdings at or above this AUM threshold.');
   } catch (e) {
-    $('#hnwiByFundTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#hnwiByFundTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   }
 }
 function loadHnwi() {
@@ -1191,17 +1205,17 @@ function loadDormant() {
     ], 'No dormancy episodes found.');
   }).catch((e) => {
     $('#dwKpis').innerHTML = '';
-    $('#dwConversionTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#dwConversionTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   });
   pRepeat.then((rows) => genTable('#dwRepeatTable', rows, [
     { key: 'user_id', label: 'User ID' }, { key: 'dormant_category', label: 'Longest dormancy recovered' },
     { key: 'buyer_type', label: 'Buyer type' },
     { key: 'txn_count', label: 'Lifetime buys', type: 'num' }, { key: 'total_spent', label: 'Lifetime spend', type: 'idr' },
-  ], 'No repeat-buyer data.')).catch((e) => $('#dwRepeatTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No repeat-buyer data.')).catch((e) => $('#dwRepeatTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
   pTtc.then((rows) => genTable('#dwTtcTable', rows, [
     { key: 'user_id', label: 'User ID' }, { key: 'dormant_category', label: 'Dormancy length' },
     { key: 'first_txn_date', label: 'Comeback buy', type: 'date' }, { key: 'days_to_convert', label: 'Days to convert', type: 'num' },
-  ], 'No time-to-convert data.')).catch((e) => $('#dwTtcTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No time-to-convert data.')).catch((e) => $('#dwTtcTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
   // Each fetch above already renders its own error into its table on failure,
   // so the combined promise never needs to reject: callers (and the smoke
   // test) just await "every panel has settled, one way or another."
@@ -1264,14 +1278,14 @@ async function loadKalcer() {
     ], 'No referrers match.');
   }).catch((e) => {
     $('#kalcerKpis').innerHTML = '';
-    $('#kalcerSummaryTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#kalcerSummaryTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   });
   pDetail.then((rows) => genTable('#kalcerDetailTable', rows, [
     { key: 'referrer_name', label: 'Referrer' }, { key: 'referrer_sid', label: 'Referrer SID' },
     { key: 'invitee_name', label: 'Referred investor' }, { key: 'invitee_sid', label: 'Investor SID' },
     { key: 'referral_date', label: 'Referral date', type: 'date' },
     { key: 'invitee_aum', label: 'Investor AUM', type: 'idr', sum: true },
-  ], 'No referrals match.')).catch((e) => $('#kalcerDetailTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No referrals match.')).catch((e) => $('#kalcerDetailTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   return Promise.allSettled([pSummary, pDetail]);
 }
@@ -1338,7 +1352,7 @@ function loadPush() {
     ], 'No data in this period.');
   }).catch((e) => {
     $('#pushKpis').innerHTML = '';
-    $('#pushPlatformTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#pushPlatformTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   });
   pCampaign.then((rows) => genTable('#pushCampaignTable', rows, [
     { key: 'analytics_label', label: 'Campaign' },
@@ -1347,7 +1361,7 @@ function loadPush() {
     { key: 'missing_registrations', label: 'Missing registrations', type: 'num', sum: true },
     { key: 'other_errors', label: 'Other errors', type: 'num', sum: true },
     { key: 'delivery_rate_pct', label: 'Delivery rate', type: 'pct' },
-  ], 'No campaigns in this period.')).catch((e) => $('#pushCampaignTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No campaigns in this period.')).catch((e) => $('#pushCampaignTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   return Promise.allSettled([pTrend, pPlatform, pCampaign]);
 }
@@ -1391,7 +1405,7 @@ function loadMarketing() {
     ], 'No channel activity in this period.');
   }).catch((e) => {
     $('#mktKpis').innerHTML = '';
-    $('#mktTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#mktTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   });
 }
 
@@ -1433,14 +1447,14 @@ function loadAppHealth() {
     { key: 'event_count', label: 'Events', type: 'num', sum: true },
     { key: 'affected_devices', label: 'Affected devices', type: 'num', sum: true },
     { key: 'latest_app_version', label: 'Latest version' },
-  ], 'No crash/error issues in this period.')).catch((e) => $('#ahCrashTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No crash/error issues in this period.')).catch((e) => $('#ahCrashTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
   pPerf.then((rows) => genTable('#ahPerfTable', rows, [
     { key: 'platform', label: 'Platform' },
     { key: 'event_name', label: 'Operation' },
     { key: 'sample_count', label: 'Samples', type: 'num', sum: true },
     { key: 'median_duration_ms', label: 'Median (ms)', type: 'num' },
     { key: 'avg_duration_ms', label: 'Avg (ms)', type: 'num' },
-  ], 'No performance data in this period.')).catch((e) => $('#ahPerfTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No performance data in this period.')).catch((e) => $('#ahPerfTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   return Promise.allSettled([pCrash, pPerf]);
 }
@@ -3178,7 +3192,7 @@ async function loadOverview() {
   const overviewFetch = defaultToLatestDate('#ovAumDate').then(() =>
     api(`/api/overview?aumDate=${$('#ovAumDate').value}${scopeQs ? '&' + scopeQs : ''}&from=${r.from}&to=${r.to}`));
   gateTabLoad((v) => { overviewLoaded = v; }, [overviewFetch]);
-  overviewFetch.then(renderKpis, (e) => { $('#kpis').innerHTML = `<div class="empty">${e.message}</div>`; });
+  overviewFetch.then(renderKpis, (e) => { $('#kpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; });
 
   loadTrends($('.seg button.on', )?.dataset.g || 'month');
   api('/api/breakdown/type' + qs).then(renderTypeChart).catch(() => {});
@@ -3218,7 +3232,7 @@ function loadIndonesiaGeoJson() {
 function geoColor(t) {
   const hex = (C.indigo || '#3a50ab').replace('#', '');
   const r2 = parseInt(hex.slice(0, 2), 16), g2 = parseInt(hex.slice(2, 4), 16), b2 = parseInt(hex.slice(4, 6), 16);
-  const r1 = 223, g1 = 227, b1 = 240; // pale indigo-tinted gray — the "0" end, still visible as a shape
+  const r1 = 223, g1 = 227, b1 = 240; // pale indigo-tinted gray, the "0" end, still visible as a shape
   const mix = (a, b) => Math.round(a + (b - a) * t);
   return `rgb(${mix(r1, r2)},${mix(g1, g2)},${mix(b1, b2)})`;
 }
@@ -3463,7 +3477,7 @@ async function loadMlRetrainStatus() {
     const { lastRetrainedAt, lastRetrainedBy } = await api('/api/ml/retrain-status');
     $('#mlRetrainStatus').textContent = lastRetrainedAt
       ? `Last retrained ${toJakartaTime(lastRetrainedAt)} WIB by ${lastRetrainedBy}.`
-      : 'Never retrained through the app yet — models may still be from a manual setup/ml_models.sql run.';
+      : 'Never retrained through the app yet, models may still be from a manual setup/ml_models.sql run.';
   } catch (e) { $('#mlRetrainStatus').textContent = e.message; }
 }
 
@@ -3472,11 +3486,11 @@ async function retrainMlModels() {
   btn.disabled = true;
   const prevLabel = btn.textContent;
   btn.textContent = 'Retraining… this can take a few minutes';
-  $('#mlRetrainStatus').textContent = 'Retraining models now — forecasts/churn scores will use the new fit once this finishes.';
+  $('#mlRetrainStatus').textContent = 'Retraining models now, forecasts/churn scores will use the new fit once this finishes.';
   try {
     const result = await api('/api/ml/retrain', { method: 'POST' });
     const failed = result.steps.filter((s) => !s.ok);
-    toast(failed.length ? `Retrain finished with ${failed.length} failed step(s) — see Model status.` : 'Models retrained.');
+    toast(failed.length ? `Retrain finished with ${failed.length} failed step(s), see Model status.` : 'Models retrained.');
     await loadMlRetrainStatus();
   } catch (e) {
     toast(e.message);
@@ -3541,7 +3555,7 @@ async function loadChurn() {
       kpi(t('kpi_avg_probability'), (val(summary.avg_prob) != null ? (val(summary.avg_prob) * 100).toFixed(1) + '%' : 'n/a'), `${num(val(summary.scored))} ${t('kpi_holders_scored')}`),
     ].join('');
     renderChurnTable(top);
-  } catch (e) { $('#churnTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#churnTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function riskTag(p) {
@@ -3585,7 +3599,7 @@ async function loadChurnOverview() {
     $('#churnTenure').innerHTML = `<table><thead><tr>
         <th>Tenure</th><th class="num">Investors</th><th class="num">Churned</th><th class="num">Churn rate</th>
       </tr></thead><tbody>${body}</tbody></table>`;
-  } catch (e) { $('#churnTenure').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#churnTenure').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 async function loadRetention() {
@@ -3617,7 +3631,7 @@ async function loadRetention() {
       return `<tr>${tds}</tr>`;
     }).join('');
     $('#retentionHeatmap').innerHTML = `<table><thead><tr>${heads.join('')}</tr></thead><tbody>${body}</tbody></table>`;
-  } catch (e) { $('#retentionHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#retentionHeatmap').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // Retained-by-capital cohort: same cohort basis as loadRetention (first
@@ -3658,7 +3672,7 @@ async function loadAumRetention() {
       return `<tr>${tds}</tr>`;
     }).join('');
     $('#aumRetentionHeatmap').innerHTML = `<table><thead><tr>${heads.join('')}</tr></thead><tbody>${body}</tbody></table>`;
-  } catch (e) { $('#aumRetentionHeatmap').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#aumRetentionHeatmap').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // AUM HISTORY
@@ -3677,7 +3691,7 @@ async function loadAumHistory() {
     renderAumTable(data);
     renderAumTrendFinding(data);
   } catch (e) {
-    $('#aumTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#aumTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     showAumCauseMessage(e.message);
   }
 }
@@ -3805,7 +3819,7 @@ async function loadAumDrill(bucket) {
       { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true },
       { key: 'switch_net', label: 'Switch (net)', type: 'idr', sum: true }, { key: 'market_effect', label: 'Market effect', type: 'idr', sum: true },
     ], 'No fund moved in this period.');
-  } catch (e) { $('#aumDrillTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#aumDrillTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderAumTable(data) {
@@ -3863,7 +3877,7 @@ async function loadRevenueTrend() {
     renderRevTrendTable(data);
     renderSeriesTrendFinding('#rvtFinding', data, 'revenue', 'Revenue');
   } catch (e) {
-    $('#revTrendTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#revTrendTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     showRevCauseMessage(e.message);
   }
 }
@@ -3960,7 +3974,7 @@ async function loadRevDrill(bucket) {
       { key: 'days_effect', label: 'Days effect', type: 'idr', sum: true }, { key: 'aum_effect', label: 'AUM effect', type: 'idr', sum: true },
       { key: 'rate_effect', label: 'Rate & mix effect', type: 'idr', sum: true },
     ], 'No fund moved in this period.');
-  } catch (e) { $('#revDrillTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#revDrillTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // PRODUCT PERFORMANCE (NAV % change per fund type, external Apollo DB)
@@ -4053,7 +4067,7 @@ async function loadPerformance() {
   try {
     perfCache = await api('/api/product-performance');
     renderPerformance(perfCache);
-  } catch (e) { $('#perfTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#perfTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderPerformance(rows) {
@@ -4085,7 +4099,7 @@ async function loadPerformanceDetail() {
     perfDetailCache = await api(`/api/product-performance/detail${asOf ? `?asOf=${asOf}` : ''}`);
     buildPerfTypeFilter(perfDetailCache);
     renderPerformanceDetail();
-  } catch (e) { $('#perfDetailTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#perfDetailTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function buildPerfTypeFilter(rows) {
@@ -4169,7 +4183,7 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
   const numTypes = ['idr', 'idrx', 'num', 'pct', 'delta'];
   const td = (c, v) => {
-    let out = v == null ? 'n/a' : v;
+    let out = v == null ? 'n/a' : safeCell(v);
     if (c.type === 'idr') out = idrFull(v);
     if (c.type === 'idrx') out = idrExact(v);
     if (c.type === 'num') out = num(v);
@@ -4209,19 +4223,19 @@ async function loadGrowth() {
     { key: 'promo_code', label: 'Promo' }, { key: 'quota', label: 'Quota', type: 'num' },
     { key: 'used_quota', label: 'Used', type: 'num' }, { key: 'redemption_pct', label: 'Redemption', type: 'pct' },
     { key: 'bonus_amount', label: 'Bonus/redemption', type: 'idr' }, { key: 'est_cost', label: 'Est. cost', type: 'idr' },
-  ], 'No campaigns in this range — widen the date filter.')).catch((e) => $('#campTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No campaigns in this range, widen the date filter.')).catch((e) => $('#campTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   const pRef = api('/api/referrals/top');
   pRef.then((rows) => genTable('#refTable', rows, [
     { key: 'referral_code', label: 'Code' }, { key: 'referrer', label: 'Referrer' },
     { key: 'referred_count', label: 'Referred', type: 'num' }, { key: 'referred_volume', label: 'Volume brought', type: 'idr' },
-  ], 'No referrals yet.')).catch((e) => $('#refTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No referrals yet.')).catch((e) => $('#refTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   const pSwitch = api('/api/switching/top-pairs');
   pSwitch.then((rows) => genTable('#switchTable', rows, [
     { key: 'from_fund', label: 'From fund' }, { key: 'to_fund', label: 'To fund' },
     { key: 'switches', label: 'Switches', type: 'num' }, { key: 'amount', label: 'Amount', type: 'idr' },
-  ], 'No switching transactions.')).catch((e) => $('#switchTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  ], 'No switching transactions.')).catch((e) => $('#switchTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   const pManager = api('/api/funds/by-manager');
   pManager.then((rows) => doughnut('managerChart', rows, 'label', 'aum', idrFull)).catch(() => {});
@@ -4236,7 +4250,7 @@ async function loadGrowth() {
       { key: 'label', label: 'Income bracket' }, { key: 'investors', label: 'Investors', type: 'num', sum: true },
       { key: 'aum', label: 'AUM', type: 'idr', sum: true }, { key: 'share', label: '% of AUM', type: 'pct', sum: true },
     ], 'No data.');
-  }).catch((e) => $('#incomeTable').innerHTML = `<div class="empty">${e.message}</div>`);
+  }).catch((e) => $('#incomeTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   gateTabLoad((v) => { growthLoaded = v; }, [pCamp, pRef, pSwitch, pManager, pRisk, pIncome]);
 }
@@ -4252,7 +4266,7 @@ function renderReconciliationFinding(rows) {
   const flagged = rows.filter((r) => Math.abs(Number(val(r.amount_diff)) || 0) > 0).length;
   if (flagged === 0) {
     el.className = 'trend-finding up';
-    el.textContent = `No discrepancies in this range — ${rows.length} rows checked, all reconciled.`;
+    el.textContent = `No discrepancies in this range, ${rows.length} rows checked, all reconciled.`;
   } else {
     el.className = 'trend-finding down';
     el.textContent = `${flagged} of ${rows.length} rows show a discrepancy, totalling ${idrFull(totalDiff)}.`;
@@ -4274,7 +4288,7 @@ async function loadReconciliation() {
     ], 'No data in this range.');
     renderReconciliationFinding(rows);
   } catch (e) {
-    $('#recTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#recTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#recTrendFinding').hidden = true;
   }
 }
@@ -4339,7 +4353,7 @@ async function loadRevenue() {
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
-    $('#revDetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#revDetailTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#revSummaryTable').innerHTML = '';
     $('#revTrendFinding').hidden = true;
   }
@@ -4379,7 +4393,7 @@ async function loadRevenue2() {
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
-    $('#rev2DetailTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#rev2DetailTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#rev2SummaryTable').innerHTML = '';
     $('#rev2TrendFinding').hidden = true;
   }
@@ -4388,7 +4402,7 @@ async function loadRevenue2() {
 // USER LIFETIME (Revenue (PWC) math per investor + lifetime dates)
 let ulGran = 'month';
 let ulLoaded = false;
-let ulSelected = null; // { sid, name } — used by the drill-down + its exports
+let ulSelected = null; // { sid, name }, used by the drill-down + its exports
 
 function renderUlTrend(rows) {
   if (!rows.length) return;
@@ -4468,7 +4482,7 @@ async function loadUlDetail(sid, name) {
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
       { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No holdings for this investor in this range.');
-  } catch (e) { $('#ulDetailTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#ulDetailTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 async function loadUserLifetime() {
@@ -4500,7 +4514,7 @@ async function loadUserLifetime() {
       { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
-    $('#ulUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#ulUsersTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#ulSummaryTable').innerHTML = '';
   }
 }
@@ -4597,7 +4611,7 @@ async function loadCampaignRevenue() {
       { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No campaign holdings in this range.');
   } catch (e) {
-    $('#crCampaignsTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#crCampaignsTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#crDetailTable').innerHTML = '';
     $('#crSummaryTable').innerHTML = '';
   }
@@ -4626,7 +4640,7 @@ async function loadReferralProgram() {
     renderReferralProgram(rows, stats, invited);
   } catch (e) {
     $('#refProgKpis').innerHTML = '';
-    $('#refProgTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#refProgTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#refProgLeaderboardTable').innerHTML = '';
     $('#refProgInvitedTable').innerHTML = '';
   }
@@ -4742,7 +4756,7 @@ async function loadReferralProgramAlt() {
     renderReferralProgram(rows, stats, invited, { kpis: '#refProgAltKpis', table: '#refProgAltTable', leaderboard: '#refProgAltLeaderboardTable', invited: '#refProgAltInvitedTable' });
   } catch (e) {
     $('#refProgAltKpis').innerHTML = '';
-    $('#refProgAltTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#refProgAltTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#refProgAltLeaderboardTable').innerHTML = '';
     $('#refProgAltInvitedTable').innerHTML = '';
   }
@@ -4811,7 +4825,7 @@ async function loadRemisier() {
       { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
-    $('#remUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#remUsersTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#remDetailTable').innerHTML = '';
     $('#remSummaryTable').innerHTML = '';
   }
@@ -4878,7 +4892,7 @@ async function loadRemisierPwc() {
       { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
-    $('#remPwcUsersTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#remPwcUsersTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     $('#remPwcDetailTable').innerHTML = '';
     $('#remPwcSummaryTable').innerHTML = '';
   }
@@ -4943,7 +4957,7 @@ async function loadRemTx() {
     $('#remTxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
     $('#remTxPrev').disabled = remTx.offset === 0;
     $('#remTxNext').disabled = end >= total;
-  } catch (e) { $('#remTxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#remTxTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // ---- nested: SInvest transactions (raw KSEI/SInvest custodian feed) -------
@@ -4995,7 +5009,7 @@ async function loadSitx() {
     $('#sitxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
     $('#sitxPrev').disabled = sitx.offset === 0;
     $('#sitxNext').disabled = end >= total;
-  } catch (e) { $('#sitxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#sitxTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // ---- nested: Users transactions (any investor, by SID/email/name) --------
@@ -5053,7 +5067,7 @@ async function loadUtx() {
     $('#utxPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
     $('#utxPrev').disabled = utx.offset === 0;
     $('#utxNext').disabled = end >= total;
-  } catch (e) { $('#utxTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#utxTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // ---- Users transactions summary (panel above the list) --------------------
@@ -5117,7 +5131,7 @@ async function loadUtxSummary() {
   } catch (e) {
     utxSum.loaded = false;
     $('#utxSumKpis').innerHTML = '';
-    $('#utxSumTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#utxSumTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -5189,7 +5203,7 @@ async function loadTopInvestors() {
   } catch (e) {
     tiRows = [];
     renderTiCompact();
-    $('#tiTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    $('#tiTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -5842,8 +5856,8 @@ function fmtCell(v, type) {
     case 'bool': return (v === true || v === 'true') ? 'Yes' : 'No';
     case 'datetime': return `<span class="mono">${String(v).replace('T', ' ').slice(0, 19)}</span>`;
     case 'date': return `<span class="mono">${String(v).slice(0, 10)}</span>`;
-    case 'tag': return `<span class="tag ${tagClass(v)}">${v}</span>`;
-    default: return String(v);
+    case 'tag': return `<span class="tag ${tagClass(v)}">${escapeHtml(v)}</span>`;
+    default: return escapeHtml(v);
   }
 }
 
@@ -5928,7 +5942,7 @@ async function loadExplore() {
     $('#exPageinfo').textContent = `${num(start)}–${num(end)} of ${num(total)}`;
     $('#exPrev').disabled = ex.offset === 0;
     $('#exNext').disabled = end >= total;
-  } catch (e) { $('#exTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#exTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderExTable(d, rows) {
@@ -5983,11 +5997,11 @@ function setSqlMsg(msg, cls) { const m = $('#sqlMsg'); m.textContent = msg; m.cl
 function renderGenericTable(sel, rows, emptyMsg = 'Query returned no rows.') {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
   const cols = Object.keys(rows[0]);
-  const head = cols.map((c) => `<th data-key="${escapeHtml(c)}">${c}</th>`).join('');
+  const head = cols.map((c) => `<th data-key="${escapeHtml(c)}">${escapeHtml(c)}</th>`).join('');
   const body = rows.slice(0, 1000).map((r) => '<tr>' + cols.map((c) => {
     const v = val(r[c]);
     const isNum = typeof v === 'number';
-    return `<td class="${isNum ? 'num' : ''}">${v == null ? 'n/a' : (isNum ? num(v) : String(v))}</td>`;
+    return `<td class="${isNum ? 'num' : ''}">${v == null ? 'n/a' : (isNum ? num(v) : escapeHtml(v))}</td>`;
   }).join('') + '</tr>').join('');
   const note = rows.length > 1000 ? `<div class="hint" style="padding:8px 12px">Showing first 1,000 of ${num(rows.length)} rows. Export for the full set.</div>` : '';
   $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>${note}`;
@@ -6013,7 +6027,7 @@ function loadPdfColumnPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem(PDF_COLS_KEY));
     if (Array.isArray(saved)) return saved;
-  } catch (e) { /* corrupt or missing prefs — fall back to all columns */ }
+  } catch (e) { /* corrupt or missing prefs, fall back to all columns */ }
   return PDF_COLUMNS.map((c) => c.key);
 }
 
@@ -6266,7 +6280,7 @@ function setupBulkExport({ prefix: p, source }) {
         { key: 'aum', label: 'AUM', type: 'idr' },
       ], 'No holdings found.');
     } catch (e) {
-      $(`#${p}BulkSummaryKpis`).innerHTML = `<div class="empty">${e.message}</div>`;
+      $(`#${p}BulkSummaryKpis`).innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
     }
   }
 
@@ -6322,13 +6336,13 @@ async function searchSendStatementUsers() {
   try {
     const rows = await api(`/api/users/search?q=${encodeURIComponent(q)}`);
     renderSsResults(rows);
-  } catch (e) { $('#ssResults').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#ssResults').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderSsResults(rows) {
   if (!rows.length) { $('#ssResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
-  const body = rows.map((r) => `<tr class="pf-row" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${val(r.name) || ''}" data-email="${val(r.email) || ''}" style="cursor:pointer">
-      <td>${val(r.sid) || 'n/a'}</td><td>${val(r.name) || 'n/a'}</td><td>${val(r.email) || 'n/a'}</td><td>${val(r.ifua) || 'n/a'}</td>
+  const body = rows.map((r) => `<tr class="pf-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
+      <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>
     </tr>`).join('');
   $('#ssResults').innerHTML = `<table><thead><tr><th>SID</th><th>Name</th><th>Email</th><th>IFUA</th></tr></thead><tbody>${body}</tbody></table>`;
   $$('#ssResults .pf-row').forEach((tr) => tr.addEventListener('click', () =>
@@ -6373,8 +6387,8 @@ async function loadSsPreview() {
     if (sendPortfolio) renderGenericTable('#ssPreviewPortfolioTable', data.holdings || [], 'No active holdings.');
     if (sendStatement) renderGenericTable('#ssPreviewStatementTable', data.transactions || [], 'No transactions this period.');
   } catch (e) {
-    if (sendPortfolio) $('#ssPreviewPortfolioTable').innerHTML = `<div class="empty">${e.message}</div>`;
-    if (sendStatement) $('#ssPreviewStatementTable').innerHTML = `<div class="empty">${e.message}</div>`;
+    if (sendPortfolio) $('#ssPreviewPortfolioTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
+    if (sendStatement) $('#ssPreviewStatementTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -6396,7 +6410,7 @@ function defaultStatementEmail({ name, sendPortfolio, portfolioDate, sendStateme
     periodLabel = anchor.toLocaleString('en-US', { month: 'long', year: 'numeric' });
   }
   return {
-    subject: `Your Sayakaya Statement — ${periodLabel}`,
+    subject: `Your Sayakaya Statement, ${periodLabel}`,
     body: `Dear ${name || 'Investor'},\n\nPlease find attached ${parts.join(' and ')}, issued by PT Sayakaya Lahir Batin.\n\nTo open the attached PDF file(s), use your date of birth as registered with us in DDMMYYYY format (e.g. 17081990 for 17 August 1990).\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin`,
   };
 }
@@ -6425,7 +6439,7 @@ async function loadSsLog() {
       { key: 'username', label: 'Sent by' },
       { key: 'detail', label: 'Sent' },
     ], 'No statements sent yet.');
-  } catch (e) { $('#ssLogTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#ssLogTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // ---- Send statement (batch): same portfolio/e-statement documents to
@@ -6630,7 +6644,7 @@ let fpeRecipients = [];
 let fpeFundFilter = null;
 function fpeDefaultEmail(asOf) {
   return {
-    subject: `Sayakaya Fund Performance Update${asOf ? ` — ${asOf}` : ''}`,
+    subject: `Sayakaya Fund Performance Update${asOf ? `, ${asOf}` : ''}`,
     body: 'Dear Investor,\n\nPlease find attached our latest fund performance update (Reksa Dana Update), issued by PT Sayakaya Lahir Batin.\n\nBest regards,\nPT Sayakaya Lahir Batin',
   };
 }
@@ -6690,7 +6704,7 @@ async function loadFpeLog() {
       { key: 'username', label: 'Sent by' },
       { key: 'detail', label: 'Sent' },
     ], 'No fund performance emails sent yet.');
-  } catch (e) { $('#fpeLogTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#fpeLogTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 // SCHEDULED / AUTOMATED SENDING — shared by Send statement ('statement')
@@ -6703,7 +6717,7 @@ function schedCfg(kind) {
 }
 function schedEl(prefix, name) { return $('#' + prefix + name); }
 
-let schedOtpState = null; // { kind, otpId } — set once step 1 succeeds
+let schedOtpState = null; // { kind, otpId }, set once step 1 succeeds
 
 async function loadSchedules(kind) {
   const { prefix } = schedCfg(kind);
@@ -6714,7 +6728,7 @@ async function loadSchedules(kind) {
     // Keep the Emails column moving while a send is in progress.
     clearTimeout(schedRefreshTimer[kind]);
     if (rows.some((r) => r.progress && r.progress.waiting)) schedRefreshTimer[kind] = setTimeout(() => loadSchedules(kind), 15000);
-  } catch (e) { schedEl(prefix, 'Table').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { schedEl(prefix, 'Table').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 const schedRefreshTimer = {};
 
@@ -6808,18 +6822,18 @@ async function openSchedDetail(kind, id) {
   schedEl(prefix, 'DetailModal').showModal();
   try {
     const { job, recipients, preview } = await api(`/api/schedules/${id}/detail`);
-    schedEl(prefix, 'DetailTitle').textContent = `${schedFrequencySummary(job)} — ${schedRecipientSummary(job)}`;
+    schedEl(prefix, 'DetailTitle').textContent = `${schedFrequencySummary(job)}, ${schedRecipientSummary(job)}`;
     if (!recipients.length) {
       schedEl(prefix, 'DetailBody').innerHTML = '<div class="empty">No recipients match this schedule\'s filters.</div>';
       return;
     }
     const note = preview
-      ? `<div class="callout" style="margin-bottom:12px"><span class="callout-icon" aria-hidden="true">${ICONS.eye}</span><span>Preview — this schedule hasn't run yet. Recipients below are resolved live and may change by the time it actually sends.</span></div>`
+      ? `<div class="callout" style="margin-bottom:12px"><span class="callout-icon" aria-hidden="true">${ICONS.eye}</span><span>Preview, this schedule hasn't run yet. Recipients below are resolved live and may change by the time it actually sends.</span></div>`
       : '';
     const rows = recipients.map((r) => {
       const sentLabel = num(r.sent_count || 0) + (r.failed_count ? ` sent · ${num(r.failed_count)} failed` : ' sent');
       const lastLabel = r.status
-        ? `${escapeHtml(r.status)}${r.processed_at ? ` · ${toJakartaTime(r.processed_at)}` : ''}${r.error ? ` — ${escapeHtml(r.error)}` : ''}`
+        ? `${escapeHtml(r.status)}${r.processed_at ? ` · ${toJakartaTime(r.processed_at)}` : ''}${r.error ? `, ${escapeHtml(r.error)}` : ''}`
         : 'Not sent yet';
       return `<tr>
         <td>${escapeHtml(r.name || 'n/a')}</td>
@@ -6836,7 +6850,7 @@ async function openSchedDetail(kind, id) {
     schedEl(prefix, 'DetailBody').innerHTML = `${note}<div class="table-wrap" style="max-height:60vh"><table><thead><tr>
         <th>Name</th><th>SID</th><th>Email</th><th>Has portfolio</th><th>Tx last month</th><th>Sent</th><th>Last send (WIB)</th>
       </tr></thead><tbody>${rows}</tbody></table></div>`;
-  } catch (e) { schedEl(prefix, 'DetailBody').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { schedEl(prefix, 'DetailBody').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function schedResetModal(kind) {
@@ -7110,7 +7124,7 @@ async function schedSendOtp(kind) {
 
 async function schedConfirmOtp(kind) {
   const { prefix } = schedCfg(kind);
-  if (!schedOtpState || schedOtpState.kind !== kind) { toast('Start over — session lost.'); return; }
+  if (!schedOtpState || schedOtpState.kind !== kind) { toast('Start over, session lost.'); return; }
   try {
     await api('/api/schedules/otp/confirm', { method: 'POST', body: JSON.stringify({ otpId: schedOtpState.otpId, code: schedEl(prefix, 'Code').value.trim() }) });
     const once = schedOnce && schedOnce.kind === kind;
@@ -8454,7 +8468,7 @@ async function suggestAskChart(question, rows, hint) {
   } catch (e) {
     $('#askChartType').value = 'none';
     askChartColor = null;
-    setAskChartMsg(e.message || 'Could not get a chart suggestion — try again.', true);
+    setAskChartMsg(e.message || 'Could not get a chart suggestion, try again.', true);
   }
   renderAskChart();
 }
@@ -8508,7 +8522,7 @@ function resetAdminForm() {
   $('#adminUsername').value = '';
   $('#adminUsername').disabled = false;
   $('#adminPassword').value = '';
-  $('#adminPassword').classList.add('hidden'); // no password up front — set via the emailed activation link
+  $('#adminPassword').classList.add('hidden'); // no password up front, set via the emailed activation link
   $('#adminEmail').value = '';
   $('#adminIsSuperuser').checked = false;
   $('#adminFormErr').textContent = '';
@@ -8543,8 +8557,8 @@ function renderAdminUsers(users) {
   };
   const body = users.map((u) => `
     <tr>
-      <td>${u.username || 'n/a'}</td>
-      <td>${u.email || 'n/a'}</td>
+      <td>${escapeHtml(u.username || 'n/a')}</td>
+      <td>${escapeHtml(u.email || 'n/a')}</td>
       <td>${accessCell(u)}</td>
       <td class="mono">${String(u.createdAt || '').slice(0, 10)}</td>
       <td>
@@ -8552,7 +8566,7 @@ function renderAdminUsers(users) {
           <button type="button" class="dropdown-multi-btn row-menu-btn" data-row-menu="${u.id}" aria-label="Actions">${ICONS.more}</button>
           <div class="dropdown-multi-panel menu-sm">
             <button type="button" class="row-menu-item" data-edit="${u.id}">Edit access</button>
-            <button type="button" class="row-menu-item danger" data-delete="${u.id}" data-username="${u.username || u.email}">Delete</button>
+            <button type="button" class="row-menu-item danger" data-delete="${u.id}" data-username="${escapeHtml(u.username || u.email)}">Delete</button>
           </div>
         </div>
       </td>
@@ -8588,7 +8602,7 @@ async function loadAdminUsers() {
   try {
     const users = await api('/api/admin/users');
     renderAdminUsers(users);
-  } catch (e) { $('#adminUsersTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#adminUsersTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 async function saveAdminUser() {
@@ -8610,7 +8624,7 @@ async function saveAdminUser() {
       toast('User updated');
     } else {
       await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, email, isSuperuser, allowedTabs }) });
-      toast('Invitation sent — they can activate their account from the email.');
+      toast('Invitation sent, they can activate their account from the email.');
     }
     $('#adminUserModal').close();
     resetAdminForm();
@@ -8641,7 +8655,7 @@ async function loadAdminAuditUserOptions() {
   try {
     const users = await api('/api/admin/users');
     const sel = $('#adminAuditUser');
-    const opts = users.map((u) => `<option value="${u.username}">${u.username}</option>`).join('');
+    const opts = users.map((u) => `<option value="${escapeHtml(u.username)}">${escapeHtml(u.username)}</option>`).join('');
     sel.insertAdjacentHTML('beforeend', opts);
   } catch { /* dropdown is a filter convenience; silently skip on failure */ }
 }
@@ -8666,7 +8680,7 @@ async function loadAdminAuditLog() {
       { key: 'action', label: 'Action' },
       { key: 'detail', label: 'Detail' },
     ], 'No activity matches these filters.');
-  } catch (e) { $('#adminAuditTable').innerHTML = `<div class="empty">${e.message}</div>`; }
+  } catch (e) { $('#adminAuditTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function wireAdmin() {
@@ -9952,7 +9966,7 @@ function wireGate() {
   $('#gate-username').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   $('#gate-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
   $('#logoutBtn').addEventListener('click', async () => {
-    try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* token already invalid — fine */ }
+    try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* token already invalid, fine */ }
     clearAuth();
     currentUser = null;
     showGate();
@@ -10005,7 +10019,7 @@ function wireGate() {
       if (!res.ok) { $('#reset-err').textContent = body.error || 'Could not reset password.'; return; }
       history.replaceState(null, '', location.pathname);
       showGate();
-      toast('Password updated — sign in with your new password.');
+      toast('Password updated, sign in with your new password.');
     } catch {
       $('#reset-err').textContent = 'Could not reach the server.';
     } finally {

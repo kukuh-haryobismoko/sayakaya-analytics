@@ -801,7 +801,7 @@ export const scheduleRecipientRecap = (userIds: string[], from: string, to: stri
 export const userHoldingsFromTx = (userId: string): Query => ({
   sql: `WITH incoming_tx AS (
       -- unit is FLOAT64 on transactions (unlike portfolios/bonus_portfolios,
-      -- which are NUMERIC) — cast so the weighted average below is computed
+      -- which are NUMERIC), cast so the weighted average below is computed
       -- in exact decimal arithmetic, same as every other portfolio query,
       -- instead of picking up FLOAT64 binary-representation noise.
       SELECT fund_id, CAST(unit AS NUMERIC) AS unit, value_per_unit
@@ -867,7 +867,7 @@ export const userHoldingsFromTx = (userId: string): Query => ({
 export const userHoldingsFromTxAsOf = (userId: string, date: string): Query => ({
   sql: `WITH incoming_tx AS (
       -- unit is FLOAT64 on transactions (unlike portfolios/bonus_portfolios,
-      -- which are NUMERIC) — cast so unit and the weighted average below are
+      -- which are NUMERIC), cast so unit and the weighted average below are
       -- computed in exact decimal arithmetic, same as every other portfolio
       -- query, instead of picking up FLOAT64 binary-representation noise.
       SELECT fund_id, CAST(unit AS NUMERIC) AS unit, value_per_unit, created_at
@@ -988,7 +988,7 @@ export const goalUserHoldings = (userId: string, asOfDate: string): Query => ({
       WHERE r.rn = 1 AND r.unit > 0
     ),
     -- Canonical daily fund NAV (sayakaya.main.snapshots, same source as Product
-    -- Performance) — goal_snapshots.nav is written per goal and can lag a day
+    -- Performance), goal_snapshots.nav is written per goal and can lag a day
     -- if that particular snapshot row didn't refresh, so the close NAV is read
     -- from the fund-level daily source instead of averaged from each goal's
     -- own row. Falls back to the old goal_snapshots-derived average if a fund
@@ -1000,7 +1000,7 @@ export const goalUserHoldings = (userId: string, asOfDate: string): Query => ({
     ),
     -- Cost basis: goal_snapshots has no real cost-basis column, so this query
     -- approximates it as the earliest snapshot's nav (buy_nav below). That's
-    -- an approximation, not the true weighted-average buy price — the same
+    -- an approximation, not the true weighted-average buy price, the same
     -- user's row in portfolio_with_code carries the real one (computed from
     -- actual buy transactions), so it's preferred here when available.
     pwc_buy AS (
@@ -1059,13 +1059,13 @@ export const goalUserHoldingsByGoal = (userId: string, asOfDate: string): Query 
       FROM ranked r JOIN first_nav fn ON fn.goal_id = r.goal_id AND fn.fund_id = r.fund_id
       WHERE r.rn = 1 AND r.unit > 0
     ),
-    -- Same canonical-NAV fix as goalUserHoldings above — see its comment.
+    -- Same canonical-NAV fix as goalUserHoldings above, see its comment.
     canon_nav AS (
       SELECT product_id AS fund_id, value AS nav
       FROM ${SNAPSHOTS}
       WHERE type = 'NAV' AND DATE(created_at) = @asOfDate
     ),
-    -- Same cost-basis fix as goalUserHoldings above — see its comment.
+    -- Same cost-basis fix as goalUserHoldings above, see its comment.
     pwc_buy AS (
       SELECT fund_id, avg_buy_price FROM (
         SELECT pwc.id AS fund_id, pwc.avg_buy_price,
@@ -4176,12 +4176,12 @@ function revenueCTEs(from?: string, to?: string, granularity = 'month', fund = '
       ),
       combined AS (
         -- portfolio_with_code is one row per sid_code (investor) + fund + day,
-        -- not one row per fund + day — SUM(pwc.amount) across investors is
+        -- not one row per fund + day, SUM(pwc.amount) across investors is
         -- required to get the fund's actual daily AUM. Without this, aum_eom/
         -- avg_aum below silently pick a single investor's holding instead of
         -- the whole fund's (management_fee/aperd_share/mi_share are the same
         -- for every row of a fund regardless, so ANY_VALUE is still correct
-        -- there — and summing each investor's per-day fee contribution, which
+        -- there, and summing each investor's per-day fee contribution, which
         -- is what daily_detail/period_fund do below, was already
         -- mathematically equal to the fund total either way; this fix is
         -- about the AUM columns specifically).

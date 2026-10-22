@@ -280,7 +280,7 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
   if (!otp) throw new Error('Confirmation code not found or already used.');
   if (new Date(otp.expires_at) < new Date()) {
     await rest(`/dashboard_schedule_otps?id=eq.${otpId}`, { method: 'DELETE' });
-    throw new Error('Confirmation code expired — request a new one.');
+    throw new Error('Confirmation code expired, request a new one.');
   }
   if (sha256Hex(String(code || '').trim()) !== otp.code_hash) throw new Error('Incorrect confirmation code.');
 

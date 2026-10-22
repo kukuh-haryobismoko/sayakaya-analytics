@@ -12,9 +12,9 @@ const crypto = require('crypto');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, fixed — no refresh-on-activity.
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, fixed, no refresh-on-activity.
 const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
-const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days — an invite email sits unread longer than a reset request
+const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days, an invite email sits unread longer than a reset request
 
 async function rest(path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
@@ -49,6 +49,38 @@ function verifyPassword(plain, stored) {
   return crypto.timingSafeEqual(candidate, expected);
 }
 
+// Verify against a throwaway hash when the user doesn't exist, so a missing
+// account costs the same scrypt time as a wrong password.
+const DUMMY_HASH = hashPassword('not-a-real-password');
+function verifyOrBurn(plain, stored) { return verifyPassword(plain, stored || DUMMY_HASH) && !!stored; }
+
+// Per-key attempt counter, in-memory (best effort: one process, resets on restart).
+// ponytail: swap for a Postgres counter if the dashboard ever runs multi-instance.
+const attemptLog = new Map();
+function tooManyAttempts(key, max = 10, windowMs = 60 * 1000) {
+  const now = Date.now();
+  const hits = (attemptLog.get(key) || []).filter((t) => now - t < windowMs);
+  hits.push(now);
+  attemptLog.set(key, hits);
+  if (attemptLog.size > 5000) for (const [k, v] of attemptLog) if (!v.some((t) => now - t < windowMs)) attemptLog.delete(k);
+  return hits.length > max;
+}
+
+// Reset and invite links go to the APP_URL, or to a known Pages origin when the
+// request came from one. Any other Origin header is ignored so a forged one
+// cannot point the emailed link at another site.
+const TRUSTED_ORIGINS = [
+  'https://kukuh-haryobismoko.github.io',
+  'https://kukuh-sayakaya.github.io',
+  ...(process.env.TRUSTED_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean),
+];
+function linkOrigin(reqOrigin) {
+  return process.env.APP_URL || (TRUSTED_ORIGINS.includes(reqOrigin) ? reqOrigin : '');
+}
+
+// PostgREST filter value: quoted so , ( ) in user input cannot add conditions.
+const pgq = (v) => encodeURIComponent(`"${String(v).replace(/[\\"]/g, '\\$&')}"`);
+
 function sha256Hex(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -67,7 +99,7 @@ async function findUserByEmail(email) {
 // Login accepts either a username or an email in the same field — invited
 // users (created with an email but no username) can only log in this way.
 async function findUserByIdentifier(identifier) {
-  const value = encodeURIComponent(identifier);
+  const value = pgq(identifier);
   const rows = await rest(`/dashboard_users?or=(username.eq.${value},email.eq.${value})&select=*`);
   return rows[0] || null;
 }
@@ -217,10 +249,10 @@ async function logEvent(userId, username, action, detail) {
 // apart from `search` so picking a user from the dropdown and typing a
 // detail/action keyword can be combined (both apply, PostgREST ANDs them).
 function listAuditLog({ limit = 200, search = '', from = '', to = '', user = '', action = '' } = {}) {
-  const params = [`select=*`, `order=created_at.desc`, `limit=${Number(limit) || 200}`];
+  const params = [`select=*`, `order=created_at.desc`, `limit=${Math.min(Number(limit) || 200, 500)}`];
   if (search) {
     const term = `*${search}*`;
-    params.push(`or=(username.ilike.${encodeURIComponent(term)},action.ilike.${encodeURIComponent(term)},detail.ilike.${encodeURIComponent(term)})`);
+    params.push(`or=(username.ilike.${pgq(term)},action.ilike.${pgq(term)},detail.ilike.${pgq(term)})`);
   }
   if (user) params.push(`username=eq.${encodeURIComponent(user)}`);
   if (action) params.push(`action=eq.${encodeURIComponent(action)}`);
@@ -244,7 +276,7 @@ function userCan(user, tab) {
 }
 
 module.exports = {
-  hashPassword, verifyPassword,
+  hashPassword, verifyPassword, verifyOrBurn, tooManyAttempts, linkOrigin,
   findUserByUsername, findUserByEmail, findUserByIdentifier, findUserById,
   listUsers, countSuperusers, createUser, updateUser, deleteUser,
   createSession, findUserByToken, deleteSessionByToken, deleteSessionsByUser,

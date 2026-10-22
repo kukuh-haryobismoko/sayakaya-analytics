@@ -343,7 +343,7 @@
       <div id="pfDetail" class="hidden">
         <div class="panel">
           <div class="panel-head wrap">
-            <h2 id="pfUserName">—</h2>
+            <h2 id="pfUserName">, </h2>
             <div class="exp">
               <label><span data-i18n="common_as_of">As of</span> <input type="date" id="pfDate" /></label>
               <button class="btn-primary" id="pfDateApply" data-i18n="common_go">Go</button>
@@ -394,7 +394,7 @@
     <!-- SEND STATEMENT — email an investor their portfolio
          (holdings only, no fund performance) and/or their monthly transaction
          e-statement, for a chosen as-of date / month. Separate from Portfolio
-         (PWC) on purpose — this is a sending tool, not a lookup dashboard. -->
+         (PWC) on purpose, this is a sending tool, not a lookup dashboard. -->
     <section id="send-statement" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="port_find_investor">Find investor</h2><span class="hint" data-i18n="common_search_hint">Search by SID code, name, email, or phone number. Use * as a wildcard, e.g. budi*santoso.</span></div>
@@ -407,7 +407,7 @@
 
       <div id="ssDetail" class="hidden">
         <div class="panel">
-          <div class="panel-head wrap"><h2 id="ssUserName">—</h2></div>
+          <div class="panel-head wrap"><h2 id="ssUserName">, </h2></div>
           <span class="hint" id="ssUserSub"></span>
 
           <div class="field-card-row" style="margin-top:16px">
@@ -499,7 +499,7 @@
           <h2><span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-clock"></use></svg></span> <span data-i18n="sched_title">Automated sending</span></h2>
           <button class="btn-primary" id="ssSchedNewBtn"><span data-i18n="sched_new">+ New schedule</span></button>
         </div>
-        <span class="hint" data-i18n="sched_hint">Recurring sends — a schedule is only created after the person setting it up confirms a one-time code emailed to them.</span>
+        <span class="hint" data-i18n="sched_hint">Recurring sends, a schedule is only created after the person setting it up confirms a one-time code emailed to them.</span>
         <div id="ssSchedTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
@@ -538,7 +538,7 @@
           <h2><span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-scroll"></use></svg></span> <span data-i18n="ss_log_title">Send history</span></h2>
           <button class="btn-ghost" id="ssLogRefresh" data-i18n="common_refresh">Refresh</button>
         </div>
-        <span class="hint" data-i18n="ss_log_hint">Every e-statement sent from this tab — who sent it, and to which investor. Most recent first.</span>
+        <span class="hint" data-i18n="ss_log_hint">Every e-statement sent from this tab, who sent it, and to which investor. Most recent first.</span>
         <div id="ssLogTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
@@ -773,7 +773,7 @@
           <h2><span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-clock"></use></svg></span> <span data-i18n="sched_title">Automated sending</span></h2>
           <button class="btn-primary" id="fpeSchedNewBtn"><span data-i18n="sched_new">+ New schedule</span></button>
         </div>
-        <span class="hint" data-i18n="sched_hint">Recurring sends — a schedule is only created after the person setting it up confirms a one-time code emailed to them.</span>
+        <span class="hint" data-i18n="sched_hint">Recurring sends, a schedule is only created after the person setting it up confirms a one-time code emailed to them.</span>
         <div id="fpeSchedTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
@@ -812,7 +812,7 @@
           <h2><span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-scroll"></use></svg></span> <span data-i18n="fpe_log_title">Send history</span></h2>
           <button class="btn-ghost" id="fpeLogRefresh" data-i18n="common_refresh">Refresh</button>
         </div>
-        <span class="hint" data-i18n="fpe_log_hint">Every fund performance email sent from this tab — who sent it, and to whom. Most recent first.</span>
+        <span class="hint" data-i18n="fpe_log_hint">Every fund performance email sent from this tab, who sent it, and to whom. Most recent first.</span>
         <div id="fpeLogTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
@@ -1107,8 +1107,8 @@
 
       <!-- Summary of the range above: subscription (buy) vs redemption (sell)
            and the net flow, per day, Monday week or month. Type and status are
-           not part of it — both sides always count and expired/cancelled rows
-           never do — so it answers "how much came in and went out" without
+           not part of it, both sides always count and expired/cancelled rows
+           never do, so it answers "how much came in and went out" without
            the table's type/status filters. -->
       <div class="panel">
         <div class="panel-head wrap">
@@ -1119,7 +1119,7 @@
             <button data-g="month" data-i18n="common_month">Month</button>
           </div>
         </div>
-        <span class="hint" data-i18n="utx_sum_hint">Subscription = buy, redemption = sell, net flow = subscription − redemption, using the same investor, fund, and promo filters as above (type and status only narrow the table below). Only settled orders count — verified_by_operational, verified, completed, completed_payment — at their order amount, with no bonus top-ups (payment_method bonus or manual_bonus); in-flight, expired, and cancelled transactions never count. This is the same rule as the finance check on Metabase, so the totals match it. Days are Jakarta (WIB) days, the same as the Date (WIB) column in the table below. One row per day, Monday–Sunday week, or calendar month, newest first; the first and last bucket can be partial.</span>
+        <span class="hint" data-i18n="utx_sum_hint">Subscription = buy, redemption = sell, net flow = subscription − redemption, using the same investor, fund, and promo filters as above (type and status only narrow the table below). Only settled orders count, verified_by_operational, verified, completed, completed_payment, at their order amount, with no bonus top-ups (payment_method bonus or manual_bonus); in-flight, expired, and cancelled transactions never count. This is the same rule as the finance check on Metabase, so the totals match it. Days are Jakarta (WIB) days, the same as the Date (WIB) column in the table below. One row per day, Monday–Sunday week, or calendar month, newest first; the first and last bucket can be partial.</span>
         <div id="utxSumKpis" class="kpi-grid cols-3" style="margin-top:14px"></div>
         <div id="utxSumTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
@@ -1232,7 +1232,7 @@
       <div id="pfxDetail" class="hidden">
         <div class="panel">
           <div class="panel-head wrap">
-            <h2 id="pfxUserName">—</h2>
+            <h2 id="pfxUserName">, </h2>
             <div class="exp">
               <label><span data-i18n="common_as_of">As of</span> <input type="date" id="pfxDate" /></label>
               <button class="btn-primary" id="pfxDateApply" data-i18n="common_go">Go</button>
@@ -1327,7 +1327,7 @@
       <div id="ptxDetail" class="hidden">
         <div class="panel">
           <div class="panel-head wrap">
-            <h2 id="ptxUserName">—</h2>
+            <h2 id="ptxUserName">, </h2>
             <div class="exp">
               <label><span data-i18n="common_as_of">As of</span> <input type="date" id="ptxDate" /></label>
               <button class="btn-primary" id="ptxDateApply" data-i18n="common_go">Go</button>
@@ -1347,7 +1347,7 @@
           <span class="hint" id="ptxUserSub"></span>
           <div class="callout" style="margin-top:8px">
             <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
-            <span id="ptxSnapshotInfo">Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).</span>
+            <span id="ptxSnapshotInfo">Live holdings (current units × today's NAV). Average buy price is computed from completed buy/SWITCH_IN/reinvestment/transfer_in transactions, sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF (e.g. a leftover 1-unit balance).</span>
           </div>
           <div id="ptxKpis" class="kpi-grid" style="margin-top:14px"></div>
         </div>
@@ -1422,7 +1422,7 @@
       <div id="psiDetail" class="hidden">
         <div class="panel">
           <div class="panel-head wrap">
-            <h2 id="psiUserName">—</h2>
+            <h2 id="psiUserName">, </h2>
             <div class="exp">
               <label><span data-i18n="common_as_of">As of</span> <input type="date" id="psiDate" /></label>
               <button class="btn-primary" id="psiDateApply" data-i18n="common_go">Go</button>
@@ -1442,7 +1442,7 @@
           <span class="hint" id="psiUserSub"></span>
           <div class="callout" style="margin-top:8px">
             <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-info"></use></svg></span>
-            <span id="psiSnapshotInfo">Live holdings (current units × today's NAV), built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table. Average buy price only reflects completed BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN rows — sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.</span>
+            <span id="psiSnapshotInfo">Live holdings (current units × today's NAV), built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table. Average buy price only reflects completed BUY/SWITCH_IN/REINVESTMENT/TRANSFER_IN rows, sells never change it. Use the Export checkbox below to leave a row out of CSV/XLSX/PDF.</span>
           </div>
           <div id="psiKpis" class="kpi-grid" style="margin-top:14px"></div>
         </div>
@@ -1517,7 +1517,7 @@
       <div id="peDetail" class="hidden">
         <div class="panel">
           <div class="panel-head wrap">
-            <h2 id="peUserName">—</h2>
+            <h2 id="peUserName">, </h2>
             <div class="exp">
               <label><span data-i18n="common_as_of">As of</span> <input type="date" id="peDate" /></label>
               <button class="btn-primary" id="peDateApply" data-i18n="common_go">Go</button>
@@ -1549,7 +1549,7 @@
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h2 data-i18n="pe_holdings_by_goal">Holdings by goal</h2><span class="hint" data-i18n="pe_holdings_by_goal_hint">Preview only — exports stay merged across goals.</span></div>
+          <div class="panel-head"><h2 data-i18n="pe_holdings_by_goal">Holdings by goal</h2><span class="hint" data-i18n="pe_holdings_by_goal_hint">Preview only, exports stay merged across goals.</span></div>
           <div id="peByGoal"></div>
         </div>
       </div>
@@ -1597,7 +1597,7 @@
             <button id="hnwiByFundApply" class="btn-primary" data-i18n="apply">Apply</button>
           </div>
         </div>
-        <span class="hint" data-i18n="hnwi_by_fund_filters_hint">Defaults to the same investors as the Min/Max AUM filter above. Applying this filter switches to its own Min/Max fund AUM range instead, ignoring the filter above — click Apply on the filter above to go back to inheriting it.</span>
+        <span class="hint" data-i18n="hnwi_by_fund_filters_hint">Defaults to the same investors as the Min/Max AUM filter above. Applying this filter switches to its own Min/Max fund AUM range instead, ignoring the filter above, click Apply on the filter above to go back to inheriting it.</span>
         <div id="hnwiByFundTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
@@ -1711,7 +1711,7 @@
           </div>
           <button id="topFundsApply" class="btn-primary" data-i18n="apply">Apply</button>
         </div>
-        <span class="hint" data-i18n="ov_largest_funds_hint">Every fund/MI holding a position on the chosen date (not just the top 10). AUM = sum of holding value, investors = distinct investors holding a position. Deselect a fund to drop it from the numbers below — its MI's total reflects the removal too. Source: mi_fee_logs.portfolio_with_code, one day before its own created_at — this goes back further than portfolio_fix, which only starts in early August.</span>
+        <span class="hint" data-i18n="ov_largest_funds_hint">Every fund/MI holding a position on the chosen date (not just the top 10). AUM = sum of holding value, investors = distinct investors holding a position. Deselect a fund to drop it from the numbers below, its MI's total reflects the removal too. Source: mi_fee_logs.portfolio_with_code, one day before its own created_at, this goes back further than portfolio_fix, which only starts in early August.</span>
         <div id="topFunds" class="table-wrap" style="margin-top:14px"></div>
       </div>
     </section>
@@ -1965,7 +1965,7 @@
           <label><span data-i18n="range_to">To</span> <input type="date" id="sitxTo" /></label>
           <button id="sitxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint" data-i18n="sitx_hint">Raw KSEI/SInvest custodian feed (sinvest.trx_history), filtered by Transaction_Date. The source table stores every column as a string, including Transaction_Date/Input_Date (YYYYMMDD) — both are reformatted to YYYY-MM-DD here.</span>
+        <span class="hint" data-i18n="sitx_hint">Raw KSEI/SInvest custodian feed (sinvest.trx_history), filtered by Transaction_Date. The source table stores every column as a string, including Transaction_Date/Input_Date (YYYYMMDD), both are reformatted to YYYY-MM-DD here.</span>
       </div>
 
       <div class="panel">
@@ -2005,7 +2005,7 @@
           <input type="text" id="revFund" data-i18n-placeholder="common_fund_wildcard_ph" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
           <input type="text" id="revMi" data-i18n-placeholder="common_mi_wildcard_ph" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
         </div>
-        <span class="hint" data-i18n="rev_filters_hint">Date filter for this section only — independent of the date range above. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches (e.g. "equity" matches any fund with "equity" in its name or code).</span>
+        <span class="hint" data-i18n="rev_filters_hint">Date filter for this section only, independent of the date range above. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches (e.g. "equity" matches any fund with "equity" in its name or code).</span>
       </div>
 
       <div class="panel">
@@ -2063,7 +2063,7 @@
           <input type="text" id="rev2Fund" data-i18n-placeholder="common_fund_wildcard_ph" placeholder="Fund (name or code, wildcard)" style="min-width:220px" />
           <input type="text" id="rev2Mi" data-i18n-placeholder="common_mi_wildcard_ph" placeholder="Investment Manager (wildcard)" style="min-width:220px" />
         </div>
-        <span class="hint" data-i18n="rev2_filters_hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code — no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches.</span>
+        <span class="hint" data-i18n="rev2_filters_hint">Same calculation as Revenue, but AUM comes from goal_snapshots instead of mi_fee_logs.portfolio_with_code, no day-offset correction needed, so this should be more accurate. Kept separate from Revenue for side-by-side comparison. The Day/Week/Month toggle controls the bucket size of the tables and chart below. Fund/MI filters accept partial matches.</span>
       </div>
 
       <div class="panel">
@@ -2140,7 +2140,7 @@
             <button class="btn-ghost" id="ulUsersXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint" data-i18n="ul_users_hint">Ordered by the platform's own take (AperD share), highest first. Click a row for that investor's month-by-month, fund-by-fund breakdown. "First/last hold" are snapshot-feed dates and only go back as far as the feed does — use "First buy" and "Holding lifetime" for the real lifetime.</span>
+        <span class="hint" data-i18n="ul_users_hint">Ordered by the platform's own take (AperD share), highest first. Click a row for that investor's month-by-month, fund-by-fund breakdown. "First/last hold" are snapshot-feed dates and only go back as far as the feed does, use "First buy" and "Holding lifetime" for the real lifetime.</span>
         <div id="ulUsersTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2222,7 +2222,7 @@
             <button class="btn-ghost" id="crDetailXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint" data-i18n="cr_detail_hint">"AperD (alt)" is the same revenue under the opposite assumption about which units a sell consumes first — the headline column assumes the campaign's units go first, the alt column assumes they go last. The gap between them is the uncertainty in the estimate.</span>
+        <span class="hint" data-i18n="cr_detail_hint">"AperD (alt)" is the same revenue under the opposite assumption about which units a sell consumes first, the headline column assumes the campaign's units go first, the alt column assumes they go last. The gap between them is the uncertainty in the estimate.</span>
         <div id="crDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2259,7 +2259,7 @@
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="refprog_leaderboard_title">Inviter leaderboard</h2></div>
-        <span class="hint" data-i18n="refprog_leaderboard_hint">One row per inviter. "Invited" and "Transacted" count everyone they referred, any fund or amount — broader than "≥ Rp1jt", "Pending" and "Eligible", which only cover invitees whose first-ever transaction met the campaign's own product/amount rule.</span>
+        <span class="hint" data-i18n="refprog_leaderboard_hint">One row per inviter. "Invited" and "Transacted" count everyone they referred, any fund or amount, broader than "≥ Rp1jt", "Pending" and "Eligible", which only cover invitees whose first-ever transaction met the campaign's own product/amount rule.</span>
         <div id="refProgLeaderboardTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
@@ -2271,7 +2271,7 @@
             <button class="btn-ghost" id="refProgInvitedXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint" data-i18n="refprog_invited_hint">One row per invitee behind the leaderboard's "Invited" count — their own account details, referral code, the referrer code they signed up with, KYC status, and first-transaction status.</span>
+        <span class="hint" data-i18n="refprog_invited_hint">One row per invitee behind the leaderboard's "Invited" count, their own account details, referral code, the referrer code they signed up with, KYC status, and first-transaction status.</span>
         <div id="refProgInvitedTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2290,11 +2290,11 @@
 
     <!-- REFERRAL PROGRAM (KYC BASED) — same T&C eligibility
          rule and detail rows as Referral program above (an invitee's
-         registration date never mattered there — only their first-ever
+         registration date never mattered there, only their first-ever
          transaction date). The one difference: "Invited" here is gated by
          the invitee's KYC verification date (invitee.verified_at) instead of
          their registration date (invitee.created_at), same 1-day grace
-         window — see queries.js:referralInviterStatsAlt. -->
+         window, see queries.js:referralInviterStatsAlt. -->
     <section id="referral-program-alt" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -2315,7 +2315,7 @@
 
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="refprog_leaderboard_title">Inviter leaderboard</h2></div>
-        <span class="hint" data-i18n="refprog_alt_leaderboard_hint">One row per inviter. Unlike the main Referral program tab, "Invited" here doesn't require the invitee to have signed up during the period — the referral itself can be arbitrarily old. What matters is their first-ever transaction: not made yet still counts as invited (pending), but one that already happened outside the period permanently excludes them.</span>
+        <span class="hint" data-i18n="refprog_alt_leaderboard_hint">One row per inviter. Unlike the main Referral program tab, "Invited" here doesn't require the invitee to have signed up during the period, the referral itself can be arbitrarily old. What matters is their first-ever transaction: not made yet still counts as invited (pending), but one that already happened outside the period permanently excludes them.</span>
         <div id="refProgAltLeaderboardTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
@@ -2327,7 +2327,7 @@
             <button class="btn-ghost" id="refProgAltInvitedXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint" data-i18n="refprog_invited_hint">One row per invitee behind the leaderboard's "Invited" count — their own account details, referral code, the referrer code they signed up with, KYC status, and first-transaction status.</span>
+        <span class="hint" data-i18n="refprog_invited_hint">One row per invitee behind the leaderboard's "Invited" count, their own account details, referral code, the referrer code they signed up with, KYC status, and first-transaction status.</span>
         <div id="refProgAltInvitedTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2530,7 +2530,7 @@
           </div>
           <button id="remRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint" data-i18n="rem_gs_hint">Remisier's fee is a portion of the AperD share (not the raw management fee) — e.g. Sayakaya 40% / remisier 60% of AperD share.</span>
+        <span class="hint" data-i18n="rem_gs_hint">Remisier's fee is a portion of the AperD share (not the raw management fee), e.g. Sayakaya 40% / remisier 60% of AperD share.</span>
       </div>
 
       <div class="panel">
@@ -2546,7 +2546,7 @@
             <button class="btn-ghost" id="remDetailXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint" data-i18n="rem_gs_detail_hint">Management fee accrued daily from goal_snapshots AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya — summed per fund per period.</span>
+        <span class="hint" data-i18n="rem_gs_detail_hint">Management fee accrued daily from goal_snapshots AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya, summed per fund per period.</span>
         <div id="remDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2583,7 +2583,7 @@
           </div>
           <button id="remPwcRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint" data-i18n="rem_pwc_hint">Same remisier/Sayakaya AperD-share split as the goal_snapshots tab, but AUM comes from mi_fee_logs.portfolio_with_code (the original Revenue tab's source) — compare the two side by side.</span>
+        <span class="hint" data-i18n="rem_pwc_hint">Same remisier/Sayakaya AperD-share split as the goal_snapshots tab, but AUM comes from mi_fee_logs.portfolio_with_code (the original Revenue tab's source), compare the two side by side.</span>
       </div>
 
       <div class="panel">
@@ -2599,7 +2599,7 @@
             <button class="btn-ghost" id="remPwcDetailXlsx" data-i18n="common_excel">Excel</button>
           </div>
         </div>
-        <span class="hint" data-i18n="rem_pwc_detail_hint">Management fee accrued daily from portfolio_with_code AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya — summed per fund per period.</span>
+        <span class="hint" data-i18n="rem_pwc_detail_hint">Management fee accrued daily from portfolio_with_code AUM, split into AperD/MI share, then AperD split into remisier/Sayakaya, summed per fund per period.</span>
         <div id="remPwcDetailTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
@@ -2629,7 +2629,7 @@
           <label><span data-i18n="range_to">To</span> <input type="date" id="remTxTo" /></label>
           <button id="remTxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
-        <span class="hint" data-i18n="remtx_filters_hint">Filtered by transaction date. Each code is a case-insensitive partial match (e.g. CE matches CELIA/CENIA) — fill one field for a single filter, or both to match either, and either field accepts multiple comma-separated codes.</span>
+        <span class="hint" data-i18n="remtx_filters_hint">Filtered by transaction date. Each code is a case-insensitive partial match (e.g. CE matches CELIA/CENIA), fill one field for a single filter, or both to match either, and either field accepts multiple comma-separated codes.</span>
       </div>
 
       <div class="panel">
@@ -3659,7 +3659,7 @@
 
     <section id="ask" class="view">
       <div class="panel">
-        <div class="panel-head"><h2 data-i18n="ask_title">Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data — no technical skills needed.</span></div>
+        <div class="panel-head"><h2 data-i18n="ask_title">Talk with Data</h2><span class="hint" id="askHint">Just use your mother language to get the data, no technical skills needed.</span></div>
 
         <div id="askDisabled" class="empty hidden" data-i18n-html="ask_disabled">
           The Ask feature is off because no Anthropic API key is set on the server.
@@ -3674,7 +3674,7 @@
             <button id="askBtn" class="btn-primary" data-i18n="ask_button">Ask</button>
           </div>
           <div id="askUnredactRow" class="sql-bar hidden">
-            <label><input type="checkbox" id="askUnredact"> <span data-i18n="common_include_restricted">Include restricted columns (password, KYC, etc. — superuser only)</span></label>
+            <label><input type="checkbox" id="askUnredact"> <span data-i18n="common_include_restricted">Include restricted columns (password, KYC, etc., superuser only)</span></label>
             <input type="password" id="askUnredactPassword" class="hidden" data-i18n-placeholder="common_confirm_password_ph" placeholder="Confirm your password" autocomplete="current-password">
           </div>
           <div class="ask-examples">
@@ -3758,7 +3758,7 @@ WHERE status = 'completed'
 GROUP BY type
 ORDER BY n DESC"></textarea>
         <div id="sqlUnredactRow" class="sql-bar hidden">
-          <label><input type="checkbox" id="sqlUnredact"> <span data-i18n="common_include_restricted">Include restricted columns (password, KYC, etc. — superuser only)</span></label>
+          <label><input type="checkbox" id="sqlUnredact"> <span data-i18n="common_include_restricted">Include restricted columns (password, KYC, etc., superuser only)</span></label>
           <input type="password" id="sqlUnredactPassword" class="hidden" data-i18n-placeholder="common_confirm_password_ph" placeholder="Confirm your password" autocomplete="current-password">
         </div>
         <div class="sql-bar">
@@ -3777,16 +3777,16 @@ ORDER BY n DESC"></textarea>
     <section id="docs" class="view">
       <div class="panel doc-intro">
         <div class="panel-head"><h2 data-i18n="docs_getting_started">Getting started</h2></div>
-        <p data-i18n="docs_intro">This dashboard shows live data pulled directly from the database — there's nothing to configure, just pick a section from the menu on the left. A few things that apply everywhere:</p>
+        <p data-i18n="docs_intro">This dashboard shows live data pulled directly from the database, there's nothing to configure, just pick a section from the menu on the left. A few things that apply everywhere:</p>
         <ol>
-          <li data-i18n-html="docs_li_date_range"><b>Date range</b> — the "From / To" fields at the top of the page and the <b>Apply</b> button next to them control the time window for whichever dashboard you're looking at.</li>
+          <li data-i18n-html="docs_li_date_range"><b>Date range</b>, the "From / To" fields at the top of the page and the <b>Apply</b> button next to them control the time window for whichever dashboard you're looking at.</li>
           <li data-i18n-html="docs_li_totals"><b>Total row</b>: breakdown tables (by fund, investment manager, income bracket, investor, or period) end with a Total row that stays visible while you scroll. Only columns that add up are totalled; averages, rates, and dates are left blank. In Largest funds by AUM, the total investor count comes from the database, so someone holding several funds is counted once.</li>
           <li data-i18n-html="docs_li_sort"><b>Sorting</b>: click any column header to sort the table, click again to reverse it (Enter or Space work too). Lists that load page by page (Users transactions, Remisier transactions, SInvest transactions, Event code users and transactions, Data explorer, Email log) sort every row on the server, not just the page you see. Every download (the CSV, Excel and PDF buttons, the buttons above each table, and the Event code workbook) comes out in the order you sorted.</li>
-          <li data-i18n-html="docs_li_menu"><b>Menu (sidebar)</b> — click the <b>☰</b> button top-left to collapse it to icons-only (desktop) or open/close it (on phone/tablet). Click a section title (like "Dashboards") to fold that group away if you don't use it often.</li>
-          <li data-i18n-html="docs_li_theme"><b>Theme</b> — top-right: <b>Auto</b> follows your device's light/dark setting automatically, or pick <b>Light</b>/<b>Dark</b> to fix it.</li>
-          <li data-i18n-html="docs_li_export"><b>Exporting</b> — wherever you see <b>CSV</b> or <b>Excel</b> buttons, that downloads exactly what's on screen as a file.</li>
-          <li data-i18n-html="docs_li_account"><b>Your account</b> — your name is in the box under the logo; <b>Password</b> lets you change it, <b>Log out</b> signs you out.</li>
-          <li data-i18n-html="docs_li_language"><b>Language</b> — top-right: switch between English and Bahasa Indonesia at any time; your choice is remembered.</li>
+          <li data-i18n-html="docs_li_menu"><b>Menu (sidebar)</b>, click the <b>☰</b> button top-left to collapse it to icons-only (desktop) or open/close it (on phone/tablet). Click a section title (like "Dashboards") to fold that group away if you don't use it often.</li>
+          <li data-i18n-html="docs_li_theme"><b>Theme</b>, top-right: <b>Auto</b> follows your device's light/dark setting automatically, or pick <b>Light</b>/<b>Dark</b> to fix it.</li>
+          <li data-i18n-html="docs_li_export"><b>Exporting</b>, wherever you see <b>CSV</b> or <b>Excel</b> buttons, that downloads exactly what's on screen as a file.</li>
+          <li data-i18n-html="docs_li_account"><b>Your account</b>, your name is in the box under the logo; <b>Password</b> lets you change it, <b>Log out</b> signs you out.</li>
+          <li data-i18n-html="docs_li_language"><b>Language</b>, top-right: switch between English and Bahasa Indonesia at any time; your choice is remembered.</li>
         </ol>
       </div>
 
@@ -3806,7 +3806,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Performance</h3>
-          <p data-i18n="docs_performance_desc">How each fund's price (NAV) has performed — pick a time window from 1 day up to 5 years and compare funds side by side.</p>
+          <p data-i18n="docs_performance_desc">How each fund's price (NAV) has performed, pick a time window from 1 day up to 5 years and compare funds side by side.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-sprout"></use></svg> Growth</h3>
@@ -3826,23 +3826,23 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-compass"></use></svg> Portfolio Explorer (GS)</h3>
-          <p data-i18n="docs_portfolio_explorer_gs_desc">Same idea as Portfolio (PWC) — search for an investor and see their holdings — but from a second data source, organized by the investor's savings goals, and viewable as of any past date.</p>
+          <p data-i18n="docs_portfolio_explorer_gs_desc">Same idea as Portfolio (PWC), search for an investor and see their holdings, but from a second data source, organized by the investor's savings goals, and viewable as of any past date.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-wrench"></use></svg> Portfolio Explorer (Main)</h3>
-          <p data-i18n="docs_portfolio_explorer_main_desc">Same as Portfolio (PWC) — same as-of-date snapshot feature — but sourced from a corrected daily table (mi_fee_logs.portfolio_fix) whose average buy price is weighted by unit instead of averaged per lot, fixing a cost-basis bug in the original portfolio_with_code pipeline.</p>
+          <p data-i18n="docs_portfolio_explorer_main_desc">Same as Portfolio (PWC), same as-of-date snapshot feature, but sourced from a corrected daily table (mi_fee_logs.portfolio_fix) whose average buy price is weighted by unit instead of averaged per lot, fixing a cost-basis bug in the original portfolio_with_code pipeline.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Portfolio (TX)</h3>
-          <p data-i18n="docs_portfolio_tx_desc">Investor lookup whose average buy price is computed directly from the transaction ledger, not from portfolios.initial_price — only completed buy/SWITCH_IN/reinvestment/transfer_in transactions affect the average; sells never change it. Supports an as-of date (reconstructed purely from transactions up to that date; bonus holdings only show live, since bonus_portfolios has no history). Lets you uncheck individual fund rows (e.g. dust balances) before exporting.</p>
+          <p data-i18n="docs_portfolio_tx_desc">Investor lookup whose average buy price is computed directly from the transaction ledger, not from portfolios.initial_price, only completed buy/SWITCH_IN/reinvestment/transfer_in transactions affect the average; sells never change it. Supports an as-of date (reconstructed purely from transactions up to that date; bonus holdings only show live, since bonus_portfolios has no history). Lets you uncheck individual fund rows (e.g. dust balances) before exporting.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> Portfolio (SInvest)</h3>
-          <p data-i18n="docs_portfolio_sinvest_desc">Same as Portfolio (TX), but every number is built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table — a second, independent source for cross-checking one investor's holdings and average buy price.</p>
+          <p data-i18n="docs_portfolio_sinvest_desc">Same as Portfolio (TX), but every number is built from the KSEI/SInvest custodian feed (sinvest.trx_history) instead of the app's own transactions table, a second, independent source for cross-checking one investor's holdings and average buy price.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gem"></use></svg> HNWI</h3>
-          <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals" — the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below defaults to that same investor list; applying its own Min/Max fund AUM filter switches it to generate its own list by fund holding amount instead, independent of the filter above.</p>
+          <p data-i18n="docs_hnwi_desc">"High-Net-Worth Individuals", the list of investors holding within a chosen AUM range (you set the min/max thresholds) as of a chosen date, including each investor's risk profile (risk level, investment priorities, risk tolerance), with a total-across-everyone summary and an export. The per-fund breakdown below defaults to that same investor list; applying its own Min/Max fund AUM filter switches it to generate its own list by fund holding amount instead, independent of the filter above.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-coin"></use></svg> Top investors</h3>
@@ -3850,7 +3850,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-hourglass"></use></svg> User lifetime</h3>
-          <p data-i18n="docs_user_lifetime_desc">The same fee revenue as Revenue (PWC), but answered per investor instead of per fund: what each one earns the platform, next to how long they've been with us — when they registered, when they first bought, and how long they've stayed invested. Click any investor for their month-by-month, fund-by-fund breakdown.</p>
+          <p data-i18n="docs_user_lifetime_desc">The same fee revenue as Revenue (PWC), but answered per investor instead of per fund: what each one earns the platform, next to how long they've been with us, when they registered, when they first bought, and how long they've stayed invested. Click any investor for their month-by-month, fund-by-fund breakdown.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg> Dormant win-back</h3>
@@ -3858,11 +3858,11 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-export"></use></svg> Google Sheet export</h3>
-          <p data-i18n-html="docs_gsheet_export_desc">Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) has a <b>Google Sheet</b> button next to its PDF buttons — one click adds a new tab, named with the investor and a timestamp, to one shared tracker spreadsheet, with the same investor info and holdings table as the "PDF (portfolio only)" export (no fund-performance breakdown), then opens straight to the new tab. Ask a superuser for the tracker sheet's link if you don't have it yet.</p>
+          <p data-i18n-html="docs_gsheet_export_desc">Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) has a <b>Google Sheet</b> button next to its PDF buttons, one click adds a new tab, named with the investor and a timestamp, to one shared tracker spreadsheet, with the same investor info and holdings table as the "PDF (portfolio only)" export (no fund-performance breakdown), then opens straight to the new tab. Ask a superuser for the tracker sheet's link if you don't have it yet.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Bulk export</h3>
-          <p data-i18n="docs_bulk_export_desc">Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box — add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM, SID, name, email, phone, referrer_code, and sales_code for the current list, before you spend an export on it — that contact detail is shown here only, never written into the export files themselves. Once the list looks right, export it to CSV, Excel, or PDF: holdings only, same as Send e-statement &amp; portfolio's portfolio send — no fund-performance pages, since this is a list of investors' holdings, not a full fund report. Combined mode makes one file (Excel puts one sheet per investor, PDF one page per investor); separate mode makes one file per investor and bundles them into a single .zip download. Capped at 50 investors per export.</p>
+          <p data-i18n="docs_bulk_export_desc">Every investor lookup above (Portfolio, Portfolio Explorer, Portfolio (TX)/(SInvest)) also has a "Bulk export" panel under its search box, add investors one at a time with the "+ Add" button next to a search result, or find everyone under one referrer_code/sales_code and add them all in one go. "Preview summary" shows the combined AUM, holdings totalled by fund, and each investor's own AUM, SID, name, email, phone, referrer_code, and sales_code for the current list, before you spend an export on it, that contact detail is shown here only, never written into the export files themselves. Once the list looks right, export it to CSV, Excel, or PDF: holdings only, same as Send e-statement &amp; portfolio's portfolio send, no fund-performance pages, since this is a list of investors' holdings, not a full fund report. Combined mode makes one file (Excel puts one sheet per investor, PDF one page per investor); separate mode makes one file per investor and bundles them into a single .zip download. Capped at 50 investors per export.</p>
         </div>
       </div>
 
@@ -3874,7 +3874,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-id-card"></use></svg> SInvest transactions</h3>
-          <p data-i18n="docs_sinvest_transactions_desc">Browse the raw KSEI/SInvest custodian feed (sinvest.trx_history) directly — the same source Reconciliation compares against, but row-by-row and filterable/exportable, for tracing a specific transaction or investor.</p>
+          <p data-i18n="docs_sinvest_transactions_desc">Browse the raw KSEI/SInvest custodian feed (sinvest.trx_history) directly, the same source Reconciliation compares against, but row-by-row and filterable/exportable, for tracing a specific transaction or investor.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-receipt"></use></svg> Remisier transactions</h3>
@@ -3882,7 +3882,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calculator"></use></svg> Reconciliation</h3>
-          <p data-i18n="docs_reconciliation_desc">A daily check that the numbers line up across systems — use this to catch discrepancies before they become a real problem.</p>
+          <p data-i18n="docs_reconciliation_desc">A daily check that the numbers line up across systems, use this to catch discrepancies before they become a real problem.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-mail"></use></svg> Send e-statement &amp; portfolio</h3>
@@ -3906,7 +3906,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> Campaign revenue</h3>
-          <p data-i18n="docs_campaign_revenue_desc">What each promo campaign earned back. A buy settled with a promo code locks those units up, and this estimates the management fee they earn while they stay invested — until the investor redeems early, or sells them after the holding period ends. Shown next to the campaign's bonus payout so you can see which promos paid for themselves.</p>
+          <p data-i18n="docs_campaign_revenue_desc">What each promo campaign earned back. A buy settled with a promo code locks those units up, and this estimates the management fee they earn while they stay invested, until the investor redeems early, or sells them after the holding period ends. Shown next to the campaign's bonus payout so you can see which promos paid for themselves.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-link"></use></svg> Remisier sharing (GS) / (PWC)</h3>
@@ -3922,11 +3922,11 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-gift"></use></svg> Referral program</h3>
-          <p data-i18n="docs_referral_program_desc">The Sep-Dec 2026 referral bonus program's eligibility report. A referral only counts if the invited friend's very first-ever transaction is a Sucor Asset Management fund purchase of at least Rp1,000,000 made with someone's referral code; the bonus (Rp25,000 to each side, in Sucorinvest Money Market Fund units) additionally requires that fund's units to stay unchanged for 30 days. Each row shows both people's contact details, the transaction, days held, and a status — Eligible, Pending (still within the 30-day hold), or Not eligible (with the specific reason, e.g. redeemed early or KYC not verified). An Inviter leaderboard sits above the row-level detail: one line per inviter with how many people they referred and how many transacted at all (any fund, any amount) — broader counts than the eligibility rule itself — next to how many of those referrals qualified, and of those, how many are Pending vs. Eligible. On this leaderboard, "Invited" only counts an invitee if they also registered during the period — an old referral relationship that never leads to a signup/purchase in this window doesn't clutter the list. Below the leaderboard, an Invited users table lists that same "Invited" population one row per person — name, registration date, SID, email, phone, their own referral code, the referrer code they signed up with, KYC status, and first-transaction status — separate from the row-level Referral detail table further down, which only covers invitees whose first-ever transaction met the campaign's own Sucor/≥Rp1jt rule.</p>
+          <p data-i18n="docs_referral_program_desc">The Sep-Dec 2026 referral bonus program's eligibility report. A referral only counts if the invited friend's very first-ever transaction is a Sucor Asset Management fund purchase of at least Rp1,000,000 made with someone's referral code; the bonus (Rp25,000 to each side, in Sucorinvest Money Market Fund units) additionally requires that fund's units to stay unchanged for 30 days. Each row shows both people's contact details, the transaction, days held, and a status, Eligible, Pending (still within the 30-day hold), or Not eligible (with the specific reason, e.g. redeemed early or KYC not verified). An Inviter leaderboard sits above the row-level detail: one line per inviter with how many people they referred and how many transacted at all (any fund, any amount), broader counts than the eligibility rule itself, next to how many of those referrals qualified, and of those, how many are Pending vs. Eligible. On this leaderboard, "Invited" only counts an invitee if they also registered during the period, an old referral relationship that never leads to a signup/purchase in this window doesn't clutter the list. Below the leaderboard, an Invited users table lists that same "Invited" population one row per person, name, registration date, SID, email, phone, their own referral code, the referrer code they signed up with, KYC status, and first-transaction status, separate from the row-level Referral detail table further down, which only covers invitees whose first-ever transaction met the campaign's own Sucor/≥Rp1jt rule.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-ticket"></use></svg> Referral program (KYC based)</h3>
-          <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above — the only difference is the Inviter leaderboard's "Invited" definition (and, correspondingly, which invitees show up in the Invited users table below it). Here, "Invited" is gated by the invitee's KYC verification date instead of their registration date (with the same 1-day grace window) — an invitee who was verified inside the period counts as invited even if they registered long before it, and one who's never been verified never counts, no matter how old the referral. Use this tab when you want "who's KYC-verified and in play for this campaign," rather than "who signed up because of this campaign."</p>
+          <p data-i18n="docs_referral_program_alt_desc">Same eligibility rule, same detail rows, and same permission-independent tab as Referral program above, the only difference is the Inviter leaderboard's "Invited" definition (and, correspondingly, which invitees show up in the Invited users table below it). Here, "Invited" is gated by the invitee's KYC verification date instead of their registration date (with the same 1-day grace window), an invitee who was verified inside the period counts as invited even if they registered long before it, and one who's never been verified never counts, no matter how old the referral. Use this tab when you want "who's KYC-verified and in play for this campaign," rather than "who signed up because of this campaign."</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg> Referral activity</h3>
@@ -3987,12 +3987,12 @@ ORDER BY n DESC"></textarea>
       </div>
 
       <!-- Tools panel is intentionally left entirely untranslated (English
-           only) — product decision, these are technical/analyst tools. -->
+           only), product decision, these are technical/analyst tools. -->
       <div class="panel">
         <div class="panel-head"><h2>Tools</h2></div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-chat"></use></svg> Ask</h3>
-          <p>Type a question in plain language — like "top 10 funds by AUM" — and get an answer with a chart, no technical knowledge needed. You can ask follow-up questions, exclude things by name, and request a specific chart type or color. Restricted columns (passwords, KYC fields) are always left out of the results — superusers can tick "Include restricted columns" and confirm their password to see them for one question.</p>
+          <p>Type a question in plain language, like "top 10 funds by AUM", and get an answer with a chart, no technical knowledge needed. You can ask follow-up questions, exclude things by name, and request a specific chart type or color. Restricted columns (passwords, KYC fields) are always left out of the results, superusers can tick "Include restricted columns" and confirm their password to see them for one question.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-search"></use></svg> Data explorer</h3>
@@ -4000,7 +4000,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-flask"></use></svg> SQL lab</h3>
-          <p>For technical users: write and run your own read-only database query. Restricted columns (passwords, KYC fields) are always left out of the results — superusers can tick "Include restricted columns" and confirm their password to see them for one query.</p>
+          <p>For technical users: write and run your own read-only database query. Restricted columns (passwords, KYC fields) are always left out of the results, superusers can tick "Include restricted columns" and confirm their password to see them for one query.</p>
         </div>
       </div>
 
@@ -4125,7 +4125,7 @@ ORDER BY n DESC"></textarea>
             <button class="btn-ghost" id="adminAuditRefresh" data-i18n="common_refresh">Refresh</button>
           </div>
         </div>
-        <span class="hint" data-i18n="admin_activity_hint">Every login, export, Ask question, SQL Lab query, and admin account change, most recent first. Pick a user from the dropdown for an exact match; search matches action/detail as a wildcard (e.g. "revenue" also finds revenue_detail exports) — leave blank to see everything.</span>
+        <span class="hint" data-i18n="admin_activity_hint">Every login, export, Ask question, SQL Lab query, and admin account change, most recent first. Pick a user from the dropdown for an exact match; search matches action/detail as a wildcard (e.g. "revenue" also finds revenue_detail exports), leave blank to see everything.</span>
         <div id="adminAuditTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
     </section>
@@ -4133,7 +4133,7 @@ ORDER BY n DESC"></textarea>
     </div>
   </div>
 
-  <div id="toast" class="toast"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <div id="navTooltip" class="nav-tooltip"></div>
   <script src="i18n.js"></script>
   <script src="booth-event-config.js"></script>

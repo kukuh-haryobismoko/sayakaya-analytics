@@ -18,6 +18,7 @@
   --pos-text: #086b48;
   --neg-text: #c8173f;
   --amber-mark: #b07400;
+  --amber-text: #8f5c00; /* 5.4:1 on --amber-tint */
   /* Series 2/3 for the Email recap and User behavior charts: the base amber
      and teal fail the chart lightness band (too pale to read as a line on
      white), these pass it plus colorblind separation next to --indigo. */
@@ -62,6 +63,7 @@
   --pos-text: #33eaaa;
   --neg-text: #ff7e9f;
   --amber-mark: #ffd87e;
+  --amber-text: #ffd87e;
   --chart-amber: #c08a1c;
   --chart-green: #1a9d70;
   --teal-tint: rgba(51,234,170,.16);
@@ -202,7 +204,7 @@ h1, h2 { font-family: "Space Grotesk", sans-serif; margin: 0; }
   font: inherit; font-size: 13px;
 }
 .nav-search input::placeholder { color: var(--sidebar-text); opacity: .6; }
-.nav-search input:focus { outline: none; border-color: var(--amber); }
+.nav-search input:focus { outline: none; border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber); }
 .nav-search-clear {
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
   width: 22px; height: 22px; border: 0; border-radius: 50%; padding: 0;
@@ -437,9 +439,9 @@ td.num, th.num { text-align: right; font-family: "JetBrains Mono"; font-variant-
 td.pos { color: var(--pos-text); }
 td.neg { color: var(--neg-text); }
 .tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
-.tag.buy { background: var(--teal-tint); color: var(--teal); }
-.tag.sell { background: var(--rose-tint); color: var(--rose); }
-.tag.completed { background: var(--teal-tint); color: var(--teal); }
+.tag.buy { background: var(--teal-tint); color: var(--pos-text); }
+.tag.sell { background: var(--rose-tint); color: var(--neg-text); }
+.tag.completed { background: var(--teal-tint); color: var(--pos-text); }
 .tag.cancelled, .tag.expired, .tag.failed { background: var(--muted-tint); color: var(--muted); }
 .tag.other { background: var(--indigo-tint); color: var(--indigo); }
 
@@ -459,7 +461,7 @@ td.neg { color: var(--neg-text); }
   flex: 1; min-width: 200px; border: 1px solid var(--line); border-radius: 10px;
   padding: 12px 14px; background: var(--surface);
 }
-.field-card:focus-within { border-color: var(--indigo); }
+.field-card:focus-within { border-color: var(--indigo); outline: 2px solid var(--indigo); outline-offset: 1px; }
 .field-card-top {
   display: flex; align-items: center; gap: 7px; cursor: pointer;
   font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
@@ -572,7 +574,7 @@ td.neg { color: var(--neg-text); }
   padding: 8px 10px; border-radius: 6px; font: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
 }
 .row-menu-item:hover { background: var(--hover-bg); }
-.row-menu-item.danger { color: var(--rose); }
+.row-menu-item.danger { color: var(--neg-text); }
 .access-list { display: flex; flex-wrap: wrap; gap: 4px; white-space: normal; max-width: 460px; }
 
 /* ---------- Admin modal (native <dialog>) ---------- */
@@ -638,8 +640,8 @@ td.neg { color: var(--neg-text); }
 #sqlInput:focus { outline: 2px solid var(--amber); border-color: var(--amber); }
 .sql-bar { display: flex; align-items: center; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
 .sql-msg { color: var(--muted); font-size: 12px; font-family: "JetBrains Mono"; }
-.sql-msg.err { color: var(--rose); }
-.sql-msg.ok { color: var(--teal); }
+.sql-msg.err { color: var(--neg-text); }
+.sql-msg.ok { color: var(--pos-text); }
 
 /* ---------- Gate ---------- */
 .gate {
@@ -668,7 +670,7 @@ td.neg { color: var(--neg-text); }
 }
 .gate-card input:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px var(--indigo-tint); }
 .gate-submit { width: 100%; padding: 11px 16px; font-size: 14px; }
-.gate-err { color: var(--rose); font-size: 13px; margin-top: 12px; min-height: 16px; }
+.gate-err { color: var(--neg-text); font-size: 13px; margin-top: 12px; min-height: 16px; }
 .gate-link {
   background: none; border: 0; color: var(--muted); font-size: 12.5px;
   cursor: pointer; padding: 0; margin-top: 14px; font-family: inherit;
@@ -695,6 +697,7 @@ td.neg { color: var(--neg-text); }
 }
 .nav-tooltip.show { opacity: 1; }
 .empty { padding: 28px; text-align: center; color: var(--muted); }
+.empty.error { color: var(--neg-text); }
 .loading { padding: 28px; text-align: center; color: var(--muted); font-family: "JetBrains Mono"; font-size: 12px; }
 
 /* ---------- Ask (natural language) ---------- */
@@ -713,7 +716,7 @@ td.neg { color: var(--neg-text); }
 .ask-thread-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .ask-thread-list { display: flex; flex-direction: column; gap: 5px; }
 .ask-chart-msg { color: var(--muted); font-size: 12px; margin: -6px 0 12px; }
-.ask-chart-msg.err { color: var(--rose); }
+.ask-chart-msg.err { color: var(--neg-text); }
 .ask-thread-item { display: flex; gap: 6px; font-size: 13px; color: var(--ink); }
 .ask-thread-item .n { color: var(--muted); flex-shrink: 0; }
 #askAdvanced { margin-bottom: 16px; }
@@ -731,7 +734,7 @@ td.neg { color: var(--neg-text); }
 .chip:hover { border-color: var(--indigo); color: var(--indigo); }
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-row .chip { background: var(--indigo-tint); color: var(--indigo); border-color: transparent; }
-.chip-row .chip:hover { background: var(--rose-tint); color: var(--rose); border-color: transparent; }
+.chip-row .chip:hover { background: var(--rose-tint); color: var(--neg-text); border-color: transparent; }
 .ask-sql { border: 1px solid var(--line); border-radius: 9px; margin-bottom: 14px; overflow: hidden; }
 .ask-sql-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -754,9 +757,9 @@ td.neg { color: var(--neg-text); }
 .ex-tab.on { background: var(--indigo); color: #fff; border-color: var(--indigo); }
 
 /* ---------- Predict / churn / retention ---------- */
-.tag.risk-high { background: var(--rose-tint); color: var(--rose); }
-.tag.risk-med  { background: var(--amber-tint); color: var(--amber); }
-.tag.risk-low  { background: var(--teal-tint); color: var(--teal); }
+.tag.risk-high { background: var(--rose-tint); color: var(--neg-text); }
+.tag.risk-med  { background: var(--amber-tint); color: var(--amber-text); }
+.tag.risk-low  { background: var(--teal-tint); color: var(--pos-text); }
 #retentionHeatmap table td { text-align: center; font-family: "JetBrains Mono"; font-size: 12px; }
 #retentionHeatmap table td.coh { text-align: left; font-weight: 600; color: var(--indigo); background: var(--surface-alt); position: sticky; left: 0; }
 .heat { color: var(--ink); }
@@ -846,3 +849,5 @@ td.neg { color: var(--neg-text); }
 .datamap ul { margin: 8px 0 0; padding-left: 18px; }
 .datamap li { margin: 2px 0; }
 .pivot td .hint { display: block; }
+
+@media (prefers-reduced-motion: reduce) { .conn-dot.live { animation: none; } .view.active { animation: none; } }

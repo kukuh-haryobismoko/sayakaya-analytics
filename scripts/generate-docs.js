@@ -28,7 +28,7 @@ const warnings = [];
 const warn = (m) => warnings.push(m);
 const strip = (s) => String(s || '').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 // Older in-app texts still carry em dashes; this document does not.
-const clean = (s) => strip(s).replace(/\s*[—–]\s*/g, ', ');
+const clean = (s) => strip(s).replace(/\s*[, –]\s*/g, ', ');
 const md = (s) => String(s).replace(/\|/g, '\\|');
 const code = (s) => `\`${s}\``;
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -485,7 +485,7 @@ p(`Diambil dari ${code('.env.example')}. Nilai rahasia disimpan di ${code('.env'
 p('| Variabel | Keterangan |', '|---|---|');
 envVars.forEach((e) => {
   if (!C.ENV_NOTES[e.key]) warn(`Variabel ${e.key} belum punya keterangan di docs/content.js ENV_NOTES.`);
-  const note = C.ENV_NOTES[e.key] || e.note.replace(/\s*[—–]\s*/g, ', ').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const note = C.ENV_NOTES[e.key] || e.note.replace(/\s*[, –]\s*/g, ', ').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   p(`| ${code(e.key)}${e.optional ? ' (opsional)' : ''} | ${md(note)} |`);
 });
 p('');

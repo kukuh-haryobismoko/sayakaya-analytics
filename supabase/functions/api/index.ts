@@ -122,7 +122,7 @@ function computeReferralEligibility(rows: Record<string, unknown>[]) {
 
     if (baseline == null) {
       if (daysHeld > REFERRAL_SNAPSHOT_LAG_DAYS) {
-        reasons.push('No holding snapshot ever found — likely fully redeemed before the first daily snapshot (needs manual review)');
+        reasons.push('No holding snapshot ever found, likely fully redeemed before the first daily snapshot (needs manual review)');
         hardFail = true;
       } else {
         reasons.push('Holding snapshot not available yet (portfolio_fix updates about a day behind)');
@@ -298,8 +298,9 @@ on('POST', '/api/auth/login', async (req) => {
   const username = body.username as string;
   const password = body.password as string;
   if (!username || !password) return json({ error: 'Username and password are required.' }, 400);
+  if (A.tooManyAttempts(`login:${(req.headers.get('x-forwarded-for') || '').split(',')[0].trim()}:${String(username).toLowerCase()}`)) return json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
   const user = await A.findUserByIdentifier(username);
-  if (!user || !A.verifyPassword(password, user.password_hash)) {
+  if (!user || !A.verifyOrBurn(password, user && user.password_hash)) {
     await A.logEvent(user ? user.id : null, username, 'login_failure');
     return json({ error: 'Incorrect username/email or password.' }, 401);
   }
@@ -345,7 +346,7 @@ on('POST', '/api/admin/users', requireSuperuser(async (req, _params, _url, user)
     allowedTabs: (body.allowedTabs as string[]) || [],
   });
   const token = await A.createPasswordReset(created.id, A.INVITE_TTL_MS);
-  const origin = Deno.env.get('APP_URL') || req.headers.get('origin') || '';
+  const origin = A.linkOrigin(req.headers.get('origin'));
   await Mail.sendInviteEmail({ to: email, activateUrl: `${origin}/?reset=${token}`, sentBy: user!.username || user!.email });
   await A.logEvent(user!.id, user!.username, 'admin_user_create',
     `invited dashboard user "${username || email}"${body.isSuperuser ? ' (superuser)' : ''}`);
@@ -499,10 +500,11 @@ on('POST', '/api/auth/forgot-password', async (req) => {
   const body = await bodyOf(req);
   const username = body.username as string;
   if (!username) return json(generic);
+  if (A.tooManyAttempts(`reset:${(req.headers.get('x-forwarded-for') || '').split(',')[0].trim()}`, 5, 5 * 60 * 1000) || A.tooManyAttempts(`reset:${String(username).toLowerCase()}`, 3, 5 * 60 * 1000)) return json(generic);
   const user = await A.findUserByIdentifier(username);
   if (user && user.email) {
     const token = await A.createPasswordReset(user.id);
-    const origin = Deno.env.get('APP_URL') || req.headers.get('origin') || '';
+    const origin = A.linkOrigin(req.headers.get('origin'));
     const resetUrl = `${origin}/?reset=${token}`;
     await Mail.sendPasswordResetEmail({ to: user.email, username: user.username || user.email, resetUrl });
     await A.logEvent(user.id, user.username || user.email, 'password_reset_requested');
@@ -1416,7 +1418,7 @@ on('POST', '/api/ask', requireTab('ask', async (req, _params, _url, user) => {
     return json({ sql, rows, count: rows.length });
   } catch (err) {
     console.error('[POST /api/ask]', (err as Error).message);
-    await A.logEvent(user!.id, user!.username, 'ask', `${question} — failed: ${(err as Error).message}`);
+    await A.logEvent(user!.id, user!.username, 'ask', `${question}, failed: ${(err as Error).message}`);
     return json({ error: (err as Error).message, sql: (err as { sql?: string }).sql || null }, 400);
   }
 }));
@@ -1553,7 +1555,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     }
     const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);
-    rows = sheets[0].rows; // CSV has no sheets — holdings only
+    rows = sheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'portfolio_fix_full') {
     // Same as portfolio_full, sourced from portfolio_fix instead of
     // portfolio_with_code for the as-of-date snapshot (see userHoldingsAsOfFix).
@@ -1594,7 +1596,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     }
     const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(fixSheets, filename, username);
-    rows = fixSheets[0].rows; // CSV has no sheets — holdings only
+    rows = fixSheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'portfolio_tx_full') {
     // Same as portfolio_full, but holdings come from userHoldingsFromTx /
     // userHoldingsFromTxAsOf (avg_buy_price derived from the transaction ledger).
@@ -1633,7 +1635,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     }
     const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(txSheets, filename, username);
-    rows = txSheets[0].rows; // CSV has no sheets — holdings only
+    rows = txSheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'portfolio_sinvest_full') {
     // Same as portfolio_tx_full, but holdings come from the custodian feed
     // (sinvestHoldings / sinvestHoldingsAsOf) instead of main.transactions.
@@ -1672,7 +1674,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     }
     const siSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdingsSi) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(siSheets, filename, username);
-    rows = siSheets[0].rows; // CSV has no sheets — holdings only
+    rows = siSheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'portfolio_explorer_full') {
     // Same shape/columns as portfolio_full, sourced from goal_snapshots as of
     // a given date instead of the live portfolios/bonus_portfolios tables —
@@ -1715,7 +1717,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     }
     const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);
-    rows = sheets[0].rows; // CSV has no sheets — holdings only
+    rows = sheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'explore') {
     const dataset = body.dataset as string;
     const filters = (body.filters as Record<string, string>) || {};
@@ -1741,7 +1743,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       ? Q.revenueDetail(body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string)
       : Q.revenueV2Detail(body.from as string, body.to as string, body.granularity as string, body.fund as string, body.mi as string);
     const detail = await runQuery(q.sql, q.params);
-    const splitBy = body.splitBy as string | undefined; // 'fund' | 'mi' | undefined — xlsx only, one sheet per value
+    const splitBy = body.splitBy as string | undefined; // 'fund' | 'mi' | undefined, xlsx only, one sheet per value
     if (format === 'xlsx' && (splitBy === 'fund' || splitBy === 'mi')) {
       return xlsxMultiResponse(splitRowsBySheet(sortExportRows(detail, body), splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename, username);
     }
@@ -1911,7 +1913,7 @@ async function fetchBatchEntries(source: string, users: BatchUser[]): Promise<Ba
           const [row] = await runQuery(d.sql, d.params);
           asOfDate = row?.latest_date as string | undefined;
         }
-        if (!asOfDate) return null; // no goal_snapshots for this investor — skip rather than fail the whole batch
+        if (!asOfDate) return null; // no goal_snapshots for this investor, skip rather than fail the whole batch
         const h = Q.goalUserHoldings(u.userId, asOfDate);
         return runQuery(h.sql, h.params);
       }
@@ -2188,7 +2190,7 @@ on('POST', '/api/fund-performance/email', requireTab('send-fund-performance', as
   results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));
 
   await A.logEvent(user!.id, username, 'email_fund_performance',
-    `fund-performance (${fundScopeLabel(fundFilter)}) to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
+    `fund-performance (${fundScopeLabel(fundFilter)}) to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? `, failed: ${failed.join(', ')}` : ''}`);
 
   if (!sent.length) return json({ error: 'All sends failed. Check the SMTP configuration.' }, 502);
   return json({ ok: true, sent, failed, excluded });
@@ -2249,7 +2251,7 @@ on('POST', '/api/schedules/otp/request', requireScheduleKindTab(async (req, _par
   }
   const spec = { kind, recipientType, recipientEmail: b.recipientEmail as string | undefined, recipientList: b.recipientList as string[] | undefined };
   const { count } = await Sched.previewRecipientCount(spec);
-  if (!count) return json({ error: 'No recipients matched — nothing would be sent.' }, 400);
+  if (!count) return json({ error: 'No recipients matched, nothing would be sent.' }, 400);
 
   const otpId = await Sched.requestOtp({
     kind, recipientType, recipientEmail: b.recipientEmail, recipientList: b.recipientList,

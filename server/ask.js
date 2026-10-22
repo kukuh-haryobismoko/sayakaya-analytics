@@ -34,10 +34,10 @@ transactions (one row per order)
   created_at TIMESTAMP, completed_at TIMESTAMP, paid_at TIMESTAMP
 
 users (one row per registered user)
-  id, sid_code STRING (unique investor code — the join key into portfolio_with_code below, which has no user_id)
+  id, sid_code STRING (unique investor code, the join key into portfolio_with_code below, which has no user_id)
   verification_status STRING (unverified, verified, failed, pending_verification)
   created_at DATETIME
-  (the password column EXISTS but is FORBIDDEN — never select or reference it)
+  (the password column EXISTS but is FORBIDDEN, never select or reference it)
 
 funds (the fund catalog, ~2350 rows)
   id, name STRING, type STRING (FIXED_INCOME, MONEY_MARKET, MIXED, EQUITY, PROTECTED)
@@ -62,12 +62,12 @@ the two tables (each filtered to active as above) before joining funds, e.g.:
   )
   holding value = unit * funds.latest_nav_value, summed/grouped per active row above
 
-portfolio_with_code (FULL PATH: \`sayakaya.mi_fee_logs.portfolio_with_code\` — different dataset)
+portfolio_with_code (FULL PATH: \`sayakaya.mi_fee_logs.portfolio_with_code\`, different dataset)
   daily snapshot of every investor's holdings, one row per sid_code + fund per day (no user_id column)
   sid_code STRING (join to users.sid_code), id (this is the fund's id, i.e. fund_id), fund STRING (fund name),
   fund_type STRING, total_unit NUMERIC (units held, > 0 = open position), avg_buy_price NUMERIC,
   buy_amount NUMERIC (cost basis), latest_nav_value NUMERIC, amount NUMERIC (that holding's value on that day),
-  created_at TIMESTAMP — the snapshot's actual date is created_at's date MINUS 1 day, so match a
+  created_at TIMESTAMP, the snapshot's actual date is created_at's date MINUS 1 day, so match a
   specific date with DATE(created_at) = DATE_ADD(@date, INTERVAL 1 DAY) (the table is partitioned on
   DATE(created_at); wrapping the column in DATE_SUB makes BigQuery scan every partition).
   Doesn't distinguish regular vs bonus holdings (unlike portfolios/bonus_portfolios below).
@@ -88,7 +88,7 @@ investment_managers
 investment_managers
   id, common_name STRING, ojk_code STRING, latest_aum_value INT64, latest_aum_date DATETIME
 
-mi_fee  (FULL PATH: \`sayakaya.mi_fee_logs.mi_fee\` — different dataset)
+mi_fee  (FULL PATH: \`sayakaya.mi_fee_logs.mi_fee\`, different dataset)
   daily AUM and fee snapshot, one row per fund per day
   fund_id, fund_name STRING, latest_nav_value NUMERIC, total_unit NUMERIC,
   AUM NUMERIC (the platform's AUM in that fund that day),
@@ -100,7 +100,7 @@ mi_fee  (FULL PATH: \`sayakaya.mi_fee_logs.mi_fee\` — different dataset)
 user_profiles (one row per user; join on user_id = users.id)
   user_id, name STRING, gender STRING, occupation STRING, id_address_city STRING,
   monthly_income INT64, total_asset INT64, investment_risk_tolerance STRING, birthdate DATE
-  (this table also has KYC identity fields — DO NOT use id_number, mothers_maiden_name,
+  (this table also has KYC identity fields, DO NOT use id_number, mothers_maiden_name,
    or any *_photo_url / signature columns)
 
 Conventions:
@@ -115,14 +115,14 @@ Conventions:
 - All monetary amounts are in Indonesian Rupiah (IDR).
 - "Buy/sell volume" means SUM(final_amount) WHERE status='completed' for that type.
 - "AUM" of a fund = funds.latest_aum_value. A user's or the platform's CURRENT AUM/holdings = the
-  portfolios + bonus_portfolios union above (both count — bonus units are real holdings the
+  portfolios + bonus_portfolios union above (both count, bonus units are real holdings the
   investor did not pay cash for, but they still hold them), not portfolios alone. For AUM/holdings
   on a past date or over time, use portfolio_with_code instead (see the note under that table above).
-- transactions.created_at is TIMESTAMP; users.created_at is DATETIME — use DATE()/EXTRACT accordingly.
+- transactions.created_at is TIMESTAMP; users.created_at is DATETIME, use DATE()/EXTRACT accordingly.
 - If the message includes a "Resolved entity lookups" block, those are real lookups from the
   database for names the user mentioned. When a resolved entry gives an id, filter/join using
   that id (the table's own id column, or the matching foreign key like fund_id /
-  investment_manager_id) — NOT a name = '...' comparison, and never a LIKE '%...%' guess.
+  investment_manager_id), NOT a name = '...' comparison, and never a LIKE '%...%' guess.
   When a resolved entry has no id (occupation/city), use an exact = or IN match on the given
   value(s). Only fall back to your own LIKE guess if that block says no match was found.
 `;
@@ -139,7 +139,7 @@ Output rules (strict):
 - Use the conventions and schema below exactly.
 - Earlier turns from this conversation may be included before the current question. Treat the
   current question as a follow-up when it reads like one ("now split that by month", "exclude
-  the sharia ones too", "same but for Q2") — reuse the prior query's filters/grouping/tables
+  the sharia ones too", "same but for Q2"), reuse the prior query's filters/grouping/tables
   unless the new question overrides them. If it's really a new, unrelated question, ignore the
   earlier turns.
 
@@ -151,7 +151,7 @@ async function questionToSql(question, priorAttempt, context, history) {
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set on the server.');
 
   const userContent = context
-    ? `${question}\n\nUser-provided hint (tables/datasets to use, or a related query for context — may be partial or imprecise, verify against the schema above):\n${context}`
+    ? `${question}\n\nUser-provided hint (tables/datasets to use, or a related query for context, may be partial or imprecise, verify against the schema above):\n${context}`
     : question;
   const messages = [];
   for (const turn of history || []) {
@@ -233,15 +233,15 @@ const ENTITY_COLUMNS = [
 
 function entitySystemPrompt() {
   return `Extract any specific named entities in the question that would need to be matched
-against real row values in the Sayakaya database — free-text proper nouns like fund names,
+against real row values in the Sayakaya database, free-text proper nouns like fund names,
 investment manager names, campaign/promo names, cities, occupations.
 
 This includes wildcard/partial-name mentions (e.g. "exclude any fund matching *syariah*",
-"funds with 'index' in the name") — extract raw_text with the wildcard characters (* or %)
+"funds with 'index' in the name"), extract raw_text with the wildcard characters (* or %)
 kept exactly as the user wrote them; they'll be matched with LIKE, not treated as one exact name.
 
 Do NOT extract fixed enum values that are already fully known (transaction type/status,
-verification_status, gender, fund type, campaign_type, is_sharia) — only extract names the
+verification_status, gender, fund type, campaign_type, is_sharia), only extract names the
 model would otherwise have to guess the exact spelling of.
 
 Respond with ONLY a JSON array, no markdown, no explanation:
@@ -285,9 +285,9 @@ function resolvedIdLine(m, col, candidates, cap) {
   const table = col.table.split('.').pop();
   const idList = candidates.map((r) => JSON.stringify(r.id)).join(', ');
   const pairs = candidates.map((r) => `id=${JSON.stringify(r.id)} (name: ${JSON.stringify(r.v)})`).join(', ');
-  const truncated = candidates.length >= cap ? ` (capped at ${cap} matches — refine the wording if more exist)` : '';
+  const truncated = candidates.length >= cap ? ` (capped at ${cap} matches, refine the wording if more exist)` : '';
   return `"${m.raw_text}" -> resolved in ${table}: ${pairs}${truncated}. Reference by id (${table}.id, or the ` +
-    `matching foreign key column such as fund_id / investment_manager_id) — never by the name string. ` +
+    `matching foreign key column such as fund_id / investment_manager_id), never by the name string. ` +
     `If the question means to EXCLUDE/OMIT/WITHOUT these, filter with NOT IN (${idList}); if it means to ` +
     `include or limit to these, filter with IN (${idList}).`;
 }
@@ -429,7 +429,7 @@ Today's date is ${new Date().toISOString().slice(0, 10)} (UTC).
 Columns available: created_at (when it happened), username (who did it),
 action (exactly one of: login_success, login_failure, password_change, export, ask, sql_run,
   admin_user_create, admin_user_update, admin_user_delete, view_portfolio),
-detail (free text — the export's source/format/filename, the Ask question asked, the SQL run
+detail (free text, the export's source/format/filename, the Ask question asked, the SQL run
   (sql_run), which dashboard account and what changed (the admin_user_* actions), or the investor
   SID looked up (view_portfolio)).
 
@@ -548,21 +548,21 @@ Rules:
 - "type" must be exactly one of: bar, line, pie, doughnut, scatter, none.
 - "x" and "y" must be exact column names from the sample given (omit for "none"), and "y" must be numeric.
 - Keep "label" under 40 characters.
-- "color" is OPTIONAL and only applies to a single-series chart (bar/line/scatter) — this app's palette has
+- "color" is OPTIONAL and only applies to a single-series chart (bar/line/scatter), this app's palette has
   exactly four accent colors: indigo (blue/purple), amber (orange/gold/yellow), teal (green), rose (red/pink).
   If the user's request names or implies a color, map it to whichever of these four is closest and set
   "color" to that key. Omit "color" entirely if no color was requested, or if type is pie/doughnut (those
-  already use a fixed multi-color palette, one per slice — a single "color" wouldn't mean anything there).
-- "reason" is always required — one short sentence a non-technical person would understand, explaining the
+  already use a fixed multi-color palette, one per slice, a single "color" wouldn't mean anything there).
+- "reason" is always required, one short sentence a non-technical person would understand, explaining the
   pick (or, for "none", exactly what's missing/wrong so the person knows what to change).
 
 If the user's visualization request names a specific chart type (bar/line/pie/doughnut/scatter), HONOR it
 whenever it's technically possible: a usable x column exists, and (for bar/line/pie/doughnut) at least one
 numeric y column exists, or (for scatter) at least two numeric columns exist. Someone who explicitly asked
-for a donut chart gets a donut chart even if it has many slices or isn't the "ideal" fit for the data —
+for a donut chart gets a donut chart even if it has many slices or isn't the "ideal" fit for the data , 
 that is their call to make, not yours to override. Only fall back to "none" for a named request when it is
 genuinely impossible for this data (e.g. a line/time-series with no date-like column, a pie/donut with no
-numeric column to size slices by, a scatter with fewer than two numeric columns) — and say specifically what
+numeric column to size slices by, a scatter with fewer than two numeric columns), and say specifically what
 column/shape is missing in "reason".
 
 If the user did NOT name a chart type, pick the best fit yourself using these defaults:
@@ -570,7 +570,7 @@ If the user did NOT name a chart type, pick the best fit yourself using these de
 - "pie"/"doughnut" for a small (<= 8) set of categories that sum to a whole.
 - "scatter" for two numeric columns with no natural category axis.
 - "none" only if nothing charts well at all (a single scalar/row, or every column is free text with no
-  numeric column to plot) — explain why in "reason".`;
+  numeric column to plot), explain why in "reason".`;
 }
 
 async function suggestChart(question, rows, hint) {
@@ -581,7 +581,7 @@ async function suggestChart(question, rows, hint) {
   const columns = Object.keys(rows[0]);
   const sample = rows.slice(0, 5).map((r) => Object.fromEntries(columns.map((c) => [c, val(r[c])])));
   const userContent = [
-    `Question asked: ${question || '(none — this is a manually edited query)'}`,
+    `Question asked: ${question || '(none, this is a manually edited query)'}`,
     hint ? `User's visualization request: ${hint}` : '',
     `Columns: ${columns.join(', ')}`,
     `Sample rows (up to 5 of ${rows.length}):\n${JSON.stringify(sample, null, 2)}`,
@@ -597,23 +597,23 @@ async function suggestChart(question, rows, hint) {
         messages: [{ role: 'user', content: userContent }],
       }),
     });
-    if (!res.ok) return { type: 'none', reason: 'Could not reach the chart suggestion model — try again.' };
+    if (!res.ok) return { type: 'none', reason: 'Could not reach the chart suggestion model, try again.' };
     const data = await res.json();
     text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim()
       .replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```$/, '').trim();
   } catch {
-    return { type: 'none', reason: 'Could not reach the chart suggestion model — try again.' };
+    return { type: 'none', reason: 'Could not reach the chart suggestion model, try again.' };
   }
 
   try {
     const spec = JSON.parse(text);
-    if (!CHART_TYPES.includes(spec.type)) return { type: 'none', reason: 'Got an unexpected response — try again.' };
+    if (!CHART_TYPES.includes(spec.type)) return { type: 'none', reason: 'Got an unexpected response, try again.' };
     if (spec.type !== 'none' && (!columns.includes(spec.x) || !columns.includes(spec.y))) {
       return { type: 'none', reason: spec.reason || 'Could not match the suggested columns to this result.' };
     }
     return spec;
   } catch {
-    return { type: 'none', reason: 'Got an unreadable response — try again.' };
+    return { type: 'none', reason: 'Got an unreadable response, try again.' };
   }
 }
 

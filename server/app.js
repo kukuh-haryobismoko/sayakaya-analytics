@@ -119,7 +119,7 @@ function computeReferralEligibility(rows) {
 
     if (baseline == null) {
       if (daysHeld > REFERRAL_SNAPSHOT_LAG_DAYS) {
-        reasons.push('No holding snapshot ever found — likely fully redeemed before the first daily snapshot (needs manual review)');
+        reasons.push('No holding snapshot ever found, likely fully redeemed before the first daily snapshot (needs manual review)');
         hardFail = true;
       } else {
         reasons.push('Holding snapshot not available yet (portfolio_fix updates about a day behind)');
@@ -221,8 +221,9 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/auth/login', handler(async (req, res) => {
     const { username, password } = req.body || {};
     if (!username || !password) return res.status(400).json({ error: 'Username and password are required.' });
+    if (Auth.tooManyAttempts(`login:${req.ip}:${String(username).toLowerCase()}`)) return res.status(429).json({ error: 'Too many attempts. Wait a minute and try again.' });
     const user = await Auth.findUserByIdentifier(username);
-    if (!user || !Auth.verifyPassword(password, user.password_hash)) {
+    if (!user || !Auth.verifyOrBurn(password, user && user.password_hash)) {
       await Auth.logEvent(user ? user.id : null, username, 'login_failure');
       return res.status(401).json({ error: 'Incorrect username/email or password.' });
     }
@@ -261,7 +262,7 @@ function createApp({ serveStatic = true } = {}) {
     if (existingEmail) return res.status(409).json({ error: 'That email is already in use.' });
     const created = await Auth.createUser({ username: username || null, email, isSuperuser: !!isSuperuser, allowedTabs: allowedTabs || [] });
     const token = await Auth.createPasswordReset(created.id, Auth.INVITE_TTL_MS);
-    const origin = process.env.APP_URL || req.get('origin') || '';
+    const origin = Auth.linkOrigin(req.get('origin'));
     await Mail.sendInviteEmail({ to: email, activateUrl: `${origin}/?reset=${token}`, sentBy: req.user.username || req.user.email });
     await Auth.logEvent(req.user.id, req.user.username, 'admin_user_create',
       `invited dashboard user "${username || email}"${isSuperuser ? ' (superuser)' : ''}`);
@@ -379,10 +380,11 @@ function createApp({ serveStatic = true } = {}) {
     const generic = { ok: true, message: 'If that account has an email on file, a reset link has been sent.' };
     const { username } = req.body || {};
     if (!username) return res.json(generic);
+    if (Auth.tooManyAttempts(`reset:${req.ip}`, 5, 5 * 60 * 1000) || Auth.tooManyAttempts(`reset:${String(username).toLowerCase()}`, 3, 5 * 60 * 1000)) return res.json(generic);
     const user = await Auth.findUserByIdentifier(username);
     if (user && user.email) {
       const token = await Auth.createPasswordReset(user.id);
-      const origin = process.env.APP_URL || req.get('origin') || '';
+      const origin = Auth.linkOrigin(req.get('origin'));
       const resetUrl = `${origin}/?reset=${token}`;
       await Mail.sendPasswordResetEmail({ to: user.email, username: user.username || user.email, resetUrl });
       await Auth.logEvent(user.id, user.username || user.email, 'password_reset_requested');
@@ -1302,7 +1304,7 @@ function createApp({ serveStatic = true } = {}) {
       res.json({ sql, rows, count: rows.length });
     } catch (err) {
       console.error('[POST /api/ask]', err.message);
-      await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question} — failed: ${err.message}`);
+      await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question}, failed: ${err.message}`);
       res.status(400).json({ error: err.message, sql: err.sql || null });
     }
   });
@@ -1456,7 +1458,7 @@ function createApp({ serveStatic = true } = {}) {
       }
       const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, sheets, filename, username);
-      rows = sheets[0].rows; // CSV has no sheets — holdings only
+      rows = sheets[0].rows; // CSV has no sheets, holdings only
     } else if (source === 'portfolio_fix_full') {
       // Same as portfolio_full, sourced from portfolio_fix instead of
       // portfolio_with_code for the as-of-date snapshot (see userHoldingsAsOfFix).
@@ -1489,7 +1491,7 @@ function createApp({ serveStatic = true } = {}) {
       }
       const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, fixSheets, filename, username);
-      rows = fixSheets[0].rows; // CSV has no sheets — holdings only
+      rows = fixSheets[0].rows; // CSV has no sheets, holdings only
     } else if (source === 'portfolio_tx_full') {
       // Same as portfolio_full, but holdings come from userHoldingsFromTx /
       // userHoldingsFromTxAsOf (avg_buy_price derived from the transaction ledger).
@@ -1520,7 +1522,7 @@ function createApp({ serveStatic = true } = {}) {
       }
       const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, txSheets, filename, username);
-      rows = txSheets[0].rows; // CSV has no sheets — holdings only
+      rows = txSheets[0].rows; // CSV has no sheets, holdings only
     } else if (source === 'portfolio_sinvest_full') {
       // Same as portfolio_tx_full, but holdings come from the custodian feed
       // (sinvestHoldings / sinvestHoldingsAsOf) instead of main.transactions.
@@ -1551,7 +1553,7 @@ function createApp({ serveStatic = true } = {}) {
       }
       const siSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdingsSi) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, siSheets, filename, username);
-      rows = siSheets[0].rows; // CSV has no sheets — holdings only
+      rows = siSheets[0].rows; // CSV has no sheets, holdings only
     } else if (source === 'portfolio_explorer_full') {
       // Same shape/columns as portfolio_full, sourced from goal_snapshots as
       // of a given date instead of the live portfolios/bonus_portfolios
@@ -1588,7 +1590,7 @@ function createApp({ serveStatic = true } = {}) {
       }
       const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
       if (format === 'xlsx') return sendXlsxMulti(res, sheets, filename, username);
-      rows = sheets[0].rows; // CSV has no sheets — holdings only
+      rows = sheets[0].rows; // CSV has no sheets, holdings only
     } else if (source === 'explore') {
       const { dataset, filters } = req.body;
       const built = EX.buildExplore(dataset, { ...filters, limit: limit || 100000, offset: 0 });
@@ -1613,7 +1615,7 @@ function createApp({ serveStatic = true } = {}) {
         ? Q.revenueDetail(req.body.from, req.body.to, req.body.granularity, req.body.fund, req.body.mi)
         : Q.revenueV2Detail(req.body.from, req.body.to, req.body.granularity, req.body.fund, req.body.mi);
       const detail = await runQuery(q.sql, q.params);
-      const { splitBy } = req.body; // 'fund' | 'mi' | undefined — xlsx only, one sheet per value
+      const { splitBy } = req.body; // 'fund' | 'mi' | undefined, xlsx only, one sheet per value
       if (format === 'xlsx' && (splitBy === 'fund' || splitBy === 'mi')) {
         return sendXlsxMulti(res, splitRowsBySheet(screenOrder(detail), splitBy === 'fund' ? 'fund_name' : 'mi_name'), filename, username);
       }
@@ -1770,7 +1772,7 @@ function createApp({ serveStatic = true } = {}) {
             const [row] = await runQuery(d.sql, d.params);
             asOfDate = row?.latest_date;
           }
-          if (!asOfDate) return null; // no goal_snapshots for this investor — skip rather than fail the whole batch
+          if (!asOfDate) return null; // no goal_snapshots for this investor, skip rather than fail the whole batch
           const h = Q.goalUserHoldings(u.userId, asOfDate);
           return runQuery(h.sql, h.params);
         }
@@ -2013,7 +2015,7 @@ function createApp({ serveStatic = true } = {}) {
     results.forEach((r, i) => (r.status === 'fulfilled' ? sent : failed).push(recipients[i]));
 
     await Auth.logEvent(req.user.id, username, 'email_fund_performance',
-      `fund-performance (${fundScopeLabel(fundFilter)}) to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? ` — failed: ${failed.join(', ')}` : ''}`);
+      `fund-performance (${fundScopeLabel(fundFilter)}) to ${sent.length} recipient(s): ${sent.join(', ')}${failed.length ? `, failed: ${failed.join(', ')}` : ''}`);
 
     if (!sent.length) return res.status(502).json({ error: 'All sends failed. Check the SMTP configuration.' });
     res.json({ ok: true, sent, failed, excluded });
@@ -2071,7 +2073,7 @@ function createApp({ serveStatic = true } = {}) {
       return res.status(400).json({ error: 'Pick at least one document to send.' });
     }
     const { count } = await Sched.previewRecipientCount({ kind, recipientType, recipientEmail, recipientList });
-    if (!count) return res.status(400).json({ error: 'No recipients matched — nothing would be sent.' });
+    if (!count) return res.status(400).json({ error: 'No recipients matched, nothing would be sent.' });
 
     const otpId = await Sched.requestOtp({
       kind, recipientType, recipientEmail, recipientList, sendPortfolio, sendStatement,

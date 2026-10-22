@@ -104,7 +104,7 @@ function holdingsGrid(holdings: Record<string, unknown>[], columns?: string[]) {
   const header = cols.map((c) => c.label);
   const rows = holdings.map((h) => cols.map((c) => {
     const raw = h[c.key];
-    return String(c.format ? c.format(raw) : (val(raw) ?? '—'));
+    return String(c.format ? c.format(raw) : (val(raw) ?? 'n/a'));
   }));
   return { cols, header, rows };
 }
@@ -123,7 +123,7 @@ function totalsRow(cols: ReturnType<typeof HOLDINGS_COLS>, holdings: Record<stri
     if (c.key === 'fund_value') return idNum(totalFund);
     if (c.key === 'value') return idNum(totalMarket);
     if (c.key === 'gain_loss') return idNum(totalGain);
-    if (c.key === 'gain_pct') return totalPct == null ? '—' : idNum(totalPct, 2) + '%';
+    if (c.key === 'gain_pct') return totalPct == null ? 'n/a' : idNum(totalPct, 2) + '%';
     return '';
   });
 }
@@ -160,7 +160,7 @@ export async function portfolioReport(
   const { columns, username } = options;
   const spreadsheetId = Deno.env.get('GSHEET_TRACKER_ID');
   if (!spreadsheetId) {
-    throw new Error('GSHEET_TRACKER_ID is not set — share a Google Sheet with the service account as Editor and set its ID in the environment.');
+    throw new Error('GSHEET_TRACKER_ID is not set, share a Google Sheet with the service account as Editor and set its ID in the environment.');
   }
 
   const { cols, header, rows } = holdingsGrid(holdings, columns);
@@ -179,10 +179,10 @@ export async function portfolioReport(
     ['CUSTOMER PORTFOLIO', '', '', 'Close NAV', statementDate(holdings)],
     [`Exported by ${username || 'dashboard'} · ${new Date().toISOString()}`],
     [],
-    ['NAME', String(val(contact?.name) || '—')],
-    ['SID', String(val(contact?.sid) || '—')],
-    ['IFUA', String(val(contact?.ifua) || '—')],
-    ['Address', String(val(contact?.address) || '—')],
+    ['NAME', String(val(contact?.name) || 'n/a')],
+    ['SID', String(val(contact?.sid) || 'n/a')],
+    ['IFUA', String(val(contact?.ifua) || 'n/a')],
+    ['Address', String(val(contact?.address) || 'n/a')],
     [],
   ];
   const headerRowIndex = portfolioRows.length;

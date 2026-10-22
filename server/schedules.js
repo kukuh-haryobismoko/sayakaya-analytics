@@ -34,8 +34,8 @@ const { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatem
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes — same order as dashboard_password_resets
-const JAKARTA_OFFSET_MIN = 7 * 60; // WIB, UTC+7, no DST — same convention as the rest of the dashboard
+const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes, same order as dashboard_password_resets
+const JAKARTA_OFFSET_MIN = 7 * 60; // WIB, UTC+7, no DST, same convention as the rest of the dashboard
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function jktDateStr(d) { return new Date(d.getTime() + JAKARTA_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
 
@@ -263,7 +263,7 @@ async function confirmOtp(otpId, code) {
   if (!otp) throw new Error('Confirmation code not found or already used.');
   if (new Date(otp.expires_at) < new Date()) {
     await rest(`/dashboard_schedule_otps?id=eq.${otpId}`, { method: 'DELETE' });
-    throw new Error('Confirmation code expired — request a new one.');
+    throw new Error('Confirmation code expired, request a new one.');
   }
   if (sha256Hex(String(code || '').trim()) !== otp.code_hash) throw new Error('Incorrect confirmation code.');
 

@@ -10,9 +10,9 @@ import { Buffer } from 'node:buffer';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, fixed — no refresh-on-activity.
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, fixed, no refresh-on-activity.
 const RESET_TTL_MS = 30 * 60 * 1000; // 30 minutes
-export const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days — an invite email sits unread longer than a reset request
+export const INVITE_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days, an invite email sits unread longer than a reset request
 
 export interface DashboardUser {
   id: string;
@@ -66,6 +66,38 @@ export function verifyPassword(plain: string, stored: string): boolean {
   return crypto.timingSafeEqual(candidate, expected);
 }
 
+// Verify against a throwaway hash when the user doesn't exist, so a missing
+// account costs the same scrypt time as a wrong password.
+const DUMMY_HASH = hashPassword('not-a-real-password');
+export function verifyOrBurn(plain: string, stored?: string | null): boolean { return verifyPassword(plain, stored || DUMMY_HASH) && !!stored; }
+
+// Per-key attempt counter, in-memory (best effort: per isolate, resets on cold start).
+// ponytail: swap for a Postgres counter if abuse shows up across isolates.
+const attemptLog = new Map<string, number[]>();
+export function tooManyAttempts(key: string, max = 10, windowMs = 60 * 1000): boolean {
+  const now = Date.now();
+  const hits = (attemptLog.get(key) || []).filter((t) => now - t < windowMs);
+  hits.push(now);
+  attemptLog.set(key, hits);
+  if (attemptLog.size > 5000) for (const [k, v] of attemptLog) if (!v.some((t) => now - t < windowMs)) attemptLog.delete(k);
+  return hits.length > max;
+}
+
+// Reset and invite links go to the APP_URL, or to a known Pages origin when the
+// request came from one. Any other Origin header is ignored so a forged one
+// cannot point the emailed link at another site.
+const TRUSTED_ORIGINS = [
+  'https://kukuh-haryobismoko.github.io',
+  'https://kukuh-sayakaya.github.io',
+  ...(Deno.env.get('TRUSTED_ORIGINS') || '').split(',').map((o) => o.trim()).filter(Boolean),
+];
+export function linkOrigin(reqOrigin: string | null): string {
+  return Deno.env.get('APP_URL') || (reqOrigin && TRUSTED_ORIGINS.includes(reqOrigin) ? reqOrigin : '');
+}
+
+// PostgREST filter value: quoted so , ( ) in user input cannot add conditions.
+const pgq = (v: string) => encodeURIComponent(`"${String(v).replace(/[\\"]/g, '\\$&')}"`);
+
 function sha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
@@ -84,7 +116,7 @@ export async function findUserByEmail(email: string): Promise<DashboardUser | nu
 // Login accepts either a username or an email in the same field — invited
 // users (created with an email but no username) can only log in this way.
 export async function findUserByIdentifier(identifier: string): Promise<DashboardUser | null> {
-  const value = encodeURIComponent(identifier);
+  const value = pgq(identifier);
   const rows = await rest(`/dashboard_users?or=(username.eq.${value},email.eq.${value})&select=*`);
   return rows[0] || null;
 }
@@ -243,10 +275,10 @@ export async function logEvent(userId: string | null, username: string, action: 
 // detail/action keyword can be combined (both apply, PostgREST ANDs them).
 export function listAuditLog(opts: { limit?: number | string; search?: string; from?: string; to?: string; user?: string; action?: string } = {}): Promise<AuditLogRow[]> {
   const { limit = 200, search = '', from = '', to = '', user = '', action = '' } = opts;
-  const params = [`select=*`, `order=created_at.desc`, `limit=${Number(limit) || 200}`];
+  const params = [`select=*`, `order=created_at.desc`, `limit=${Math.min(Number(limit) || 200, 500)}`];
   if (search) {
     const term = `*${search}*`;
-    params.push(`or=(username.ilike.${encodeURIComponent(term)},action.ilike.${encodeURIComponent(term)},detail.ilike.${encodeURIComponent(term)})`);
+    params.push(`or=(username.ilike.${pgq(term)},action.ilike.${pgq(term)},detail.ilike.${pgq(term)})`);
   }
   if (user) params.push(`username=eq.${encodeURIComponent(user)}`);
   if (action) params.push(`action=eq.${encodeURIComponent(action)}`);

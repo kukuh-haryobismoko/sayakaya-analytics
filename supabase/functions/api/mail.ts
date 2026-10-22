@@ -29,7 +29,7 @@ async function getTransport() {
 // the "Send statement" tab's compose modal always sends edited text
 // (public/app.js: defaultStatementEmail), so this mainly covers scripts.
 function defaultSubject(): string {
-  return `Your Sayakaya Statement — ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`;
+  return `Your Sayakaya Statement, ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}`;
 }
 // Shared with public/app.js's defaultStatementEmail (the text an admin
 // actually edits/sends) — kept in sync by hand since one runs in the browser.
@@ -110,7 +110,7 @@ export async function sendStatementEmail({ to, subject, body, name, attachments,
 export async function sendPasswordResetEmail({ to, username, resetUrl }: {
   to: string; username: string; resetUrl: string;
 }): Promise<void> {
-  const text = `Hi ${username},\n\nWe received a request to reset your Sayakaya Analytics password.\n\nReset your password: ${resetUrl}\n\nThis link expires in 30 minutes and can only be used once. If you didn't request this, you can safely ignore this email — your password won't change.`;
+  const text = `Hi ${username},\n\nWe received a request to reset your Sayakaya Analytics password.\n\nReset your password: ${resetUrl}\n\nThis link expires in 30 minutes and can only be used once. If you didn't request this, you can safely ignore this email, your password won't change.`;
   const html = `
 <div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1d2e">
   <div style="padding:24px 0 16px"><img src="cid:${LOGO_CID}" alt="Sayakaya" width="180" style="display:block"></div>
@@ -118,7 +118,7 @@ export async function sendPasswordResetEmail({ to, username, resetUrl }: {
     <p>Hi ${escapeHtml(username)},</p>
     <p>We received a request to reset your Sayakaya Analytics password.</p>
     <p><a href="${resetUrl}" ses:no-track style="display:inline-block;background:#3a50ab;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Reset password</a></p>
-    <p style="color:#6b7280;font-size:12px">This link expires in 30 minutes and can only be used once. If you didn't request this, you can safely ignore this email — your password won't change.</p>
+    <p style="color:#6b7280;font-size:12px">This link expires in 30 minutes and can only be used once. If you didn't request this, you can safely ignore this email, your password won't change.</p>
   </div>
 </div>`;
   await send({
@@ -163,20 +163,20 @@ export async function sendInviteEmail({ to, activateUrl, sentBy }: {
 const KIND_LABEL: Record<string, string> = { statement: 'Send e-statement & portfolio', fund_performance: 'Send fund performance' };
 export async function sendScheduleOtpEmail({ to, code, kind, sentBy }: { to: string; code: string; kind: string; sentBy?: string | null }): Promise<void> {
   const label = KIND_LABEL[kind] || 'a scheduled send';
-  const text = `A ${label} schedule is being set up on Sayakaya Analytics.\n\nConfirmation code: ${code}\n\nThis code expires in 10 minutes. If you didn't request this, you can ignore this email — no schedule will be created without it.`;
+  const text = `A ${label} schedule is being set up on Sayakaya Analytics.\n\nConfirmation code: ${code}\n\nThis code expires in 10 minutes. If you didn't request this, you can ignore this email, no schedule will be created without it.`;
   const html = `
 <div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1d2e">
   <div style="padding:24px 0 16px"><img src="cid:${LOGO_CID}" alt="Sayakaya" width="180" style="display:block"></div>
   <div style="font-size:14px;line-height:1.6">
     <p>A <strong>${escapeHtml(label)}</strong> schedule is being set up on Sayakaya Analytics.</p>
     <p style="font-size:28px;font-weight:700;letter-spacing:4px;margin:20px 0">${escapeHtml(code)}</p>
-    <p style="color:#6b7280;font-size:12px">This code expires in 10 minutes. If you didn't request this, you can ignore this email — no schedule will be created without it.</p>
+    <p style="color:#6b7280;font-size:12px">This code expires in 10 minutes. If you didn't request this, you can ignore this email, no schedule will be created without it.</p>
   </div>
 </div>`;
   await send({
     from: Deno.env.get('SMTP_FROM'),
     to,
-    subject: `Confirm your ${label} schedule — ${code}`,
+    subject: `Confirm your ${label} schedule, ${code}`,
     text,
     html,
     attachments: [{ filename: 'sayakaya-horizontal.png', content: LOGO_BUFFER, cid: LOGO_CID, contentDisposition: 'inline' }],
