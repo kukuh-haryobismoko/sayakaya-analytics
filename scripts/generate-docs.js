@@ -33,7 +33,7 @@ const md = (s) => String(s).replace(/\|/g, '\\|');
 const code = (s) => `\`${s}\``;
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-// ---------- what the code says ----------
+// what the code says
 
 const html = read('public/index.html');
 const i18nSrc = read('public/i18n.js');
@@ -330,7 +330,7 @@ if (process.argv.includes('--inventory')) {
   process.exit(0);
 }
 
-// ---------- gaps ----------
+// gaps
 
 allTabs.forEach((t) => {
   if (!C.TABS[t.id]) warn(`Tab "${t.label}" (${t.id}) belum punya entri di docs/content.js TABS.`);
@@ -385,7 +385,7 @@ function renderDetails(t) {
   if (d.notes && d.notes.length) { p('- **Catatan penting**:'); d.notes.forEach((n) => p(`  - ${n}`)); }
 }
 
-// ---------- document ----------
+// document
 
 const L = [];
 const p = (...lines) => L.push(...lines);

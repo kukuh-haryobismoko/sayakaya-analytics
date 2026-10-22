@@ -76,7 +76,7 @@ async function getAccessToken(): Promise<string> {
   return cachedToken.token;
 }
 
-// ---- Query parameter typing --------------------------------------------
+// Query parameter typing
 // BigQuery's REST API requires each parameter's type spelled out explicitly
 // (the Node SDK infers this client-side; here we do the same inference by
 // hand). Every param this app actually passes is a string, an integer, a
@@ -104,7 +104,7 @@ function toQueryParameter(name: string, value: unknown) {
   return { name, parameterType: { type: 'STRING' }, parameterValue: { value: String(value) } };
 }
 
-// ---- Row parsing ---------------------------------------------------------
+// Row parsing
 // The REST API returns every value as a string, keyed positionally
 // (row.f[i].v) against schema.fields[i] — turn that into plain objects
 // keyed by column name, coercing to native JS types where that's lossless.

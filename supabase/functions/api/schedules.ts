@@ -84,7 +84,7 @@ async function rest(path: string, opts: RequestInit = {}): Promise<any> {
 function sha256Hex(v: string): string { return crypto.createHash('sha256').update(v).digest('hex'); }
 function genOtpCode(): string { return String(crypto.randomInt(0, 1000000)).padStart(6, '0'); }
 
-// ---- Next-run computation (Asia/Jakarta wall-clock, UTC+7 fixed, no DST) ---
+// Next-run computation (Asia/Jakarta wall-clock, UTC+7 fixed, no DST)
 interface NextRunSpec { frequency: string; day_of_week?: number | null; day_of_month?: number | null; run_time?: string | null }
 
 function parseRunTime(runTime?: string | null) {
@@ -140,7 +140,7 @@ export function computeNextRun(job: NextRunSpec, from: Date = new Date()): Date 
   throw new Error(`Unknown frequency: ${job.frequency}`);
 }
 
-// ---- Recipient resolution ---------------------------------------------------
+// Recipient resolution
 export interface RecipientSpec {
   kind: string;
   recipientType: string;
@@ -174,7 +174,7 @@ export async function resolveRecipients({ kind, recipientType, recipientEmail, r
     .filter((r) => r.email);
 }
 
-// ---- Exclusion (opt-out) list -----------------------------------------------
+// Exclusion (opt-out) list
 // dashboard_send_exclusions (migration 20261013160000): skipped by schedules,
 // group sends and batch sends. An entry matches on what was typed and on the
 // SID / email BigQuery returned for it, so one added by SID also catches that
@@ -254,7 +254,7 @@ export async function previewRecipientCount(spec: RecipientSpec): Promise<{ coun
   return { count: recipients.length, excluded };
 }
 
-// ---- OTP-gated schedule creation --------------------------------------------
+// OTP-gated schedule creation
 // deno-lint-ignore no-explicit-any
 export async function requestOtp(payload: any): Promise<string> {
   if (!payload.confirmationEmail || !EMAIL_RE.test(payload.confirmationEmail)) {
@@ -325,7 +325,7 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
   return job;
 }
 
-// ---- CRUD used by the UI ----------------------------------------------------
+// CRUD used by the UI
 // Each job carries its email counts (sent / waiting / failed) for the table.
 export async function listJobs(kind: string): Promise<ScheduledJob[]> {
   const jobs: ScheduledJob[] = await rest(`/dashboard_scheduled_jobs?kind=eq.${kind}&select=*&order=created_at.desc`);
@@ -377,7 +377,7 @@ export async function deleteJob(id: string): Promise<void> {
   await rest(`/dashboard_scheduled_jobs?id=eq.${id}`, { method: 'DELETE' });
 }
 
-// ---- Execution: called by POST /api/cron/run-due-schedules -----------------
+// Execution: called by POST /api/cron/run-due-schedules
 async function enqueueJob(job: ScheduledJob): Promise<number> {
   const { recipients } = await resolveSendable({
     kind: job.kind, recipientType: job.recipient_type,

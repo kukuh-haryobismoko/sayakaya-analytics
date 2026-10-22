@@ -82,7 +82,7 @@ export async function record({ id, message, log = {}, status, error, sesId }: {
   }
 }
 
-// ---- SES events (via the SNS webhook) --------------------------------------
+// SES events (via the SNS webhook)
 const EVENT_FIELD: Record<string, string> = {
   Send: 'send', Delivery: 'delivery', Open: 'open', Click: 'click', Bounce: 'bounce', Complaint: 'complaint',
   Reject: 'reject', DeliveryDelay: 'deliveryDelay', RenderingFailure: 'failure',
@@ -214,7 +214,7 @@ export function secretMatches(given: string | null | undefined, expected: string
   return crypto.timingSafeEqual(h(given), h(expected));
 }
 
-// ---- Reads for the Email recap tab ------------------------------------------
+// Reads for the Email recap tab
 export function recap({ from, to, category, source }: { from: string; to: string; category?: string; source?: string }) {
   return rest('/rpc/dashboard_email_recap', {
     method: 'POST',

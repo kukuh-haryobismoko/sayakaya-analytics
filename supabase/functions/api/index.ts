@@ -101,7 +101,7 @@ function portfolioSheetRows(holdings: Record<string, unknown>[]) {
   }));
 }
 
-// ---- Referral program eligibility -----------------------------------------
+// Referral program eligibility
 // Ported from server/app.js — turns Q.referralProgramDetail()'s raw holding
 // numbers into the T&C's verdict. Precedence: any hard-fail (KYC, redeemed,
 // no snapshot ever found) wins over "still pending" over "eligible" — a row
@@ -141,7 +141,7 @@ function computeReferralEligibility(rows: Record<string, unknown>[]) {
   });
 }
 
-// ---- Response helpers -----------------------------------------------------
+// Response helpers
 const CORS_HEADERS: Record<string, string> = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS',
@@ -213,7 +213,7 @@ async function xlsxMultiResponse(sheets: { name: string; rows: Record<string, un
   });
 }
 
-// ---- Tiny router ------------------------------------------------------------
+// Tiny router
 // The 4th arg is the authenticated user (null only for /api/health and
 // /api/auth/login, the two routes that skip the auth check below) — handlers
 // that don't need it can simply omit it from their signature.
@@ -273,7 +273,7 @@ async function bodyOf(req: Request): Promise<Record<string, unknown>> {
   }
 }
 
-// ---- Health -----------------------------------------------------------
+// Health
 // Pings BigQuery with a trivial query (no table scan, no cost) so the UI
 // can show a live/down connection indicator instead of just "the API server
 // itself responded".
@@ -290,7 +290,7 @@ on('GET', '/api/health', async () => {
   return json({ ok: true, project: PROJECT_ID, bigquery, askEnabled: askEnabled() });
 });
 
-// ---- Auth: login/logout/me --------------------------------------------
+// Auth: login/logout/me
 // Login is the one route not gated by the auth check below (it's how you get
 // a token in the first place).
 on('POST', '/api/auth/login', async (req) => {
@@ -318,7 +318,7 @@ on('POST', '/api/auth/logout', async (req) => {
 
 on('GET', '/api/auth/me', (_req, _params, _url, user) => json({ user: A.publicUser(user!) }));
 
-// ---- Admin: manage dashboard accounts (superuser only) --------------------
+// Admin: manage dashboard accounts (superuser only)
 on('GET', '/api/admin/users', requireSuperuser(async () => {
   const rows = await A.listUsers();
   return json(rows.map((r) => A.publicUser({ ...r, password_hash: '' })));
@@ -406,7 +406,7 @@ on('GET', '/api/admin/audit-log', requireSuperuser(async (_req, _params, url) =>
   return json(rows);
 }));
 
-// ---- Presentation decks (internal meetings) --------------------------------
+// Presentation decks (internal meetings)
 // Mirrors server/app.js's PRESENTATIONS map/route: two independently
 // grantable tabs ('presentation' for AI Taskforce decks, 'monthly-review' for
 // the rest) rather than one, so an admin can hand out a login scoped to just
@@ -454,7 +454,7 @@ on('GET', '/api/presentations/:month', async (_req, params, _url, user) => {
   return new Response(res.body, { headers: { 'content-type': 'application/pdf' } });
 });
 
-// ---- Auth: change your own password ---------------------------------------
+// Auth: change your own password
 // Requires the current password (not just a valid session) so a hijacked-but-
 // still-valid token can't lock the real owner out permanently.
 on('POST', '/api/auth/change-password', async (req, _params, _url, user) => {
@@ -477,7 +477,7 @@ on('POST', '/api/auth/change-password', async (req, _params, _url, user) => {
   return json({ ok: true });
 });
 
-// ---- Auth: claim your own username (once) ----------------------------------
+// Auth: claim your own username (once)
 // Only for accounts created via email-only invite (no username yet). Once
 // set, further changes go through an admin — matching the picker's
 // disabled-once-set rule in the admin edit form.
@@ -493,7 +493,7 @@ on('POST', '/api/auth/set-username', async (req, _params, _url, user) => {
   return json({ user: A.publicUser(updated) });
 });
 
-// ---- Auth: forgot password (unauthenticated, like login) ------------------
+// Auth: forgot password (unauthenticated, like login)
 // Always responds with the same generic message regardless of whether the
 // username exists or has an email on file — otherwise the response itself
 // would let someone probe for valid usernames.
@@ -530,7 +530,7 @@ on('POST', '/api/auth/reset-password', async (req) => {
   return json({ ok: true });
 });
 
-// ---- Overview (KPIs) ------------------------------------------------------
+// Overview (KPIs)
 // aumDate is the Platform AUM card's own "as of" date, deliberately separate
 // from from/to (which only scope buy/sell/transaction figures) — see
 // platformAumAsOf in queries.ts for why. Required, same as /api/funds/top
@@ -551,20 +551,20 @@ on('GET', '/api/overview', requireTab('overview', async (_req, _params, url) => 
   return json({ ...users[0], ...aum[0], ...tx[0], ...funds[0] });
 }));
 
-// ---- Trends ---------------------------------------------------------------
+// Trends
 on('GET', '/api/trends', requireTab('overview', async (_req, _params, url) => {
   const q = Q.trends(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), parseFundIds(url), parseUserFilter(url));
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Breakdowns -----------------------------------------------------------
+// Breakdowns
 on('GET', '/api/breakdown/:dimension', requireTab('overview', async (_req, params, url) => {
   const q = Q.breakdownBy(params.dimension, qp(url, 'from'), qp(url, 'to'), parseFundIds(url), parseUserFilter(url));
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Funds ------------------------------------------------------------
-// Largest funds/MI by AUM, as of a date, from portfolio_with_code -------
+// Funds
+// Largest funds/MI by AUM, as of a date, from portfolio_with_code
 on('GET', '/api/funds/top/latest-date', requireTab('overview', async () => {
   const d = Q.largestFundsLatestDate();
   const [row] = await runQuery(d.sql, d.params);
@@ -589,7 +589,7 @@ on('GET', '/api/funds/list', requireAnyTab(['overview', 'performance', 'users-tx
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Users ----------------------------------------------------------------
+// Users
 on('GET', '/api/users/growth', requireTab('overview', async () => {
   const q = Q.userGrowth();
   return json(await runQuery(q.sql, q.params));
@@ -611,7 +611,7 @@ on('GET', '/api/users/top-cities-aum', requireTab('overview', async (_req, _para
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Transactions explorer ------------------------------------------------
+// Transactions explorer
 on('GET', '/api/transactions/filters', requireTab('remisier-tx', async () => {
   const q = Q.txFilterValues();
   const rows = await runQuery(q.sql, q.params);
@@ -629,7 +629,7 @@ on('GET', '/api/transactions', requireTab('remisier-tx', async (_req, _params, u
   return json({ rows, total: Number(countRows[0]?.total || 0) });
 }));
 
-// ---- SInvest transactions (raw KSEI/SInvest custodian feed, paged) --------
+// SInvest transactions (raw KSEI/SInvest custodian feed, paged)
 on('GET', '/api/sinvest-transactions', requireTab('sinvest-tx', async (_req, _params, url) => {
   const q = Q.sinvestTransactions({
     from: qp(url, 'from'), to: qp(url, 'to'),
@@ -644,7 +644,7 @@ on('GET', '/api/sinvest-transactions', requireTab('sinvest-tx', async (_req, _pa
   return json({ rows, total: Number(countRows[0]?.total || 0) });
 }));
 
-// ---- Users transactions (any investor, by SID/email/name) -----------------
+// Users transactions (any investor, by SID/email/name)
 on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params, url) => {
   const q2 = qp(url, 'q');
   const fundName = qp(url, 'fundName');
@@ -673,11 +673,11 @@ on('GET', '/api/users-transactions/summary', requireTab('users-tx', async (_req,
   return json({ rows: await runQuery(q.sql, q.params) });
 }));
 
-// ---- Event code tracking (generic — see queries.ts:eventCodeWhere for why
+// Event code tracking (generic — see queries.ts:eventCodeWhere for why
 // `field` still picks referrer_code vs sales_code instead of a real event
 // column) — funnel, tagged users, cohort, and transaction detail for
-// whatever referral/sales codes an eventual event hands out. ----------------
-// ---- HNWI bonus: the page sends the program's dates and thresholds from
+// whatever referral/sales codes an eventual event hands out.
+// HNWI bonus: the page sends the program's dates and thresholds from
 // public/hnwi-bonus-config.js and computes the bonus itself.
 on('GET', '/api/hnwi-bonus/data', requireTab('hnwi-bonus', async (_req, _params, url) => {
   const startDate = qp(url, 'startDate') || '';
@@ -698,7 +698,7 @@ on('GET', '/api/hnwi-bonus/data', requireTab('hnwi-bonus', async (_req, _params,
   return json({ candidates, transactions: await runQuery(t.sql, t.params) });
 }));
 
-// ---- Promo recap: raw promo buys and promo participations (with holding
+// Promo recap: raw promo buys and promo participations (with holding
 // and fee from portfolio_with_code); the page builds the per-promo summary.
 const PROMO_CODE_RE = /^[A-Za-z0-9_*-]{1,60}$/;
 on('GET', '/api/promo-recap/data', requireTab('promo-recap', async (_req, _params, url) => {
@@ -715,7 +715,7 @@ on('GET', '/api/promo-recap/data', requireTab('promo-recap', async (_req, _param
   return json({ transactions, participants });
 }));
 
-// ---- Booth event: the page sends codes and dates from
+// Booth event: the page sends codes and dates from
 // public/booth-event-config.js and computes targets and incentives itself.
 const BOOTH_CODE_RE = /^[A-Za-z0-9_-]{2,40}$/;
 const BOOTH_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -822,7 +822,7 @@ on('GET', '/api/event-code/transactions', requireTab('event-code', async (_req, 
   return json({ rows, total: Number(countRows[0]?.total || 0) });
 }));
 
-// ---- AUM history (mi_fee_logs.mi_fee) -------------------------------------
+// AUM history (mi_fee_logs.mi_fee)
 on('GET', '/api/aum-history', requireTab('aum', async (_req, _params, url) => {
   const q = Q.aumHistory(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
   return json(await runQuery(q.sql, q.params));
@@ -844,13 +844,13 @@ on('GET', '/api/aum-history/drill', requireTab('aum', async (_req, _params, url)
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Top investors (subscribers / redeemers / net deposit) ---------------
+// Top investors (subscribers / redeemers / net deposit)
 on('GET', '/api/top-investors', requireTab('top-investors', async (_req, _params, url) => {
   const q = Q.topInvestors({ from: qp(url, 'from'), to: qp(url, 'to'), metric: qp(url, 'metric'), limit: qp(url, 'limit'), direction: qp(url, 'direction') });
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- User portfolio lookup (search by SID, print one user's portfolio) ----
+// User portfolio lookup (search by SID, print one user's portfolio)
 on('GET', '/api/users/search', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest', 'send-statement', 'send-fund-performance', 'user-behavior'], async (_req, _params, url) => {
   const q = Q.userSearch(qp(url, 'q'));
   return json(await runQuery(q.sql, q.params));
@@ -892,7 +892,7 @@ on('GET', '/api/portfolio', requireTab('portfolio', async (_req, _params, url, u
   return json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null, latestDate });
 }));
 
-// ---- Portfolio (Fix): same as Portfolio (PWC) above, but the as-of-date
+// Portfolio (Fix): same as Portfolio (PWC) above, but the as-of-date
 // snapshot is read from portfolio_fix instead of portfolio_with_code (see
 // userHoldingsAsOfFix in queries.ts for why). Live (no date) holdings are
 // identical to Portfolio (PWC) — both read the same real-time userHoldings().
@@ -919,7 +919,7 @@ on('GET', '/api/portfolio-fix', requireTab('portfolio-fix', async (_req, _params
   return json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null, latestDate });
 }));
 
-// ---- Portfolio (TX): holdings with avg_buy_price computed straight from
+// Portfolio (TX): holdings with avg_buy_price computed straight from
 // the transaction ledger (see userHoldingsFromTx in queries.ts) instead of
 // trusting portfolios.initial_price. An as-of-date reconstructs holdings
 // purely from transactions up to that date (userHoldingsFromTxAsOf) — bonus
@@ -947,7 +947,7 @@ on('GET', '/api/portfolio-tx', requireTab('portfolio-tx', async (_req, _params, 
   return json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null });
 }));
 
-// ---- Portfolio (SInvest): same as Portfolio (TX), but holdings are built
+// Portfolio (SInvest): same as Portfolio (TX), but holdings are built
 // entirely from the custodian feed (sinvest.trx_history) instead of the
 // app's own transactions table (see sinvestHoldings/sinvestHoldingsAsOf in
 // queries.ts). split/performance/history still come from the app's own live
@@ -972,7 +972,7 @@ on('GET', '/api/portfolio-sinvest', requireTab('portfolio-sinvest', async (_req,
   return json({ holdings, split: date ? null : splitRows[0], performance, history, recentTx, asOfDate: date || null });
 }));
 
-// ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
+// Portfolio Explorer (goal_snapshots, point-in-time by date)
 on('GET', '/api/portfolio-explorer', requireTab('portfolio-explorer', async (_req, _params, url, user) => {
   const userId = qp(url, 'userId');
   if (!userId) return json({ error: 'userId is required.' }, 400);
@@ -994,8 +994,8 @@ on('GET', '/api/portfolio-explorer', requireTab('portfolio-explorer', async (_re
   return json({ asOfDate, latestDate, holdings, byGoal });
 }));
 
-// ---- HNWI (High Net Worth Individual): investors above an AUM threshold, as
-// of a date, from portfolio_with_code ---------------------------------------
+// HNWI (High Net Worth Individual): investors above an AUM threshold, as
+// of a date, from portfolio_with_code
 on('GET', '/api/hnwi/latest-date', requireTab('hnwi', async () => {
   const d = Q.hnwiLatestDate();
   const [row] = await runQuery(d.sql, d.params);
@@ -1014,8 +1014,8 @@ on('GET', '/api/hnwi/by-fund', requireTab('hnwi', async (_req, _params, url) => 
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Dormant win-back: computed live from main.transactions, see
-// queries.js (DORMANT_EPISODES_CTE) for the gap/conversion methodology ----
+// Dormant win-back: computed live from main.transactions, see
+// queries.js (DORMANT_EPISODES_CTE) for the gap/conversion methodology
 on('GET', '/api/dormant/conversion-summary', requireTab('dormant', async () => {
   const q = Q.dormantConversionSummary();
   return json(await runQuery(q.sql, q.params));
@@ -1029,8 +1029,8 @@ on('GET', '/api/dormant/time-to-convert', requireTab('dormant', async () => {
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Kalcer (ambassadors): raw referral links + dated AUM, no bonus math
-// (see queries.ts) ------------------------------------------------------
+// Kalcer (ambassadors): raw referral links + dated AUM, no bonus math
+// (see queries.ts)
 on('GET', '/api/kalcer/latest-date', requireTab('kalcer', async () => {
   const q = Q.kalcerLatestDate();
   const [row] = await runQuery(q.sql, q.params);
@@ -1049,7 +1049,7 @@ on('GET', '/api/kalcer/detail', requireTab('kalcer', async (_req, _params, url) 
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Push delivery: FCM's own send-pipeline health log (own dataset) ----
+// Push delivery: FCM's own send-pipeline health log (own dataset)
 on('GET', '/api/push/trend', requireTab('push', async (_req, _params, url) => {
   const q = Q.pushTrend(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'));
   return json(await runQuery(q.sql, q.params));
@@ -1063,13 +1063,13 @@ on('GET', '/api/push/by-platform', requireTab('push', async (_req, _params, url)
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Marketing attribution: Adjust's mobile attribution events (own dataset) --
+// Marketing attribution: Adjust's mobile attribution events (own dataset) --
 on('GET', '/api/marketing/funnel', requireTab('marketing', async (_req, _params, url) => {
   const q = Q.marketingFunnelByChannel(qp(url, 'from'), qp(url, 'to'));
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- App health: Crashlytics + Performance Monitoring (own datasets) ----
+// App health: Crashlytics + Performance Monitoring (own datasets)
 on('GET', '/api/app-health/crashes', requireTab('app-health', async (_req, _params, url) => {
   const q = Q.appCrashIssues(qp(url, 'from'), qp(url, 'to'));
   return json(await runQuery(q.sql, q.params));
@@ -1079,8 +1079,8 @@ on('GET', '/api/app-health/performance', requireTab('app-health', async (_req, _
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Investor journey (tab id user-behavior): one investor's GA4 events
-// (user_id) and transactions on one timeline, see queries.ts -------------
+// Investor journey (tab id user-behavior): one investor's GA4 events
+// (user_id) and transactions on one timeline, see queries.ts
 on('GET', '/api/behavior/user', requireTab('user-behavior', async (_req, _params, url, user) => {
   const userId = qp(url, 'userId');
   if (!userId) return json({ error: 'userId is required.' }, 400);
@@ -1092,9 +1092,9 @@ on('GET', '/api/behavior/user', requireTab('user-behavior', async (_req, _params
   return json({ profile: profile[0] || null, timeline });
 }));
 
-// ---- Analysis tabs: GA4 app events joined to the main database by
+// Analysis tabs: GA4 app events joined to the main database by
 // user_id, one tab each for buying, onboarding, selling, app features and
-// the sign-up funnel, see queries.ts ----------------------------------
+// the sign-up funnel, see queries.ts
 const ANALYSIS_ROUTES: [string, string, Record<string, (from?: string, to?: string) => Q.Query>][] = [
   ['subscription-analysis', 'subscription', {
     funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
@@ -1128,7 +1128,7 @@ on('GET', '/api/analysis/coverage', requireAnyTab(ANALYSIS_ROUTES.map(([tab]) =>
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Product performance (NAV % change per fund type) ----------------------
+// Product performance (NAV % change per fund type)
 on('GET', '/api/product-performance', requireTab('performance', async () => {
   const q = Q.productPerformance();
   return json(await runQuery(q.sql, q.params));
@@ -1145,7 +1145,7 @@ on('GET', '/api/product-performance/trend', requireTab('performance', async (_re
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Growth: campaigns, referrals, switching, manager/demographic AUM -----
+// Growth: campaigns, referrals, switching, manager/demographic AUM
 on('GET', '/api/campaigns/performance', requireTab('growth', async (_req, _params, url) => {
   const q = Q.campaignPerformance(qp(url, 'limit'));
   return json(await runQuery(q.sql, q.params));
@@ -1171,13 +1171,13 @@ on('GET', '/api/referrals/top', requireTab('growth', async (_req, _params, url) 
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Reconciliation: app ledger vs custodian (sinvest) feed ----------------
+// Reconciliation: app ledger vs custodian (sinvest) feed
 on('GET', '/api/reconciliation', requireTab('reconciliation', async (_req, _params, url) => {
   const q = Q.reconciliationDaily(qp(url, 'from'), qp(url, 'to'));
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Revenue: management fee earned per fund/period -------------------------
+// Revenue: management fee earned per fund/period
 on('GET', '/api/revenue', requireTab('revenue', async (_req, _params, url) => {
   const q = Q.revenueDetail(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
@@ -1187,7 +1187,7 @@ on('GET', '/api/revenue/summary', requireTab('revenue', async (_req, _params, ur
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Revenue v2: same as Revenue above, but AUM sourced from goal_snapshots
+// Revenue v2: same as Revenue above, but AUM sourced from goal_snapshots
 on('GET', '/api/revenue-v2', requireTab('revenue2', async (_req, _params, url) => {
   const q = Q.revenueV2Detail(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'fund'), qp(url, 'mi'));
   return json(await runQuery(q.sql, q.params));
@@ -1197,8 +1197,8 @@ on('GET', '/api/revenue-v2/summary', requireTab('revenue2', async (_req, _params
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- User lifetime: Revenue (PWC) math grouped per investor, plus the
-// lifetime dates (registration / first buy / holding span) around it --------
+// User lifetime: Revenue (PWC) math grouped per investor, plus the
+// lifetime dates (registration / first buy / holding span) around it
 on('GET', '/api/user-lifetime', requireTab('user-lifetime', async (_req, _params, url) => {
   const limit = Math.min(Number(qp(url, 'limit')) || 200, 2000);
   const q = Q.userLifetimeUsers(qp(url, 'from'), qp(url, 'to'), qp(url, 'fund'), qp(url, 'mi'), qp(url, 'sid'), limit);
@@ -1215,7 +1215,7 @@ on('GET', '/api/user-lifetime/detail', requireTab('user-lifetime', async (_req, 
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Campaign revenue: management fee earned on promo-locked units --------
+// Campaign revenue: management fee earned on promo-locked units
 on('GET', '/api/campaign-revenue', requireTab('campaign-revenue', async (_req, _params, url) => {
   const q = Q.campaignRevenueDetail(qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), qp(url, 'promo'));
   return json(await runQuery(q.sql, q.params));
@@ -1229,7 +1229,7 @@ on('GET', '/api/campaign-revenue/summary', requireTab('campaign-revenue', async 
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
+// Referral program: Sep-Dec 2026 T&C eligibility report
 // inviteeDateField='created_at' here so "qualifying" (and everything derived
 // from it below) is scoped to the same registered-in-period population as
 // referralInviterStats()'s "Invited"/"Transacted" — otherwise an invitee who
@@ -1256,7 +1256,7 @@ on('GET', '/api/referral-program/invited', requireTab('referral-program', async 
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Referral program (kyc based): an exact copy of the section above —
+// Referral program (kyc based): an exact copy of the section above —
 // same T&C eligibility rule, same detail-row shape, same leaderboard shape —
 // with exactly one thing swapped throughout: every place the main tab gates
 // the funnel by the invitee's registration date (invitee.created_at) this
@@ -1281,8 +1281,8 @@ on('GET', '/api/referral-program-alt/invited', requireTab('referral-program-alt'
   return json(await runQuery(q.sql, q.params));
 }));
 
-// ---- Remisier sharing: management fee revenue for one remisier's users,
-// from goal_snapshots, split as a portion of the AperD share -----------------
+// Remisier sharing: management fee revenue for one remisier's users,
+// from goal_snapshots, split as a portion of the AperD share
 on('GET', '/api/remisier/users', requireAnyTab(['remisier', 'remisier-pwc'], async (_req, _params, url) => {
   const code = qp(url, 'code');
   if (!code) return json({ error: 'code is required.' }, 400);
@@ -1303,8 +1303,8 @@ on('GET', '/api/remisier/revenue/summary', requireTab('remisier', async (_req, _
   const q = Q.remisierRevenueSummary(qp(url, 'field') || '', code, qp(url, 'from'), qp(url, 'to'), qp(url, 'granularity'), portion);
   return json(await runQuery(q.sql, q.params));
 }));
-// ---- Remisier sharing (portfolio_with_code): same as above, AUM sourced
-// from mi_fee_logs.portfolio_with_code instead of goal_snapshots ----------
+// Remisier sharing (portfolio_with_code): same as above, AUM sourced
+// from mi_fee_logs.portfolio_with_code instead of goal_snapshots
 on('GET', '/api/remisier/revenue-pwc', requireTab('remisier-pwc', async (_req, _params, url) => {
   const code = qp(url, 'code');
   if (!code) return json({ error: 'code is required.' }, 400);
@@ -1337,7 +1337,7 @@ on('GET', '/api/remisier/transactions', requireTab('remisier-tx', async (_req, _
   return json({ rows, total: Number(countRows[0]?.total || 0) });
 }));
 
-// ---- Predictive models (BigQuery ML) --------------------------------------
+// Predictive models (BigQuery ML)
 on('GET', '/api/ml/status', requireTab('predict', async () => {
   try {
     const models = await ML.status();
@@ -1369,7 +1369,7 @@ on('POST', '/api/ml/retrain', requireSuperuser(async (_req, _params, _url, user)
   return json(result);
 }));
 
-// ---- Generic multi-table explorer -----------------------------------------
+// Generic multi-table explorer
 on('GET', '/api/explore/_meta', requireTab('explorer', () => json(EX.meta())));
 
 on('GET', '/api/explore/:dataset/filters/:filter', requireTab('explorer', async (_req, params) => {
@@ -1389,7 +1389,7 @@ on('GET', '/api/explore/:dataset', requireTab('explorer', async (_req, params, u
   return json({ rows, total: Number(countRows[0]?.total || 0) });
 }));
 
-// ---- Ask (natural language -> SQL via Anthropic) --------------------------
+// Ask (natural language -> SQL via Anthropic)
 on('GET', '/api/ask/tables', requireTab('ask', () => json({ tables: TABLES })));
 
 on('POST', '/api/ask', requireTab('ask', async (req, _params, _url, user) => {
@@ -1433,7 +1433,7 @@ on('POST', '/api/ask/chart', requireTab('ask', async (req) => {
   return json(await suggestChart(question, rows || [], hint));
 }));
 
-// ---- SQL Lab --------------------------------------------------------------
+// SQL Lab
 on('POST', '/api/sql/estimate', requireTab('sql', async (req) => {
   const body = await bodyOf(req);
   const v = validateAdHoc(String(body.sql || ''));
@@ -1463,7 +1463,7 @@ on('POST', '/api/sql/run', requireTab('sql', async (req, _params, _url, user) =>
   return json({ rows, count: rows.length });
 }));
 
-// ---- Exports --------------------------------------------------------------
+// Exports
 on('POST', '/api/export', async (req, _params, _url, user) => {
   const body = await bodyOf(req);
   const source = body.source as string;
@@ -1886,7 +1886,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
   return csvResponse(rows, filename, username);
 });
 
-// ---- Bulk export (Portfolio tabs): same 5 portfolio sources as /api/export
+// Bulk export (Portfolio tabs): same 5 portfolio sources as /api/export
 // above, combined across a list of investors instead of just one — CSV rows
 // tagged with SID/name, XLSX one sheet per investor, PDF one document with
 // one page per investor. "Separate files" mode needs no server support: the
@@ -1986,7 +1986,7 @@ on('POST', '/api/export/batch', async (req, _params, _url, user) => {
   return csvResponse(rows, filename, username);
 });
 
-// ---- Bulk export "Preview summary": same investor list as the batch export
+// Bulk export "Preview summary": same investor list as the batch export
 // above, aggregated instead of written to a file — total AUM, holdings summed
 // by fund, and each investor's own AUM — so an admin can sanity-check a
 // selection before spending an export on it.
@@ -2002,7 +2002,7 @@ on('POST', '/api/portfolio/bulk-summary', async (req, _params, _url, user) => {
   return json(aggregateBulkHoldings(entries));
 });
 
-// ---- Send statement preview: same holdings/transactions the PDFs would
+// Send statement preview: same holdings/transactions the PDFs would
 // contain, as JSON, so the admin can sanity-check before sending. Reuses
 // the exact query builders /api/statement/email attaches as PDFs.
 on('GET', '/api/statement/preview', requireTab('send-statement', async (_req, _params, url) => {
@@ -2028,9 +2028,9 @@ on('GET', '/api/statement/preview', requireTab('send-statement', async (_req, _p
   return json(result);
 }));
 
-// ---- Send statement: email an investor their portfolio (holdings only, no
+// Send statement: email an investor their portfolio (holdings only, no
 // fund performance) and/or their monthly transaction e-statement, as one
-// or two PDF attachments. ---------------------------------------------------
+// or two PDF attachments.
 on('POST', '/api/statement/email', requireTab('send-statement', async (req, _params, _url, user) => {
   const body = await bodyOf(req);
   const userId = body.userId as string; const sid = body.sid as string;
@@ -2072,7 +2072,7 @@ on('POST', '/api/statement/email', requireTab('send-statement', async (req, _par
   return json({ ok: true, to: contact.email });
 }));
 
-// ---- Send statement (batch): resolves a pasted list of emails/SIDs to
+// Send statement (batch): resolves a pasted list of emails/SIDs to
 // investors, then sends each their own portfolio/e-statement — same
 // subject/body, own PDFs and own birthdate-derived password. One email per
 // recipient (Promise.allSettled, same convention as /api/fund-performance/email)
@@ -2152,7 +2152,7 @@ on('GET', '/api/statement/log', requireTab('send-statement', async () => {
   return json(rows);
 }));
 
-// ---- Send fund performance: broadcast the Reksa Dana Update PDF to a
+// Send fund performance: broadcast the Reksa Dana Update PDF to a
 // picked/pasted list of email addresses — one email per recipient, so one
 // bad address doesn't block the rest of the list. Separate tool from Send
 // statement, which is scoped to a single investor's own documents.
@@ -2208,7 +2208,7 @@ on('GET', '/api/fund-performance/log', requireTab('send-fund-performance', async
   return json(rows);
 }));
 
-// ---- Scheduled/automated sending -------------------------------------------
+// Scheduled/automated sending
 // Ported from server/app.js — see server/schedules.js / schedules.ts for the
 // actual scheduling, OTP, and recipient-resolution logic. A schedule only
 // ever gets created through the OTP request/confirm pair below; there's no
@@ -2370,7 +2370,7 @@ on('PATCH', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-pe
   return json({ ok: true, job });
 }));
 
-// ---- Exclusion list (both Send tabs share it) ------------------------------
+// Exclusion list (both Send tabs share it)
 const EXCLUSION_SCOPES = ['all', 'statement', 'fund_performance'];
 on('GET', '/api/send-exclusions', requireAnyTab(['send-statement', 'send-fund-performance'], async () => {
   return json(await Sched.listExclusions());
@@ -2409,8 +2409,8 @@ on('DELETE', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-p
   return json({ ok: true });
 }));
 
-// ---- Email recap: every email this app sends (email-log.ts) and the
-// delivery/open/click events SES reports back for it ----------------------
+// Email recap: every email this app sends (email-log.ts) and the
+// delivery/open/click events SES reports back for it
 on('GET', '/api/email-recap/summary', requireTab('email-recap', async (_req, _params, url) => {
   const from = qp(url, 'from'); const to = qp(url, 'to');
   if (!from || !to) return json({ error: 'from and to are required.' }, 400);
@@ -2435,7 +2435,7 @@ on('POST', '/api/webhooks/ses', async (req, _params, url) => {
   return json(r.body, r.status);
 });
 
-// ---- Scheduled-send execution: invoked by an external scheduler on a timer
+// Scheduled-send execution: invoked by an external scheduler on a timer
 // (see server/schedules.js's header comment for the full rationale) — never
 // by a dashboard session, so it's exempted from the Bearer-token check below
 // and checks its own shared secret instead.
@@ -2446,7 +2446,7 @@ on('POST', '/api/cron/run-due-schedules', async (req) => {
   return json(await Sched.runDueJobs());
 });
 
-// ---- Scheduled ML retraining: same external-scheduler shape as the cron
+// Scheduled ML retraining: same external-scheduler shape as the cron
 // route above (pg_cron job dashboard-retrain-models, monthly), just a
 // different job. See server/ml-train.js's header comment for why.
 on('POST', '/api/cron/retrain-models', async (req) => {
@@ -2459,7 +2459,7 @@ on('POST', '/api/cron/retrain-models', async (req) => {
   return json(result);
 });
 
-// ---- Serve ------------------------------------------------------------------
+// Serve
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   // Supabase prefixes its own function-routing path in front of ours

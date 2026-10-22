@@ -31,7 +31,7 @@ export async function status(): Promise<string[]> {
   return ['aum_forecast', 'tx_forecast', 'churn_model'];
 }
 
-// ---- AUM forecast: recent history + ARIMA_PLUS forecast --------------------
+// AUM forecast: recent history + ARIMA_PLUS forecast
 export async function aumForecast(horizon: unknown) {
   const h = clampHorizon(horizon);
   const history = await runQuery(`
@@ -50,7 +50,7 @@ export async function aumForecast(horizon: unknown) {
   return { history, forecast };
 }
 
-// ---- Transaction (buy volume) forecast ------------------------------------
+// Transaction (buy volume) forecast
 export async function txForecast(horizon: unknown) {
   const h = clampHorizon(horizon);
   const history = await runQuery(`
@@ -70,7 +70,7 @@ export async function txForecast(horizon: unknown) {
   return { history, forecast };
 }
 
-// ---- Churn predictions: score current holders -----------------------------
+// Churn predictions: score current holders
 // One CTE runs ML.PREDICT once over current holders (churned=0 in features);
 // the summary buckets and the top-N list are both selected from it in the
 // same query, instead of two separate runQuery calls each re-running
@@ -107,7 +107,7 @@ export async function churnPredictions(limit: unknown = 100) {
   };
 }
 
-// ---- Churn exploration (no model needed) ----------------------------------
+// Churn exploration (no model needed)
 export async function churnOverview() {
   const overall = await runQuery(`
     WITH buyers AS (${CHURN_BUYERS}),
@@ -135,7 +135,7 @@ export async function churnOverview() {
   return { overall: overall[0] || {}, byTenure };
 }
 
-// ---- Retention cohorts (engagement by months since first transaction) ------
+// Retention cohorts (engagement by months since first transaction)
 export async function retentionCohorts(months: unknown = 12) {
   const m = Math.min(parseInt(String(months), 10) || 12, 24);
   const rows = await runQuery(`
@@ -158,7 +158,7 @@ export async function retentionCohorts(months: unknown = 12) {
   return rows;
 }
 
-// ---- AUM retention cohorts (engagement by months since first AUM) ---------
+// AUM retention cohorts (engagement by months since first AUM)
 // Cohort assignment is NOT first-transaction month (that's retentionCohorts
 // above) — it's the first calendar month a sid_code shows positive AUM in
 // mi_fee_logs.portfolios, joined to users via sid_code. Retention per month

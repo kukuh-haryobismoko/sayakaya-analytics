@@ -405,7 +405,7 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
   if (options.username) doc.info.Author = options.username;
   drawPortfolioHoldingsPage(doc, { contact, holdings }, options);
 
-  // ---- One page per fund type: NAV % change table, "Reksa Dana Update" style.
+  // One page per fund type: NAV % change table, "Reksa Dana Update" style.
   // Landscape, same as the standalone Fund Performance PDF — needs the extra
   // width for all 13 columns. Each addPage() switches layout for just that
   // page; page 1 above stays portrait since it's a different, narrower table.

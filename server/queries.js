@@ -105,7 +105,7 @@ function userFilterClause(params, col, rules, key = 'id', joiner = ' AND ') {
   return `${joiner}${col} IN (SELECT ${key} FROM ${USERS} WHERE ${preds.join(' AND ')})`;
 }
 
-// ---- Overview KPIs ----------------------------------------------------------
+// Overview KPIs
 
 const overviewUsers = (userFilter = []) => {
   const params = {};
@@ -150,7 +150,7 @@ const overviewFunds = (fundIds = []) => {
   };
 };
 
-// ---- Time series ------------------------------------------------------------
+// Time series
 
 const trends = (from, to, granularity = 'month', fundIds = [], userFilter = []) => {
   const fmt = granularity === 'day' ? '%Y-%m-%d'
@@ -174,7 +174,7 @@ const trends = (from, to, granularity = 'month', fundIds = [], userFilter = []) 
   };
 };
 
-// ---- Breakdowns -------------------------------------------------------------
+// Breakdowns
 
 const breakdownBy = (column, from, to, fundIds = [], userFilter = []) => {
   const allowed = { status: 'status', type: 'type', payment_method: 'payment_method', payment_gateway: 'payment_gateway' };
@@ -194,7 +194,7 @@ const breakdownBy = (column, from, to, fundIds = [], userFilter = []) => {
   };
 };
 
-// ---- Funds ------------------------------------------------------------------
+// Funds
 
 // AUM by fund type counts only what Sayakaya customers hold (live holdings plus
 // locked campaign units, same as the Overview map), never funds.latest_aum_value,
@@ -213,7 +213,7 @@ const fundTypes = (fundIds = [], userFilter = []) => {
   };
 };
 
-// ---- Users ------------------------------------------------------------------
+// Users
 
 const userGrowth = () => ({
   sql: `SELECT FORMAT_DATETIME('%Y-%m', created_at) AS bucket, COUNT(*) AS signups
@@ -232,7 +232,7 @@ const verificationBreakdown = (userFilter = []) => {
   };
 };
 
-// ---- Transactions explorer (paged, filtered) --------------------------------
+// Transactions explorer (paged, filtered)
 // NOTE: the password column lives only on the users table; transactions has no
 // sensitive PII columns, and we never join users' password anywhere.
 
@@ -269,7 +269,7 @@ const txFilterValues = () => ({
   params: {},
 });
 
-// ---- AUM history (from mi_fee_logs.mi_fee: daily AUM + revenue per fund) -----
+// AUM history (from mi_fee_logs.mi_fee: daily AUM + revenue per fund)
 // AUM is a point-in-time stock: daily = sum across funds that day; monthly =
 // end-of-month value. Revenue (aperd_share_per_day) is a flow: always summed.
 // Joined to FUNDS and filtered to listing_status='ACTIVE' — a liquidated fund
@@ -443,7 +443,7 @@ const aumHistoryDrill = (start, end) => ({
   params: { start, end },
 });
 
-// ---- Product performance (NAV per fund, from native BigQuery tables) -------
+// Product performance (NAV per fund, from native BigQuery tables)
 // snapshots.value is daily NAV per fund. % change per period = (latest NAV -
 // NAV as-of period start) / NAV as-of period start, averaged per fund type.
 const SNAPSHOTS = '`sayakaya.main.snapshots`';
@@ -605,7 +605,7 @@ function fundNavTrend({ type, period = '1Y', limit = 5, funds } = {}) {
   };
 }
 
-// ---- User portfolio lookup (pick a user by SID code, print their holdings) -
+// User portfolio lookup (pick a user by SID code, print their holdings) -
 const BONUS_PORT = '`sayakaya.main.bonus_portfolios`';
 const USER_PROFILES = '`sayakaya.main.user_profiles`';
 
@@ -923,7 +923,7 @@ const userPortfolioSplit = (userId) => ({
   params: { userId },
 });
 
-// ---- Portfolio Explorer: goal_snapshots-based, point-in-time holdings -----
+// Portfolio Explorer: goal_snapshots-based, point-in-time holdings
 // goal_snapshots is a daily per-goal-per-fund valuation table (goal_id,
 // fund_id, nav, unit, amount, date); it has no user_id or buy-price column,
 // so every query here joins through goals for user_id and treats each
@@ -1185,7 +1185,7 @@ const userHoldingsAsOf = (sid, date) => ({
   params: { sid, date },
 });
 
-// ---- Portfolio (Fix): same as the PWC block above, but sourced from
+// Portfolio (Fix): same as the PWC block above, but sourced from
 // portfolio_fix — a corrected daily snapshot (same schema as
 // portfolio_with_code) whose scheduled query weights avg_buy_price/buy_amount
 // by unit instead of taking a plain AVG(price) across lots. Kept as a
@@ -1260,8 +1260,8 @@ const userHoldingsAsOfFix = (sid, date) => ({
   params: { sid, date },
 });
 
-// ---- Scheduled sending: recipient resolution for "All AUM investors" /
-// "All registered users" (see server/schedules.js) --------------------------
+// Scheduled sending: recipient resolution for "All AUM investors" /
+// "All registered users" (see server/schedules.js)
 
 // Every investor with a positive AUM as of the latest available portfolio_fix
 // snapshot, with an email on file — same source table as the rest of Send
@@ -1320,7 +1320,7 @@ const allRegisteredUsersWithEmail = () => ({
   params: {},
 });
 
-// ---- HNWI (High Net Worth Individual): investors at/above an AUM threshold,
+// HNWI (High Net Worth Individual): investors at/above an AUM threshold,
 // as of a specific date, from portfolio_with_code — same -1 day correction as
 // the rest of this section (created_at is a day ahead of the AUM date it
 // represents). Two shapes: one row per investor (total AUM across funds), and
@@ -1407,7 +1407,7 @@ const hnwiByFund = (date, minAum, maxAum, minFundAum, maxFundAum, limit = 5000) 
   };
 };
 
-// ---- Dormant win-back: computed live from main.transactions, not a
+// Dormant win-back: computed live from main.transactions, not a
 // precomputed table. For every user, look at the gap between each pair of
 // consecutive completed buys (LEAD/LAG over their own buy history): a gap of
 // 14+ days is a "dormancy episode." If a buy eventually follows, the episode
@@ -1521,7 +1521,7 @@ const dormantRepeatBuyers = () => ({
   params: {},
 });
 
-// ---- Kalcer (ambassadors): who referred whom, and when, with the referred
+// Kalcer (ambassadors): who referred whom, and when, with the referred
 // investor's AUM as of a picked date. Originally read kalcer.kalcer_fix, a
 // precomputed bonus table with no date columns at all (not even on the
 // table itself: each refresh just overwrites the same dateless aggregate),
@@ -1605,7 +1605,7 @@ const kalcerReferralDetail = (date, q = '') => {
   };
 };
 
-// ---- Push delivery: Firebase Cloud Messaging's own delivery log (own
+// Push delivery: Firebase Cloud Messaging's own delivery log (own
 // dataset, day-partitioned on event_timestamp). This is send-pipeline
 // health only ("did FCM accept and hand off the message"), not an
 // open/click/read event: Firebase's standard export has no such events for
@@ -1666,7 +1666,7 @@ const pushByPlatform = (from, to) => {
   };
 };
 
-// ---- Marketing attribution: Adjust's mobile attribution events (own
+// Marketing attribution: Adjust's mobile attribution events (own
 // dataset, tiny, 80K rows, no partitioning). One row per channel
 // (_tracker_name_): clicks, installs, and funnel milestones through to a
 // completed payment, with revenue. _event_name_ has duplicate-fire variants
@@ -1699,7 +1699,7 @@ const marketingFunnelByChannel = (from, to) => {
   };
 };
 
-// ---- App health: Firebase Crashlytics + Performance Monitoring, each split
+// App health: Firebase Crashlytics + Performance Monitoring, each split
 // across two own-dataset tables (one per platform, identical schema) that
 // have to be UNIONed since there's no combined table.
 const CRASH_ANDROID = '`sayakaya.firebase_crashlytics.com_sayakaya_android_ANDROID`';
@@ -1769,7 +1769,7 @@ const appPerfTraces = (from, to) => {
   };
 };
 
-// ---- Product funnel: GA4 export (own dataset, one physical table per day,
+// Product funnel: GA4 export (own dataset, one physical table per day,
 // `events_*` + `_TABLE_SUFFIX` is BigQuery's standard way to query a date
 // range across them). Cohort-based, not a same-window count per step:
 // people sign up in one period and pay in a later one, so every device whose
@@ -2057,7 +2057,7 @@ const productFunnelUninstalls = (from, to) => {
   };
 };
 
-// ---- User behavior: GA4 app events joined to the main database. GA4's
+// User behavior: GA4 app events joined to the main database. GA4's
 // user_id is main.users.id (the app sets it at login), so in-app actions can
 // be lined up against real transactions, holdings and KYC status. Events
 // from before login only carry user_pseudo_id and are left out. Background
@@ -2435,7 +2435,7 @@ const behaviorUserTimeline = (userId, from, to) => {
   };
 };
 
-// ---- Subscription analysis: which screens and actions come before a paid
+// Subscription analysis: which screens and actions come before a paid
 // buy (a fund subscription), and where people leave the buy flow. Same GA4
 // to main-database join as User behavior. The app's buy flow, in order:
 // buy form (SubscriptionFormBottomSheet, or the multi-fund form from the
@@ -2789,7 +2789,7 @@ const subscriptionChips = (from, to) => {
   };
 };
 
-// ---- Analysis tabs shared pieces (Subscription, Onboarding, Redemption,
+// Analysis tabs shared pieces (Subscription, Onboarding, Redemption,
 // Engagement). Every one joins GA4's user_id to main.users.id.
 // A sell or switch is done once it reaches any of these; cancelled is not.
 const DONE_STATUSES = `'completed', 'completed_payment', 'verified', 'verified_by_operational'`;
@@ -2893,7 +2893,7 @@ const subscriptionProfile = (from, to) => {
   };
 };
 
-// ---- Onboarding analysis: starts from the main database (everyone whose
+// Onboarding analysis: starts from the main database (everyone whose
 // account was created in the period, institutions left out), then looks in
 // GA4 for the KYC screens they reached, with no end date so a KYC finished
 // after the period still counts. KYC screens in the app's order (Sep 2026):
@@ -3039,7 +3039,7 @@ const onboardingOutcome = (from, to) => {
   };
 };
 
-// ---- Redemption analysis -------------------------------------------------
+// Redemption analysis
 // An ordered app funnel that ends in a main-database row: per person, the
 // first time in the period they reached each app step, each one counted only
 // after the step before it (so the numbers only go down), then whether a
@@ -3155,7 +3155,7 @@ const redemptionSignals = (from, to) => ga4OutcomeDrivers(from, to, {
   graceSeconds: -2,
 });
 
-// ---- Engagement analysis -------------------------------------------------
+// Engagement analysis
 // App features (Sep 2026 event and screen names) grouped by what they are for.
 const ENG_FEATURES = {
   search: { events: ['search_trigger', 'search_result_click', 'search_history_click'], screens: ['ProductSearchScreen'] },
@@ -3354,7 +3354,7 @@ const engagementActivity = (from, to) => {
   };
 };
 
-// ---- Growth: campaigns, referrals, switching, manager/demographic AUM splits --
+// Growth: campaigns, referrals, switching, manager/demographic AUM splits --
 const CAMPAIGNS = '`sayakaya.main.campaigns`';
 const SWITCHING = '`sayakaya.main.switching_transactions`';
 const IM = '`sayakaya.main.investment_managers`';
@@ -3543,7 +3543,7 @@ const aumByIncome = () => {
   };
 };
 
-// ---- Geographic distribution (Overview map) ---------------------------------
+// Geographic distribution (Overview map)
 // user_profiles.id_address_city is NOT a free-text city name — it's the exact
 // Kemendagri/BPS administrative code (e.g. "31.71"), matching main.geo's
 // subdistrict_city_code one-for-one. main.geo is one row per *village*, so it's
@@ -3637,7 +3637,7 @@ const topReferrers = (limit = 20) => ({
   params: { limit: parseInt(limit, 10) },
 });
 
-// ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
+// Referral program: Sep-Dec 2026 T&C eligibility report
 // main.user_referrals records the inviter/invitee link by user id at the time
 // of referral (immutable), unlike invitee.referrer_code / inviter.referral_code
 // string matching used elsewhere (e.g. the Growth tab's referral leaderboard):
@@ -3921,7 +3921,7 @@ const referralInvitedUsers = (periodFrom, periodTo, alt = false) => {
   };
 };
 
-// ---- Reconciliation: app ledger (main.transactions) vs custodian feed (sinvest) -
+// Reconciliation: app ledger (main.transactions) vs custodian feed (sinvest) -
 // Transaction_Date/amount columns in sinvest.trx_history are STRING ('YYYYMMDD',
 // formatted numbers) — the raw KSEI/SInvest export, never cleaned.
 const SINVEST = '`sayakaya.sinvest.trx_history`';
@@ -3971,7 +3971,7 @@ const reconciliationDaily = (from, to) => {
   };
 };
 
-// ---- SInvest transactions explorer (paged, filtered) -----------------------
+// SInvest transactions explorer (paged, filtered)
 // Every column in trx_history is STRING, including the two date columns
 // (Transaction_Date/Input_Date, both 'YYYYMMDD') and the numeric-looking ones
 // — this is the raw, uncleaned KSEI/SInvest export. Dates are reformatted to
@@ -4014,7 +4014,7 @@ function sinvestTransactions({ from, to, type, sid, search, limit = 50, offset =
   };
 }
 
-// ---- Portfolio (SInvest): same shape/logic as userHoldingsFromTx(), but
+// Portfolio (SInvest): same shape/logic as userHoldingsFromTx(), but
 // sourced entirely from the custodian feed (sinvest.trx_history) instead of
 // the app's own transactions table — keyed by SID (trx_history has no
 // user_id), joined to funds via funds.sinvest_code = Fund_Code. trx_history
@@ -4131,7 +4131,7 @@ const sinvestHoldingsAsOf = (sid, date) => {
   };
 };
 
-// ---- Revenue: management fee earned per fund, prorated daily from AUM -----
+// Revenue: management fee earned per fund, prorated daily from AUM
 // Daily AUM snapshots (portfolio_with_code) x the management fee rate in
 // effect (latest_mgmt_fee, deduped by updated_at) gives a daily fee accrual,
 // split into AperD's and MI's share. Grouped by month + fund for the detail
@@ -4269,7 +4269,7 @@ const revenueMonthlySummary = (from, to, granularity = 'month', fund = '', mi = 
   };
 };
 
-// ---- Revenue v2: same shape/columns as revenueDetail/revenueMonthlySummary
+// Revenue v2: same shape/columns as revenueDetail/revenueMonthlySummary
 // above, but AUM comes from goal_snapshots instead of
 // mi_fee_logs.portfolio_with_code — goal_snapshots.date is already the
 // correct AUM date, so there's no "-1 day" correction to make, which is what
@@ -4391,7 +4391,7 @@ const revenueV2MonthlySummary = (from, to, granularity = 'month', fund = '', mi 
   };
 };
 
-// ---- User lifetime: the same daily management-fee accrual as Revenue (PWC)
+// User lifetime: the same daily management-fee accrual as Revenue (PWC)
 // above, but grouped per investor instead of per fund, with lifetime dates
 // attached.
 //
@@ -4599,7 +4599,7 @@ const userLifetimeSummary = (from, to, granularity = 'month', fund = '', mi = ''
   };
 };
 
-// ---- Campaign revenue: management fee earned on units locked by a promo -----
+// Campaign revenue: management fee earned on units locked by a promo
 //
 // main.bonus_portfolios is one row per promo participation: the units a buy
 // transaction locked under a campaign's holding period (verified — for promo
@@ -4874,7 +4874,7 @@ const campaignRevenueSummary = (from, to, granularity = 'month', promo = '') => 
   };
 };
 
-// ---- Remisier sharing: same management-fee math as Revenue above, but the
+// Remisier sharing: same management-fee math as Revenue above, but the
 // AUM comes from goal_snapshots (already daily, per user+fund) filtered down
 // to one remisier's users, instead of the whole platform's daily AUM — so
 // there's no "-1 day" correction to make (that only exists because
@@ -5026,7 +5026,7 @@ const remisierRevenueSummary = (field, code, from, to, granularity, remisierPort
   };
 };
 
-// ---- Remisier sharing (portfolio_with_code): same math as
+// Remisier sharing (portfolio_with_code): same math as
 // remisierRevenueDetail/Summary above, but AUM comes from
 // mi_fee_logs.portfolio_with_code (one row per sid_code+fund per day) instead
 // of goal_snapshots — matches the original Revenue tab's source, including
@@ -5177,7 +5177,7 @@ const codePatterns = (codes) => (Array.isArray(codes) ? codes : [codes])
     return p.includes('*') ? p.replace(/\*/g, '%') : `%${p}%`;
   });
 
-// ---- Remisier transactions: per-transaction detail for one or more
+// Remisier transactions: per-transaction detail for one or more
 // referrer_code/sales_code values, with the buyer's contact info and fund
 // name attached — a due-diligence/audit list next to the revenue rollups
 // above, filtered by transaction date rather than snapshot date.
@@ -5218,7 +5218,7 @@ function remisierTransactions({ referrerCodes = [], salesCodes = [], type, statu
   };
 }
 
-// ---- Users transactions: any investor's transactions by SID/email/name
+// Users transactions: any investor's transactions by SID/email/name
 // (partial match, caller requires at least one — this table has hundreds of
 // thousands of rows), with type/status/fund/date refinements on top. Same
 // users/user_profiles/funds join as remisierTransactions above, just keyed
@@ -5276,7 +5276,7 @@ function usersTransactions({ q, type, status, fundId, fundName, promo, from, to,
   };
 }
 
-// ---- Users transactions summary: subscription (buy) vs redemption (sell) and
+// Users transactions summary: subscription (buy) vs redemption (sell) and
 // the net flow between them, one row per day, Monday-based week or calendar
 // month. Days are Jakarta (WIB) days, like Metabase and the rest of this file;
 // DATE(created_at) alone is a UTC day and moves every order placed between
@@ -5320,7 +5320,7 @@ const usersTransactionsSummary = ({ q, fundId, fundName, promo, from, to, granul
   };
 };
 
-// ---- Top investors: biggest subscribers / redeemers / net depositors -----
+// Top investors: biggest subscribers / redeemers / net depositors
 // Completed buy/sell only, bucketed by transaction date (created_at) like the
 // Overview buy/sell volume KPIs — not the +1 day completed_at shift the AUM
 // history root-cause columns need. Share % is of every investor's total in
@@ -5363,14 +5363,14 @@ const topInvestors = ({ from, to, metric, limit = 100, direction }) => {
   };
 };
 
-// ---- Event code tracking (generic): an event that doesn't exist yet will
+// Event code tracking (generic): an event that doesn't exist yet will
 // hand out its own referral/sales codes, but neither the codes nor even
 // which users column they'll land in are decided yet. So, like the Remisier
 // tabs above, `field` picks referrer_code or sales_code at query time
 // instead of hardcoding one, and `codes` is whatever wildcard list the
 // caller types in (see codePatterns). Swap in a real field/column once the
 // event defines one.
-// ---- HNWI bonus program (tab "HNWI bonus", rules in
+// HNWI bonus program (tab "HNWI bonus", rules in
 // public/hnwi-bonus-config.js; the page computes lots, FIFO and monthly
 // bonus from these rows).
 //
@@ -5452,7 +5452,7 @@ const hnwiBonusTransactions = ({ userIds, from, to, samManager }) => ({
   params: { users: userIds, from, to, sam: samManager },
 });
 
-// ---- Promo recap (tab "Promo recap"). A promo buy (transactions.promo_code)
+// Promo recap (tab "Promo recap"). A promo buy (transactions.promo_code)
 // locks its units in main.bonus_portfolios until the holding date (status
 // on_going), then they move to main.portfolios (succeeded) where they carry
 // no promo mark; redeemed = pulled out before the holding date. Bonus payouts
@@ -5590,7 +5590,7 @@ const promoRecapData = (from, to, codes) => {
   };
 };
 
-// ---- Booth event (tab "Booth event", rules in public/booth-event-config.js).
+// Booth event (tab "Booth event", rules in public/booth-event-config.js).
 // The page sends the event's codes and dates; everything about targets and
 // incentives is computed in the browser from these three row sets.
 //

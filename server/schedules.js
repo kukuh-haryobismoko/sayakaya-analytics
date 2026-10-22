@@ -75,7 +75,7 @@ async function rest(path, opts = {}) {
 function sha256Hex(v) { return crypto.createHash('sha256').update(v).digest('hex'); }
 function genOtpCode() { return String(crypto.randomInt(0, 1000000)).padStart(6, '0'); }
 
-// ---- Next-run computation ---------------------------------------------------
+// Next-run computation
 // Schedule times are Asia/Jakarta wall-clock (WIB, UTC+7, fixed offset, no
 // DST) — computed by shifting to "Jakarta-local" UTC-ish arithmetic and
 // shifting back, instead of pulling in a timezone library for one fixed
@@ -133,7 +133,7 @@ function computeNextRun(job, from = new Date()) {
   throw new Error(`Unknown frequency: ${job.frequency}`);
 }
 
-// ---- Recipient resolution ---------------------------------------------------
+// Recipient resolution
 // For kind='statement' every recipient must be a real investor (their own
 // portfolio/e-statement is per-person) — single_email/csv_list entries are
 // matched to a BigQuery user record by exact email, same as the manual batch
@@ -164,7 +164,7 @@ async function resolveRecipients({ kind, recipientType, recipientEmail, recipien
     .filter((r) => r.email);
 }
 
-// ---- Exclusion (opt-out) list -----------------------------------------------
+// Exclusion (opt-out) list
 // dashboard_send_exclusions (migration 20261013160000): skipped by schedules,
 // group sends and batch sends. An entry matches on what was typed and on the
 // SID / email BigQuery returned for it, so one added by SID also catches that
@@ -235,7 +235,7 @@ async function previewRecipientCount(spec) {
   return { count: recipients.length, excluded };
 }
 
-// ---- OTP-gated schedule creation --------------------------------------------
+// OTP-gated schedule creation
 // payload: { kind, recipientType, recipientEmail, recipientList, sendPortfolio,
 //   sendStatement, fundFilter, subject, body, frequency, dayOfWeek, dayOfMonth,
 //   runTime, confirmationEmail, userId, username }
@@ -308,7 +308,7 @@ async function confirmOtp(otpId, code) {
   return job;
 }
 
-// ---- CRUD used by the UI ----------------------------------------------------
+// CRUD used by the UI
 // Each job carries its email counts (sent / waiting / failed) for the table.
 async function listJobs(kind) {
   const jobs = await rest(`/dashboard_scheduled_jobs?kind=eq.${kind}&select=*&order=created_at.desc`);
@@ -358,7 +358,7 @@ async function deleteJob(id) {
   await rest(`/dashboard_scheduled_jobs?id=eq.${id}`, { method: 'DELETE' });
 }
 
-// ---- Execution: called by POST /api/cron/run-due-schedules -----------------
+// Execution: called by POST /api/cron/run-due-schedules
 
 // Snapshots resolveRecipients() into queue rows for one due job. Recipients
 // are fixed at this moment even if the underlying investor pool changes

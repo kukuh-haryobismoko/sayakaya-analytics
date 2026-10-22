@@ -50,7 +50,7 @@ async function rest(path: string, opts: RequestInit = {}): Promise<any> {
   return text ? JSON.parse(text) : null;
 }
 
-// ---- Password hashing: scrypt (via Deno's node:crypto compat) --------------
+// Password hashing: scrypt (via Deno's node:crypto compat)
 export function hashPassword(plain: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(plain, salt, 64).toString('hex');
@@ -104,7 +104,7 @@ function sha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-// ---- Users ------------------------------------------------------------------
+// Users
 export async function findUserByUsername(username: string): Promise<DashboardUser | null> {
   const rows = await rest(`/dashboard_users?username=eq.${encodeURIComponent(username)}&select=*`);
   return rows[0] || null;
@@ -174,7 +174,7 @@ export function deleteUser(id: string): Promise<null> {
   return rest(`/dashboard_users?id=eq.${id}`, { method: 'DELETE' });
 }
 
-// ---- Sessions -----------------------------------------------------------
+// Sessions
 export async function createSession(userId: string): Promise<string> {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
@@ -215,7 +215,7 @@ export function deleteSessionsByUser(userId: string, exceptToken?: string | null
   return rest(`/dashboard_sessions?user_id=eq.${userId}${exceptClause}`, { method: 'DELETE' });
 }
 
-// ---- Password reset (forgot password) ------------------------------------
+// Password reset (forgot password)
 // Deletes any earlier outstanding token for this user first, so only the
 // most recently emailed link ever works.
 export async function createPasswordReset(userId: string, ttlMs: number = RESET_TTL_MS): Promise<string> {
@@ -242,7 +242,7 @@ export async function consumePasswordReset(token: string | null): Promise<string
   return reset.user_id;
 }
 
-// ---- Audit log ----------------------------------------------------------
+// Audit log
 export interface AuditLogRow {
   id: string;
   user_id: string | null;
@@ -289,7 +289,7 @@ export function listAuditLog(opts: { limit?: number | string; search?: string; f
   return rest(`/dashboard_audit_log?${params.join('&')}`);
 }
 
-// ---- Shaping + permission check ---------------------------------------------
+// Shaping + permission check
 export function publicUser(u: DashboardUser): PublicUser {
   return { id: u.id, username: u.username, email: u.email || null, isSuperuser: u.is_superuser, allowedTabs: u.allowed_tabs || [], createdAt: u.created_at };
 }

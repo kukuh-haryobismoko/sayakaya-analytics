@@ -1,6 +1,6 @@
 'use strict';
 
-// ---------- tiny helpers ----------
+// tiny helpers
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 const AUTH_KEY = 'sk_auth'; // { token, user: { id, username, isSuperuser, allowedTabs } }
@@ -90,7 +90,7 @@ document.addEventListener('keydown', (e) => {
 });
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-// ---------- date range ----------
+// date range
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 function defaultRange() {
   const to = new Date();
@@ -118,7 +118,7 @@ function crRange() {
   return { from: $('#crFrom').value, to: $('#crTo').value, promo: $('#crPromo').value.trim() };
 }
 
-// ---------- chart palette (theme-aware: read from CSS custom properties) ----------
+// chart palette (theme-aware: read from CSS custom properties)
 function readThemeColors() {
   const cs = getComputedStyle(document.documentElement);
   const v = (name) => cs.getPropertyValue(name).trim();
@@ -143,7 +143,7 @@ function applyChartDefaults() {
 }
 applyChartDefaults();
 
-// ---------- CHART EXPORT (PNG download + copy to clipboard) ----------
+// CHART EXPORT (PNG download + copy to clipboard)
 // Wired automatically by paint() above onto every chart in the app — no
 // per-chart code needed anywhere else.
 function wireChartExportBar(id) {
@@ -172,12 +172,12 @@ function copyChartPng(id) {
   chart.canvas.toBlob((blob) => {
     if (!blob) return;
     navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      .then(() => toast('Chart copied to clipboard'))
-      .catch(() => toast('Copy failed. Try Download instead.'));
+      .then(() => toast(t('msg_chart_copied_to_clipboard')))
+      .catch(() => toast(t('msg_copy_failed_try_download_instead')));
   });
 }
 
-// ---------- TABLE EXPORT (CSV / Excel / PDF / PNG, on every table) ----------
+// TABLE EXPORT (CSV / Excel / PDF / PNG, on every table)
 // A MutationObserver watches every .table-wrap in the app (there are dozens,
 // each rendered by its own function) and injects one small export bar the
 // first time it sees a real <table> inside — covers every table, present and
@@ -285,8 +285,8 @@ function copyTable(table) {
   const tsv = rows.map((r) => r.join('\t')).join('\n');
   const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const html = '<table>' + rows.map((r, i) => '<tr>' + r.map((c) => `<${i ? 'td' : 'th'}>${esc(c)}</${i ? 'td' : 'th'}>`).join('') + '</tr>').join('') + '</table>';
-  const ok = () => toast('Table copied to clipboard');
-  const fail = () => toast('Copy failed. Try CSV instead.');
+  const ok = () => toast(t('msg_table_copied_to_clipboard'));
+  const fail = () => toast(t('msg_copy_failed_try_csv_instead'));
   if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
     navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([tsv], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })]).then(ok).catch(fail);
   } else if (navigator.clipboard) navigator.clipboard.writeText(tsv).then(ok).catch(fail);
@@ -326,7 +326,7 @@ function queueTableToolbarRefresh() {
 }
 new MutationObserver(queueTableToolbarRefresh).observe(document.body, { childList: true, subtree: true });
 
-// ---------- TABLE SORT (every table: click, Enter or Space on a header) ----------
+// TABLE SORT (every table: click, Enter or Space on a header)
 // Lists paged on the server register a reload in SERVER_SORT under their
 // .table-wrap id and render their headers with data-sort (the server's column
 // name): a click reloads page one in that order, so the whole result is
@@ -459,7 +459,7 @@ async function searchPortfolioUsers() {
 }
 
 function renderPfResults(rows) {
-  if (!rows.length) { $('#pfResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  if (!rows.length) { $('#pfResults').innerHTML = `<div class="empty">${t('msg_no_matching_investor')}</div>`; return; }
   const body = rows.map((r) => `<tr class="pf-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
       <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
@@ -510,8 +510,8 @@ async function loadPortfolioUser() {
     renderPfAumChart(history);
     renderSeriesTrendFinding('#pfGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#pfRecentTx', recentTx, [
-      { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
-      { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
+      { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
+      { key: 'fund', label: t('col_fund') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
     ], 'No transactions yet.');
   } catch (e) { $('#pfKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -606,12 +606,12 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = 
 }
 
 function renderPfHoldings(rows) {
-  if (!rows.length) { $('#pfHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  if (!rows.length) { $('#pfHoldings').innerHTML = `<div class="empty">${t('msg_no_active_holdings')}</div>`; return; }
   $('#pfHoldings').innerHTML = holdingsTableHtml(rows);
 }
 
 function renderPfPerformance(rows) {
-  if (!rows.length) { $('#pfPerformance').innerHTML = '<div class="empty">No AUM history for this SID.</div>'; return; }
+  if (!rows.length) { $('#pfPerformance').innerHTML = `<div class="empty">${t('msg_no_aum_history_for_this_sid')}</div>`; return; }
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
@@ -635,7 +635,7 @@ async function searchPfxUsers() {
 }
 
 function renderPfxResults(rows) {
-  if (!rows.length) { $('#pfxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  if (!rows.length) { $('#pfxResults').innerHTML = `<div class="empty">${t('msg_no_matching_investor')}</div>`; return; }
   const body = rows.map((r) => `<tr class="pfx-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
       <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
@@ -682,8 +682,8 @@ async function loadPfxUser() {
     renderPfxAumChart(history);
     renderSeriesTrendFinding('#pfxGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#pfxRecentTx', recentTx, [
-      { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
-      { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
+      { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
+      { key: 'fund', label: t('col_fund') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
     ], 'No transactions yet.');
   } catch (e) { $('#pfxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -717,7 +717,7 @@ function renderPfxKpis(holdings, split) {
 }
 
 function renderPfxHoldings(rows) {
-  if (!rows.length) { $('#pfxHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  if (!rows.length) { $('#pfxHoldings').innerHTML = `<div class="empty">${t('msg_no_active_holdings')}</div>`; return; }
   // Dust-sized holdings (≤1 unit) default excluded from export — still shown
   // on screen, just unchecked, since a leftover 1 unit is effectively "not held".
   if (!pfxSelected.excludedFunds) {
@@ -731,7 +731,7 @@ function renderPfxHoldings(rows) {
 }
 
 function renderPfxPerformance(rows) {
-  if (!rows.length) { $('#pfxPerformance').innerHTML = '<div class="empty">No AUM history for this SID.</div>'; return; }
+  if (!rows.length) { $('#pfxPerformance').innerHTML = `<div class="empty">${t('msg_no_aum_history_for_this_sid')}</div>`; return; }
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
@@ -758,7 +758,7 @@ async function searchPtxUsers() {
 }
 
 function renderPtxResults(rows) {
-  if (!rows.length) { $('#ptxResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  if (!rows.length) { $('#ptxResults').innerHTML = `<div class="empty">${t('msg_no_matching_investor')}</div>`; return; }
   const body = rows.map((r) => `<tr class="ptx-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
       <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
@@ -805,8 +805,8 @@ async function loadPtxUser() {
     renderPtxAumChart(history);
     renderSeriesTrendFinding('#ptxGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#ptxRecentTx', recentTx, [
-      { key: 'completed_at', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
-      { key: 'fund', label: 'Fund' }, { key: 'final_amount', label: 'Amount', type: 'idr' },
+      { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
+      { key: 'fund', label: t('col_fund') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
     ], 'No transactions yet.');
   } catch (e) { $('#ptxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -842,7 +842,7 @@ function renderPtxKpis(holdings, split) {
 }
 
 function renderPtxHoldings(rows) {
-  if (!rows.length) { $('#ptxHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  if (!rows.length) { $('#ptxHoldings').innerHTML = `<div class="empty">${t('msg_no_active_holdings')}</div>`; return; }
   // Dust-sized holdings (≤1 unit) default excluded from export — still shown
   // on screen, just unchecked, since a leftover 1 unit is effectively "not held".
   if (!ptxSelected.excludedFunds) {
@@ -856,7 +856,7 @@ function renderPtxHoldings(rows) {
 }
 
 function renderPtxPerformance(rows) {
-  if (!rows.length) { $('#ptxPerformance').innerHTML = '<div class="empty">No AUM history for this SID.</div>'; return; }
+  if (!rows.length) { $('#ptxPerformance').innerHTML = `<div class="empty">${t('msg_no_aum_history_for_this_sid')}</div>`; return; }
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
@@ -881,7 +881,7 @@ async function searchPsiUsers() {
 }
 
 function renderPsiResults(rows) {
-  if (!rows.length) { $('#psiResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  if (!rows.length) { $('#psiResults').innerHTML = `<div class="empty">${t('msg_no_matching_investor')}</div>`; return; }
   const body = rows.map((r) => `<tr class="psi-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
       <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
@@ -928,8 +928,8 @@ async function loadPsiUser() {
     renderPsiAumChart(history);
     renderSeriesTrendFinding('#psiGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#psiRecentTx', recentTx, [
-      { key: 'transaction_date', label: 'Date', type: 'date' }, { key: 'type', label: 'Type' },
-      { key: 'fund_name', label: 'Fund' }, { key: 'net_amount', label: 'Amount', type: 'idr' },
+      { key: 'transaction_date', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
+      { key: 'fund_name', label: t('col_fund') }, { key: 'net_amount', label: t('col_amount'), type: 'idr' },
     ], 'No transactions yet.');
   } catch (e) { $('#psiKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -963,7 +963,7 @@ function renderPsiKpis(holdings, split) {
 }
 
 function renderPsiHoldings(rows) {
-  if (!rows.length) { $('#psiHoldings').innerHTML = '<div class="empty">No active holdings.</div>'; return; }
+  if (!rows.length) { $('#psiHoldings').innerHTML = `<div class="empty">${t('msg_no_active_holdings')}</div>`; return; }
   if (!psiSelected.excludedFunds) {
     psiSelected.excludedFunds = new Set(rows.filter((h) => Number(val(h.unit)) <= 1).map((h) => val(h.fund)));
   }
@@ -975,7 +975,7 @@ function renderPsiHoldings(rows) {
 }
 
 function renderPsiPerformance(rows) {
-  if (!rows.length) { $('#psiPerformance').innerHTML = '<div class="empty">No AUM history for this SID.</div>'; return; }
+  if (!rows.length) { $('#psiPerformance').innerHTML = `<div class="empty">${t('msg_no_aum_history_for_this_sid')}</div>`; return; }
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
@@ -998,7 +998,7 @@ async function searchExplorerUsers() {
 }
 
 function renderPeResults(rows) {
-  if (!rows.length) { $('#peResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  if (!rows.length) { $('#peResults').innerHTML = `<div class="empty">${t('msg_no_matching_investor')}</div>`; return; }
   const body = rows.map((r) => `<tr class="pe-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
       <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>${bulkAddCell(r)}
     </tr>`).join('');
@@ -1068,14 +1068,14 @@ function renderPeKpis(holdings, byGoal) {
 }
 
 function renderPeHoldings(rows) {
-  if (!rows.length) { $('#peHoldings').innerHTML = '<div class="empty">No holdings for this date.</div>'; return; }
+  if (!rows.length) { $('#peHoldings').innerHTML = `<div class="empty">${t('msg_no_holdings_for_this_date')}</div>`; return; }
   $('#peHoldings').innerHTML = holdingsTableHtml(rows);
 }
 
 // Preview-only breakdown: one mini table per goal, headed by the goal's name.
 // Exports never use this grouping — they always use the merged holdings above.
 function renderPeByGoal(rows) {
-  if (!rows.length) { $('#peByGoal').innerHTML = '<div class="empty">No goals with holdings for this date.</div>'; return; }
+  if (!rows.length) { $('#peByGoal').innerHTML = `<div class="empty">${t('msg_no_goals_with_holdings_for_this_date')}</div>`; return; }
   const byGoal = new Map();
   rows.forEach((r) => {
     const name = val(r.goal) || '(unnamed goal)';
@@ -1115,13 +1115,13 @@ function hnwiByFundParams(useOwnFilter) {
   return { ...hnwiTotalParams(), minFundAum: 0, maxFundAum: '' };
 }
 const HNWI_CONTACT_COLS = [
-  { key: 'name', label: 'Name' }, { key: 'sid_code', label: 'SID code' }, { key: 'ifua', label: 'IFUA code' },
-  { key: 'phone', label: 'Phone' }, { key: 'email', label: 'Email' }, { key: 'birthdate', label: 'Birthdate', type: 'date' },
+  { key: 'name', label: t('col_name') }, { key: 'sid_code', label: 'SID code' }, { key: 'ifua', label: 'IFUA code' },
+  { key: 'phone', label: t('col_phone') }, { key: 'email', label: 'Email' }, { key: 'birthdate', label: t('col_birthdate'), type: 'date' },
 ];
 const HNWI_RISK_COLS = [
-  { key: 'risk_level', label: 'Risk level' },
-  { key: 'investment_priorities', label: 'Investment priorities' },
-  { key: 'investment_risk_tolerance', label: 'Investment risk tolerance' },
+  { key: 'risk_level', label: t('col_risk_level') },
+  { key: 'investment_priorities', label: t('col_investment_priorities') },
+  { key: 'investment_risk_tolerance', label: t('col_investment_risk_tolerance') },
 ];
 async function hnwiEnsureDate() {
   if (!hnwiDateDefaulted) {
@@ -1136,14 +1136,14 @@ async function hnwiEnsureDate() {
   return !!$('#hnwiDate').value;
 }
 async function loadHnwiTotal() {
-  if (!(await hnwiEnsureDate())) { $('#hnwiTotalTable').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  if (!(await hnwiEnsureDate())) { $('#hnwiTotalTable').innerHTML = `<div class="empty">${t('msg_pick_a_date')}</div>`; return; }
   const p = hnwiTotalParams();
   $('#hnwiTotalTable').innerHTML = '<div class="loading">Loading…</div>';
   try {
     const totals = await api(`/api/hnwi/total?date=${p.date}&minAum=${p.minAum}&maxAum=${p.maxAum}`);
     genTable('#hnwiTotalTable', totals, [
       ...HNWI_CONTACT_COLS, ...HNWI_RISK_COLS,
-      { key: 'total_aum', label: 'Total AUM', type: 'idr', sum: true }, { key: 'aum_date', label: 'AUM date', type: 'date' },
+      { key: 'total_aum', label: 'Total AUM', type: 'idr', sum: true }, { key: 'aum_date', label: t('col_aum_date'), type: 'date' },
     ], 'No investors at or above this AUM threshold.');
     renderHnwiFinding(totals);
   } catch (e) {
@@ -1163,15 +1163,15 @@ function renderHnwiFinding(rows) {
 }
 async function loadHnwiByFund(useOwnFilter = hnwiByFundOwnFilter) {
   hnwiByFundOwnFilter = useOwnFilter;
-  if (!(await hnwiEnsureDate())) { $('#hnwiByFundTable').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  if (!(await hnwiEnsureDate())) { $('#hnwiByFundTable').innerHTML = `<div class="empty">${t('msg_pick_a_date')}</div>`; return; }
   const p = hnwiByFundParams(useOwnFilter);
   $('#hnwiByFundTable').innerHTML = '<div class="loading">Loading…</div>';
   try {
     const byFund = await api(`/api/hnwi/by-fund?date=${p.date}&minAum=${p.minAum}&maxAum=${p.maxAum}&minFundAum=${p.minFundAum}&maxFundAum=${p.maxFundAum}`);
     genTable('#hnwiByFundTable', byFund, [
       ...HNWI_CONTACT_COLS, ...HNWI_RISK_COLS,
-      { key: 'fund_name', label: 'Fund' }, { key: 'fund_aum', label: 'Fund AUM', type: 'idr', sum: true },
-      { key: 'aum_date', label: 'AUM date', type: 'date' }, { key: 'total_aum', label: 'Total AUM', type: 'idr' },
+      { key: 'fund_name', label: t('col_fund') }, { key: 'fund_aum', label: t('col_fund_aum'), type: 'idr', sum: true },
+      { key: 'aum_date', label: t('col_aum_date'), type: 'date' }, { key: 'total_aum', label: 'Total AUM', type: 'idr' },
     ], 'No fund holdings at or above this AUM threshold.');
   } catch (e) {
     $('#hnwiByFundTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
@@ -1207,27 +1207,27 @@ function loadDormant() {
   pSummary.then((summary) => {
     renderDormantKpis(summary);
     genTable('#dwConversionTable', summary, [
-      { key: 'dormant_category', label: 'Dormancy length' },
-      { key: 'total_dormancy_periods', label: 'Episodes', type: 'num', sum: true },
-      { key: 'converted_periods', label: 'Converted', type: 'num', sum: true },
-      { key: 'conversion_rate_pct', label: 'Conversion', type: 'pct' },
-      { key: 'total_revenue', label: 'Revenue', type: 'idr', sum: true },
-      { key: 'avg_revenue_per_conversion', label: 'Avg per conversion', type: 'idr' },
-      { key: 'median_revenue_per_conversion', label: 'Median per conversion', type: 'idr' },
-      { key: 'max_revenue_per_conversion', label: 'Max per conversion', type: 'idr' },
+      { key: 'dormant_category', label: t('col_dormancy_length') },
+      { key: 'total_dormancy_periods', label: t('col_episodes'), type: 'num', sum: true },
+      { key: 'converted_periods', label: t('col_converted'), type: 'num', sum: true },
+      { key: 'conversion_rate_pct', label: t('col_conversion'), type: 'pct' },
+      { key: 'total_revenue', label: t('col_revenue'), type: 'idr', sum: true },
+      { key: 'avg_revenue_per_conversion', label: t('col_avg_per_conversion'), type: 'idr' },
+      { key: 'median_revenue_per_conversion', label: t('col_median_per_conversion'), type: 'idr' },
+      { key: 'max_revenue_per_conversion', label: t('col_max_per_conversion'), type: 'idr' },
     ], 'No dormancy episodes found.');
   }).catch((e) => {
     $('#dwKpis').innerHTML = '';
     $('#dwConversionTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   });
   pRepeat.then((rows) => genTable('#dwRepeatTable', rows, [
-    { key: 'user_id', label: 'User ID' }, { key: 'dormant_category', label: 'Longest dormancy recovered' },
-    { key: 'buyer_type', label: 'Buyer type' },
-    { key: 'txn_count', label: 'Lifetime buys', type: 'num' }, { key: 'total_spent', label: 'Lifetime spend', type: 'idr' },
+    { key: 'user_id', label: t('col_user_id') }, { key: 'dormant_category', label: t('col_longest_dormancy_recovered') },
+    { key: 'buyer_type', label: t('col_buyer_type') },
+    { key: 'txn_count', label: t('col_lifetime_buys'), type: 'num' }, { key: 'total_spent', label: t('col_lifetime_spend'), type: 'idr' },
   ], 'No repeat-buyer data.')).catch((e) => $('#dwRepeatTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
   pTtc.then((rows) => genTable('#dwTtcTable', rows, [
-    { key: 'user_id', label: 'User ID' }, { key: 'dormant_category', label: 'Dormancy length' },
-    { key: 'first_txn_date', label: 'Comeback buy', type: 'date' }, { key: 'days_to_convert', label: 'Days to convert', type: 'num' },
+    { key: 'user_id', label: t('col_user_id') }, { key: 'dormant_category', label: t('col_dormancy_length') },
+    { key: 'first_txn_date', label: t('col_comeback_buy'), type: 'date' }, { key: 'days_to_convert', label: t('col_days_to_convert'), type: 'num' },
   ], 'No time-to-convert data.')).catch((e) => $('#dwTtcTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
   // Each fetch above already renders its own error into its table on failure,
   // so the combined promise never needs to reject: callers (and the smoke
@@ -1272,7 +1272,7 @@ function kalcerParams() {
   return { date: $('#kalcerDate').value, q: $('#kalcerSearchInput').value.trim() };
 }
 async function loadKalcer() {
-  if (!(await kalcerEnsureDate())) { $('#kalcerSummaryTable').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  if (!(await kalcerEnsureDate())) { $('#kalcerSummaryTable').innerHTML = `<div class="empty">${t('msg_pick_a_date')}</div>`; return; }
   ['#kalcerSummaryTable', '#kalcerDetailTable'].forEach((s) => $(s).innerHTML = '<div class="loading">Loading…</div>');
   const p = kalcerParams();
   const qs = `date=${p.date}&q=${encodeURIComponent(p.q)}`;
@@ -1283,21 +1283,21 @@ async function loadKalcer() {
   pSummary.then((rows) => {
     renderKalcerKpis(rows);
     genTable('#kalcerSummaryTable', rows, [
-      { key: 'referrer_name', label: 'Name' }, { key: 'referrer_sid', label: 'SID' }, { key: 'referrer_email', label: 'Email' },
-      { key: 'referred_count', label: 'Referred', type: 'num', sum: true },
-      { key: 'first_referral_date', label: 'First referral', type: 'date' },
-      { key: 'last_referral_date', label: 'Last referral', type: 'date' },
-      { key: 'total_aum_referred', label: 'AUM referred', type: 'idr', sum: true },
+      { key: 'referrer_name', label: t('col_name') }, { key: 'referrer_sid', label: 'SID' }, { key: 'referrer_email', label: 'Email' },
+      { key: 'referred_count', label: t('col_referred'), type: 'num', sum: true },
+      { key: 'first_referral_date', label: t('col_first_referral'), type: 'date' },
+      { key: 'last_referral_date', label: t('col_last_referral'), type: 'date' },
+      { key: 'total_aum_referred', label: t('col_aum_referred'), type: 'idr', sum: true },
     ], 'No referrers match.');
   }).catch((e) => {
     $('#kalcerKpis').innerHTML = '';
     $('#kalcerSummaryTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   });
   pDetail.then((rows) => genTable('#kalcerDetailTable', rows, [
-    { key: 'referrer_name', label: 'Referrer' }, { key: 'referrer_sid', label: 'Referrer SID' },
-    { key: 'invitee_name', label: 'Referred investor' }, { key: 'invitee_sid', label: 'Investor SID' },
-    { key: 'referral_date', label: 'Referral date', type: 'date' },
-    { key: 'invitee_aum', label: 'Investor AUM', type: 'idr', sum: true },
+    { key: 'referrer_name', label: t('col_referrer') }, { key: 'referrer_sid', label: t('col_referrer_sid') },
+    { key: 'invitee_name', label: t('col_referred_investor') }, { key: 'invitee_sid', label: t('col_investor_sid') },
+    { key: 'referral_date', label: t('col_referral_date'), type: 'date' },
+    { key: 'invitee_aum', label: t('col_investor_aum'), type: 'idr', sum: true },
   ], 'No referrals match.')).catch((e) => $('#kalcerDetailTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   return Promise.allSettled([pSummary, pDetail]);
@@ -1330,7 +1330,7 @@ function renderPushTrendChart(rows) {
     type: 'bar',
     data: {
       labels: rows.map((d) => val(d.bucket)),
-      datasets: [{ label: 'Sends', data: rows.map((d) => Number(val(d.total_sends))), backgroundColor: C.indigo, borderRadius: 4 }],
+      datasets: [{ label: t('col_sends'), data: rows.map((d) => Number(val(d.total_sends))), backgroundColor: C.indigo, borderRadius: 4 }],
     },
     options: {
       maintainAspectRatio: false,
@@ -1354,26 +1354,26 @@ function loadPush() {
   const pCampaign = api(`/api/push/by-campaign?${qs}`);
   gateTabLoad((v) => { pushLoaded = v; }, [pTrend, pPlatform, pCampaign]);
 
-  pTrend.then(renderPushTrendChart).catch(() => {});
+  pTrend.then(renderPushTrendChart).catch((e) => showFail('pushTrendChart', e));
   pPlatform.then((rows) => {
     renderPushKpis(rows);
     genTable('#pushPlatformTable', rows, [
       { key: 'sdk_platform', label: 'Platform' },
-      { key: 'total_sends', label: 'Sends', type: 'num', sum: true },
-      { key: 'accepted', label: 'Accepted', type: 'num', sum: true },
-      { key: 'delivery_rate_pct', label: 'Delivery rate', type: 'pct' },
+      { key: 'total_sends', label: t('col_sends'), type: 'num', sum: true },
+      { key: 'accepted', label: t('col_accepted'), type: 'num', sum: true },
+      { key: 'delivery_rate_pct', label: t('col_delivery_rate'), type: 'pct' },
     ], 'No data in this period.');
   }).catch((e) => {
     $('#pushKpis').innerHTML = '';
     $('#pushPlatformTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
   });
   pCampaign.then((rows) => genTable('#pushCampaignTable', rows, [
-    { key: 'analytics_label', label: 'Campaign' },
-    { key: 'total_sends', label: 'Sends', type: 'num', sum: true },
-    { key: 'accepted', label: 'Accepted', type: 'num', sum: true },
-    { key: 'missing_registrations', label: 'Missing registrations', type: 'num', sum: true },
-    { key: 'other_errors', label: 'Other errors', type: 'num', sum: true },
-    { key: 'delivery_rate_pct', label: 'Delivery rate', type: 'pct' },
+    { key: 'analytics_label', label: t('col_campaign') },
+    { key: 'total_sends', label: t('col_sends'), type: 'num', sum: true },
+    { key: 'accepted', label: t('col_accepted'), type: 'num', sum: true },
+    { key: 'missing_registrations', label: t('col_missing_registrations'), type: 'num', sum: true },
+    { key: 'other_errors', label: t('col_other_errors'), type: 'num', sum: true },
+    { key: 'delivery_rate_pct', label: t('col_delivery_rate'), type: 'pct' },
   ], 'No campaigns in this period.')).catch((e) => $('#pushCampaignTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   return Promise.allSettled([pTrend, pPlatform, pCampaign]);
@@ -1406,15 +1406,15 @@ function loadMarketing() {
   return p.then((rows) => {
     renderMarketingKpis(rows);
     genTable('#mktTable', rows, [
-      { key: 'channel', label: 'Channel' },
-      { key: 'clicks', label: 'Clicks', type: 'num', sum: true },
-      { key: 'installs', label: 'Installs', type: 'num', sum: true },
-      { key: 'otp_verified', label: 'OTP verified', type: 'num', sum: true },
-      { key: 'registrations', label: 'Registered', type: 'num', sum: true },
-      { key: 'kyc_verified', label: 'KYC verified', type: 'num', sum: true },
-      { key: 'orders_created', label: 'Orders created', type: 'num', sum: true },
-      { key: 'payments_completed', label: 'Payments', type: 'num', sum: true },
-      { key: 'total_revenue', label: 'Revenue', type: 'idr', sum: true },
+      { key: 'channel', label: t('col_channel') },
+      { key: 'clicks', label: t('col_clicks'), type: 'num', sum: true },
+      { key: 'installs', label: t('col_installs'), type: 'num', sum: true },
+      { key: 'otp_verified', label: t('col_otp_verified'), type: 'num', sum: true },
+      { key: 'registrations', label: t('col_registered'), type: 'num', sum: true },
+      { key: 'kyc_verified', label: t('col_kyc_verified'), type: 'num', sum: true },
+      { key: 'orders_created', label: t('col_orders_created'), type: 'num', sum: true },
+      { key: 'payments_completed', label: t('col_payments'), type: 'num', sum: true },
+      { key: 'total_revenue', label: t('col_revenue'), type: 'idr', sum: true },
     ], 'No channel activity in this period.');
   }).catch((e) => {
     $('#mktKpis').innerHTML = '';
@@ -1455,18 +1455,18 @@ function loadAppHealth() {
     .catch(() => { $('#ahKpis').innerHTML = ''; });
   pCrash.then((rows) => genTable('#ahCrashTable', rows, [
     { key: 'platform', label: 'Platform' },
-    { key: 'issue_title', label: 'Issue' },
+    { key: 'issue_title', label: t('col_issue') },
     { key: 'is_fatal', label: 'Fatal' },
-    { key: 'event_count', label: 'Events', type: 'num', sum: true },
-    { key: 'affected_devices', label: 'Affected devices', type: 'num', sum: true },
-    { key: 'latest_app_version', label: 'Latest version' },
+    { key: 'event_count', label: t('col_events'), type: 'num', sum: true },
+    { key: 'affected_devices', label: t('col_affected_devices'), type: 'num', sum: true },
+    { key: 'latest_app_version', label: t('col_latest_version') },
   ], 'No crash/error issues in this period.')).catch((e) => $('#ahCrashTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
   pPerf.then((rows) => genTable('#ahPerfTable', rows, [
     { key: 'platform', label: 'Platform' },
-    { key: 'event_name', label: 'Operation' },
-    { key: 'sample_count', label: 'Samples', type: 'num', sum: true },
+    { key: 'event_name', label: t('col_operation') },
+    { key: 'sample_count', label: t('col_samples'), type: 'num', sum: true },
     { key: 'median_duration_ms', label: 'Median (ms)', type: 'num' },
-    { key: 'avg_duration_ms', label: 'Avg (ms)', type: 'num' },
+    { key: 'avg_duration_ms', label: t('col_avg_ms'), type: 'num' },
   ], 'No performance data in this period.')).catch((e) => $('#ahPerfTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   return Promise.allSettled([pCrash, pPerf]);
@@ -1871,7 +1871,7 @@ function driverStory(sel, rows, key) {
   ]);
 }
 
-// ---------- Subscription analysis ----------
+// Subscription analysis
 const SA_TAB = { id: 'subscription-analysis', prefix: 'sa', cache: {}, loaded: false, charts: ['saFunnelChart', 'saHoursChart'] };
 const saCache = SA_TAB.cache;
 const saView = { split: 'all', level: 'screen', step: 1, by: 'hour', dim: 'age_band' };
@@ -2210,7 +2210,7 @@ SA_TAB.sections = [
 ];
 SA_TAB.reset = () => { $('#saDropStep').innerHTML = ''; $('#saFunnelEmpty').hidden = true; };
 
-// ---------- Onboarding analysis ----------
+// Onboarding analysis
 const OB_TAB = { id: 'onboarding-analysis', prefix: 'ob', cache: {}, loaded: false, charts: ['obFunnelChart'] };
 const obView = { segment: 'all' };
 const OB_STEPS = [
@@ -2296,7 +2296,7 @@ OB_TAB.sections = [
 ];
 OB_TAB.reset = () => { $('#obSegment').innerHTML = ''; $('#obRejectedTable').innerHTML = ''; };
 
-// ---------- Redemption analysis ----------
+// Redemption analysis
 const RD_TAB = { id: 'redemption-analysis', prefix: 'rd', cache: {}, loaded: false, charts: ['rdFunnelChart', 'rdSwitchChart'] };
 const rdView = { dim: 'held' };
 const RD_STEPS = [['step1', 'rd_step_form'], ['step2', 'rd_step_checkout'], ['step3', 'rd_step_confirm'], ['done', 'rd_step_done']];
@@ -2398,7 +2398,7 @@ RD_TAB.sections = [
   ['redemption/switching', '#rdSwitchTable', renderRdSwitch],
 ];
 
-// ---------- Engagement analysis ----------
+// Engagement analysis
 const EG_TAB = { id: 'engagement-analysis', prefix: 'eg', cache: {}, loaded: false, charts: ['egFeatureChart', 'egDailyChart'] };
 const egView = { kind: 'sort' };
 const EG_TIERS = ['1_under_1m', '2_1m_10m', '3_10m_100m', '4_100m_1b', '5_over_1b'];
@@ -2678,7 +2678,7 @@ EG_TAB.sections = [
   ['engagement/search', '#egSearchTable', renderEgSearch],
   ['engagement/discovery', '#egDiscoveryTable', renderEgDiscovery],
 ];
-// ---------- Product funnel ----------
+// Product funnel
 // Phones that started sign-up in the period (GA4), followed into the main
 // database once they log in. The funnel, the groups and the weeks all come
 // from one query (steps); see queries.js productFunnel*.
@@ -3208,17 +3208,17 @@ async function loadOverview() {
   overviewFetch.then(renderKpis, (e) => { $('#kpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; });
 
   loadTrends($('.seg button.on', )?.dataset.g || 'month');
-  api('/api/breakdown/type' + qs).then(renderTypeChart).catch(() => {});
-  api('/api/breakdown/status' + qs).then(renderStatusChart).catch(() => {});
-  api('/api/users/verification' + (scopeQs ? '?' + scopeQs : '')).then(renderVerifyChart).catch(() => {});
-  api('/api/funds/types' + (scopeQs ? '?' + scopeQs : '')).then(renderFundTypeChart).catch(() => {});
+  api('/api/breakdown/type' + qs).then(renderTypeChart).catch((e) => showFail('typeChart', e));
+  api('/api/breakdown/status' + qs).then(renderStatusChart).catch((e) => showFail('statusChart', e));
+  api('/api/users/verification' + (scopeQs ? '?' + scopeQs : '')).then(renderVerifyChart).catch((e) => showFail('verifyChart', e));
+  api('/api/funds/types' + (scopeQs ? '?' + scopeQs : '')).then(renderFundTypeChart).catch((e) => showFail('fundTypeChart', e));
   loadTopFunds();
-  api('/api/users/by-province' + (scopeQs ? '?' + scopeQs : '')).then(renderGeoChart).catch(() => {});
-  api('/api/users/top-cities?limit=15' + (scopeQs ? '&' + scopeQs : '')).then(renderTopCities).catch(() => {});
-  api('/api/users/top-cities-aum?limit=15' + (scopeQs ? '&' + scopeQs : '')).then(renderTopCitiesAum).catch(() => {});
+  api('/api/users/by-province' + (scopeQs ? '?' + scopeQs : '')).then(renderGeoChart).catch((e) => showFail('geoChart', e));
+  api('/api/users/top-cities?limit=15' + (scopeQs ? '&' + scopeQs : '')).then(renderTopCities).catch((e) => showFail('topCitiesTable', e));
+  api('/api/users/top-cities-aum?limit=15' + (scopeQs ? '&' + scopeQs : '')).then(renderTopCitiesAum).catch((e) => showFail('topCitiesAumTable', e));
 }
 
-// ---- Investor distribution map (chartjs-chart-geo choropleth) -------------
+// Investor distribution map (chartjs-chart-geo choropleth)
 // Registered once — the plugin script (loaded via CDN, see index.html) attaches
 // its controllers to the shared Chart global but doesn't auto-register them.
 let geoControllersRegistered = false;
@@ -3263,7 +3263,7 @@ async function renderGeoChart(rows) {
     data: {
       labels: geo.features.map((f) => f.properties.province_name),
       datasets: [{
-        label: 'Investors',
+        label: t('col_investors'),
         outline: geo,
         // Fixed, opaque, theme-independent border — province boundaries stay
         // legible regardless of fill color or light/dark mode.
@@ -3377,7 +3377,16 @@ function setChartEmpty(id, empty) {
   const wrap = $('#' + id).parentElement;
   let msg = wrap.querySelector('.chart-empty');
   if (empty && !msg) { msg = document.createElement('div'); msg.className = 'empty chart-empty'; wrap.appendChild(msg); }
-  if (msg) { msg.hidden = !empty; msg.textContent = t('chart_empty'); }
+  if (msg) { msg.hidden = !empty; msg.textContent = t('chart_empty'); msg.classList.remove('error'); }
+}
+// A chart or table slot whose request failed says so, instead of staying blank.
+function showFail(id, e) {
+  const el = $('#' + id);
+  if (el.tagName !== 'CANVAS') { el.innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; return; }
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  setChartEmpty(id, true);
+  const m = el.parentElement.querySelector('.chart-empty');
+  m.textContent = `Could not load: ${e.message}`; m.classList.add('error');
 }
 function doughnut(id, rows, labelKey, valueKey, fmt) {
   setChartEmpty(id, !rows.length);
@@ -3405,7 +3414,7 @@ function renderTopFunds(rows) {
   topFundsCache = rows;
   const funds = rows.filter((f) => !val(f.is_total));
   const total = rows.find((f) => val(f.is_total));
-  if (!funds.length) { $('#topFunds').innerHTML = '<div class="empty">No funds.</div>'; return; }
+  if (!funds.length) { $('#topFunds').innerHTML = `<div class="empty">${t('msg_no_funds')}</div>`; return; }
   const nameCol = topFundsGroup === 'manager' ? 'Investment manager' : 'Fund';
   const cells = (f) => `
       <td>${val(f.label)}</td>
@@ -3447,16 +3456,16 @@ function filterTopFundsExclude() {
 }
 function loadTopFundsTable() {
   const date = $('#topFundsDate').value;
-  if (!date) { $('#topFunds').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  if (!date) { $('#topFunds').innerHTML = `<div class="empty">${t('msg_pick_a_date')}</div>`; return; }
   const exclude = topFundsExcluded();
   const userQs = overviewUserQs();
   const qs = `groupBy=${topFundsGroup}&date=${date}` + (exclude.length ? `&excludeFunds=${encodeURIComponent(exclude.join(','))}` : '') + (userQs ? `&${userQs}` : '');
-  api(`/api/funds/top?${qs}`).then(renderTopFunds).catch(() => {});
+  api(`/api/funds/top?${qs}`).then(renderTopFunds).catch((e) => showFail('topFunds', e));
 }
 async function loadTopFunds() {
   await defaultToLatestDate('#topFundsDate');
   const date = $('#topFundsDate').value;
-  if (!date) { $('#topFunds').innerHTML = '<div class="empty">Pick a date.</div>'; return; }
+  if (!date) { $('#topFunds').innerHTML = `<div class="empty">${t('msg_pick_a_date')}</div>`; return; }
   // Checklist and table in parallel: the table reads the exclusions already
   // on screen, and the rebuilt checklist keeps them by name.
   loadTopFundsOptions(date);
@@ -3530,10 +3539,10 @@ function renderForecast(canvasId, data, label) {
     data: {
       labels,
       datasets: [
-        { label: 'Confidence band', data: upper, borderColor: 'transparent', backgroundColor: 'rgba(224,163,62,.15)', fill: '+1', pointRadius: 0 },
+        { label: t('col_confidence_band'), data: upper, borderColor: 'transparent', backgroundColor: 'rgba(224,163,62,.15)', fill: '+1', pointRadius: 0 },
         { label: '_lower', data: lower, borderColor: 'transparent', fill: false, pointRadius: 0 },
         { label: label || 'History', data: histVals, borderColor: C.indigo, backgroundColor: C.indigo, tension: .3, pointRadius: 0, borderWidth: 2 },
-        { label: 'Forecast', data: fcVals, borderColor: C.amber, backgroundColor: C.amber, borderDash: [6, 4], tension: .3, pointRadius: 0, borderWidth: 2 },
+        { label: t('col_forecast'), data: fcVals, borderColor: C.amber, backgroundColor: C.amber, borderDash: [6, 4], tension: .3, pointRadius: 0, borderWidth: 2 },
       ],
     },
     options: {
@@ -3578,7 +3587,7 @@ function riskTag(p) {
   return '<span class="tag risk-low">Low</span>';
 }
 function renderChurnTable(rows) {
-  if (!rows.length) { $('#churnTable').innerHTML = '<div class="empty">No holders to score.</div>'; return; }
+  if (!rows.length) { $('#churnTable').innerHTML = `<div class="empty">${t('msg_no_holders_to_score')}</div>`; return; }
   const body = rows.map((r) => `<tr>
       <td>${val(r.name) || val(r.user_id)}</td>
       <td>${val(r.email) || 'n/a'}</td>
@@ -3619,7 +3628,7 @@ async function loadRetention() {
   $('#retentionHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
   try {
     const rows = await api('/api/retention/cohorts?months=12');
-    if (!rows.length) { $('#retentionHeatmap').innerHTML = '<div class="empty">Not enough buy history yet to build cohorts.</div>'; return; }
+    if (!rows.length) { $('#retentionHeatmap').innerHTML = `<div class="empty">${t('msg_not_enough_buy_history_yet_to_build_coho')}</div>`; return; }
     // pivot: cohort -> {offset: users}
     const cohorts = {};
     let maxOffset = 0;
@@ -3656,7 +3665,7 @@ async function loadAumRetention() {
   $('#aumRetentionHeatmap').innerHTML = '<div class="loading">Building cohorts…</div>';
   try {
     const rows = await api('/api/retention/aum-cohorts?months=12');
-    if (!rows.length) { $('#aumRetentionHeatmap').innerHTML = '<div class="empty">Not enough data.</div>'; return; }
+    if (!rows.length) { $('#aumRetentionHeatmap').innerHTML = `<div class="empty">${t('msg_not_enough_data')}</div>`; return; }
     const cohorts = {};
     const sizes = {};
     let maxOffset = 0;
@@ -3716,10 +3725,10 @@ function renderAumChart(data) {
     data: {
       labels,
       datasets: [
-        { type: 'line', label: 'AUM (end of period)', data: data.map((d) => val(d.aum)),
+        { type: 'line', label: t('col_aum_end_of_period'), data: data.map((d) => val(d.aum)),
           borderColor: C.indigo, backgroundColor: 'rgba(30,42,74,.08)', fill: true,
           tension: .3, pointRadius: 2, yAxisID: 'y', order: 1 },
-        { label: 'Revenue', data: data.map((d) => val(d.revenue)),
+        { label: t('col_revenue'), data: data.map((d) => val(d.revenue)),
           backgroundColor: C.amber, borderRadius: 4, yAxisID: 'y1', order: 2 },
       ],
     },
@@ -3787,8 +3796,8 @@ function renderAumCauseChart(data) {
       datasets: [
         { type: 'line', label: 'Δ AUM', data: rows.map((d) => Number(val(d.net_flow)) + Number(val(d.market_effect))),
           borderColor: C.ink, backgroundColor: C.ink, showLine: false, pointRadius: 4, stack: 'delta', order: 0 },
-        { label: 'Net flow', data: rows.map((d) => val(d.net_flow)), backgroundColor: C.indigo, ...bar },
-        { label: 'Market effect', data: rows.map((d) => val(d.market_effect)), backgroundColor: C.amberMark, ...bar },
+        { label: t('col_net_flow'), data: rows.map((d) => val(d.net_flow)), backgroundColor: C.indigo, ...bar },
+        { label: t('col_market_effect'), data: rows.map((d) => val(d.market_effect)), backgroundColor: C.amberMark, ...bar },
       ],
     },
     options: {
@@ -3826,17 +3835,17 @@ async function loadAumDrill(bucket) {
   try {
     const rows = await api(`/api/aum-history/drill?start=${aumDrillRange.start}&end=${aumDrillRange.end}`);
     genTable('#aumDrillTable', rows, [
-      { key: 'fund', label: 'Fund' }, { key: 'manager', label: 'Investment manager' },
-      { key: 'aum_start', label: 'AUM start', type: 'idr', sum: true }, { key: 'aum_end', label: 'AUM end', type: 'idr', sum: true },
+      { key: 'fund', label: t('col_fund') }, { key: 'manager', label: t('col_investment_manager') },
+      { key: 'aum_start', label: t('col_aum_start'), type: 'idr', sum: true }, { key: 'aum_end', label: t('col_aum_end'), type: 'idr', sum: true },
       { key: 'aum_change', label: 'Δ AUM', type: 'idr', sum: true },
-      { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true },
-      { key: 'switch_net', label: 'Switch (net)', type: 'idr', sum: true }, { key: 'market_effect', label: 'Market effect', type: 'idr', sum: true },
+      { key: 'subscriptions', label: t('col_subscriptions'), type: 'idr', sum: true }, { key: 'redemptions', label: t('col_redemptions'), type: 'idr', sum: true },
+      { key: 'switch_net', label: t('col_switch_net'), type: 'idr', sum: true }, { key: 'market_effect', label: t('col_market_effect'), type: 'idr', sum: true },
     ], 'No fund moved in this period.');
   } catch (e) { $('#aumDrillTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
 function renderAumTable(data) {
-  if (!data.length) { $('#aumTable').innerHTML = '<div class="empty">No AUM snapshots in this date range. Widen the date filter.</div>'; return; }
+  if (!data.length) { $('#aumTable').innerHTML = `<div class="empty">${t('msg_no_aum_snapshots_in_this_date_range_wide')}</div>`; return; }
   const tone = (v) => `color:${v >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}`;
   const signed = (v) => (v == null ? 'n/a' : `<span style="${tone(v)}">${v >= 0 ? '+' : '-'}${idrFull(Math.abs(v))}</span>`);
   const rows = data.map((d, i) => {
@@ -3900,7 +3909,7 @@ function renderRevTrendChart(data) {
     type: 'bar',
     data: {
       labels: data.map((d) => val(d.bucket)),
-      datasets: [{ label: 'Revenue', data: data.map((d) => val(d.revenue)), backgroundColor: C.amber, borderRadius: 4 }],
+      datasets: [{ label: t('col_revenue'), data: data.map((d) => val(d.revenue)), backgroundColor: C.amber, borderRadius: 4 }],
     },
     options: {
       maintainAspectRatio: false,
@@ -3947,11 +3956,11 @@ function renderRevCauseChart(data) {
     data: {
       labels: rows.map((d) => val(d.bucket)),
       datasets: [
-        { type: 'line', label: 'Δ Revenue', data: rows.map((d) => Number(val(d.days_effect)) + Number(val(d.aum_effect)) + Number(val(d.rate_effect))),
+        { type: 'line', label: t('col_revenue_2'), data: rows.map((d) => Number(val(d.days_effect)) + Number(val(d.aum_effect)) + Number(val(d.rate_effect))),
           borderColor: C.ink, backgroundColor: C.ink, showLine: false, pointRadius: 4, stack: 'delta', order: 0 },
-        { label: 'Days effect', data: g('days_effect'), backgroundColor: C.muted, ...bar },
-        { label: 'AUM effect', data: g('aum_effect'), backgroundColor: C.indigo, ...bar },
-        { label: 'Rate & mix effect', data: g('rate_effect'), backgroundColor: C.amberMark, ...bar },
+        { label: t('col_days_effect'), data: g('days_effect'), backgroundColor: C.muted, ...bar },
+        { label: t('col_aum_effect'), data: g('aum_effect'), backgroundColor: C.indigo, ...bar },
+        { label: t('col_rate_mix_effect'), data: g('rate_effect'), backgroundColor: C.amberMark, ...bar },
       ],
     },
     options: {
@@ -3981,11 +3990,11 @@ async function loadRevDrill(bucket) {
     const q = new URLSearchParams(revDrillParams).toString();
     const rows = await api(`/api/revenue-trend/drill?${q}`);
     genTable('#revDrillTable', rows, [
-      { key: 'fund', label: 'Fund' }, { key: 'manager', label: 'Investment manager' },
-      { key: 'revenue_prev', label: 'Revenue previous', type: 'idr', sum: true }, { key: 'revenue_cur', label: 'Revenue', type: 'idr', sum: true },
-      { key: 'change', label: 'Δ Revenue', type: 'idr', sum: true },
-      { key: 'days_effect', label: 'Days effect', type: 'idr', sum: true }, { key: 'aum_effect', label: 'AUM effect', type: 'idr', sum: true },
-      { key: 'rate_effect', label: 'Rate & mix effect', type: 'idr', sum: true },
+      { key: 'fund', label: t('col_fund') }, { key: 'manager', label: t('col_investment_manager') },
+      { key: 'revenue_prev', label: t('col_revenue_previous'), type: 'idr', sum: true }, { key: 'revenue_cur', label: t('col_revenue'), type: 'idr', sum: true },
+      { key: 'change', label: t('col_revenue_2'), type: 'idr', sum: true },
+      { key: 'days_effect', label: t('col_days_effect'), type: 'idr', sum: true }, { key: 'aum_effect', label: t('col_aum_effect'), type: 'idr', sum: true },
+      { key: 'rate_effect', label: t('col_rate_mix_effect'), type: 'idr', sum: true },
     ], 'No fund moved in this period.');
   } catch (e) { $('#revDrillTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -4084,7 +4093,7 @@ async function loadPerformance() {
 }
 
 function renderPerformance(rows) {
-  if (!rows.length) { $('#perfTable').innerHTML = '<div class="empty">No NAV data.</div>'; return; }
+  if (!rows.length) { $('#perfTable').innerHTML = `<div class="empty">${t('msg_no_nav_data')}</div>`; return; }
   const byType = {};
   rows.forEach((r) => {
     const type = val(r.type);
@@ -4172,7 +4181,7 @@ function renderPerformanceDetail() {
   $('#perfDetailAsOfInfo').textContent = latestDate
     ? `Showing NAV as of ${latestDate}${$('#perfDetailAsOf').value ? ' (most recent on or before the date picked above)' : ' (latest available)'}.`
     : '';
-  if (!funds.length) { $('#perfDetailTable').innerHTML = '<div class="empty">No matching fund.</div>'; $('#perfDetailFinding').hidden = true; return; }
+  if (!funds.length) { $('#perfDetailTable').innerHTML = `<div class="empty">${t('msg_no_matching_fund')}</div>`; $('#perfDetailFinding').hidden = true; return; }
   renderPerfDetailFinding(funds);
   const head = PERF_PERIODS.map((p) => `<th class="num">${p}</th>`).join('');
   const body = funds.map((f) => {
@@ -4232,36 +4241,36 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
 async function loadGrowth() {
   const pCamp = api('/api/campaigns/performance');
   pCamp.then((rows) => genTable('#campTable', rows, [
-    { key: 'name', label: 'Campaign' }, { key: 'campaign_type', label: 'Type' },
-    { key: 'promo_code', label: 'Promo' }, { key: 'quota', label: 'Quota', type: 'num' },
-    { key: 'used_quota', label: 'Used', type: 'num' }, { key: 'redemption_pct', label: 'Redemption', type: 'pct' },
-    { key: 'bonus_amount', label: 'Bonus/redemption', type: 'idr' }, { key: 'est_cost', label: 'Est. cost', type: 'idr' },
+    { key: 'name', label: t('col_campaign') }, { key: 'campaign_type', label: t('col_type') },
+    { key: 'promo_code', label: 'Promo' }, { key: 'quota', label: t('col_quota'), type: 'num' },
+    { key: 'used_quota', label: t('col_used'), type: 'num' }, { key: 'redemption_pct', label: 'Redemption', type: 'pct' },
+    { key: 'bonus_amount', label: 'Bonus/redemption', type: 'idr' }, { key: 'est_cost', label: t('col_est_cost'), type: 'idr' },
   ], 'No campaigns in this range, widen the date filter.')).catch((e) => $('#campTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   const pRef = api('/api/referrals/top');
   pRef.then((rows) => genTable('#refTable', rows, [
-    { key: 'referral_code', label: 'Code' }, { key: 'referrer', label: 'Referrer' },
-    { key: 'referred_count', label: 'Referred', type: 'num' }, { key: 'referred_volume', label: 'Volume brought', type: 'idr' },
+    { key: 'referral_code', label: t('col_code') }, { key: 'referrer', label: t('col_referrer') },
+    { key: 'referred_count', label: t('col_referred'), type: 'num' }, { key: 'referred_volume', label: t('col_volume_brought'), type: 'idr' },
   ], 'No referrals yet.')).catch((e) => $('#refTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   const pSwitch = api('/api/switching/top-pairs');
   pSwitch.then((rows) => genTable('#switchTable', rows, [
-    { key: 'from_fund', label: 'From fund' }, { key: 'to_fund', label: 'To fund' },
-    { key: 'switches', label: 'Switches', type: 'num' }, { key: 'amount', label: 'Amount', type: 'idr' },
+    { key: 'from_fund', label: t('col_from_fund') }, { key: 'to_fund', label: t('col_to_fund') },
+    { key: 'switches', label: t('col_switches'), type: 'num' }, { key: 'amount', label: t('col_amount'), type: 'idr' },
   ], 'No switching transactions.')).catch((e) => $('#switchTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
   const pManager = api('/api/funds/by-manager');
-  pManager.then((rows) => doughnut('managerChart', rows, 'label', 'aum', idrFull)).catch(() => {});
+  pManager.then((rows) => doughnut('managerChart', rows, 'label', 'aum', idrFull)).catch((e) => showFail('managerChart', e));
 
   const pRisk = api('/api/users/aum-by-risk');
-  pRisk.then((rows) => doughnut('riskChart', rows, 'label', 'aum', idrFull)).catch(() => {});
+  pRisk.then((rows) => doughnut('riskChart', rows, 'label', 'aum', idrFull)).catch((e) => showFail('riskChart', e));
 
   const pIncome = api('/api/users/aum-by-income');
   pIncome.then((rows) => {
     const total = rows.reduce((a, r) => a + (Number(val(r.aum)) || 0), 0);
     genTable('#incomeTable', rows.map((r) => ({ ...r, share: total ? Number(val(r.aum)) / total * 100 : null })), [
-      { key: 'label', label: 'Income bracket' }, { key: 'investors', label: 'Investors', type: 'num', sum: true },
-      { key: 'aum', label: 'AUM', type: 'idr', sum: true }, { key: 'share', label: '% of AUM', type: 'pct', sum: true },
+      { key: 'label', label: t('col_income_bracket') }, { key: 'investors', label: t('col_investors'), type: 'num', sum: true },
+      { key: 'aum', label: 'AUM', type: 'idr', sum: true }, { key: 'share', label: t('col_of_aum'), type: 'pct', sum: true },
     ], 'No data.');
   }).catch((e) => $('#incomeTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`);
 
@@ -4293,11 +4302,11 @@ async function loadReconciliation() {
   try {
     const rows = await api(`/api/reconciliation?from=${r.from}&to=${r.to}`);
     genTable('#recTable', rows, [
-      { key: 'bucket', label: 'Date' },
-      { key: 'type', label: 'Type' },
-      { key: 'app_count', label: 'App tx', type: 'num' }, { key: 'app_amount', label: 'App amount', type: 'idr' },
-      { key: 'sinvest_count', label: 'Custodian tx', type: 'num' }, { key: 'sinvest_amount', label: 'Custodian amount', type: 'idr' },
-      { key: 'amount_diff', label: 'Diff', type: 'idr' },
+      { key: 'bucket', label: t('col_date') },
+      { key: 'type', label: t('col_type') },
+      { key: 'app_count', label: t('col_app_tx'), type: 'num' }, { key: 'app_amount', label: t('col_app_amount'), type: 'idr' },
+      { key: 'sinvest_count', label: t('col_custodian_tx'), type: 'num' }, { key: 'sinvest_amount', label: t('col_custodian_amount'), type: 'idr' },
+      { key: 'amount_diff', label: t('col_diff'), type: 'idr' },
     ], 'No data in this range.');
     renderReconciliationFinding(rows);
   } catch (e) {
@@ -4314,8 +4323,8 @@ function renderRevenueTrend(rows, chartId = 'revTrendChart') {
     data: {
       labels: rows.map((d) => val(d.period)),
       datasets: [
-        { label: 'AperD share', data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, stack: 'fee', order: 2 },
-        { label: 'MI share', data: rows.map((d) => Number(val(d.total_mi_share))), backgroundColor: C.amber, borderRadius: 4, stack: 'fee', order: 2 },
+        { label: t('col_aperd_share'), data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, stack: 'fee', order: 2 },
+        { label: t('col_mi_share'), data: rows.map((d) => Number(val(d.total_mi_share))), backgroundColor: C.amber, borderRadius: 4, stack: 'fee', order: 2 },
         { label: 'Total AUM', data: rows.map((d) => Number(val(d.total_aum))), type: 'line', yAxisID: 'y1',
           borderColor: C.indigo, backgroundColor: C.indigo, tension: .3, pointRadius: 2, order: 1 },
       ],
@@ -4348,21 +4357,21 @@ async function loadRevenue() {
     renderRevenueTrend(summary);
     renderSeriesTrendFinding('#revTrendFinding', summary, 'total_management_fee', 'Management fee revenue');
     genTable('#revDetailTable', detail, [
-      { key: 'period', label: 'Period', type: 'date' },
-      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
-      { key: 'mi_name', label: 'Investment Manager' },
-      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
-      { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
-      { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM EOM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' },
+      { key: 'fund_name', label: t('col_fund') }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'mi_name', label: t('col_investment_manager_2') },
+      { key: 'management_fee', label: t('col_mgmt_fee_rate'), type: 'num' },
+      { key: 'aperd_share', label: t('col_aperd_share'), type: 'num' }, { key: 'mi_share', label: t('col_mi_share'), type: 'num' },
+      { key: 'days_running', label: t('col_days_running'), type: 'num' },
+      { key: 'avg_aum', label: t('col_avg_aum'), type: 'idr' }, { key: 'aum_eom', label: t('col_aum_eom'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
     genTable('#revSummaryTable', summary, [
-      { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
-      { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' }, { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' }, { key: 'funds', label: t('col_funds'), type: 'num' },
+      { key: 'days_running', label: t('col_days_running'), type: 'num' },
+      { key: 'total_aum', label: t('col_total_aum_eom'), type: 'idr' }, { key: 'avg_aum', label: t('col_avg_aum'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
@@ -4388,21 +4397,21 @@ async function loadRevenue2() {
     renderRevenueTrend(summary, 'rev2TrendChart');
     renderSeriesTrendFinding('#rev2TrendFinding', summary, 'total_management_fee', 'Management fee revenue');
     genTable('#rev2DetailTable', detail, [
-      { key: 'period', label: 'Period', type: 'date' },
-      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
-      { key: 'mi_name', label: 'Investment Manager' },
-      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
-      { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
-      { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM EOM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' },
+      { key: 'fund_name', label: t('col_fund') }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'mi_name', label: t('col_investment_manager_2') },
+      { key: 'management_fee', label: t('col_mgmt_fee_rate'), type: 'num' },
+      { key: 'aperd_share', label: t('col_aperd_share'), type: 'num' }, { key: 'mi_share', label: t('col_mi_share'), type: 'num' },
+      { key: 'days_running', label: t('col_days_running'), type: 'num' },
+      { key: 'avg_aum', label: t('col_avg_aum'), type: 'idr' }, { key: 'aum_eom', label: t('col_aum_eom'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
     genTable('#rev2SummaryTable', summary, [
-      { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
-      { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'total_aum', label: 'Total AUM (EOM)', type: 'idr' }, { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' }, { key: 'funds', label: t('col_funds'), type: 'num' },
+      { key: 'days_running', label: t('col_days_running'), type: 'num' },
+      { key: 'total_aum', label: t('col_total_aum_eom'), type: 'idr' }, { key: 'avg_aum', label: t('col_avg_aum'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
@@ -4424,8 +4433,8 @@ function renderUlTrend(rows) {
     data: {
       labels: rows.map((d) => val(d.period)),
       datasets: [
-        { label: 'AperD share', data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, order: 2 },
-        { label: 'Investors', data: rows.map((d) => Number(val(d.investors))), type: 'line', yAxisID: 'y1',
+        { label: t('col_aperd_share'), data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, order: 2 },
+        { label: t('col_investors'), data: rows.map((d) => Number(val(d.investors))), type: 'line', yAxisID: 'y1',
           borderColor: C.indigo, backgroundColor: C.indigo, tension: .3, pointRadius: 2, order: 1 },
       ],
     },
@@ -4442,22 +4451,22 @@ function renderUlTrend(rows) {
 }
 
 const UL_USER_COLS = [
-  { key: 'sid_code', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
-  { key: 'registered_at', label: 'Registered', type: 'date' },
-  { key: 'first_buy', label: 'First buy', type: 'date' },
-  { key: 'last_tx', label: 'Last transaction', type: 'date' },
-  { key: 'account_age_days', label: 'Account age (d)', type: 'num' },
-  { key: 'days_to_first_buy', label: 'Days to first buy', type: 'num' },
-  { key: 'tx_span_days', label: 'Transacting span (d)', type: 'num' },
-  { key: 'holding_lifetime_days', label: 'Holding lifetime (d)', type: 'num' },
-  { key: 'tx_count', label: 'Transactions', type: 'num' },
-  { key: 'total_invested', label: 'Lifetime invested', type: 'idr' },
-  { key: 'first_hold', label: 'First hold (feed)', type: 'date' },
-  { key: 'last_hold', label: 'Last hold (feed)', type: 'date' },
-  { key: 'active_days', label: 'Days in range', type: 'num' },
-  { key: 'funds', label: 'Funds', type: 'num' },
-  { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'last_aum', label: 'Latest AUM', type: 'idr' },
-  { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr' },
+  { key: 'sid_code', label: 'SID' }, { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
+  { key: 'registered_at', label: t('col_registered'), type: 'date' },
+  { key: 'first_buy', label: t('col_first_buy'), type: 'date' },
+  { key: 'last_tx', label: t('col_last_transaction'), type: 'date' },
+  { key: 'account_age_days', label: t('col_account_age_d'), type: 'num' },
+  { key: 'days_to_first_buy', label: t('col_days_to_first_buy'), type: 'num' },
+  { key: 'tx_span_days', label: t('col_transacting_span_d'), type: 'num' },
+  { key: 'holding_lifetime_days', label: t('col_holding_lifetime_d'), type: 'num' },
+  { key: 'tx_count', label: t('col_transactions'), type: 'num' },
+  { key: 'total_invested', label: t('col_lifetime_invested'), type: 'idr' },
+  { key: 'first_hold', label: t('col_first_hold_feed'), type: 'date' },
+  { key: 'last_hold', label: t('col_last_hold_feed'), type: 'date' },
+  { key: 'active_days', label: t('col_days_in_range'), type: 'num' },
+  { key: 'funds', label: t('col_funds'), type: 'num' },
+  { key: 'avg_aum', label: t('col_avg_aum'), type: 'idr' }, { key: 'last_aum', label: t('col_latest_aum'), type: 'idr' },
+  { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr' },
   { key: 'total_aperd_share', label: 'Total AperD', type: 'idr' },
   { key: 'total_mi_share', label: 'Total MI', type: 'idr' },
 ];
@@ -4485,13 +4494,13 @@ async function loadUlDetail(sid, name) {
   try {
     const rows = await api(`/api/user-lifetime/detail?sid=${encodeURIComponent(sid)}&from=${r.from}&to=${r.to}&granularity=${ulGran}&fund=${encodeURIComponent(r.fund)}&mi=${encodeURIComponent(r.mi)}`);
     genTable('#ulDetailTable', rows, [
-      { key: 'period', label: 'Period', type: 'date' },
-      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
-      { key: 'mi_name', label: 'Investment Manager' },
-      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
-      { key: 'days_running', label: 'Days', type: 'num' },
-      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eop', label: 'AUM end of period', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' },
+      { key: 'fund_name', label: t('col_fund') }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'mi_name', label: t('col_investment_manager_2') },
+      { key: 'management_fee', label: t('col_mgmt_fee_rate'), type: 'num' },
+      { key: 'days_running', label: t('col_days'), type: 'num' },
+      { key: 'avg_aum', label: t('col_avg_aum'), type: 'idr' }, { key: 'aum_eop', label: t('col_aum_end_of_period_2'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
       { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No holdings for this investor in this range.');
@@ -4517,12 +4526,12 @@ async function loadUserLifetime() {
     renderSeriesTrendFinding('#ulTrendFinding', summary, 'total_aperd_share', 'AperD revenue');
     renderUlUsers(users);
     genTable('#ulSummaryTable', summary, [
-      { key: 'period', label: 'Period', type: 'date' },
-      { key: 'investors', label: 'Investors', type: 'num' },
-      { key: 'days_running', label: 'Days', type: 'num' },
-      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' },
+      { key: 'period', label: t('col_period'), type: 'date' },
+      { key: 'investors', label: t('col_investors'), type: 'num' },
+      { key: 'days_running', label: t('col_days'), type: 'num' },
+      { key: 'avg_aum', label: t('col_avg_aum'), type: 'idr' },
       { key: 'aperd_per_investor', label: 'AperD per investor', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
       { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No revenue in this range.');
@@ -4543,9 +4552,9 @@ function renderCrTrend(rows) {
     data: {
       labels: rows.map((d) => val(d.period)),
       datasets: [
-        { label: 'AperD share', data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, order: 2 },
-        { label: 'AperD share (alt)', data: rows.map((d) => Number(val(d.total_aperd_share_alt))), backgroundColor: C.amber, borderRadius: 4, order: 2 },
-        { label: 'Locked AUM', data: rows.map((d) => Number(val(d.avg_aum))), type: 'line', yAxisID: 'y1',
+        { label: t('col_aperd_share'), data: rows.map((d) => Number(val(d.total_aperd_share))), backgroundColor: C.teal, borderRadius: 4, order: 2 },
+        { label: t('col_aperd_share_alt'), data: rows.map((d) => Number(val(d.total_aperd_share_alt))), backgroundColor: C.amber, borderRadius: 4, order: 2 },
+        { label: t('col_locked_aum'), data: rows.map((d) => Number(val(d.avg_aum))), type: 'line', yAxisID: 'y1',
           borderColor: C.indigo, backgroundColor: C.indigo, tension: .3, pointRadius: 2, order: 1 },
       ],
     },
@@ -4579,46 +4588,46 @@ async function loadCampaignRevenue() {
     renderCrTrend(summary);
     renderSeriesTrendFinding('#crTrendFinding', summary, 'total_aperd_share', 'AperD revenue');
     genTable('#crCampaignsTable', campaigns, [
-      { key: 'promo_code', label: 'Promo' }, { key: 'campaign_name', label: 'Campaign' },
-      { key: 'campaign_type', label: 'Type' },
-      { key: 'start_date', label: 'Starts', type: 'date' }, { key: 'end_date', label: 'Ends', type: 'date' },
-      { key: 'holding_date', label: 'Holding until', type: 'date' },
-      { key: 'participations', label: 'Participations', type: 'num', sum: true },
-      { key: 'investors', label: 'Investors', type: 'num' },
-      { key: 'still_locked', label: 'Still locked', type: 'num', sum: true },
-      { key: 'funds', label: 'Funds', type: 'num' },
-      { key: 'first_lock', label: 'First lock', type: 'date' },
-      { key: 'days_running', label: 'Days', type: 'num' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'promo_code', label: 'Promo' }, { key: 'campaign_name', label: t('col_campaign') },
+      { key: 'campaign_type', label: t('col_type') },
+      { key: 'start_date', label: t('col_starts'), type: 'date' }, { key: 'end_date', label: t('col_ends'), type: 'date' },
+      { key: 'holding_date', label: t('col_holding_until'), type: 'date' },
+      { key: 'participations', label: t('col_participations'), type: 'num', sum: true },
+      { key: 'investors', label: t('col_investors'), type: 'num' },
+      { key: 'still_locked', label: t('col_still_locked'), type: 'num', sum: true },
+      { key: 'funds', label: t('col_funds'), type: 'num' },
+      { key: 'first_lock', label: t('col_first_lock'), type: 'date' },
+      { key: 'days_running', label: t('col_days'), type: 'num' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
       { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr', sum: true },
       { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
-      { key: 'est_cost', label: 'Est. cost', type: 'idr', sum: true },
-      { key: 'net_vs_cost', label: 'Net vs cost', type: 'idr', sum: true },
+      { key: 'est_cost', label: t('col_est_cost'), type: 'idr', sum: true },
+      { key: 'net_vs_cost', label: t('col_net_vs_cost'), type: 'idr', sum: true },
     ], 'No campaign holdings in this range.');
     genTable('#crDetailTable', detail, [
-      { key: 'period', label: 'Period', type: 'date' },
-      { key: 'promo_code', label: 'Promo' }, { key: 'campaign_name', label: 'Campaign' },
-      { key: 'participations', label: 'Participations', type: 'num' },
-      { key: 'investors', label: 'Investors', type: 'num' },
-      { key: 'still_locked', label: 'Still locked', type: 'num' },
-      { key: 'funds', label: 'Funds', type: 'num' },
-      { key: 'days_running', label: 'Days', type: 'num' },
-      { key: 'avg_units', label: 'Avg units', type: 'num' },
-      { key: 'avg_aum', label: 'Avg locked AUM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' },
+      { key: 'promo_code', label: 'Promo' }, { key: 'campaign_name', label: t('col_campaign') },
+      { key: 'participations', label: t('col_participations'), type: 'num' },
+      { key: 'investors', label: t('col_investors'), type: 'num' },
+      { key: 'still_locked', label: t('col_still_locked'), type: 'num' },
+      { key: 'funds', label: t('col_funds'), type: 'num' },
+      { key: 'days_running', label: t('col_days'), type: 'num' },
+      { key: 'avg_units', label: t('col_avg_units'), type: 'num' },
+      { key: 'avg_aum', label: t('col_avg_locked_aum'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
       { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr', sum: true },
       { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
     ], 'No campaign holdings in this range.');
     genTable('#crSummaryTable', summary, [
-      { key: 'period', label: 'Period', type: 'date' },
-      { key: 'campaigns', label: 'Campaigns', type: 'num' },
-      { key: 'participations', label: 'Participations', type: 'num' },
-      { key: 'investors', label: 'Investors', type: 'num' },
-      { key: 'days_running', label: 'Days', type: 'num' },
-      { key: 'avg_aum', label: 'Avg locked AUM', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' },
+      { key: 'campaigns', label: t('col_campaigns'), type: 'num' },
+      { key: 'participations', label: t('col_participations'), type: 'num' },
+      { key: 'investors', label: t('col_investors'), type: 'num' },
+      { key: 'days_running', label: t('col_days'), type: 'num' },
+      { key: 'avg_aum', label: t('col_avg_locked_aum'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true },
       { key: 'total_aperd_share_alt', label: 'Total AperD (alt)', type: 'idr', sum: true },
       { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
@@ -4709,37 +4718,37 @@ function renderReferralProgram(rows, stats, invited, sel = { kpis: '#refProgKpis
   ].join('');
 
   genTable(sel.table, rows, [
-    { key: 'inviter_sid', label: 'Inviter SID' }, { key: 'inviter_name', label: 'Inviter name' },
-    { key: 'inviter_ifua', label: 'Inviter IFUA' }, { key: 'inviter_email', label: 'Inviter email' },
-    { key: 'inviter_phone', label: 'Inviter phone' },
-    { key: 'invitee_sid', label: 'Invitee SID' }, { key: 'invitee_name', label: 'Invitee name' },
-    { key: 'invitee_ifua', label: 'Invitee IFUA' }, { key: 'invitee_email', label: 'Invitee email' },
-    { key: 'invitee_phone', label: 'Invitee phone' },
-    { key: 'fund_name', label: 'Fund' }, { key: 'amount', label: 'Amount', type: 'idr' },
-    { key: 'tx_date', label: 'Transaction date', type: 'date' }, { key: 'days_held', label: 'Days held', type: 'num' },
-    { key: 'baseline_unit', label: 'Baseline units', type: 'num' }, { key: 'min_unit_in_window', label: 'Min units seen', type: 'num' },
-    { key: 'status', label: 'Status' }, { key: 'reason', label: 'Reason' },
+    { key: 'inviter_sid', label: t('col_inviter_sid') }, { key: 'inviter_name', label: t('col_inviter_name') },
+    { key: 'inviter_ifua', label: t('col_inviter_ifua') }, { key: 'inviter_email', label: t('col_inviter_email') },
+    { key: 'inviter_phone', label: t('col_inviter_phone') },
+    { key: 'invitee_sid', label: t('col_invitee_sid') }, { key: 'invitee_name', label: t('col_invitee_name') },
+    { key: 'invitee_ifua', label: t('col_invitee_ifua') }, { key: 'invitee_email', label: t('col_invitee_email') },
+    { key: 'invitee_phone', label: t('col_invitee_phone') },
+    { key: 'fund_name', label: t('col_fund') }, { key: 'amount', label: t('col_amount'), type: 'idr' },
+    { key: 'tx_date', label: t('col_transaction_date'), type: 'date' }, { key: 'days_held', label: t('col_days_held'), type: 'num' },
+    { key: 'baseline_unit', label: t('col_baseline_units'), type: 'num' }, { key: 'min_unit_in_window', label: t('col_min_units_seen'), type: 'num' },
+    { key: 'status', label: 'Status' }, { key: 'reason', label: t('col_reason') },
   ], 'No qualifying referrals in this period.');
 
   genTable(sel.leaderboard, buildReferralLeaderboard(rows, stats), [
-    { key: 'inviter_sid', label: 'Inviter SID' }, { key: 'inviter_name', label: 'Inviter name' },
-    { key: 'inviter_referral_code', label: 'Referral code' },
-    { key: 'invited', label: 'Invited', type: 'num' },
-    { key: 'transacted', label: 'Transacted', type: 'num' },
-    { key: 'qualifying', label: 'Transacted ≥ Rp1jt', type: 'num' },
-    { key: 'pending', label: 'Pending', type: 'num' },
-    { key: 'eligible', label: 'Eligible', type: 'num' },
-    { key: 'not_eligible', label: 'Not eligible', type: 'num' },
+    { key: 'inviter_sid', label: t('col_inviter_sid') }, { key: 'inviter_name', label: t('col_inviter_name') },
+    { key: 'inviter_referral_code', label: t('col_referral_code') },
+    { key: 'invited', label: t('col_invited'), type: 'num' },
+    { key: 'transacted', label: t('col_transacted'), type: 'num' },
+    { key: 'qualifying', label: t('col_transacted_rp1jt'), type: 'num' },
+    { key: 'pending', label: t('col_pending'), type: 'num' },
+    { key: 'eligible', label: t('col_eligible'), type: 'num' },
+    { key: 'not_eligible', label: t('col_not_eligible'), type: 'num' },
   ], 'No referral activity in this period.');
 
   genTable(sel.invited, invited, [
-    { key: 'inviter_sid', label: 'Inviter SID' }, { key: 'inviter_name', label: 'Inviter name' },
-    { key: 'invitee_name', label: 'Name' }, { key: 'invitee_created_at', label: 'Created at', type: 'date' },
-    { key: 'invitee_verified_at', label: 'Verified at', type: 'date' },
+    { key: 'inviter_sid', label: t('col_inviter_sid') }, { key: 'inviter_name', label: t('col_inviter_name') },
+    { key: 'invitee_name', label: t('col_name') }, { key: 'invitee_created_at', label: t('col_created_at'), type: 'date' },
+    { key: 'invitee_verified_at', label: t('col_verified_at'), type: 'date' },
     { key: 'invitee_sid', label: 'SID' }, { key: 'invitee_email', label: 'Email' },
-    { key: 'invitee_phone', label: 'Phone number' },
-    { key: 'invitee_referral_code', label: 'Referral code' }, { key: 'inviter_referral_code', label: 'Referrer code' },
-    { key: 'kyc_status', label: 'KYC status' }, { key: 'transaction_status', label: 'Transaction status' },
+    { key: 'invitee_phone', label: t('col_phone_number') },
+    { key: 'invitee_referral_code', label: t('col_referral_code') }, { key: 'inviter_referral_code', label: t('col_referrer_code') },
+    { key: 'kyc_status', label: t('col_kyc_status') }, { key: 'transaction_status', label: t('col_transaction_status') },
   ], 'No invited users in this period.');
 }
 
@@ -4796,7 +4805,7 @@ function remParams() {
 
 async function loadRemisier() {
   const p = remParams();
-  if (!p.code) { toast('Enter a remisier code first.'); return; }
+  if (!p.code) { toast(t('msg_enter_a_remisier_code_first')); return; }
   $('#remUsersTable').innerHTML = '<div class="loading">Loading…</div>';
   $('#remDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#remSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
@@ -4810,32 +4819,32 @@ async function loadRemisier() {
     ]);
     renderSeriesTrendFinding('#remSummaryFinding', summary, 'total_remisier_fee_net', 'Remisier fee (net)');
     genTable('#remUsersTable', users, [
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
-      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
+      { key: 'referrer_code', label: t('col_referrer_code') }, { key: 'sales_code', label: t('col_sales_code') },
     ], 'No users under this remisier code.');
     genTable('#remDetailTable', detail, [
-      { key: 'period', label: 'Period', type: 'date' },
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
-      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
-      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
-      { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
-      { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'avg_aum', label: 'Avg AUM', type: 'idr' }, { key: 'aum_eom', label: 'AUM (EOP)', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
+      { key: 'fund_name', label: t('col_fund') }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'management_fee', label: t('col_mgmt_fee_rate'), type: 'num' },
+      { key: 'aperd_share', label: t('col_aperd_share'), type: 'num' }, { key: 'mi_share', label: t('col_mi_share'), type: 'num' },
+      { key: 'days_running', label: t('col_days_running'), type: 'num' },
+      { key: 'avg_aum', label: t('col_avg_aum'), type: 'idr' }, { key: 'aum_eom', label: t('col_aum_eop'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
-      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idr', sum: true },
-      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr', sum: true }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idr', sum: true },
-      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr', sum: true },
+      { key: 'total_remisier_fee', label: t('col_remisier_fee_gross'), type: 'idr', sum: true },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr', sum: true }, { key: 'total_remisier_fee_net', label: t('col_remisier_fee_net'), type: 'idr', sum: true },
+      { key: 'total_sayakaya_fee', label: t('col_sayakaya_fee'), type: 'idr', sum: true },
     ], 'No revenue in this range.');
     genTable('#remSummaryTable', summary, [
-      { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
-      { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'total_aum', label: 'Total AUM (EOP)', type: 'idr' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idr', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' }, { key: 'funds', label: t('col_funds'), type: 'num' },
+      { key: 'days_running', label: t('col_days_running'), type: 'num' },
+      { key: 'total_aum', label: t('col_total_aum_eop'), type: 'idr' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idr', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idr', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idr', sum: true },
-      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idr', sum: true },
-      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr', sum: true }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idr', sum: true },
-      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idr', sum: true },
+      { key: 'total_remisier_fee', label: t('col_remisier_fee_gross'), type: 'idr', sum: true },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idr', sum: true }, { key: 'total_remisier_fee_net', label: t('col_remisier_fee_net'), type: 'idr', sum: true },
+      { key: 'total_sayakaya_fee', label: t('col_sayakaya_fee'), type: 'idr', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
     $('#remUsersTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
@@ -4863,7 +4872,7 @@ function remPwcParams() {
 
 async function loadRemisierPwc() {
   const p = remPwcParams();
-  if (!p.code) { toast('Enter a remisier code first.'); return; }
+  if (!p.code) { toast(t('msg_enter_a_remisier_code_first')); return; }
   $('#remPwcUsersTable').innerHTML = '<div class="loading">Loading…</div>';
   $('#remPwcDetailTable').innerHTML = '<div class="loading">Computing revenue…</div>';
   $('#remPwcSummaryTable').innerHTML = '<div class="loading">Computing revenue…</div>';
@@ -4877,32 +4886,32 @@ async function loadRemisierPwc() {
     ]);
     renderSeriesTrendFinding('#remPwcSummaryFinding', summary, 'total_remisier_fee_net', 'Remisier fee (net)');
     genTable('#remPwcUsersTable', users, [
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
-      { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
+      { key: 'referrer_code', label: t('col_referrer_code') }, { key: 'sales_code', label: t('col_sales_code') },
     ], 'No users under this remisier code.');
     genTable('#remPwcDetailTable', detail, [
-      { key: 'period', label: 'Period', type: 'date' },
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
-      { key: 'fund_name', label: 'Fund' }, { key: 'sinvest_code', label: 'Sinvest code' },
-      { key: 'management_fee', label: 'Mgmt fee rate', type: 'num' },
-      { key: 'aperd_share', label: 'AperD share', type: 'num' }, { key: 'mi_share', label: 'MI share', type: 'num' },
-      { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'avg_aum', label: 'Avg AUM', type: 'idrx' }, { key: 'aum_eom', label: 'AUM (EOP)', type: 'idrx' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idrx', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
+      { key: 'fund_name', label: t('col_fund') }, { key: 'sinvest_code', label: 'Sinvest code' },
+      { key: 'management_fee', label: t('col_mgmt_fee_rate'), type: 'num' },
+      { key: 'aperd_share', label: t('col_aperd_share'), type: 'num' }, { key: 'mi_share', label: t('col_mi_share'), type: 'num' },
+      { key: 'days_running', label: t('col_days_running'), type: 'num' },
+      { key: 'avg_aum', label: t('col_avg_aum'), type: 'idrx' }, { key: 'aum_eom', label: t('col_aum_eop'), type: 'idrx' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idrx', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idrx', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idrx', sum: true },
-      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idrx', sum: true },
-      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx', sum: true }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idrx', sum: true },
-      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx', sum: true },
+      { key: 'total_remisier_fee', label: t('col_remisier_fee_gross'), type: 'idrx', sum: true },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx', sum: true }, { key: 'total_remisier_fee_net', label: t('col_remisier_fee_net'), type: 'idrx', sum: true },
+      { key: 'total_sayakaya_fee', label: t('col_sayakaya_fee'), type: 'idrx', sum: true },
     ], 'No revenue in this range.');
     genTable('#remPwcSummaryTable', summary, [
-      { key: 'period', label: 'Period', type: 'date' }, { key: 'funds', label: 'Funds', type: 'num' },
-      { key: 'days_running', label: 'Days running', type: 'num' },
-      { key: 'total_aum', label: 'Total AUM (EOP)', type: 'idrx' },
-      { key: 'total_management_fee', label: 'Total mgmt fee', type: 'idrx', sum: true },
+      { key: 'period', label: t('col_period'), type: 'date' }, { key: 'funds', label: t('col_funds'), type: 'num' },
+      { key: 'days_running', label: t('col_days_running'), type: 'num' },
+      { key: 'total_aum', label: t('col_total_aum_eop'), type: 'idrx' },
+      { key: 'total_management_fee', label: t('col_total_mgmt_fee'), type: 'idrx', sum: true },
       { key: 'total_aperd_share', label: 'Total AperD', type: 'idrx', sum: true }, { key: 'total_mi_share', label: 'Total MI', type: 'idrx', sum: true },
-      { key: 'total_remisier_fee', label: 'Remisier fee (gross)', type: 'idrx', sum: true },
-      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx', sum: true }, { key: 'total_remisier_fee_net', label: 'Remisier fee (net)', type: 'idrx', sum: true },
-      { key: 'total_sayakaya_fee', label: 'Sayakaya fee', type: 'idrx', sum: true },
+      { key: 'total_remisier_fee', label: t('col_remisier_fee_gross'), type: 'idrx', sum: true },
+      { key: 'total_remisier_pph', label: 'PPh 2.5%', type: 'idrx', sum: true }, { key: 'total_remisier_fee_net', label: t('col_remisier_fee_net'), type: 'idrx', sum: true },
+      { key: 'total_sayakaya_fee', label: t('col_sayakaya_fee'), type: 'idrx', sum: true },
     ], 'No revenue in this range.');
   } catch (e) {
     $('#remPwcUsersTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
@@ -4911,7 +4920,7 @@ async function loadRemisierPwc() {
   }
 }
 
-// ---- nested: remisier transactions (per-transaction detail, own filters) --
+// nested: remisier transactions (per-transaction detail, own filters) --
 const remTx = { limit: 100, offset: 0, total: 0, sort: null };
 
 function remTxCodesArr(sel) {
@@ -4940,7 +4949,7 @@ async function loadRemTxFilterOptions() {
 
 async function loadRemTx() {
   const p = remTxParams();
-  if (!p.referrerCodes.length && !p.salesCodes.length) { toast('Enter at least one referrer_code or sales_code.'); return; }
+  if (!p.referrerCodes.length && !p.salesCodes.length) { toast(t('msg_enter_at_least_one_referrer_code_or_sale')); return; }
   $('#remTxTable').innerHTML = '<div class="loading">Loading…</div>';
   const qs = new URLSearchParams();
   p.referrerCodes.forEach((c) => qs.append('referrerCodes', c));
@@ -4954,16 +4963,16 @@ async function loadRemTx() {
     const { rows, total } = await api(`/api/remisier/transactions?${qs}`);
     remTx.total = total;
     genTable('#remTxTable', rows, [
-      { key: 'created_at', label: 'Date', type: 'date', sort: true },
-      { key: 'transaction_number', label: 'Trx #', sort: true },
-      { key: 'type', label: 'Type', sort: true }, { key: 'status', label: 'Status', sort: true },
-      { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: 'Name', sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: 'Phone', sort: true },
-      { key: 'fund_name', label: 'Fund', sort: true }, { key: 'fund_type', label: 'Fund type', sort: true },
+      { key: 'created_at', label: t('col_date'), type: 'date', sort: true },
+      { key: 'transaction_number', label: t('col_trx'), sort: true },
+      { key: 'type', label: t('col_type'), sort: true }, { key: 'status', label: 'Status', sort: true },
+      { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: t('col_name'), sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: t('col_phone'), sort: true },
+      { key: 'fund_name', label: t('col_fund'), sort: true }, { key: 'fund_type', label: t('col_fund_type'), sort: true },
       { key: 'unit', label: 'Unit', type: 'num', sort: true },
       { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
-      { key: 'amount', label: 'Amount', type: 'idr', sort: true }, { key: 'final_amount', label: 'Final amount', type: 'idr', sort: true },
-      { key: 'realized_gain_loss', label: 'Realized G/L', type: 'idr', sort: true },
-      { key: 'referrer_code', label: 'Referrer code', sort: true }, { key: 'sales_code', label: 'Sales code', sort: true },
+      { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
+      { key: 'realized_gain_loss', label: t('col_realized_g_l'), type: 'idr', sort: true },
+      { key: 'referrer_code', label: t('col_referrer_code'), sort: true }, { key: 'sales_code', label: t('col_sales_code'), sort: true },
     ], 'No transactions match these filters.', remTx.sort);
     const start = total ? remTx.offset + 1 : 0;
     const end = Math.min(remTx.offset + remTx.limit, total);
@@ -4973,7 +4982,7 @@ async function loadRemTx() {
   } catch (e) { $('#remTxTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
-// ---- nested: SInvest transactions (raw KSEI/SInvest custodian feed) -------
+// nested: SInvest transactions (raw KSEI/SInvest custodian feed)
 const sitx = { limit: 50, offset: 0, total: 0, sort: null };
 let sitxLoaded = false;
 
@@ -5005,17 +5014,17 @@ async function loadSitx() {
     const { rows, total } = await sitxFetch;
     sitx.total = total;
     genTable('#sitxTable', rows, [
-      { key: 'transaction_date', label: 'Date', type: 'date', sort: true },
-      { key: 'type', label: 'Type', sort: true },
+      { key: 'transaction_date', label: t('col_date'), type: 'date', sort: true },
+      { key: 'type', label: t('col_type'), sort: true },
       { key: 'sid', label: 'SID', sort: true }, { key: 'investor_name', label: 'Investor', sort: true },
-      { key: 'fund_code', label: 'Fund code', sort: true }, { key: 'fund_name', label: 'Fund', sort: true },
+      { key: 'fund_code', label: t('col_fund_code'), sort: true }, { key: 'fund_name', label: t('col_fund'), sort: true },
       { key: 'unit', label: 'Unit', type: 'num', sort: true },
       { key: 'nav_per_unit', label: 'NAV', type: 'num', sort: true },
-      { key: 'gross_amount', label: 'Gross amount', type: 'idr', sort: true },
-      { key: 'fee', label: 'Fee', type: 'idr', sort: true },
-      { key: 'net_amount', label: 'Net amount', type: 'idr', sort: true },
-      { key: 'input_date', label: 'Input date', type: 'date', sort: true },
-      { key: 'reference_no', label: 'Reference #', sort: true },
+      { key: 'gross_amount', label: t('col_gross_amount'), type: 'idr', sort: true },
+      { key: 'fee', label: t('col_fee'), type: 'idr', sort: true },
+      { key: 'net_amount', label: t('col_net_amount'), type: 'idr', sort: true },
+      { key: 'input_date', label: t('col_input_date'), type: 'date', sort: true },
+      { key: 'reference_no', label: t('col_reference'), sort: true },
     ], 'No transactions match these filters.', sitx.sort);
     const start = total ? sitx.offset + 1 : 0;
     const end = Math.min(sitx.offset + sitx.limit, total);
@@ -5025,7 +5034,7 @@ async function loadSitx() {
   } catch (e) { $('#sitxTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
-// ---- nested: Users transactions (any investor, by SID/email/name) --------
+// nested: Users transactions (any investor, by SID/email/name)
 const utx = { limit: 50, offset: 0, total: 0, sort: null };
 
 async function loadUtxFundOptions() {
@@ -5066,14 +5075,14 @@ async function loadUtx() {
     utx.total = total;
     // created_at is a UTC instant; show it as Jakarta time so the day matches the summary above.
     genTable('#utxTable', rows.map((r) => ({ ...r, created_at: toJakartaTime(val(r.created_at)) })), [
-      { key: 'created_at', label: 'Date (WIB)', sort: true, text: true },
-      { key: 'transaction_number', label: 'Trx #', sort: true },
-      { key: 'type', label: 'Type', sort: true }, { key: 'status', label: 'Status', sort: true },
-      { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: 'Name', sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: 'Phone', sort: true },
-      { key: 'fund_name', label: 'Fund', sort: true }, { key: 'promo_code', label: 'Promo', sort: true },
+      { key: 'created_at', label: t('col_date_wib'), sort: true, text: true },
+      { key: 'transaction_number', label: t('col_trx'), sort: true },
+      { key: 'type', label: t('col_type'), sort: true }, { key: 'status', label: 'Status', sort: true },
+      { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: t('col_name'), sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: t('col_phone'), sort: true },
+      { key: 'fund_name', label: t('col_fund'), sort: true }, { key: 'promo_code', label: 'Promo', sort: true },
       { key: 'unit', label: 'Unit', type: 'num', sort: true },
       { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
-      { key: 'amount', label: 'Amount', type: 'idr', sort: true }, { key: 'final_amount', label: 'Final amount', type: 'idr', sort: true },
+      { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
     ], 'No transactions match these filters.', utx.sort);
     const start = total ? utx.offset + 1 : 0;
     const end = Math.min(utx.offset + utx.limit, total);
@@ -5083,7 +5092,7 @@ async function loadUtx() {
   } catch (e) { $('#utxTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
-// ---- Users transactions summary (panel above the list) --------------------
+// Users transactions summary (panel above the list)
 // Subscription (buy), redemption (sell) and net flow per day, Monday week or
 // month, over the same investor/fund/promo filters as the list. Type and
 // status are deliberately not sent: the panel always counts both sides, and
@@ -5135,11 +5144,11 @@ async function loadUtxSummary() {
     // Newest bucket first, like the table below it; the query returns them oldest first.
     genTable('#utxSumTable', rows.slice().reverse(), [
       { key: 'bucket', label: utxSumGranLabel() },
-      { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true },
-      { key: 'buys', label: '# buys', type: 'num', sum: true },
-      { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true },
-      { key: 'sells', label: '# sells', type: 'num', sum: true },
-      { key: 'net_flow', label: 'Net flow', type: 'idr', sum: true, fmt: signedIdr },
+      { key: 'subscriptions', label: t('col_subscriptions'), type: 'idr', sum: true },
+      { key: 'buys', label: t('col_buys'), type: 'num', sum: true },
+      { key: 'redemptions', label: t('col_redemptions'), type: 'idr', sum: true },
+      { key: 'sells', label: t('col_sells'), type: 'num', sum: true },
+      { key: 'net_flow', label: t('col_net_flow'), type: 'idr', sum: true, fmt: signedIdr },
     ], t('utx_sum_empty'));
   } catch (e) {
     utxSum.loaded = false;
@@ -5174,24 +5183,24 @@ function tiParams() {
 
 const TI_COLS = {
   subscriptions: [
-    { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'buys', label: '# buys', type: 'num', sum: true },
-    { key: 'pct_of_subscriptions', label: '% of all subscriptions', type: 'pct', sum: true },
-    { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true }, { key: 'net_deposit', label: 'Net deposit', type: 'idr', sum: true },
+    { key: 'subscriptions', label: t('col_subscriptions'), type: 'idr', sum: true }, { key: 'buys', label: t('col_buys'), type: 'num', sum: true },
+    { key: 'pct_of_subscriptions', label: t('col_of_all_subscriptions'), type: 'pct', sum: true },
+    { key: 'redemptions', label: t('col_redemptions'), type: 'idr', sum: true }, { key: 'net_deposit', label: t('col_net_deposit'), type: 'idr', sum: true },
   ],
   redemptions: [
-    { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true }, { key: 'sells', label: '# sells', type: 'num', sum: true },
-    { key: 'pct_of_redemptions', label: '% of all redemptions', type: 'pct', sum: true },
-    { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'net_deposit', label: 'Net deposit', type: 'idr', sum: true },
+    { key: 'redemptions', label: t('col_redemptions'), type: 'idr', sum: true }, { key: 'sells', label: t('col_sells'), type: 'num', sum: true },
+    { key: 'pct_of_redemptions', label: t('col_of_all_redemptions'), type: 'pct', sum: true },
+    { key: 'subscriptions', label: t('col_subscriptions'), type: 'idr', sum: true }, { key: 'net_deposit', label: t('col_net_deposit'), type: 'idr', sum: true },
   ],
   net: [
-    { key: 'net_deposit', label: 'Net deposit', type: 'idr', sum: true },
-    { key: 'subscriptions', label: 'Subscriptions', type: 'idr', sum: true }, { key: 'redemptions', label: 'Redemptions', type: 'idr', sum: true },
+    { key: 'net_deposit', label: t('col_net_deposit'), type: 'idr', sum: true },
+    { key: 'subscriptions', label: t('col_subscriptions'), type: 'idr', sum: true }, { key: 'redemptions', label: t('col_redemptions'), type: 'idr', sum: true },
   ],
 };
 
 async function loadTopInvestors() {
   const p = tiParams();
-  if (!p.from || !p.to) { toast('Pick a date range first.'); return; }
+  if (!p.from || !p.to) { toast(t('msg_pick_a_date_range_first')); return; }
   $('#tiSummary').hidden = true;
   $('#tiTable').innerHTML = '<div class="loading">Querying BigQuery…</div>';
   const tiFetch = api(`/api/top-investors?${new URLSearchParams(p)}`);
@@ -5202,7 +5211,7 @@ async function loadTopInvestors() {
     renderTiCompact();
     genTable('#tiTable', rows.map((r, i) => ({ ...r, rank: i + 1 })), [
       { key: 'rank', label: '#', type: 'num' },
-      { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
+      { key: 'sid', label: 'SID' }, { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
       ...TI_COLS[p.metric],
     ], t('ti_empty'));
     if (!rows.length) return;
@@ -5227,10 +5236,10 @@ function renderTiCompact() {
   const rows = tiRows.map((r) => ({ name: val(r.name) || val(r.sid), buys: Number(val(r.subscriptions)) || 0,
     sell: Number(val(r.redemptions)) || 0, net: Number(val(r.net_deposit)) || 0 }));
   genTable('#tiCompactTable', rows, [
-    { key: 'name', label: 'Name' },
-    { key: 'buys', label: 'Buys', type: 'idr', sum: true },
-    { key: 'sell', label: 'Sell', type: 'idr', sum: true },
-    { key: 'net', label: 'Net increase', type: 'idr', sum: true },
+    { key: 'name', label: t('col_name') },
+    { key: 'buys', label: t('col_buys_2'), type: 'idr', sum: true },
+    { key: 'sell', label: t('col_sell'), type: 'idr', sum: true },
+    { key: 'net', label: t('col_net_increase'), type: 'idr', sum: true },
   ], t('ti_empty'));
 }
 
@@ -5742,14 +5751,14 @@ function evcTxQs(limit, offset) {
   return qs;
 }
 const EVC_TX_COLS = [
-  { key: 'created_at', label: 'Date', type: 'date', sort: true },
-  { key: 'transaction_number', label: 'Trx #', sort: true },
-  { key: 'type', label: 'Type', sort: true }, { key: 'status', label: 'Status', sort: true },
-  { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: 'Name', sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: 'Phone', sort: true },
-  { key: 'fund_name', label: 'Fund', sort: true }, { key: 'fund_type', label: 'Fund type', sort: true },
+  { key: 'created_at', label: t('col_date'), type: 'date', sort: true },
+  { key: 'transaction_number', label: t('col_trx'), sort: true },
+  { key: 'type', label: t('col_type'), sort: true }, { key: 'status', label: 'Status', sort: true },
+  { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: t('col_name'), sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: t('col_phone'), sort: true },
+  { key: 'fund_name', label: t('col_fund'), sort: true }, { key: 'fund_type', label: t('col_fund_type'), sort: true },
   { key: 'unit', label: 'Unit', type: 'num', sort: true },
-  { key: 'amount', label: 'Amount', type: 'idr', sort: true }, { key: 'final_amount', label: 'Final amount', type: 'idr', sort: true },
-  { key: 'referrer_code', label: 'Referrer code', sort: true }, { key: 'sales_code', label: 'Sales code', sort: true },
+  { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
+  { key: 'referrer_code', label: t('col_referrer_code'), sort: true }, { key: 'sales_code', label: t('col_sales_code'), sort: true },
 ];
 
 async function loadEvcTx() {
@@ -5959,7 +5968,7 @@ async function loadExplore() {
 }
 
 function renderExTable(d, rows) {
-  if (!rows.length) { $('#exTable').innerHTML = '<div class="empty">No rows match these filters.</div>'; return; }
+  if (!rows.length) { $('#exTable').innerHTML = `<div class="empty">${t('msg_no_rows_match_these_filters')}</div>`; return; }
   const numTypes = ['idr', 'num', 'num4'];
   const head = d.columns.map((c) => sortTh(c.label, c.key, ex.sort, numTypes.includes(c.type) ? 'num' : '',
     numTypes.includes(c.type) || c.type === 'datetime' ? 'desc' : 'asc')).join('');
@@ -6026,13 +6035,13 @@ function renderGenericTable(sel, rows, emptyMsg = 'Query returned no rows.') {
 // server-side as the row identity column.
 const PDF_COLS_KEY = 'sk_pdf_cols';
 const PDF_COLUMNS = [
-  { key: 'fund_type', label: 'Fund Type' },
-  { key: 'unit', label: 'Unit Balance' },
-  { key: 'avg_buy_price', label: 'Average NAV' },
-  { key: 'nav', label: 'Close NAV' },
-  { key: 'fund_value', label: 'Fund Value' },
-  { key: 'value', label: 'Market Value' },
-  { key: 'gain_loss', label: 'Unrealized Gain/Loss' },
+  { key: 'fund_type', label: t('col_fund_type_2') },
+  { key: 'unit', label: t('col_unit_balance') },
+  { key: 'avg_buy_price', label: t('col_average_nav') },
+  { key: 'nav', label: t('col_close_nav') },
+  { key: 'fund_value', label: t('col_fund_value') },
+  { key: 'value', label: t('col_market_value') },
+  { key: 'gain_loss', label: t('col_unrealized_gain_loss') },
   { key: 'gain_pct', label: '%' },
 ];
 
@@ -6084,7 +6093,7 @@ async function download(body, filename) {
     const a = document.createElement('a');
     a.href = url; a.download = filenameFromResponse(res, filename); a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast('Export ready');
+    toast(t('msg_export_ready'));
   } catch (e) { toast(`Export failed: ${e.message}`); }
 }
 
@@ -6112,7 +6121,7 @@ async function pushToSheet(body) {
       return;
     }
     if (tab) tab.location.href = data.url; else window.open(data.url, '_blank');
-    toast('Google Sheet ready');
+    toast(t('msg_google_sheet_ready'));
   } catch (e) {
     if (tab) tab.close();
     toast(`Google Sheets export failed: ${e.message}`);
@@ -6231,7 +6240,7 @@ function setupBulkExport({ prefix: p, source }) {
     const result = await fetchBatchBlob(body, filename);
     if (!result) return;
     downloadBlob(result.blob, result.filename);
-    toast('Export ready');
+    toast(t('msg_export_ready'));
   }
 
   // One /api/export/batch call per investor (a 1-element users array each),
@@ -6262,7 +6271,7 @@ function setupBulkExport({ prefix: p, source }) {
   }
 
   function runExport(format) {
-    if (!basket.size) { toast('Add at least one investor first.'); return; }
+    if (!basket.size) { toast(t('msg_add_at_least_one_investor_first')); return; }
     if (!picked().length) { toast(t('bulk_none_ticked')); return; }
     ($(`#${p}BulkMode`).value === 'separate' ? exportSeparate : exportCombined)(format);
   }
@@ -6295,8 +6304,8 @@ function setupBulkExport({ prefix: p, source }) {
       // Contact detail (email/phone/referrer/sales code) is shown here only —
       // the actual export files never include it, just SID/name.
       genTable(`#${p}BulkSummaryInvestors`, summary.investors, [
-        { key: 'sid', label: 'SID' }, { key: 'name', label: 'Name' }, { key: 'email', label: 'Email' },
-        { key: 'phone', label: 'Phone' }, { key: 'referrer_code', label: 'Referrer code' }, { key: 'sales_code', label: 'Sales code' },
+        { key: 'sid', label: 'SID' }, { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
+        { key: 'phone', label: t('col_phone') }, { key: 'referrer_code', label: t('col_referrer_code') }, { key: 'sales_code', label: t('col_sales_code') },
         { key: 'aum', label: 'AUM', type: 'idr' },
       ], 'No holdings found.');
     } catch (e) {
@@ -6322,7 +6331,7 @@ function setupBulkExport({ prefix: p, source }) {
   $(`#${p}BulkXlsx`).addEventListener('click', () => runExport('xlsx'));
   $(`#${p}BulkPdf`).addEventListener('click', () => runExport('pdf'));
 
-  return { addOne: (u) => { const ok = addOne(u); render(); if (!ok) toast('Already in the list.'); return ok; } };
+  return { addOne: (u) => { const ok = addOne(u); render(); if (!ok) toast(t('msg_already_in_the_list')); return ok; } };
 }
 
 // "+" button appended to a Portfolio-tab search-results row — adds that
@@ -6360,7 +6369,7 @@ async function searchSendStatementUsers() {
 }
 
 function renderSsResults(rows) {
-  if (!rows.length) { $('#ssResults').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+  if (!rows.length) { $('#ssResults').innerHTML = `<div class="empty">${t('msg_no_matching_investor')}</div>`; return; }
   const body = rows.map((r) => `<tr class="pf-row" tabindex="0" role="button" data-id="${val(r.user_id)}" data-sid="${val(r.sid)}" data-name="${escapeHtml(val(r.name) || '')}" data-email="${escapeHtml(val(r.email) || '')}" style="cursor:pointer">
       <td>${escapeHtml(val(r.sid) || 'n/a')}</td><td>${escapeHtml(val(r.name) || 'n/a')}</td><td>${escapeHtml(val(r.email) || 'n/a')}</td><td>${escapeHtml(val(r.ifua) || 'n/a')}</td>
     </tr>`).join('');
@@ -6455,16 +6464,16 @@ async function loadSsLog() {
     const rows = await api('/api/statement/log');
     const mapped = rows.map((r) => ({ ...r, created_at: toJakartaTime(val(r.created_at)) }));
     genTable('#ssLogTable', mapped, [
-      { key: 'created_at', label: 'When (WIB)' },
-      { key: 'username', label: 'Sent by' },
-      { key: 'detail', label: 'Sent' },
+      { key: 'created_at', label: t('col_when_wib') },
+      { key: 'username', label: t('col_sent_by') },
+      { key: 'detail', label: t('col_sent') },
     ], 'No statements sent yet.');
   } catch (e) { $('#ssLogTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
-// ---- Send statement (batch): same portfolio/e-statement documents to
+// Send statement (batch): same portfolio/e-statement documents to
 // picked and/or pasted investors (emails/SIDs), resolved server-side (one
-// email per matching recipient — see /api/statement/email-batch). ----------
+// email per matching recipient — see /api/statement/email-batch).
 
 // Search-and-pick list behind both Send tabs' bulk sends: search by name
 // (* wildcard), SID, email, or phone (see queries.js userSearch), then
@@ -6483,7 +6492,7 @@ function setupRecipientPicker(p) {
   }
 
   function renderResults(rows) {
-    if (!rows.length) { el('Results').innerHTML = '<div class="empty">No matching investor.</div>'; return; }
+    if (!rows.length) { el('Results').innerHTML = `<div class="empty">${t('msg_no_matching_investor')}</div>`; return; }
     const body = rows.map((r, i) => {
       const action = val(r.email)
         ? `<button type="button" class="btn-ghost picker-add-btn" data-i="${i}">+ Add</button>`
@@ -6495,7 +6504,7 @@ function setupRecipientPicker(p) {
     $$(`#${p}Results .picker-add-btn`).forEach((btn) => btn.addEventListener('click', () => {
       const r = rows[btn.dataset.i];
       const id = String(val(r.user_id));
-      if (picked.has(id)) { toast('Already added.'); return; }
+      if (picked.has(id)) { toast(t('msg_already_added')); return; }
       picked.set(id, { sid: val(r.sid) || '', name: val(r.name) || '', email: val(r.email) });
       render();
     }));
@@ -6534,10 +6543,10 @@ let ssBatchIdentifiers = [];
 function openSsBatchCompose() {
   const sendPortfolio = $('#ssBatchSendPortfolio').checked;
   const sendStatement = $('#ssBatchSendStatement').checked;
-  if (!sendPortfolio && !sendStatement) { toast('Pick at least one document to send.'); return; }
+  if (!sendPortfolio && !sendStatement) { toast(t('msg_pick_at_least_one_document_to_send')); return; }
   const portfolioDate = $('#ssBatchPortfolioDate').value;
   const statementMonth = $('#ssBatchStatementMonth').value;
-  if (sendStatement && !statementMonth) { toast('Pick a month for the transaction e-statement.'); return; }
+  if (sendStatement && !statementMonth) { toast(t('msg_pick_a_month_for_the_transaction_e_state')); return; }
   const group = $('#ssBatchRecipientType').value;
   const docs = [sendPortfolio && 'the live portfolio (as of the send date)', sendStatement && `the transaction e-statement for ${statementMonth}`].filter(Boolean).join(' and ');
   if (group !== 'list') {
@@ -6550,7 +6559,7 @@ function openSsBatchCompose() {
   // if they have no SID yet.
   const picked = ssBatchPicker.list().map((u) => u.sid || u.email);
   ssBatchIdentifiers = [...new Set([...picked, ...parseBatchIdentifiers($('#ssBatchInput').value)])];
-  if (!ssBatchIdentifiers.length) { toast('Add or paste at least one investor.'); return; }
+  if (!ssBatchIdentifiers.length) { toast(t('msg_add_or_paste_at_least_one_investor')); return; }
   if (ssBatchIdentifiers.length > BATCH_DIRECT_MAX.statement) {
     openSchedOnce('statement', 'csv_list', { sendPortfolio, sendStatement, statementMonth: sendStatement ? statementMonth : null },
       `${num(ssBatchIdentifiers.length)} emails/SIDs is more than ${BATCH_DIRECT_MAX.statement}, so they go out once, right away, from the queue: ${docs}.`
@@ -6616,7 +6625,7 @@ function setupFundScope(p) {
     try {
       const funds = (await (fpeFundsPromise ||= api('/api/funds/list')))
         .map((f) => ({ id: val(f.id), name: val(f.name) || val(f.id), type: val(f.type) || '(none)' }));
-      if (!funds.length) { el('Types').innerHTML = el('FundList').innerHTML = '<div class="empty">No active funds found.</div>'; return; }
+      if (!funds.length) { el('Types').innerHTML = el('FundList').innerHTML = `<div class="empty">${t('msg_no_active_funds_found')}</div>`; return; }
       el('Types').innerHTML = [...new Set(funds.map((f) => f.type))].sort().map((ty) => chk(ty, ty)).join('');
       el('FundList').innerHTML = funds.sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name))
         .map((f) => chk(f.id, f.name, f.type)).join('');
@@ -6681,7 +6690,7 @@ function openFpeCompose() {
     return;
   }
   fpeRecipients = [...new Set([...fpePicker.list().map((u) => u.email.toLowerCase()), ...pasted])];
-  if (!fpeRecipients.length) { toast('Add at least one recipient.'); return; }
+  if (!fpeRecipients.length) { toast(t('msg_add_at_least_one_recipient')); return; }
   if (fpeRecipients.length > BATCH_DIRECT_MAX.fund_performance) {
     openSchedOnce('fund_performance', 'csv_list', { fundFilter: fpeFundFilter, navAsOf: asOf || null },
       `${num(fpeRecipients.length)} emails is more than ${BATCH_DIRECT_MAX.fund_performance}, so they go out once, right away, from the queue: the Reksa Dana Update PDF (${fundScopeSummary(fpeFundFilter)}, NAV ${asOf ? `as of ${asOf}` : 'of the latest date'}).`,
@@ -6711,7 +6720,7 @@ async function sendFpeEmail() {
     const exclNoteText = data.excluded?.length ? `, ${data.excluded.length} skipped (exclusion list)` : '';
     toast(`Sent to ${data.sent.length} recipient${data.sent.length === 1 ? '' : 's'}${failedNote}${exclNoteText}`);
     loadFpeLog();
-  } catch { toast('Could not reach the server.'); }
+  } catch { toast(t('msg_could_not_reach_the_server')); }
 }
 
 async function loadFpeLog() {
@@ -6720,9 +6729,9 @@ async function loadFpeLog() {
     const rows = await api('/api/fund-performance/log');
     const mapped = rows.map((r) => ({ ...r, created_at: toJakartaTime(val(r.created_at)) }));
     genTable('#fpeLogTable', mapped, [
-      { key: 'created_at', label: 'When (WIB)' },
-      { key: 'username', label: 'Sent by' },
-      { key: 'detail', label: 'Sent' },
+      { key: 'created_at', label: t('col_when_wib') },
+      { key: 'username', label: t('col_sent_by') },
+      { key: 'detail', label: t('col_sent') },
     ], 'No fund performance emails sent yet.');
   } catch (e) { $('#fpeLogTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -6787,7 +6796,7 @@ function schedFrequencySummary(row) {
 function renderSchedules(kind, rows) {
   const { prefix } = schedCfg(kind);
   const tableEl = schedEl(prefix, 'Table');
-  if (!rows.length) { tableEl.innerHTML = '<div class="empty">No schedules yet.</div>'; return; }
+  if (!rows.length) { tableEl.innerHTML = `<div class="empty">${t('msg_no_schedules_yet')}</div>`; return; }
   const body = rows.map((r) => `<tr>
       <td>${escapeHtml(schedRecipientSummary(r))}</td>
       <td>${escapeHtml(schedFrequencySummary(r))}</td>
@@ -6819,8 +6828,8 @@ function renderSchedules(kind, rows) {
     btn.textContent = pausing ? 'Pausing…' : 'Resuming…';
     try {
       const { job } = await api(`/api/schedules/${btn.dataset.id}`, { method: 'PATCH', body: JSON.stringify({ status: pausing ? 'paused' : 'active' }) });
-      if (pausing) toast('Schedule paused.');
-      else if (job.status === 'ended') toast('Schedule resumed and finished: its end date has passed.');
+      if (pausing) toast(t('msg_schedule_paused'));
+      else if (job.status === 'ended') toast(t('msg_schedule_resumed_and_finished_its_end_da'));
       else toast(`Schedule resumed. Next run: ${job.next_run_at ? `${toJakartaTime(job.next_run_at)} WIB` : 'n/a'}.`);
     } catch (e) { toast(e.message); }
     loadSchedules(kind);
@@ -6844,7 +6853,7 @@ async function openSchedDetail(kind, id) {
     const { job, recipients, preview } = await api(`/api/schedules/${id}/detail`);
     schedEl(prefix, 'DetailTitle').textContent = `${schedFrequencySummary(job)}, ${schedRecipientSummary(job)}`;
     if (!recipients.length) {
-      schedEl(prefix, 'DetailBody').innerHTML = '<div class="empty">No recipients match this schedule\'s filters.</div>';
+      schedEl(prefix, 'DetailBody').innerHTML = `<div class="empty">${t('msg_no_recipients_match_this_schedules_filte')}</div>`;
       return;
     }
     const note = preview
@@ -6919,8 +6928,8 @@ function renderExclusions(p) {
   const el = $(`#${p}Table`);
   const q = $(`#${p}Filter`).value.trim().toLowerCase();
   const rows = exclRows.filter((r) => !q || [r.name, r.sid, r.email, r.identifier, r.reason].some((v) => String(v || '').toLowerCase().includes(q)));
-  if (!exclRows.length) { el.innerHTML = '<div class="empty">No one is excluded.</div>'; return; }
-  if (!rows.length) { el.innerHTML = '<div class="empty">No one on the list matches this filter.</div>'; return; }
+  if (!exclRows.length) { el.innerHTML = `<div class="empty">${t('msg_no_one_is_excluded')}</div>`; return; }
+  if (!rows.length) { el.innerHTML = `<div class="empty">${t('msg_no_one_on_the_list_matches_this_filter')}</div>`; return; }
   el.innerHTML = `<table><thead><tr>
       <th>Name</th><th>SID</th><th>Email</th><th>Skipped from</th><th>Reason</th><th>Added by</th><th>Added (WIB)</th><th></th>
     </tr></thead><tbody>${rows.map((r) => `<tr>
@@ -6944,7 +6953,7 @@ function renderExclusions(p) {
 }
 async function addExclusions(p) {
   const identifiers = parseBatchIdentifiers($(`#${p}Input`).value);
-  if (!identifiers.length) { toast('Enter at least one email or SID.'); return; }
+  if (!identifiers.length) { toast(t('msg_enter_at_least_one_email_or_sid')); return; }
   const btn = $(`#${p}AddBtn`);
   btn.disabled = true;
   try {
@@ -7144,7 +7153,7 @@ async function schedSendOtp(kind) {
 
 async function schedConfirmOtp(kind) {
   const { prefix } = schedCfg(kind);
-  if (!schedOtpState || schedOtpState.kind !== kind) { toast('Start over, session lost.'); return; }
+  if (!schedOtpState || schedOtpState.kind !== kind) { toast(t('msg_start_over_session_lost')); return; }
   try {
     await api('/api/schedules/otp/confirm', { method: 'POST', body: JSON.stringify({ otpId: schedOtpState.otpId, code: schedEl(prefix, 'Code').value.trim() }) });
     const once = schedOnce && schedOnce.kind === kind;
@@ -7481,7 +7490,7 @@ function renderPromoRecap() {
     ...r, promo: bEsc(r.promo), campaign: bEsc(r.campaign),
     window: r.campaign_start ? `${r.campaign_start} s.d. ${r.campaign_end || ''}` : 'n/a',
   })), [
-    { key: 'promo', label: 'Promo' }, { key: 'campaign', label: 'Campaign' }, { key: 'window', label: bL('Campaign dates', 'Periode campaign') },
+    { key: 'promo', label: 'Promo' }, { key: 'campaign', label: t('col_campaign') }, { key: 'window', label: bL('Campaign dates', 'Periode campaign') },
     { key: 'min_amount', label: bL('Minimum', 'Minimum'), type: 'idr' }, { key: 'campaign_holding', label: bL('Holding until', 'Holding sampai'), type: 'date' },
     { key: 'rule', label: bL('Bonus rule', 'Aturan bonus') },
     { key: 'buys', label: bL('Buys', 'Beli'), type: 'num', sum: true }, { key: 'users', label: bL('Customers', 'Nasabah'), type: 'num', sum: true },
@@ -7506,7 +7515,7 @@ function renderPromoRecap() {
       days: r.days_held, value_now: r.value_now, fee_total: r.fee_total, fee_aperd: r.fee_aperd,
     };
   }), [
-    { key: 'promo', label: 'Promo' }, { key: 'campaign', label: 'Campaign' }, { key: 'name', label: bL('Customer', 'Nasabah') },
+    { key: 'promo', label: 'Promo' }, { key: 'campaign', label: t('col_campaign') }, { key: 'name', label: bL('Customer', 'Nasabah') },
     { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') }, { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' },
     { key: 'fund', label: bL('Product', 'Produk') }, { key: 'manager', label: 'MI' },
     { key: 'unit', label: bL('Units locked', 'Unit dikunci'), type: 'num' }, { key: 'locked_value', label: bL('Value locked', 'Nilai dikunci'), type: 'idr', sum: true },
@@ -7514,7 +7523,7 @@ function renderPromoRecap() {
     { key: 'status', label: 'Status' }, { key: 'due', label: bL('Bonus owed', 'Bonus harus dikirim'), type: 'idr', sum: true },
     { key: 'sent', label: bL('Bonus sent', 'Bonus terkirim'), type: 'idr', sum: true }, { key: 'sent_on', label: bL('Sent on', 'Dikirim'), type: 'date' },
     { key: 'days', label: bL('Days held', 'Hari holding'), type: 'num' }, { key: 'value_now', label: bL('Still held today', 'Masih dipegang hari ini'), type: 'idr', sum: true },
-    { key: 'fee_total', label: 'Management fee', type: 'idr', sum: true }, { key: 'fee_aperd', label: 'Fee AperD', type: 'idr', sum: true },
+    { key: 'fee_total', label: t('col_management_fee'), type: 'idr', sum: true }, { key: 'fee_aperd', label: t('col_fee_aperd'), type: 'idr', sum: true },
   ], bL('No promo participation matches.', 'Tidak ada peserta promo yang cocok.'));
 
   genTable('#prTransactions', transactions.map((r) => ({
@@ -7523,7 +7532,7 @@ function renderPromoRecap() {
     amount: r.amount, unit: r.unit == null ? null : Math.round(Number(r.unit) * 10000) / 10000, status: bEsc(r.status), payment: bEsc(r.payment_method || ''),
     bonus: r.status !== 'completed' ? '' : prStatus(r.bonus ? r.bonus.status : 'none'), holding: r.bonus ? r.bonus.holding_until : null,
   })), [
-    { key: 'day', label: bL('Day (WIB)', 'Tanggal (WIB)'), type: 'date' }, { key: 'promo', label: 'Promo' }, { key: 'campaign', label: 'Campaign' },
+    { key: 'day', label: bL('Day (WIB)', 'Tanggal (WIB)'), type: 'date' }, { key: 'promo', label: 'Promo' }, { key: 'campaign', label: t('col_campaign') },
     { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') },
     { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' }, { key: 'fund', label: bL('Product', 'Produk') }, { key: 'manager', label: 'MI' },
     { key: 'amount', label: bL('Amount', 'Nominal'), type: 'idr', sum: true }, { key: 'unit', label: 'Unit', type: 'num' },
@@ -8051,12 +8060,12 @@ function renderBoothEvent() {
   genTable('#beSales', salesRows, [
     { key: 'person', label: bL('Sales', 'Sales') }, { key: 'codes', label: bL('Code', 'Kode') }, { key: 'booth', label: 'Booth' },
     { key: 'target', label: bL('SID target', 'Target SID'), type: 'num' }, { key: 'sid', label: 'SID', type: 'num', sum: true },
-    { key: 'funded', label: `Funded ${idr(cfg.sales.minFunded)}+`, type: 'num', sum: true }, { key: 'fundedPct', label: 'Funded %', type: 'pct' },
+    { key: 'funded', label: `Funded ${idr(cfg.sales.minFunded)}+`, type: 'num', sum: true }, { key: 'fundedPct', label: t('col_funded'), type: 'pct' },
     { key: 'gate_text', label: bL('Threshold (rules 1+2)', 'Syarat (rule 1+2)') },
-    { key: 'r1', label: 'Rule 1 SID', type: 'idr', sum: true }, { key: 'r2', label: 'Rule 2 funded', type: 'idr', sum: true },
+    { key: 'r1', label: t('col_rule_1_sid'), type: 'idr', sum: true }, { key: 'r2', label: t('col_rule_2_funded'), type: 'idr', sum: true },
     { key: 'aum', label: bL('Net money in', 'Dana bersih'), type: 'idr', sum: true }, { key: 'aumTarget', label: bL('AUM target', 'Target AUM'), type: 'idr' },
-    { key: 'r3', label: 'Rule 3 AUM', type: 'idr', sum: true }, { key: 'repeatPct', label: bL('Bought again in M1', 'Beli lagi di M1'), type: 'pct' },
-    { key: 'r4', label: 'Rule 4 M1', type: 'idr', sum: true }, { key: 'total', label: 'Total', type: 'idr', sum: true },
+    { key: 'r3', label: t('col_rule_3_aum'), type: 'idr', sum: true }, { key: 'repeatPct', label: bL('Bought again in M1', 'Beli lagi di M1'), type: 'pct' },
+    { key: 'r4', label: t('col_rule_4_m1'), type: 'idr', sum: true }, { key: 'total', label: 'Total', type: 'idr', sum: true },
     { key: 'paid', label: bL(`Paid (max ${idr(cfg.sales.cap)})`, `Dibayar (maks. ${idr(cfg.sales.cap)})`), type: 'idr', sum: true },
     { key: 'status_text', label: 'Status' },
   ], bL('No sales in this filter.', 'Tidak ada sales di filter ini.'));
@@ -8072,12 +8081,12 @@ function renderBoothEvent() {
     { key: 'booth', label: 'Booth' }, { key: 'person', label: 'Team lead' },
     { key: 'target', label: bL('Team SID target', 'Target SID tim'), type: 'num' }, { key: 'sid', label: bL('Team SID', 'SID tim'), type: 'num', sum: true },
     { key: 'sidPct', label: bL('Of target', 'Dari target'), type: 'pct' },
-    { key: 'funded', label: `Funded ${idr(cfg.teamLead.minFunded)}+`, type: 'num', sum: true }, { key: 'fundedPct', label: 'Funded %', type: 'pct' },
+    { key: 'funded', label: `Funded ${idr(cfg.teamLead.minFunded)}+`, type: 'num', sum: true }, { key: 'fundedPct', label: t('col_funded'), type: 'pct' },
     { key: 'gate_text', label: bL('Threshold (rules 1+2)', 'Syarat (rule 1+2)') },
-    { key: 'r1', label: 'Rule 1 SID', type: 'idr', sum: true }, { key: 'r2', label: 'Rule 2 funded', type: 'idr', sum: true },
+    { key: 'r1', label: t('col_rule_1_sid'), type: 'idr', sum: true }, { key: 'r2', label: t('col_rule_2_funded'), type: 'idr', sum: true },
     { key: 'aum', label: bL('Team net money in', 'Dana bersih tim'), type: 'idr', sum: true }, { key: 'aumTarget', label: bL('AUM target', 'Target AUM'), type: 'idr' },
-    { key: 'r3', label: 'Rule 3 AUM', type: 'idr', sum: true }, { key: 'repeatPct', label: bL('Bought again in M1', 'Beli lagi di M1'), type: 'pct' },
-    { key: 'r4', label: 'Rule 4 M1', type: 'idr', sum: true }, { key: 'total', label: 'Total', type: 'idr', sum: true },
+    { key: 'r3', label: t('col_rule_3_aum'), type: 'idr', sum: true }, { key: 'repeatPct', label: bL('Bought again in M1', 'Beli lagi di M1'), type: 'pct' },
+    { key: 'r4', label: t('col_rule_4_m1'), type: 'idr', sum: true }, { key: 'total', label: 'Total', type: 'idr', sum: true },
     { key: 'paid', label: bL(`Paid (max ${idr(cfg.teamLead.cap)})`, `Dibayar (maks. ${idr(cfg.teamLead.cap)})`), type: 'idr', sum: true },
     { key: 'status_text', label: 'Status' },
   ], bL('No booth in this filter.', 'Tidak ada booth di filter ini.'));
@@ -8341,7 +8350,7 @@ function setAskEditable(on) {
 }
 
 function copyAskSql() {
-  navigator.clipboard.writeText($('#askSqlText').value).then(() => toast('SQL copied'));
+  navigator.clipboard.writeText($('#askSqlText').value).then(() => toast(t('msg_sql_copied')));
 }
 
 // Runs whatever is currently in the SQL box (edited or not) via the same
@@ -8386,7 +8395,7 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ---- Chart: Claude picks a type/x/y(/color), or the user overrides them by hand ----
+// Chart: Claude picks a type/x/y(/color), or the user overrides them by hand
 function buildAskChartConfig(type, rows, x, y, label, colorKey) {
   const capped = rows.slice(0, 50);
   const color = resolveAskChartColor(colorKey);
@@ -8641,10 +8650,10 @@ async function saveAdminUser() {
       const patch = { email, username, isSuperuser, allowedTabs };
       if (password) patch.password = password;
       await api(`/api/admin/users/${editingUserId}`, { method: 'PATCH', body: JSON.stringify(patch) });
-      toast('User updated');
+      toast(t('msg_user_updated'));
     } else {
       await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, email, isSuperuser, allowedTabs }) });
-      toast('Invitation sent, they can activate their account from the email.');
+      toast(t('msg_invitation_sent_they_can_activate_their_'));
     }
     $('#adminUserModal').close();
     resetAdminForm();
@@ -8695,9 +8704,9 @@ async function loadAdminAuditLog() {
     const rows = await api(`/api/admin/audit-log?${qs}`);
     const mapped = rows.map((r) => ({ ...r, created_at: toJakartaTime(val(r.created_at)) }));
     genTable('#adminAuditTable', mapped, [
-      { key: 'created_at', label: 'Time (WIB)' },
+      { key: 'created_at', label: t('col_time_wib') },
       { key: 'username', label: 'User' },
-      { key: 'action', label: 'Action' },
+      { key: 'action', label: t('col_action') },
       { key: 'detail', label: 'Detail' },
     ], 'No activity matches these filters.');
   } catch (e) { $('#adminAuditTable').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
@@ -8721,7 +8730,7 @@ function wireAdmin() {
   $('#adminAuditSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadAdminAuditLog(); });
 }
 
-// ---------- set own username, once (sidebar) ----------
+// set own username, once (sidebar)
 // Only for accounts created via email-only invite — hidden once a username
 // exists, matching the admin edit form's disabled-once-set field.
 function wireSetUsername() {
@@ -8738,12 +8747,12 @@ function wireSetUsername() {
       $('#setUsernamePanel').classList.add('hidden');
       $('#setUsernameInput').value = '';
       applyPermissions(body.user);
-      toast('Username set');
+      toast(t('msg_username_set'));
     } catch (e) { $('#setUsernameErr').textContent = e.message; }
   });
 }
 
-// ---------- change own password (sidebar) ----------
+// change own password (sidebar)
 function wireChangePassword() {
   $('#changePwBtn').addEventListener('click', () => {
     $('#changePwPanel').classList.toggle('hidden');
@@ -8775,7 +8784,7 @@ function wireChangePassword() {
         btn.innerHTML = ICONS.eye; btn.setAttribute('aria-label', 'Show password');
       });
       $('#changePwPanel').classList.add('hidden');
-      toast('Password updated');
+      toast(t('msg_password_updated'));
     } catch (e) { $('#changePwErr').textContent = e.message; }
   });
 }
@@ -9052,7 +9061,7 @@ function repaintActiveTab() {
   }
 }
 
-// ---------- theme: Auto (follows the OS/browser setting) / Light / Dark ----------
+// theme: Auto (follows the OS/browser setting) / Light / Dark
 const THEME_KEY = 'sk_theme';
 const osDarkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const getThemeChoice = () => localStorage.getItem(THEME_KEY) || 'auto';
@@ -9271,10 +9280,10 @@ function wire() {
     if (!ssSelected) return;
     const sendPortfolio = $('#ssSendPortfolio').checked;
     const sendStatement = $('#ssSendStatement').checked;
-    if (!sendPortfolio && !sendStatement) { toast('Pick at least one document to send.'); return; }
+    if (!sendPortfolio && !sendStatement) { toast(t('msg_pick_at_least_one_document_to_send')); return; }
     const portfolioDate = $('#ssPortfolioDate').value;
     const statementMonth = $('#ssStatementMonth').value;
-    if (sendStatement && !statementMonth) { toast('Pick a month for the transaction e-statement.'); return; }
+    if (sendStatement && !statementMonth) { toast(t('msg_pick_a_month_for_the_transaction_e_state')); return; }
     const { subject, body } = defaultStatementEmail({ name: ssSelected.name, sendPortfolio, portfolioDate, sendStatement, statementMonth });
     $('#ssEmailTo').textContent = `Will be sent to ${ssSelected.name}'s email on file.`;
     $('#ssEmailSubject').value = subject;
@@ -9904,7 +9913,7 @@ function wire() {
   $$('[data-export="topfunds"]').forEach((b) => b.addEventListener('click', () => {
     const fmt = b.dataset.fmt;
     const date = $('#topFundsDate').value;
-    if (!date) { toast('Pick a date first.'); return; }
+    if (!date) { toast(t('msg_pick_a_date_first')); return; }
     download({ source: 'growth_top_funds', format: fmt, filename: 'top_funds', groupBy: topFundsGroup, date, excludeFunds: topFundsExcluded(), userFilter: ovUserFilter }, `top_funds.${fmt}`);
   }));
 
@@ -9942,7 +9951,7 @@ function wire() {
   $('#sqlXlsx').addEventListener('click', () => download({ source: 'sql', format: 'xlsx', filename: 'query_result', sql: $('#sqlInput').value, limit: 100000 }, 'query_result.xlsx'));
 }
 
-// ---------- login gate ----------
+// login gate
 // Three cards share the same #gate overlay — login, forgot-password, and
 // set-new-password — only one visible at a time.
 let resetGateToken = null; // set in init() from ?reset=<token>, consumed by wireGate()'s submitReset
@@ -10039,7 +10048,7 @@ function wireGate() {
       if (!res.ok) { $('#reset-err').textContent = body.error || 'Could not reset password.'; return; }
       history.replaceState(null, '', location.pathname);
       showGate();
-      toast('Password updated, sign in with your new password.');
+      toast(t('msg_password_updated_sign_in_with_your_new_p'));
     } catch {
       $('#reset-err').textContent = 'Could not reach the server.';
     } finally {
@@ -10050,7 +10059,7 @@ function wireGate() {
   $('#reset-password-confirm').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitReset(); });
 }
 
-// ---------- boot ----------
+// boot
 // Runs once we know who's logged in (fresh login or a restored session).
 async function boot() {
   loadRemTxFilterOptions();

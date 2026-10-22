@@ -99,7 +99,7 @@ function splitRowsBySheet(rows, keyField) {
   return Object.keys(groups).sort().map((name) => ({ name, rows: groups[name] }));
 }
 
-// ---- Referral program eligibility -----------------------------------------
+// Referral program eligibility
 // Turns Q.referralProgramDetail()'s raw holding numbers into the T&C's
 // verdict. Precedence: any hard-fail (KYC, redeemed, no snapshot ever found)
 // wins over "still pending" over "eligible" — a row never both.
@@ -163,7 +163,7 @@ function createApp({ serveStatic = true } = {}) {
   app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json({ limit: '256kb' }));
 
-  // ---- Per-user login (replaces the old shared APP_PASSWORD gate) -----------
+  // Per-user login (replaces the old shared APP_PASSWORD gate)
   // Every /api/* route except login + health requires a valid session token
   // (Authorization: Bearer <token>). req.user is always re-read live from
   // dashboard_users on each request — never cached in the token — so a
@@ -217,7 +217,7 @@ function createApp({ serveStatic = true } = {}) {
     res.status(403).json({ error: 'Superuser access required.' });
   };
 
-  // ---- Auth: login/logout/me --------------------------------------------
+  // Auth: login/logout/me
   // Login is the one route not gated by the middleware above (it's how you
   // get a token in the first place).
   app.post('/api/auth/login', handler(async (req, res) => {
@@ -243,7 +243,7 @@ function createApp({ serveStatic = true } = {}) {
 
   app.get('/api/auth/me', (req, res) => res.json({ user: Auth.publicUser(req.user) }));
 
-  // ---- Admin: manage dashboard accounts (superuser only) --------------------
+  // Admin: manage dashboard accounts (superuser only)
   app.get('/api/admin/users', requireSuperuser, handler(async (_req, res) => {
     const rows = await Auth.listUsers();
     res.json(rows.map((r) => Auth.publicUser({ ...r, password_hash: '' })));
@@ -311,7 +311,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(rows);
   }));
 
-  // ---- Presentation decks (internal meetings) --------------------------------
+  // Presentation decks (internal meetings)
   // Two independently grantable tabs — 'presentation' (AI Taskforce decks) and
   // 'monthly-review' — so an admin can hand out a login scoped to just one
   // deck family (e.g. a "monthly-review" account) without granting the other.
@@ -340,7 +340,7 @@ function createApp({ serveStatic = true } = {}) {
     res.type('application/pdf').send(pdf);
   }));
 
-  // ---- Auth: change your own password ---------------------------------------
+  // Auth: change your own password
   // Requires the current password (not just a valid session) so a hijacked-
   // but-still-valid token can't lock the real owner out permanently.
   app.post('/api/auth/change-password', handler(async (req, res) => {
@@ -361,7 +361,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ ok: true });
   }));
 
-  // ---- Auth: claim your own username (once) ----------------------------------
+  // Auth: claim your own username (once)
   // Only for accounts created via email-only invite (no username yet). Once
   // set, further changes go through an admin — matching the picker's
   // disabled-once-set rule in the admin edit form.
@@ -376,7 +376,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ user: Auth.publicUser(updated) });
   }));
 
-  // ---- Auth: forgot password (unauthenticated, like login) ------------------
+  // Auth: forgot password (unauthenticated, like login)
   // Always responds with the same generic message regardless of whether the
   // username exists or has an email on file — otherwise the response itself
   // would let someone probe for valid usernames.
@@ -410,7 +410,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ ok: true });
   }));
 
-  // ---- Health -----------------------------------------------------------
+  // Health
   // Pings BigQuery with a trivial query (no table scan, no cost) so the UI
   // can show a live/down connection indicator instead of just "the API server
   // itself responded".
@@ -427,7 +427,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ ok: true, project: PROJECT_ID, bigquery, askEnabled: askEnabled() });
   });
 
-  // ---- Overview (KPIs) ------------------------------------------------------
+  // Overview (KPIs)
   // aumDate is the Platform AUM card's own "as of" date, deliberately separate
   // from from/to (which only scope buy/sell/transaction figures) — see
   // platformAumAsOf in queries.js for why. Required, same as /api/funds/top
@@ -447,22 +447,22 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ ...users[0], ...aum[0], ...tx[0], ...funds[0] });
   }));
 
-  // ---- Trends ---------------------------------------------------------------
+  // Trends
   app.get('/api/trends', requireTab('overview'), handler(async (req, res) => {
     const { from, to, granularity } = req.query;
     const q = Q.trends(from, to, granularity, parseFundIds(req.query.fundIds), Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Breakdowns -----------------------------------------------------------
+  // Breakdowns
   app.get('/api/breakdown/:dimension', requireTab('overview'), handler(async (req, res) => {
     const { from, to } = req.query;
     const q = Q.breakdownBy(req.params.dimension, from, to, parseFundIds(req.query.fundIds), Q.normalizeUserFilter(req.query.userFilter));
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Funds ------------------------------------------------------------
-  // Largest funds/MI by AUM, as of a date, from portfolio_with_code -------
+  // Funds
+  // Largest funds/MI by AUM, as of a date, from portfolio_with_code
   app.get('/api/funds/top/latest-date', requireTab('overview'), handler(async (_req, res) => {
     const d = Q.largestFundsLatestDate();
     const [row] = await runQuery(d.sql, d.params);
@@ -491,7 +491,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Users ----------------------------------------------------------------
+  // Users
   app.get('/api/users/growth', requireTab('overview'), handler(async (_req, res) => {
     const q = Q.userGrowth();
     res.json(await runQuery(q.sql, q.params));
@@ -513,7 +513,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Transactions explorer ------------------------------------------------
+  // Transactions explorer
   app.get('/api/transactions/filters', requireTab('remisier-tx'), handler(async (_req, res) => {
     const q = Q.txFilterValues();
     const rows = await runQuery(q.sql, q.params);
@@ -529,7 +529,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
 
-  // ---- SInvest transactions (raw KSEI/SInvest custodian feed, paged) --------
+  // SInvest transactions (raw KSEI/SInvest custodian feed, paged)
   app.get('/api/sinvest-transactions', requireTab('sinvest-tx'), handler(async (req, res) => {
     const { from, to, type, sid, search, limit, offset, sort, dir } = req.query;
     const q = Q.sinvestTransactions({ from, to, type, sid, search, limit: limit || 50, offset: offset || 0, sort, dir });
@@ -540,7 +540,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
 
-  // ---- Users transactions (any investor, by SID/email/name) -----------------
+  // Users transactions (any investor, by SID/email/name)
   app.get('/api/users-transactions', requireTab('users-tx'), handler(async (req, res) => {
     const { q, type, status, fundId, fundName, promo, from, to, limit, offset, sort, dir } = req.query;
     const query = Q.usersTransactions({ q, type, status, fundId, fundName, promo, from, to, limit: limit || 50, offset: offset || 0, sort, dir });
@@ -560,11 +560,11 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows: await runQuery(query.sql, query.params) });
   }));
 
-  // ---- Event code tracking (generic — see queries.js:eventCodeWhere for why
+  // Event code tracking (generic — see queries.js:eventCodeWhere for why
   // `field` still picks referrer_code vs sales_code instead of a real event
   // column) — funnel, tagged users, cohort, and transaction detail for
-  // whatever referral/sales codes an eventual event hands out. ----------------
-  // ---- HNWI bonus: the page sends the program's dates and thresholds from
+  // whatever referral/sales codes an eventual event hands out.
+  // HNWI bonus: the page sends the program's dates and thresholds from
   // public/hnwi-bonus-config.js and computes the bonus itself.
   app.get('/api/hnwi-bonus/data', requireTab('hnwi-bonus'), handler(async (req, res) => {
     const { startDate, purchaseFrom, purchaseTo, programTo, minAum, sam } = req.query;
@@ -580,7 +580,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ candidates, transactions: await runQuery(t.sql, t.params) });
   }));
 
-  // ---- Promo recap: raw promo buys and promo participations (with holding
+  // Promo recap: raw promo buys and promo participations (with holding
   // and fee from portfolio_with_code); the page builds the per-promo summary.
   const PROMO_CODE_RE = /^[A-Za-z0-9_*-]{1,60}$/;
   app.get('/api/promo-recap/data', requireTab('promo-recap'), handler(async (req, res) => {
@@ -596,7 +596,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ transactions, participants });
   }));
 
-  // ---- Booth event: the page sends codes and dates from
+  // Booth event: the page sends codes and dates from
   // public/booth-event-config.js and computes targets and incentives itself.
   const BOOTH_CODE_RE = /^[A-Za-z0-9_-]{2,40}$/;
   const BOOTH_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -698,7 +698,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
 
-  // ---- AUM history (mi_fee_logs.mi_fee) -------------------------------------
+  // AUM history (mi_fee_logs.mi_fee)
   app.get('/api/aum-history', requireTab('aum'), handler(async (req, res) => {
     const { from, to, granularity } = req.query;
     const q = Q.aumHistory(from, to, granularity);
@@ -722,13 +722,13 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Top investors (subscribers / redeemers / net deposit) ---------------
+  // Top investors (subscribers / redeemers / net deposit)
   app.get('/api/top-investors', requireTab('top-investors'), handler(async (req, res) => {
     const q = Q.topInvestors(req.query);
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- User portfolio lookup (search by SID, print one user's portfolio) ----
+  // User portfolio lookup (search by SID, print one user's portfolio)
   // Shared by Portfolio, Portfolio Explorer, Portfolio (Fix), Portfolio (TX), Portfolio (SInvest), Send statement, Send fund performance, and User behavior: allow any.
   const requireAnyPortfolio = (req, res, next) => {
     if (Auth.userCan(req.user, 'portfolio') || Auth.userCan(req.user, 'portfolio-explorer') || Auth.userCan(req.user, 'portfolio-fix') || Auth.userCan(req.user, 'portfolio-tx') || Auth.userCan(req.user, 'portfolio-sinvest') || Auth.userCan(req.user, 'send-statement') || Auth.userCan(req.user, 'send-fund-performance') || Auth.userCan(req.user, 'user-behavior')) return next();
@@ -774,7 +774,7 @@ function createApp({ serveStatic = true } = {}) {
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
-  // ---- Portfolio (Fix): same as Portfolio (PWC) above, but the as-of-date
+  // Portfolio (Fix): same as Portfolio (PWC) above, but the as-of-date
   // snapshot is read from portfolio_fix instead of portfolio_with_code (see
   // userHoldingsAsOfFix in queries.js for why). Live (no date) holdings are
   // identical to Portfolio (PWC) — both read the same real-time userHoldings().
@@ -800,7 +800,7 @@ function createApp({ serveStatic = true } = {}) {
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_fix', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
-  // ---- Portfolio (TX): holdings with avg_buy_price computed straight from
+  // Portfolio (TX): holdings with avg_buy_price computed straight from
   // the transaction ledger (see userHoldingsFromTx in queries.js) instead of
   // trusting portfolios.initial_price. An as-of-date reconstructs holdings
   // purely from transactions up to that date (userHoldingsFromTxAsOf) —
@@ -827,7 +827,7 @@ function createApp({ serveStatic = true } = {}) {
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_tx', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
-  // ---- Portfolio (SInvest): same as Portfolio (TX), but holdings are built
+  // Portfolio (SInvest): same as Portfolio (TX), but holdings are built
   // entirely from the custodian feed (sinvest.trx_history) instead of the
   // app's own transactions table (see sinvestHoldings/sinvestHoldingsAsOf in
   // queries.js). split/performance/history still come from the app's own
@@ -851,7 +851,7 @@ function createApp({ serveStatic = true } = {}) {
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_sinvest', `SID ${sid}${date ? ` as of ${date}` : ''}`);
   }));
 
-  // ---- Portfolio Explorer (goal_snapshots, point-in-time by date) -----------
+  // Portfolio Explorer (goal_snapshots, point-in-time by date)
   app.get('/api/portfolio-explorer', requireTab('portfolio-explorer'), handler(async (req, res) => {
     const { userId, sid } = req.query;
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
@@ -873,8 +873,8 @@ function createApp({ serveStatic = true } = {}) {
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio', `SID ${sid || userId} as of ${asOfDate} (explorer)`);
   }));
 
-  // ---- HNWI (High Net Worth Individual): investors above an AUM threshold,
-  // as of a date, from portfolio_with_code --------------------------------
+  // HNWI (High Net Worth Individual): investors above an AUM threshold,
+  // as of a date, from portfolio_with_code
   app.get('/api/hnwi/latest-date', requireTab('hnwi'), handler(async (_req, res) => {
     const d = Q.hnwiLatestDate();
     const [row] = await runQuery(d.sql, d.params);
@@ -893,8 +893,8 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Dormant win-back: computed live from main.transactions, see
-  // queries.js (DORMANT_EPISODES_CTE) for the gap/conversion methodology ----
+  // Dormant win-back: computed live from main.transactions, see
+  // queries.js (DORMANT_EPISODES_CTE) for the gap/conversion methodology
   app.get('/api/dormant/conversion-summary', requireTab('dormant'), handler(async (_req, res) => {
     const q = Q.dormantConversionSummary();
     res.json(await runQuery(q.sql, q.params));
@@ -908,8 +908,8 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Kalcer (ambassadors): raw referral links + dated AUM, no bonus math
-  // (see queries.js for why) --------------------------------------------
+  // Kalcer (ambassadors): raw referral links + dated AUM, no bonus math
+  // (see queries.js for why)
   app.get('/api/kalcer/latest-date', requireTab('kalcer'), handler(async (_req, res) => {
     const q = Q.kalcerLatestDate();
     const [row] = await runQuery(q.sql, q.params);
@@ -928,7 +928,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(query.sql, query.params));
   }));
 
-  // ---- Push delivery: FCM's own send-pipeline health log (own dataset) ----
+  // Push delivery: FCM's own send-pipeline health log (own dataset)
   app.get('/api/push/trend', requireTab('push'), handler(async (req, res) => {
     const { from, to, granularity } = req.query;
     const q = Q.pushTrend(from, to, granularity);
@@ -945,14 +945,14 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Marketing attribution: Adjust's mobile attribution events (own dataset) --
+  // Marketing attribution: Adjust's mobile attribution events (own dataset) --
   app.get('/api/marketing/funnel', requireTab('marketing'), handler(async (req, res) => {
     const { from, to } = req.query;
     const q = Q.marketingFunnelByChannel(from, to);
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- App health: Crashlytics + Performance Monitoring (own datasets) ----
+  // App health: Crashlytics + Performance Monitoring (own datasets)
   app.get('/api/app-health/crashes', requireTab('app-health'), handler(async (req, res) => {
     const { from, to } = req.query;
     const q = Q.appCrashIssues(from, to);
@@ -964,8 +964,8 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Investor journey (tab id user-behavior): one investor's GA4 events
-  // (user_id) and transactions on one timeline, see queries.js -------------
+  // Investor journey (tab id user-behavior): one investor's GA4 events
+  // (user_id) and transactions on one timeline, see queries.js
   app.get('/api/behavior/user', requireTab('user-behavior'), handler(async (req, res) => {
     const { userId, from, to } = req.query;
     if (!userId) return res.status(400).json({ error: 'userId is required.' });
@@ -977,9 +977,9 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ profile: profile[0] || null, timeline });
   }));
 
-  // ---- Analysis tabs: GA4 app events joined to the main database by
+  // Analysis tabs: GA4 app events joined to the main database by
   // user_id, one tab each for buying, onboarding, selling, app features and
-  // the sign-up funnel, see queries.js ----------------------------------
+  // the sign-up funnel, see queries.js
   const ANALYSIS_ROUTES = [
     ['subscription-analysis', 'subscription', {
       funnel: Q.subscriptionFunnel, entry: Q.subscriptionEntry, dropoff: Q.subscriptionDropoff,
@@ -1013,7 +1013,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Product performance (NAV % change per fund type, external Apollo DB) --
+  // Product performance (NAV % change per fund type, external Apollo DB) --
   app.get('/api/product-performance', requireTab('performance'), handler(async (_req, res) => {
     const q = Q.productPerformance();
     res.json(await runQuery(q.sql, q.params));
@@ -1029,7 +1029,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Growth: campaigns, referrals, switching, manager/demographic AUM -----
+  // Growth: campaigns, referrals, switching, manager/demographic AUM
   app.get('/api/campaigns/performance', requireTab('growth'), handler(async (req, res) => {
     const q = Q.campaignPerformance(req.query.limit);
     res.json(await runQuery(q.sql, q.params));
@@ -1055,14 +1055,14 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Reconciliation: app ledger vs custodian (sinvest) feed ----------------
+  // Reconciliation: app ledger vs custodian (sinvest) feed
   app.get('/api/reconciliation', requireTab('reconciliation'), handler(async (req, res) => {
     const { from, to } = req.query;
     const q = Q.reconciliationDaily(from, to);
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Revenue: management fee earned per fund/period -------------------------
+  // Revenue: management fee earned per fund/period
   app.get('/api/revenue', requireTab('revenue'), handler(async (req, res) => {
     const { from, to, granularity, fund, mi } = req.query;
     const q = Q.revenueDetail(from, to, granularity, fund, mi);
@@ -1075,7 +1075,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Revenue v2: same as Revenue above, but AUM sourced from goal_snapshots
+  // Revenue v2: same as Revenue above, but AUM sourced from goal_snapshots
   app.get('/api/revenue-v2', requireTab('revenue2'), handler(async (req, res) => {
     const { from, to, granularity, fund, mi } = req.query;
     const q = Q.revenueV2Detail(from, to, granularity, fund, mi);
@@ -1087,8 +1087,8 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- User lifetime: Revenue (PWC) math grouped per investor, plus the
-  // lifetime dates (registration / first buy / holding span) around it --------
+  // User lifetime: Revenue (PWC) math grouped per investor, plus the
+  // lifetime dates (registration / first buy / holding span) around it
   app.get('/api/user-lifetime', requireTab('user-lifetime'), handler(async (req, res) => {
     const { from, to, fund, mi, sid, limit } = req.query;
     const q = Q.userLifetimeUsers(from, to, fund, mi, sid, Math.min(Number(limit) || 200, 2000));
@@ -1106,7 +1106,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Campaign revenue: management fee earned on promo-locked units --------
+  // Campaign revenue: management fee earned on promo-locked units
   app.get('/api/campaign-revenue', requireTab('campaign-revenue'), handler(async (req, res) => {
     const { from, to, granularity, promo } = req.query;
     const q = Q.campaignRevenueDetail(from, to, granularity, promo);
@@ -1123,7 +1123,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Referral program: Sep-Dec 2026 T&C eligibility report ----------------
+  // Referral program: Sep-Dec 2026 T&C eligibility report
   app.get('/api/referral-program/detail', requireTab('referral-program'), handler(async (req, res) => {
     const { from, to } = req.query;
     const q = Q.referralProgramDetail(from, to, 'created_at');
@@ -1147,7 +1147,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Referral program (kyc based): an exact copy of the section above —
+  // Referral program (kyc based): an exact copy of the section above —
   // same T&C eligibility rule, same detail-row shape, same leaderboard shape
   // — with exactly one thing swapped throughout: every place the main tab
   // gates the funnel by the invitee's registration date (invitee.created_at)
@@ -1175,8 +1175,8 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
-  // ---- Remisier sharing: management fee revenue for one remisier's users,
-  // from goal_snapshots, split as a portion of the AperD share -----------------
+  // Remisier sharing: management fee revenue for one remisier's users,
+  // from goal_snapshots, split as a portion of the AperD share
   // Shared by Remisier sharing and its PWC sibling — allow either.
   const requireAnyRemisier = (req, res, next) => {
     if (Auth.userCan(req.user, 'remisier') || Auth.userCan(req.user, 'remisier-pwc')) return next();
@@ -1200,8 +1200,8 @@ function createApp({ serveStatic = true } = {}) {
     const q = Q.remisierRevenueSummary(field, code, from, to, granularity, Number(portion) || 0);
     res.json(await runQuery(q.sql, q.params));
   }));
-  // ---- Remisier sharing (portfolio_with_code): same as above, AUM sourced
-  // from mi_fee_logs.portfolio_with_code instead of goal_snapshots ----------
+  // Remisier sharing (portfolio_with_code): same as above, AUM sourced
+  // from mi_fee_logs.portfolio_with_code instead of goal_snapshots
   app.get('/api/remisier/revenue-pwc', requireTab('remisier-pwc'), handler(async (req, res) => {
     const { field, code, from, to, granularity, portion } = req.query;
     if (!code) return res.status(400).json({ error: 'code is required.' });
@@ -1227,7 +1227,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
 
-  // ---- Predictive models (BigQuery ML) --------------------------------------
+  // Predictive models (BigQuery ML)
   app.get('/api/ml/status', requireTab('predict'), async (_req, res) => {
     try {
       const models = await ML.status();
@@ -1259,7 +1259,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(result);
   }));
 
-  // ---- Generic multi-table explorer -----------------------------------------
+  // Generic multi-table explorer
   app.get('/api/explore/_meta', requireTab('explorer'), handler(async (_req, res) => {
     res.json(EX.meta());
   }));
@@ -1280,7 +1280,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows, total: Number(countRows[0]?.total || 0) });
   }));
 
-  // ---- Ask (natural language -> SQL via Anthropic) --------------------------
+  // Ask (natural language -> SQL via Anthropic)
   app.get('/api/ask/tables', requireTab('ask'), (req, res) => res.json({ tables: TABLES }));
 
   app.post('/api/ask', requireTab('ask'), async (req, res) => {
@@ -1320,7 +1320,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await suggestChart(question, rows, hint));
   }));
 
-  // ---- SQL Lab --------------------------------------------------------------
+  // SQL Lab
   app.post('/api/sql/estimate', requireTab('sql'), handler(async (req, res) => {
     const v = validateAdHoc(req.body.sql);
     if (!v.ok) return res.status(400).json({ error: v.error });
@@ -1350,7 +1350,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ rows, count: rows.length });
   }));
 
-  // ---- Exports --------------------------------------------------------------
+  // Exports
   // Every exported file is remarked with the requesting user: their name is
   // appended to the filename, and (for xlsx/pdf) written into the file's own
   // "last modified by" / Author document property \u2014 the server already knows
@@ -1749,7 +1749,7 @@ function createApp({ serveStatic = true } = {}) {
     return sendCsv(res, rows, filename, username);
   }));
 
-  // ---- Bulk export (Portfolio tabs): same 5 portfolio sources as /api/export
+  // Bulk export (Portfolio tabs): same 5 portfolio sources as /api/export
   // above, combined across a list of investors instead of just one — CSV rows
   // tagged with SID/name, XLSX one sheet per investor, PDF one document with
   // one page per investor. "Separate files" mode needs no server support: the
@@ -1837,7 +1837,7 @@ function createApp({ serveStatic = true } = {}) {
     return sendCsv(res, rows, filename, username);
   }));
 
-  // ---- Bulk export "Preview summary": same investor list as the batch export
+  // Bulk export "Preview summary": same investor list as the batch export
   // above, aggregated instead of written to a file — total AUM, holdings
   // summed by fund, and each investor's own AUM — so an admin can sanity-check
   // a selection before spending an export on it.
@@ -1851,7 +1851,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(aggregateBulkHoldings(entries));
   }));
 
-  // ---- Send statement preview: same holdings/transactions the PDFs would
+  // Send statement preview: same holdings/transactions the PDFs would
   // contain, as JSON, so the admin can sanity-check before sending. Reuses
   // the exact query builders /api/statement/email attaches as PDFs.
   app.get('/api/statement/preview', requireTab('send-statement'), handler(async (req, res) => {
@@ -1873,7 +1873,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(result);
   }));
 
-  // ---- Send statement: email an investor their portfolio (holdings only, no
+  // Send statement: email an investor their portfolio (holdings only, no
   // fund performance) and/or their monthly transaction e-statement, as one
   // email with 1-2 PDF attachments. Separate tool from Portfolio (PWC).
   app.post('/api/statement/email', requireTab('send-statement'), handler(async (req, res) => {
@@ -1909,7 +1909,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ ok: true, to: contact.email });
   }));
 
-  // ---- Send statement (batch): resolves a pasted list of emails/SIDs to
+  // Send statement (batch): resolves a pasted list of emails/SIDs to
   // investors, then sends each their own portfolio/e-statement — same
   // subject/body, own PDFs and own birthdate-derived password. One email per
   // recipient (Promise.allSettled, same convention as /api/fund-performance/email)
@@ -1983,7 +1983,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(rows);
   }));
 
-  // ---- Send fund performance: broadcast the Reksa Dana Update PDF to a
+  // Send fund performance: broadcast the Reksa Dana Update PDF to a
   // picked/pasted list of email addresses — one email per recipient, so one
   // bad address doesn't block the rest of the list. Separate tool from Send
   // statement, which is scoped to a single investor's own documents.
@@ -2035,7 +2035,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(rows);
   }));
 
-  // ---- Scheduled/automated sending -------------------------------------------
+  // Scheduled/automated sending
   // Shared by Send statement ('statement') and Send fund performance
   // ('fund_performance') — see server/schedules.js for the actual scheduling,
   // OTP, and recipient-resolution logic. A schedule only ever gets created
@@ -2189,7 +2189,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ ok: true, job });
   }));
 
-  // ---- Exclusion list (both Send tabs share it) ----------------------------
+  // Exclusion list (both Send tabs share it)
   const EXCLUSION_SCOPES = ['all', 'statement', 'fund_performance'];
   app.get('/api/send-exclusions', requireEitherScheduleTab, handler(async (_req, res) => {
     res.json(await Sched.listExclusions());
@@ -2227,8 +2227,8 @@ function createApp({ serveStatic = true } = {}) {
     res.json({ ok: true });
   }));
 
-  // ---- Email recap: every email this app sends (server/email-log.js) and the
-  // delivery/open/click events SES reports back for it ---------------------
+  // Email recap: every email this app sends (server/email-log.js) and the
+  // delivery/open/click events SES reports back for it
   app.get('/api/email-recap/summary', requireTab('email-recap'), handler(async (req, res) => {
     const { from, to, category, source } = req.query;
     if (!from || !to) return res.status(400).json({ error: 'from and to are required.' });
@@ -2254,7 +2254,7 @@ function createApp({ serveStatic = true } = {}) {
     res.status(r.status).json(r.body);
   }));
 
-  // ---- Scheduled-send execution: invoked by an external scheduler on a
+  // Scheduled-send execution: invoked by an external scheduler on a
   // timer (Netlify Scheduled Function today, GCP Cloud Scheduler after a
   // migration, or literally cron+curl) — never by a dashboard session, so it
   // sits outside the /api Bearer-token gate above and checks its own shared
@@ -2267,7 +2267,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await Sched.runDueJobs());
   }));
 
-  // ---- Scheduled ML retraining: same external-scheduler shape as the cron
+  // Scheduled ML retraining: same external-scheduler shape as the cron
   // route above (Netlify Scheduled Function, monthly — see netlify.toml),
   // just a different job. Kept as its own route/secret check rather than
   // folding into run-due-schedules so the two can be scheduled independently.
@@ -2281,7 +2281,7 @@ function createApp({ serveStatic = true } = {}) {
     res.json(result);
   }));
 
-  // ---- Static frontend (standalone hosts only) ------------------------------
+  // Static frontend (standalone hosts only)
   if (serveStatic) {
     const pub = path.join(__dirname, '..', 'public');
     app.use(express.static(pub));

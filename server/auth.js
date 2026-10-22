@@ -33,7 +33,7 @@ async function rest(path, opts = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-// ---- Password hashing: scrypt (Node stdlib, no bcrypt dependency) ----------
+// Password hashing: scrypt (Node stdlib, no bcrypt dependency)
 function hashPassword(plain) {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(plain, salt, 64).toString('hex');
@@ -87,7 +87,7 @@ function sha256Hex(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-// ---- Users ------------------------------------------------------------------
+// Users
 async function findUserByUsername(username) {
   const rows = await rest(`/dashboard_users?username=eq.${encodeURIComponent(username)}&select=*`);
   return rows[0] || null;
@@ -157,7 +157,7 @@ function deleteUser(id) {
   return rest(`/dashboard_users?id=eq.${id}`, { method: 'DELETE' });
 }
 
-// ---- Sessions -----------------------------------------------------------
+// Sessions
 async function createSession(userId) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
@@ -198,7 +198,7 @@ function deleteSessionsByUser(userId, exceptToken) {
   return rest(`/dashboard_sessions?user_id=eq.${userId}${exceptClause}`, { method: 'DELETE' });
 }
 
-// ---- Password reset (forgot password) ------------------------------------
+// Password reset (forgot password)
 // Deletes any earlier outstanding token for this user first, so only the
 // most recently emailed link ever works — an admin resetting on someone's
 // behalf twice in a row doesn't leave a dangling valid link from the first email.
@@ -226,7 +226,7 @@ async function consumePasswordReset(token) {
   return reset.user_id;
 }
 
-// ---- Audit log ----------------------------------------------------------
+// Audit log
 // username is stored as a plain snapshot (not just a join through user_id)
 // so the record survives the account later being deleted.
 async function logEvent(userId, username, action, detail) {
@@ -263,7 +263,7 @@ function listAuditLog({ limit = 200, search = '', from = '', to = '', user = '',
   return rest(`/dashboard_audit_log?${params.join('&')}`);
 }
 
-// ---- Shaping + permission check ---------------------------------------------
+// Shaping + permission check
 function publicUser(u) {
   return {
     id: u.id, username: u.username, email: u.email || null,

@@ -214,7 +214,7 @@ async function questionToSql(question: string, priorAttempt: PriorAttempt | null
     .trim();
 }
 
-// ---- Entity resolution --------------------------------------------------
+// Entity resolution
 // A question that names a specific fund/manager/campaign/etc. ("exclude
 // Avrist Liquid Fund") gives the model nothing to match against but its own
 // guess at spelling — which is how it ends up writing a fragile
@@ -406,7 +406,7 @@ async function resolveEntityContext(question: string): Promise<string> {
 
 interface AskError extends Error { sql?: string }
 
-// ---- Activity log (the dashboard's own login/export/audit trail) --------
+// Activity log (the dashboard's own login/export/audit trail)
 // This is NOT BigQuery data — it's the dashboard_audit_log table in Supabase
 // Postgres, reached through Auth.listAuditLog()'s PostgREST filters, not SQL.
 // So a question about it can't go through questionToSql above at all; it's
@@ -544,7 +544,7 @@ export async function ask(question: string, context?: string | null, history?: H
   }
 }
 
-// ---- Chart suggestion --------------------------------------------------
+// Chart suggestion
 // Given the question and the rows Ask (or an edited re-run) returned, ask the
 // model to pick a Chart.js-friendly visualization. Cheap, separate call from
 // questionToSql so a bad/no suggestion never affects the SQL generation path.
