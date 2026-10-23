@@ -105,38 +105,36 @@ async function anomalies() {
 // Who to win back, judged on money that left, not on a model score: investors
 // whose AUM was once large and is now mostly gone (redeemed everything, or fell
 // to a fraction of their peak) and who have not bought in the last 30 days.
-// AUM per day is unit x nav from goal_snapshots (the only source with history
-// back to Aug 2025). The snapshot job stops writing rows once a user holds
-// nothing, so "no snapshot in the last 2 days" means current AUM is 0.
+// AUM per day is SUM(amount) per SID from portfolio_with_code, with the usual
+// one-day correction on created_at. That table starts in mid January 2026, so
+// peaks before then are not visible. Once a user holds nothing the rows stop
+// coming, so "no row in the last 2 days" means current AUM is 0.
 //   Priority 1: peak 100 jt or more, 20% or less of it left
 //   Priority 2: peak 25 jt or more, 50% or less left
 //   Priority 3: peak 10 jt or more, 50% or less left
 const CHURN_SQL = `
   WITH snap AS (
-    SELECT g.user_id, s.date AS d, SUM(s.unit * s.nav) AS aum FROM (
-      SELECT goal_id, fund_id, date, unit, nav FROM ${GOAL_SNAPSHOTS}
-      QUALIFY ROW_NUMBER() OVER (PARTITION BY goal_id, fund_id, date ORDER BY created_at DESC) = 1) s
-    JOIN \`sayakaya.main.goals\` g ON g.id = s.goal_id AND g.deleted_at IS NULL
-    GROUP BY g.user_id, s.date),
+    SELECT sid_code, DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS d, SUM(amount) AS aum
+    FROM ${PWC} GROUP BY sid_code, d),
   latest AS (SELECT MAX(d) AS d FROM snap),
   per AS (
-    SELECT user_id,
+    SELECT sid_code,
       ARRAY_AGG(STRUCT(d, aum) ORDER BY aum DESC LIMIT 1)[OFFSET(0)] AS peak,
       ARRAY_AGG(STRUCT(d, aum) ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS last
-    FROM snap GROUP BY user_id),
+    FROM snap GROUP BY sid_code),
   cur AS (
-    SELECT user_id, peak.aum AS peak_aum, peak.d AS peak_date, last.d AS last_snap,
+    SELECT sid_code, peak.aum AS peak_aum, peak.d AS peak_date, last.d AS last_snap,
       IF(last.d >= DATE_SUB((SELECT d FROM latest), INTERVAL 2 DAY), last.aum, 0) AS current_aum
     FROM per),
   tx AS (
     SELECT user_id, MAX(IF(type = 'buy', DATE(created_at), NULL)) AS last_buy, MAX(IF(type = 'sell', DATE(created_at), NULL)) AS last_sell
     FROM ${TX} WHERE status = 'completed' AND type IN ('buy', 'sell') GROUP BY user_id),
   c AS (
-    SELECT cur.*, tx.last_buy, tx.last_sell, (SELECT d FROM latest) AS as_of,
+    SELECT cur.*, u.id AS user_id, tx.last_buy, tx.last_sell, (SELECT d FROM latest) AS as_of,
       CASE WHEN peak_aum >= 1e8 AND current_aum <= peak_aum * 0.2 THEN 1
            WHEN peak_aum >= 2.5e7 AND current_aum <= peak_aum * 0.5 THEN 2
            WHEN peak_aum >= 1e7 AND current_aum <= peak_aum * 0.5 THEN 3 END AS priority
-    FROM cur LEFT JOIN tx USING (user_id))
+    FROM cur JOIN ${USERS} u ON u.sid_code = cur.sid_code LEFT JOIN tx ON tx.user_id = u.id)
   SELECT c.priority, up.name, u.email, up.phone_number AS phone, IFNULL(u.is_institution, FALSE) AS is_institution,
     ROUND(c.peak_aum) AS peak_aum, FORMAT_DATE('%Y-%m-%d', c.peak_date) AS peak_date, ROUND(c.current_aum) AS current_aum,
     ROUND(SAFE_DIVIDE(c.current_aum - c.peak_aum, c.peak_aum) * 100, 1) AS change_pct,
