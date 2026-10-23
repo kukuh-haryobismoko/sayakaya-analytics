@@ -31,7 +31,9 @@ async function callAI(body) {
       // 9Router can append an SSE terminator ("data: [DONE]") after the JSON body.
       const raw = (await res.text()).replace(/\s*data:\s*\[DONE\]\s*$/, '');
       if (!res.ok) return new Response(raw, { status: res.status, headers: { 'content-type': 'application/json' } });
-      const choice = JSON.parse(raw).choices?.[0];
+      let choice;
+      try { choice = JSON.parse(raw).choices?.[0]; }
+      catch { throw Object.assign(new Error(`The AI router answered, but not with valid JSON: ${raw.slice(0, 120).replace(/\s+/g, ' ')}`), { reachable: true }); }
       return new Response(JSON.stringify({ content: [{ type: 'text', text: choice?.message?.content ?? '' }], stop_reason: choice?.finish_reason }),
         { status: 200, headers: { 'content-type': 'application/json' } });
     }
@@ -40,7 +42,9 @@ async function callAI(body) {
       headers: { 'x-api-key': apiKey() || '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
-  } catch {
+  } catch (e) {
+    // Only a failed connection means "cannot reach"; an answer we could not read is a different problem.
+    if (e && e.reachable) throw e;
     throw new Error(VIA_ROUTER
       ? `Cannot reach the AI router (${BASE_URL}). Make sure 9Router is running, then try again.`
       : 'Cannot reach the Anthropic API. Try again in a moment.');

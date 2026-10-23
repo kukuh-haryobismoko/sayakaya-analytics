@@ -46,6 +46,17 @@ supabase secrets unset AI_BASE_URL AI_API_KEY AI_MODEL --project-ref josptpfisrs
 
 `ANTHROPIC_API_KEY` is then used again.
 
+## Checklist when "Cannot reach the AI router" shows up
+
+Funnel is part of the Tailscale app, so all three must be running on the Mac (logged in): 9Router, the Tailscale app, and Funnel.
+
+1. `pgrep -fl 9router`: if empty, start 9Router.
+2. `tailscale status`: "failed to connect to local Tailscale service" means the app is not running, so `open -a Tailscale`. Turn on Start at login in its settings.
+3. `tailscale funnel status` must show Funnel on. If not, `tailscale funnel --bg 20128`.
+4. A request without a key to the Funnel address must return 401.
+
+An answer the router sends back but the dashboard cannot read is reported separately ("answered, but not with valid JSON"), not as "cannot reach".
+
 ## Usage tracking
 
 9Router's Usage page only records `/v1/chat/completions` calls; `/v1/messages` calls are served but never logged. So when `AI_BASE_URL` is set, `callAI` talks to `/v1/chat/completions` (OpenAI format, `stream: false`) and rewraps the answer in the Anthropic shape. With `AI_BASE_URL` unset it still calls api.anthropic.com `/v1/messages`.
