@@ -442,7 +442,7 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/event-code/cohort'))    return evcCohortRows;
   if (path.startsWith('/api/ai/digest'))        return { facts: { as_of: '2026-10-22' }, text: 'AUM naik 1,2 persen dalam seminggu.' };
   if (path.startsWith('/api/ai/anomalies'))     return [{ metric: 'Buy volume', day: '2026-10-20', value: 9e9, z: 4.2, change_pct: null }];
-  if (path.startsWith('/api/ai/churn-actions')) return { summary: { scored: 100, high_risk: 5, medium_risk: 9 }, rows: [{ priority: 1, action: 'Call personally: large investor at high risk', name: 'A', email: 'a@x.id', churn_prob: 0.82, total_buy_amount: 2e8, recency_days: 120 }] };
+  if (path.startsWith('/api/ai/churn-actions')) return { summary: { priority_1: 1, priority_2: 0, priority_3: 0, redeemed_all: 1, aum_lost: 2e8 }, rows: [{ priority: 1, status: 'Redeemed all', action: 'Call personally: redeemed everything and has not come back', name: 'A', email: 'a@x.id', phone: '0812', peak_aum: 2e8, peak_date: '2026-01-29', current_aum: 0, change_pct: -100, days_since_redeem_all: 90, last_buy: '2026-01-10', last_sell: '2026-07-01' }] };
   if (path.startsWith('/api/ai/watchdog'))      return { text: 'Semua sumber segar.', checks: [{ source: 'mi_fee (AUM date)', latest: '2026-10-22', age_days: 1, status: 'ok' }], diffs: [{ day: '2026-10-22', portfolio_with_code: 2.6e11, mi_fee: 2.6e11, goal_snapshots: 2.4e11, goal_snapshots_vs_pwc_pct: -7.7, mi_fee_vs_pwc_pct: 0, status: 'differs' }] };
   throw new Error('unexpected path ' + path);
 };

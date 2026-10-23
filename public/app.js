@@ -1036,13 +1036,21 @@ function loadAiAnomalies() {
 function loadAiChurn() {
   return aiRun('#aiChurnBtn', '#aiChurnOut', async () => {
     const { summary, rows } = await api('/api/ai/churn-actions');
-    $('#aiChurnSummary').textContent = `${t('ai_churn_scored')}: ${num(val(summary.scored))} · ${t('ai_churn_high')}: ${num(val(summary.high_risk))} · ${t('ai_churn_medium')}: ${num(val(summary.medium_risk))}`;
+    $('#aiChurnSummary').textContent = [
+      `${t('ai_churn_p1')}: ${num(val(summary.priority_1))}`, `${t('ai_churn_p2')}: ${num(val(summary.priority_2))}`, `${t('ai_churn_p3')}: ${num(val(summary.priority_3))}`,
+      `${t('ai_churn_redeemed')}: ${num(val(summary.redeemed_all))}`, `${t('ai_churn_lost')}: ${idrFull(val(summary.aum_lost))}`,
+    ].join(' · ');
+    const days = (v) => (v == null ? '' : num(v));
     genTable('#aiChurnOut', rows, [
-      { key: 'priority', label: t('ai_col_priority'), type: 'num' }, { key: 'action', label: t('ai_col_action') },
-      { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
-      { key: 'churn_prob', label: t('ai_col_risk'), fmt: (v) => (v == null ? 'n/a' : `${(Number(v) * 100).toFixed(0)}%`) },
-      { key: 'total_buy_amount', label: t('ai_col_lifetime_buy'), type: 'idr' },
-      { key: 'recency_days', label: t('ai_col_days_since_buy'), type: 'num' },
+      { key: 'priority', label: t('ai_col_priority'), type: 'num' }, { key: 'status', label: t('ai_col_status') },
+      { key: 'name', label: t('col_name') }, { key: 'is_institution', label: t('ai_col_type'), fmt: (v) => (v ? t('ai_type_institution') : t('ai_type_individual')) },
+      { key: 'email', label: 'Email' }, { key: 'phone', label: t('ai_col_phone'), text: true },
+      { key: 'peak_aum', label: t('ai_col_peak'), type: 'idr' }, { key: 'peak_date', label: t('ai_col_peak_date'), type: 'date' },
+      { key: 'current_aum', label: t('ai_col_now'), type: 'idr' },
+      { key: 'change_pct', label: t('ai_col_change_peak'), fmt: (v) => (v == null ? 'n/a' : `${Number(v).toFixed(0)}%`) },
+      { key: 'days_since_redeem_all', label: t('ai_col_gone_days'), type: 'num', fmt: days },
+      { key: 'last_buy', label: t('ai_col_last_buy'), type: 'date' }, { key: 'last_sell', label: t('ai_col_last_sell'), type: 'date' },
+      { key: 'action', label: t('ai_col_action') },
     ], t('ai_churn_empty'));
   });
 }
