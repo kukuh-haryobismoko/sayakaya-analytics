@@ -3754,6 +3754,12 @@
               placeholder="Optional: a related SQL query to use as extra context"></textarea>
           </details>
 
+          <div id="askMsg" class="sql-msg"></div>
+
+          <div id="askAnswer" class="ask-answer hidden"></div>
+
+          <details id="askData" class="ask-data hidden">
+            <summary id="askDataSummary" data-i18n="ask_data_summary_plain">SQL and table</summary>
           <div id="askSql" class="ask-sql hidden">
             <div class="ask-sql-head">
               <span data-i18n="ask_generated_sql">Generated SQL</span>
@@ -3767,8 +3773,6 @@
             </div>
             <textarea id="askSqlText" class="mono" rows="6" spellcheck="false" readonly></textarea>
           </div>
-
-          <div id="askMsg" class="sql-msg"></div>
 
           <div id="askChartControls" class="filters hidden" style="margin-bottom:12px">
             <select id="askChartType">
@@ -3784,13 +3788,12 @@
             <select id="askChartY"></select>
             <input id="askChartHint" type="text" data-i18n-placeholder="ask_chart_hint_ph" placeholder="Optional: describe the chart you want" style="flex:1; min-width:180px" />
             <button class="btn-ghost" id="askChartSuggest" data-i18n="common_suggest">Suggest</button>
-            <button class="btn-ghost" id="askExplain" data-i18n="ask_explain_btn">Explain result</button>
           </div>
-          <div id="askExplainOut" class="hidden"></div>
           <div id="askChartMsg" class="ask-chart-msg hidden"></div>
           <div id="askChartWrap" class="chart-wrap hidden"><canvas id="askChart"></canvas></div>
 
           <div id="askResult" class="table-wrap tall"></div>
+          </details>
         </div>
       </div>
     </section>
@@ -3917,7 +3920,7 @@ ORDER BY n DESC"></textarea>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> AI Insights</h3>
-          <p data-i18n="docs_ai_insights_desc">Four on-demand checks, each behind its own button. Weekly digest: AUM (ACTIVE funds only, from portfolio_fix, the same rule as the AUM history tab), buy minus sell and new users for the last 7 days against the 7 before, computed in SQL, then written up in Indonesian by the model. Anomaly scan: plain statistics, no model, flags days in the last 14 where AUM change, buy volume or sell volume is 3 or more standard deviations from the previous 28 days. Churn action list: investors who once held a lot and now hold little, meaning they redeemed everything or fell to half of their peak AUM or less and have not bought in 30 days. Priority 1 is a peak of 100 jt or more with 20% or less left, priority 2 is 25 jt or more with half or less left, priority 3 is 10 jt or more with half or less left. AUM per day is SUM(amount) per SID from portfolio_with_code (data starts mid January 2026). Data-quality watchdog: latest date per source and a same-day AUM comparison across portfolio_with_code, portfolio_fix and goal_snapshots, ACTIVE funds only (portfolio_fix and portfolio_with_code should agree almost exactly). Names, SIDs and emails are never sent to the model. The Portfolio and Portfolio Explorer tabs have a "Portfolio note" button, and Ask has an "Explain result" button, built the same way.</p>
+          <p data-i18n="docs_ai_insights_desc">Four on-demand checks, each behind its own button. Weekly digest: AUM (ACTIVE funds only, from portfolio_fix, the same rule as the AUM history tab), buy minus sell and new users for the last 7 days against the 7 before, computed in SQL, then written up in Indonesian by the model. Anomaly scan: plain statistics, no model, flags days in the last 14 where AUM change, buy volume or sell volume is 3 or more standard deviations from the previous 28 days. Churn action list: investors who once held a lot and now hold little, meaning they redeemed everything or fell to half of their peak AUM or less and have not bought in 30 days. Priority 1 is a peak of 100 jt or more with 20% or less left, priority 2 is 25 jt or more with half or less left, priority 3 is 10 jt or more with half or less left. AUM per day is SUM(amount) per SID from portfolio_with_code (data starts mid January 2026). Data-quality watchdog: latest date per source and a same-day AUM comparison across portfolio_with_code, portfolio_fix and goal_snapshots, ACTIVE funds only (portfolio_fix and portfolio_with_code should agree almost exactly). Names, SIDs and emails are never sent to the model. The Portfolio and Portfolio Explorer tabs have a "Portfolio note" button, and Ask now answers in sentences first, with the SQL and the table folded underneath, built the same way.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg> Dormant win-back</h3>

@@ -243,9 +243,9 @@ const TABS = {
   },
 
   "ask": {
-    summary: "Tanya dalam bahasa biasa (mis. \"top 10 funds by AUM\") dan dapatkan jawaban dengan chart.",
+    summary: "Tanya bebas seperti ngobrol (mis. \"kenapa AUM turun bulan lalu?\" atau \"apa itu NAV?\") dan dapatkan jawaban tertulis, dengan SQL, tabel, dan chart di bawahnya.",
     datasets: "Dataset BigQuery utama, lewat server/ask.js",
-    computation: "Pertanyaan diterjemahkan jadi query read-only, bisa ditindaklanjuti dan diminta tipe chart. Kolom terbatas (password, KYC) selalu dibuang, kecuali superuser mencentang opsi dan mengonfirmasi password.",
+    computation: "Pertanyaan yang butuh data diterjemahkan jadi query read-only, lalu hasilnya dijelaskan model dalam kalimat (bahasa mengikuti toggle EN atau ID) dan SQL serta tabelnya dilipat di bawah jawaban; pertanyaan yang tidak butuh data (definisi, cara hitung, saran) dijawab langsung tanpa query. Kolom nama, email, telepon, SID, dan IFUA tidak dikirim ke model saat menulis jawaban. Pertanyaan bisa ditindaklanjuti dan diminta tipe chart. Kolom terbatas (password, KYC) selalu dibuang, kecuali superuser mencentang opsi dan mengonfirmasi password.",
   },
   "explorer": {
     summary: "Browse tabel data mentah dengan filter.",

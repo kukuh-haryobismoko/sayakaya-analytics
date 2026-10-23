@@ -160,6 +160,7 @@ function systemPrompt(): string {
 
 Output rules (strict):
 - Respond with ONLY the SQL. No explanation, no markdown, no code fences.
+- One exception: if the question needs no data from these tables (a definition, how a metric is calculated, general advice, small talk), reply with a single line starting with ANSWER: followed by a short answer in the language the user wrote in, and no SQL. Questions about numbers, trends, funds, investors or transactions always need SQL, including "why" questions: query the data that would explain it (for example the change per fund, per period or per segment).
 - Exactly one statement, read-only: a single SELECT, or WITH ... SELECT. Never INSERT/UPDATE/DELETE/MERGE/DDL.
 - Always fully-qualify tables. Most are \`sayakaya.main.<table>\`; exceptions: \`sayakaya.mi_fee_logs.mi_fee\` and the ML models/features in \`sayakaya.ml\`.
 - NEVER select or reference the users.password column.
@@ -513,7 +514,7 @@ async function answerActivityLog(question: string): Promise<{ sql: null; rows: R
  * activity-log path only — the same superuser restriction the Activity log
  * tab itself enforces, since that data is every user's login/export history.
  */
-export async function ask(question: string, context?: string | null, history?: HistoryTurn[] | null, user?: Auth.DashboardUser | null, opts?: { redact?: boolean }): Promise<{ sql: string | null; rows: Record<string, unknown>[] }> {
+export async function ask(question: string, context?: string | null, history?: HistoryTurn[] | null, user?: Auth.DashboardUser | null, opts?: { redact?: boolean }): Promise<{ sql: string | null; rows: Record<string, unknown>[]; answer?: string }> {
   const redact = opts?.redact ?? true;
   if (looksLikeActivityLogQuestion(question)) {
     if (!user || !user.is_superuser) {
@@ -525,6 +526,8 @@ export async function ask(question: string, context?: string | null, history?: H
   const resolved = await resolveEntityContext(question);
   const fullContext = [context, resolved].filter(Boolean).join('\n\n') || null;
   let sql = await questionToSql(question, null, fullContext, history);
+  // A question that needs no data comes back as a plain answer, not SQL.
+  if (/^\s*ANSWER:/i.test(sql)) return { sql: null, rows: [], answer: sql.replace(/^\s*ANSWER:\s*/i, '').trim() };
   for (let attempt = 0; ; attempt++) {
     const v = validateAdHoc(sql);
     if (!v.ok) {
@@ -659,14 +662,21 @@ export async function aiText(system: string, user: string, maxTokens = 3000): Pr
   return text;
 }
 
-// Plain-language read of a result table, for the Ask tab's "Explain" button.
+// Columns that identify a person never go to the model: the answer needs the figures, not the names.
+const IDENTITY_COLUMN = /^(name|full_name|user_name|username|email|phone|phone_number|sid|sid_code|ifua|ifua_code|nik|id_number|birthdate|birth_date|address|id_address|correspondence_address)$|_(email|phone|address)$/i;
+
+// The written answer to a question, from the rows the query returned. Shown first in
+// the Ask tab, with the SQL and the table folded underneath.
 export async function explainResult(question: string | undefined, rows: Record<string, unknown>[], lang?: string): Promise<{ text: string }> {
   if (!Array.isArray(rows) || !rows.length) throw new Error('There are no rows to explain yet.');
-  const columns = Object.keys(rows[0]);
-  const sample = rows.slice(0, 30).map((r) => Object.fromEntries(columns.map((c) => [c, val(r[c])])));
+  const all = Object.keys(rows[0]);
+  const columns = all.filter((c) => !IDENTITY_COLUMN.test(c));
+  const hidden = all.filter((c) => IDENTITY_COLUMN.test(c));
+  const sample = rows.slice(0, 40).map((r) => Object.fromEntries(columns.map((c) => [c, val(r[c])])));
   const text = await aiText(
-    `You explain a table of query results to a business user at an Indonesian mutual-fund platform. ${langRule(lang)} Write 3 to 5 short sentences: what the table shows, the biggest number or pattern, and anything that looks unusual. State only what the rows show, never invent causes or figures. No headings, no em dashes.`,
-    [`Question asked: ${question || '(none)'}`, `Total rows: ${rows.length} (first ${sample.length} shown)`, `Columns: ${columns.join(', ')}`, JSON.stringify(sample)].join('\n\n'),
+    `You answer a business user's question at an Indonesian mutual-fund platform, using a table of query results. ${langRule(lang)} Answer the question directly in the first sentence. For a "why" question, name the main drivers visible in the table with their figures, and say plainly what the data cannot explain. Write 3 to 6 short sentences as plain paragraphs: no headings, no bullet points, no em dashes. State only what the rows show, never invent causes or figures. If the table was cut to its first rows, or some columns were hidden for privacy, do not guess about the missing part. Amounts are rupiah.`,
+    [`Question: ${question || '(none)'}`, `Total rows: ${rows.length} (first ${sample.length} shown)`, `Columns: ${columns.join(', ') || '(none)'}`,
+      hidden.length ? `Hidden for privacy: ${hidden.join(', ')}` : '', JSON.stringify(sample)].filter(Boolean).join('\n\n'),
   );
   return { text };
 }

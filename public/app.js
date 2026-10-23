@@ -1101,19 +1101,33 @@ function writeNarrative(btnSel, outSel, selected) {
   });
 }
 
-// Ask: plain-language read of the rows currently on screen.
-async function explainAskResult() {
-  const out = $('#askExplainOut'), btn = $('#askExplain');
-  if (!askRowsCache.length) return;
-  btn.disabled = true;
-  out.classList.remove('hidden');
-  out.innerHTML = `<div class="loading">${t('ai_working')}</div>`;
+// Ask: the written answer comes first; the SQL and the table sit folded underneath.
+// A question that needs no data arrives as data.answer and has nothing to fold.
+async function showAskAnswer(data, question) {
+  const box = $('#askAnswer'), details = $('#askData');
+  const rows = data.rows || [];
+  box.classList.remove('hidden');
+  if (data.answer) {
+    box.innerHTML = aiText(data.answer);
+    details.classList.add('hidden');
+    return;
+  }
+  details.classList.remove('hidden');
+  details.open = false;
+  $('#askDataSummary').textContent = t('ask_data_summary').replace('{n}', num(rows.length));
+  if (!rows.length) { box.innerHTML = `<p class="hint">${t('ask_answer_empty')}</p>`; details.open = true; return; }
+  box.innerHTML = `<div class="loading">${t('ask_answering')}</div>`;
   try {
-    const { text } = await api('/api/ask/explain', { method: 'POST', body: JSON.stringify({ question: lastAskQuestion, rows: askRowsCache.slice(0, 30), lang: getLang() }) });
-    out.innerHTML = aiText(text);
-  } catch (e) { out.innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
-  finally { btn.disabled = false; }
+    const { text } = await api('/api/ask/explain', { method: 'POST', body: JSON.stringify({ question, rows: rows.slice(0, 40), lang: getLang() }) });
+    if (question !== lastAskQuestion) return;
+    box.innerHTML = aiText(text);
+  } catch (e) {
+    // The table is still a valid answer, so show it and say why the sentence is missing.
+    box.innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`;
+    details.open = true;
+  }
 }
+
 
 // PORTFOLIO EXPLORER (goal_snapshots — point-in-time holdings by date,
 // merged by fund and also broken out by goal for the preview only)
@@ -8436,6 +8450,8 @@ async function runAsk(q) {
   $('#askSql').classList.add('hidden');
   $('#askChartControls').classList.add('hidden');
   $('#askChartWrap').classList.add('hidden');
+  $('#askAnswer').classList.add('hidden');
+  $('#askData').classList.add('hidden');
   setAskEditable(false);
   $('#askCsv').disabled = $('#askXlsx').disabled = true;
   try {
@@ -8456,7 +8472,13 @@ async function runAsk(q) {
     // BigQuery at all, so there's no SQL — keep the box hidden for those.
     if (data.sql) { askSqlCache = data.sql; $('#askSqlText').value = data.sql; $('#askSql').classList.remove('hidden'); }
     else { askSqlCache = ''; $('#askSql').classList.add('hidden'); }
-    if (!res.ok) { $('#askResult').innerHTML = ''; setAskMsg(data.error || 'Request failed', 'err'); return; }
+    if (!res.ok) {
+      $('#askResult').innerHTML = '';
+      setAskMsg(data.error || 'Request failed', 'err');
+      // A blocked query still shows its SQL, so open the folded section for it.
+      if (data.sql) { $('#askData').classList.remove('hidden'); $('#askData').open = true; }
+      return;
+    }
     $('#askInput').value = '';
     renderGenericTable('#askResult', data.rows || []);
     const c = data.count || 0;
@@ -8471,6 +8493,7 @@ async function runAsk(q) {
       renderAskThread();
     }
     prepareAskChart(data.rows || []);
+    showAskAnswer(data, question);
   } catch (e) {
     $('#askResult').innerHTML = '';
     setAskMsg(e.message, 'err');
@@ -8591,7 +8614,6 @@ function setAskChartMsg(text, isProblem) {
 // hand, instead of firing an extra model call on every question automatically.
 function prepareAskChart(rows) {
   askRowsCache = rows || [];
-  $('#askExplainOut').classList.add('hidden');
   $('#askChartType').value = 'none';
   askChartColor = null;
   setAskChartMsg('');
@@ -10074,7 +10096,6 @@ function wire() {
   $('#askChartType').addEventListener('change', renderAskChart);
   $('#askChartX').addEventListener('change', renderAskChart);
   $('#askChartY').addEventListener('change', renderAskChart);
-  $('#askExplain').addEventListener('click', explainAskResult);
   $('#aiDigestBtn').addEventListener('click', loadAiDigest);
   $('#aiAnomBtn').addEventListener('click', loadAiAnomalies);
   $('#aiChurnBtn').addEventListener('click', loadAiChurn);

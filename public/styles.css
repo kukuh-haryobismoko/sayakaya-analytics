@@ -873,3 +873,9 @@ td.neg { color: var(--neg-text); }
 #ai-insights .kpi-grid { margin-bottom: 16px; }
 #ai-insights .table-wrap:empty { display: none; }
 #ai-insights .hint:empty { display: none; }
+
+/* Ask: written answer first, the SQL and the table folded underneath. */
+.ask-answer { margin: 4px 0 14px; padding: 16px 18px; background: var(--surface-alt); border: 1px solid var(--line); border-radius: 10px; }
+.ask-data { margin-top: 4px; }
+.ask-data > summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 6px 0 10px; }
+.ask-data > summary:hover { color: var(--ink); }
