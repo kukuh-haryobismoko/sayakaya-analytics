@@ -326,20 +326,22 @@ if (import.meta.main) {
   assertEquals(coerceValue('DATE', '2026-07-24'), '2026-07-24');
   assertEquals(coerceValue('TIMESTAMP', null), null);
 
+  // STRUCT / ARRAY<STRUCT> come back as {f:[{v}]} and must be rebuilt by name.
+  assertEquals(
+    parseRows(
+      { fields: [
+        { name: 'summary', type: 'RECORD', mode: 'NULLABLE', fields: [{ name: 'scored', type: 'INTEGER' }, { name: 'avg', type: 'FLOAT' }] },
+        { name: 'top', type: 'RECORD', mode: 'REPEATED', fields: [{ name: 'name', type: 'STRING' }, { name: 'p', type: 'FLOAT' }] },
+      ] },
+      [{ f: [
+        { v: { f: [{ v: '4' }, { v: '0.25' }] } },
+        { v: [{ v: { f: [{ v: 'a' }, { v: '0.9' }] } }, { v: { f: [{ v: 'b' }, { v: null }] } }] },
+      ] }],
+    ),
+    [{ summary: { scored: 4, avg: 0.25 }, top: [{ name: 'a', p: 0.9 }, { name: 'b', p: null }] }],
+  );
+
   console.log('bigquery.ts redaction self-check passed');
 }
 
 export { PROJECT_ID, LOCATION, MAX_BYTES_BILLED };
-
-Deno.test('parseRows rebuilds named objects for STRUCT and ARRAY<STRUCT>', async () => {
-  const { assertEquals } = await import('jsr:@std/assert');
-  const schema = { fields: [
-    { name: 'summary', type: 'RECORD', mode: 'NULLABLE', fields: [{ name: 'scored', type: 'INTEGER' }, { name: 'avg', type: 'FLOAT' }] },
-    { name: 'top', type: 'RECORD', mode: 'REPEATED', fields: [{ name: 'name', type: 'STRING' }, { name: 'p', type: 'FLOAT' }] },
-  ] };
-  const rows = [{ f: [
-    { v: { f: [{ v: '4' }, { v: '0.25' }] } },
-    { v: [{ v: { f: [{ v: 'a' }, { v: '0.9' }] } }, { v: { f: [{ v: 'b' }, { v: null }] } }] },
-  ] }];
-  assertEquals(parseRows(schema, rows), [{ summary: { scored: 4, avg: 0.25 }, top: [{ name: 'a', p: 0.9 }, { name: 'b', p: null }] }]);
-});
