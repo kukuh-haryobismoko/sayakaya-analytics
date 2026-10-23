@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `792fddf (2026-10-23)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `7fe42bd (2026-10-23)`.
 
 ## Cara membaca dokumen ini
 
@@ -33,7 +33,7 @@ Yang bisa dilakukan, secara garis besar:
 - **Marketing dan produk**: atribusi iklan, program referral, push notification, kesehatan aplikasi, dan perilaku pengguna di aplikasi yang dicocokkan dengan database (siapa membeli, di mana orang berhenti, fitur apa yang dipakai).
 - **Alat bantu**: bertanya dalam bahasa biasa (Ask), menjelajah tabel mentah, dan menulis query SQL sendiri (read-only).
 
-Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 51 tab dalam 8 grup.
+Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 52 tab dalam 8 grup.
 
 ## 2. Istilah penting
 
@@ -77,6 +77,7 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 | [Performance](#tab-performance) | Performa NAV tiap fund dari 1 hari sampai 5 tahun, dibandingkan antar fund. |
 | [Growth](#tab-growth) | Kinerja campaign promo, referrer teratas, dan alur switching antar fund. |
 | [Forecast & churn](#tab-predict) | Forecast AUM dan volume transaksi, risiko churn investor, dan tren retensi. Sebelumnya bernama Predict. |
+| [AI Insights](#tab-ai-insights) | Empat pengecekan otomatis yang dijalankan lewat tombol: ringkasan mingguan, pemindaian anomali, daftar tindakan churn, dan pengawas kualitas data. |
 
 **Investor**
 
@@ -633,6 +634,17 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Endpoint: `GET /api/ml/status`, `GET /api/predict/aum`, `GET /api/predict/transactions`, `GET /api/predict/churn`, `GET /api/churn/overview`, `GET /api/retention/cohorts`, `GET /api/retention/aum-cohorts`, `GET /api/ml/retrain-status`
   - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.mi_fee`, `mi_fee_logs.portfolios`, `ml.aum_forecast`, `ml.churn_features`, `ml.churn_model`, `ml.tx_forecast`
   - Tabel Supabase: `dashboard_audit_log`
+
+<a id="tab-ai-insights"></a>
+#### AI Insights
+
+- **Untuk apa**: Empat pengecekan otomatis yang dijalankan lewat tombol: ringkasan mingguan, pemindaian anomali, daftar tindakan churn, dan pengawas kualitas data.
+- **Penjelasan sederhana**: Empat, pengecekan, sesuai, permintaan, masing-masing, dengan, tombolnya, sendiri., Ringkasan, mingguan:, AUM, buy, dikurangi, sell, dan, user, baru, 7, hari, terakhir, dibanding, 7, hari, sebelumnya, dihitung, di, SQL, lalu, ditulis, model, dalam, bahasa, Indonesia., Pemindaian, anomali:, statistik, biasa, tanpa, model, menandai, hari, dalam, 14, hari, terakhir, ketika, perubahan, AUM, volume, buy, atau, volume, sell, berjarak, 3, simpangan, baku, atau, lebih, dari, 28, hari, sebelumnya., Daftar, tindakan, churn:, skor, model, churn, diubah, menjadi, daftar, kontak, dengan, aturan, sederhana, (investor, besar, berarti, total, pembelian, 100, jt, atau, lebih)., Pengawas, kualitas, data:, tanggal, terbaru, tiap, sumber, dan, perbandingan, AUM, hari, yang, sama, antara, portfolio_with_code, mi_fee, dan, goal_snapshots, (goal_snapshots, biasanya, 1, sampai, 2, persen, lebih, rendah)., Nama, SID, dan, email, tidak, pernah, dikirim, ke, model., Tab, Portfolio, dan, Portfolio, Explorer, punya, tombol, "Catatan, portofolio", dan, Ask, punya, tombol, "Jelaskan, hasil", dibuat, dengan, cara, yang, sama.
+- **Data yang dibaca**: mi_fee_logs.mi_fee, mi_fee_logs.portfolio_with_code, mi_fee_logs.portfolio_fix, main.goal_snapshots, main.snapshots, main.transactions, main.users, ml.churn_model
+- **Cara hitung**: Semua angka dan penanda dihitung di SQL dan JavaScript, model hanya menulis kalimat di sekitarnya dan tidak pernah menerima nama, SID, atau email. Digest: AUM terbaru dibanding 7 dan 30 hari sebelumnya (tanggal mi_fee dikoreksi minus 1 hari), buy dan sell completed 7 hari terakhir dibanding 7 hari sebelumnya, dan user baru. Anomali: z-score tiap hari terhadap 28 hari sebelumnya, AUM dinilai dari perubahan harian dan volume buy/sell dari levelnya, ditandai bila 3 atau lebih. Churn: skor model churn, lalu aturan prioritas (risiko 50 persen ke atas dan total beli 100 jt ke atas dihubungi langsung). Watchdog: tanggal terbaru tiap sumber, ditandai stale bila lebih dari 2 hari, dan AUM hari yang sama dari tiga sumber, ditandai bila goal_snapshots berbeda lebih dari 3 persen atau mi_fee berbeda lebih dari 1 persen dari portfolio_with_code.
+- **Detail teknis** (otomatis dari kode):
+  - Id tab untuk hak akses: `ai-insights`
+  - Endpoint: `GET /api/ai/digest`, `GET /api/ai/anomalies`, `GET /api/ai/churn-actions`, `GET /api/ai/watchdog`
 
 ### Investor
 
@@ -1616,7 +1628,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Jawaban dibuat oleh model AI, jadi periksa SQL-nya untuk angka penting. Kolom sensitif (password, data KYC) selalu disaring kecuali superuser mengonfirmasi password.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `ask`
-  - Endpoint: `GET /api/ask/tables`, `POST /api/ask`, `POST /api/ask/chart`
+  - Endpoint: `GET /api/ask/tables`, `POST /api/ask`, `POST /api/ask/chart`, `POST /api/ask/explain`
   - Tabel Supabase: `dashboard_audit_log`
 
 <a id="tab-explorer"></a>
@@ -1758,6 +1770,7 @@ Endpoint yang tidak terikat pada satu tab: login dan akun, admin, ekspor, jadwal
 | `GET /api/users/by-code` | `remisierUsers` | `main.user_profiles`, `main.users` |
 | `GET /api/remisier/users` | `remisierUsers` | `main.user_profiles`, `main.users` |
 | `POST /api/ml/retrain` | - | `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.mi_fee`, `ml.aum_forecast`, `ml.churn_features`, `ml.churn_model`, `ml.tx_forecast`, `dashboard_audit_log` |
+| `POST /api/ai/portfolio-narrative` | - | `dashboard_audit_log` |
 | `POST /api/export` | `largestFundsAum`, `normalizeUserFilter`, `transactions`, `aumHistory`, `revenueTrend`, `revenueTrendDrill`, `aumHistoryDrill`, `topInvestors`, `productPerformance`, `productPerformanceDetail`, `userHoldingsAsOf`, `userHoldings`, `userContact`, `userHoldingsAsOfFix`, `userHoldingsFromTxAsOf`, `userHoldingsFromTx`, `sinvestHoldingsAsOf`, `sinvestHoldings`, `goalLatestSnapshotDate`, `goalUserHoldings`, `campaignPerformance`, `switchingTopPairs`, `topReferrers`, `reconciliationDaily`, `revenueDetail`, `revenueV2Detail`, `revenueMonthlySummary`, `revenueV2MonthlySummary`, `userLifetimeUsers`, `userLifetimeSummary`, `userLifetimeDetail`, `campaignRevenueDetail`, `campaignRevenueByCampaign`, `campaignRevenueSummary`, `remisierRevenueDetail`, `remisierRevenueSummary`, `remisierRevenuePwcDetail`, `remisierRevenuePwcSummary`, `remisierTransactions`, `sinvestTransactions`, `usersTransactions`, `hnwiTotal`, `hnwiByFund`, `dormantConversionSummary`, `dormantRepeatBuyers`, `dormantTimeToConvert`, `kalcerAmbassadorSummary`, `kalcerReferralDetail`, `pushByCampaign`, `pushByPlatform`, `marketingFunnelByChannel`, `appCrashIssues`, `appPerfTraces`, `referralProgramDetail`, `referralInvitedUsers` | `adjust_analytics.events`, `firebase_crashlytics.com_sayakaya_android_ANDROID`, `firebase_crashlytics.com_sayakaya_ios_IOS`, `firebase_messaging.data`, `firebase_performance.com_sayakaya_android_ANDROID`, `firebase_performance.com_sayakaya_ios_IOS`, `main.bonus_portfolios`, `main.campaigns`, `main.funds`, `main.goal_snapshots`, `main.goals`, `main.investment_managers`, `main.management_fee_logs`, `main.portfolios`, `main.snapshots`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.mi_fee`, `mi_fee_logs.portfolio_fix`, `mi_fee_logs.portfolio_with_code`, `mi_fee_logs.portfolios`, `ml.aum_forecast`, `ml.churn_features`, `ml.churn_model`, `ml.tx_forecast`, `sinvest.trx_history`, `dashboard_audit_log` |
 | `POST /api/export/batch` | - | `dashboard_audit_log` |
 | `POST /api/portfolio/bulk-summary` | - | - |
