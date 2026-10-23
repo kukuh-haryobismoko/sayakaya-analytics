@@ -183,7 +183,7 @@ async function churnActions() {
 
 // ---- 4. Data-quality watchdog ---------------------------------------------
 
-const watchdogSystem = (lang) => `You review automated data-quality checks for the analytics team of an Indonesian mutual-fund app. You get JSON with each source's latest date and a same-day AUM comparison across portfolio_with_code, portfolio_fix and goal_snapshots, ACTIVE funds only. ${langRule(lang)} 3 to 6 short sentences: name what is stale or disagrees, by how much, and what to check first. Only use the figures given. If everything is within tolerance, say so in one sentence. Known and expected: portfolio_with_code and portfolio_fix are dated one day ahead and are already corrected, they should agree almost exactly, and goal_snapshots can run slightly below them. No headings, no bullet points, no em dashes.`;
+const watchdogSystem = (lang) => `You review automated data-quality checks for the analytics team of an Indonesian mutual-fund app. You get JSON with each source's latest date and a same-day AUM comparison across portfolio_with_code, portfolio_fix and goal_snapshots, ACTIVE funds only. ${langRule(lang)} 3 to 6 short sentences: name what is stale or disagrees, by how much, and what to check first. Only use the figures given. If everything is within tolerance, say so in one sentence. All sources are already put on the same rules (ACTIVE funds, true AUM date, same daily NAV), so the tolerance is 1 percent for every gap: portfolio_fix and portfolio_with_code should match almost exactly, goal_snapshots only covers holdings under goals, and a gap between the stored portfolio_with_code amount and its same-NAV value means a stale NAV. No headings, no bullet points, no em dashes.`;
 
 async function watchdog(lang) {
   const freshness = await runQuery(`
@@ -193,21 +193,35 @@ async function watchdog(lang) {
     UNION ALL SELECT 'fund NAV (snapshots)', FORMAT_DATE('%Y-%m-%d', MAX(DATE(created_at))) FROM ${SNAPSHOTS} WHERE type = 'NAV'
     UNION ALL SELECT 'transactions', FORMAT_DATE('%Y-%m-%d', MAX(DATE(created_at))) FROM ${TX}`, {});
 
-  // Same AUM date, three sources, ACTIVE funds only (the dashboard's AUM rule).
-  // goal_snapshots is deduplicated to the latest row per goal, fund and date, as
-  // in the Portfolio Explorer.
+  // Same rules for every source, so the gaps mean something: ACTIVE funds only
+  // (the dashboard's AUM rule), the true AUM date (created_at minus 1 day for the
+  // two portfolio tables), goal_snapshots limited to the latest row per goal, fund
+  // and date on goals that are not deleted, and every source valued as units x the
+  // canonical daily NAV (main.snapshots), not each table's own NAV. The stored
+  // portfolio_with_code amount is the figure the dashboard shows; its gap to the
+  // same-NAV value catches a stale latest_nav_value.
   const compare = await runQuery(`
     WITH act AS (SELECT id FROM ${FUNDS} WHERE listing_status = 'ACTIVE'),
+    canon AS (
+      SELECT product_id AS fund_id, DATE(created_at) AS d, ARRAY_AGG(value ORDER BY created_at DESC LIMIT 1)[OFFSET(0)] AS nav
+      FROM ${SNAPSHOTS} WHERE type = 'NAV' AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY) GROUP BY fund_id, d),
     gs AS (
-      SELECT d, SUM(unit * nav) AS v FROM (
-        SELECT s.date AS d, s.unit, s.nav FROM ${GOAL_SNAPSHOTS} s
-        WHERE s.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY) AND s.fund_id IN (SELECT id FROM act)
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY s.goal_id, s.fund_id, s.date ORDER BY s.created_at DESC) = 1) GROUP BY d),
-    fx AS (SELECT DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS d, SUM(amount) AS v FROM ${PORT_FIX}
-      WHERE id IN (SELECT id FROM act) AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY) GROUP BY d),
-    pw AS (SELECT DATE_SUB(DATE(created_at), INTERVAL 1 DAY) AS d, SUM(amount) AS v FROM ${PWC}
-      WHERE id IN (SELECT id FROM act) AND DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY) GROUP BY d)
-    SELECT FORMAT_DATE('%Y-%m-%d', gs.d) AS day, ROUND(gs.v) AS goal_snapshots, ROUND(fx.v) AS portfolio_fix, ROUND(pw.v) AS portfolio_with_code
+      SELECT s.d, SUM(s.unit * COALESCE(c.nav, s.nav)) AS v FROM (
+        SELECT x.goal_id, x.fund_id, x.date AS d, x.unit, x.nav FROM ${GOAL_SNAPSHOTS} x
+        JOIN \`sayakaya.main.goals\` g ON g.id = x.goal_id AND g.deleted_at IS NULL
+        WHERE x.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY) AND x.fund_id IN (SELECT id FROM act)
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY x.goal_id, x.fund_id, x.date ORDER BY x.created_at DESC) = 1) s
+      LEFT JOIN canon c ON c.fund_id = s.fund_id AND c.d = s.d GROUP BY s.d),
+    fx AS (
+      SELECT DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY) AS d, SUM(COALESCE(p.total_unit * c.nav, p.amount)) AS v
+      FROM ${PORT_FIX} p LEFT JOIN canon c ON c.fund_id = p.id AND c.d = DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY)
+      WHERE p.id IN (SELECT id FROM act) AND DATE(p.created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY) GROUP BY d),
+    pw AS (
+      SELECT DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY) AS d, SUM(COALESCE(p.total_unit * c.nav, p.amount)) AS v, SUM(p.amount) AS stored
+      FROM ${PWC} p LEFT JOIN canon c ON c.fund_id = p.id AND c.d = DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY)
+      WHERE p.id IN (SELECT id FROM act) AND DATE(p.created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY) GROUP BY d)
+    SELECT FORMAT_DATE('%Y-%m-%d', gs.d) AS day, ROUND(gs.v) AS goal_snapshots, ROUND(fx.v) AS portfolio_fix,
+      ROUND(pw.v) AS portfolio_with_code, ROUND(pw.stored) AS portfolio_with_code_stored
     FROM gs LEFT JOIN fx ON fx.d = gs.d LEFT JOIN pw ON pw.d = gs.d ORDER BY gs.d DESC`, {});
 
   const today = new Date().toISOString().slice(0, 10);
@@ -217,14 +231,14 @@ async function watchdog(lang) {
     return { source: r.source, latest: r.latest, age_days: age, status: age == null || age > 2 ? 'stale' : 'ok' };
   });
   const diffs = compare.map((r) => {
-    const gs = num(r.goal_snapshots), fx = num(r.portfolio_fix), pw = num(r.portfolio_with_code);
-    const gsGap = pw ? pct(gs, pw) : null, fxGap = pw && fx ? pct(fx, pw) : null;
+    const gs = num(r.goal_snapshots), fx = num(r.portfolio_fix), pw = num(r.portfolio_with_code), stored = num(r.portfolio_with_code_stored);
+    const gap = (v) => (pw && v ? pct(v, pw) : null);
+    const gaps = [gap(gs), gap(fx), gap(stored)];
     return {
-      day: r.day, goal_snapshots: gs, portfolio_fix: fx || null, portfolio_with_code: pw || null,
-      goal_snapshots_vs_pwc_pct: gsGap, portfolio_fix_vs_pwc_pct: fxGap,
-      // goal_snapshots can sit slightly low, so only flag beyond 3. portfolio_fix and
-      // portfolio_with_code should agree, so flag beyond 1.
-      status: (gsGap != null && Math.abs(gsGap) > 3) || (fxGap != null && Math.abs(fxGap) > 1) ? 'differs' : 'ok',
+      day: r.day, portfolio_with_code: pw || null, portfolio_fix: fx || null, goal_snapshots: gs || null, portfolio_with_code_stored: stored || null,
+      goal_snapshots_vs_pwc_pct: gaps[0], portfolio_fix_vs_pwc_pct: gaps[1], stored_vs_pwc_pct: gaps[2],
+      // The rules are identical, so one tolerance for every gap: 1 percent.
+      status: gaps.some((g) => g != null && Math.abs(g) > 1) ? 'differs' : 'ok',
     };
   });
   const text = await aiText(watchdogSystem(lang), JSON.stringify({ today, checks, same_day_aum: diffs }));

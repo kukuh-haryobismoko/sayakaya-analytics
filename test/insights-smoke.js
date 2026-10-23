@@ -20,7 +20,7 @@ stub('./bigquery', { runQuery: async (sql) => {
   if (sql.includes("'buy'  AND d >")) return [{ buy_7d: 300, sell_7d: 100, buy_prev: 200, sell_prev: 150 }];
   if (sql.includes('new_7d')) return [{ new_7d: 12, new_prev: 10 }];
   if (sql.includes("'portfolio_with_code' AS source")) return [{ source: 'portfolio_with_code', latest: daysAgo(1) }, { source: 'goal_snapshots', latest: daysAgo(6) }];
-  if (sql.includes('goal_snapshots, ROUND') || sql.includes('AS goal_snapshots')) return [{ day: daysAgo(1), goal_snapshots: 90, portfolio_fix: 100, portfolio_with_code: 100 }];
+  if (sql.includes('goal_snapshots, ROUND') || sql.includes('AS goal_snapshots')) return [{ day: daysAgo(1), goal_snapshots: 90, portfolio_fix: 100, portfolio_with_code: 100, portfolio_with_code_stored: 100 }];
   return [];
 } });
 stub('./queries', {});

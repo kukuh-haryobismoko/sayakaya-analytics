@@ -866,5 +866,10 @@ td.neg { color: var(--neg-text); }
 
 @media (prefers-reduced-motion: reduce) { .conn-dot.live { animation: none; } .view.active { animation: none; } }
 
-/* AI text blocks: written paragraphs, kept to a readable measure. */
-.ai-text { margin: 0 0 8px; line-height: 1.65; max-width: 78ch; white-space: pre-wrap; color: var(--ink); }
+/* AI Insights: written paragraphs at a readable measure, spacing from the stylesheet. */
+.ai-text { max-width: 72ch; color: var(--ink); }
+.ai-text p { margin: 0 0 .65em; line-height: 1.6; }
+.ai-text p:last-child { margin-bottom: 0; }
+#ai-insights .kpi-grid { margin-bottom: 16px; }
+#ai-insights .table-wrap:empty { display: none; }
+#ai-insights .hint:empty { display: none; }

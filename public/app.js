@@ -1012,12 +1012,22 @@ async function aiRun(btnSel, outSel, fn) {
   finally { btn.disabled = false; }
 }
 
-const aiText = (text) => `<p class="ai-text">${escapeHtml(text)}</p>`;
+// Model text as real paragraphs: blank lines split them, stray line breaks inside one
+// are joined, so spacing comes from the stylesheet and not from the model's newlines.
+const aiText = (text) => '<div class="ai-text">' + String(text).split(/\n\s*\n/)
+  .map((p) => p.replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean).map((p) => `<p>${escapeHtml(p)}</p>`).join('') + '</div>';
 
 function loadAiDigest() {
   return aiRun('#aiDigestBtn', '#aiDigestOut', async (out) => {
     const { facts, text } = await api(`/api/ai/digest?lang=${getLang()}`);
-    out.innerHTML = aiText(text) + `<p class="hint">${t('ai_as_of')} ${escapeHtml(val(facts.as_of))}</p>`;
+    const chg = (v) => (v == null ? 'n/a' : `${v > 0 ? '+' : ''}${Number(v).toFixed(1)}%`);
+    const flow = facts.last_7d.net_flow;
+    out.innerHTML = `<div class="kpi-grid">${[
+      kpi(t('ai_kpi_aum'), idr(facts.aum_now), `${t('ai_as_of')} ${escapeHtml(val(facts.as_of))}`, 'accent'),
+      kpi(t('ai_kpi_chg'), chg(facts.aum_change_7d_pct), `${t('ai_kpi_30d')}: ${chg(facts.aum_change_30d_pct)}`),
+      kpi(t('ai_kpi_flow'), `${flow > 0 ? '+' : ''}${idr(flow)}`, `${t('ai_kpi_prev')}: ${idr(facts.previous_7d.net_flow)}`, flow < 0 ? 'warn' : ''),
+      kpi(t('ai_kpi_users'), num(facts.new_users_last_7d), `${t('ai_kpi_prev')}: ${num(facts.new_users_previous_7d)}`),
+    ].join('')}</div>${aiText(text)}`;
   });
 }
 
@@ -1073,8 +1083,9 @@ function loadAiWatchdog() {
     genTable('#aiWdDiff', diffs, [
       { key: 'day', label: t('col_date'), type: 'date' },
       { key: 'portfolio_with_code', label: 'portfolio_with_code', type: 'idr' }, { key: 'portfolio_fix', label: 'portfolio_fix', type: 'idr' },
-      { key: 'goal_snapshots', label: 'goal_snapshots', type: 'idr' },
-      { key: 'goal_snapshots_vs_pwc_pct', label: t('ai_col_gs_gap'), fmt: gap }, { key: 'portfolio_fix_vs_pwc_pct', label: t('ai_col_fix_gap'), fmt: gap },
+      { key: 'goal_snapshots', label: 'goal_snapshots', type: 'idr' }, { key: 'portfolio_with_code_stored', label: t('ai_col_stored'), type: 'idr' },
+      { key: 'portfolio_fix_vs_pwc_pct', label: t('ai_col_fix_gap'), fmt: gap }, { key: 'goal_snapshots_vs_pwc_pct', label: t('ai_col_gs_gap'), fmt: gap },
+      { key: 'stored_vs_pwc_pct', label: t('ai_col_stored_gap'), fmt: gap },
       { key: 'status', label: 'Status', fmt: (v) => flag(v === 'ok' ? 'ok' : 'differs') },
     ], '');
   });
