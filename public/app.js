@@ -8365,6 +8365,8 @@ let askHistory = [];
 function renderAskThread() {
   const el = $('#askThread');
   el.innerHTML = '';
+  // The example chips only help on an empty conversation; afterwards they just push the answer down.
+  $('.ask-examples').classList.toggle('hidden', askHistory.length > 0);
   if (!askHistory.length) {
     el.classList.add('hidden');
     $('#askHint').textContent = t('ask_hint_default');
@@ -8482,7 +8484,7 @@ async function runAsk(q) {
     $('#askInput').value = '';
     renderGenericTable('#askResult', data.rows || []);
     const c = data.count || 0;
-    setAskMsg(`${num(c)} row${c === 1 ? '' : 's'}`, 'ok');
+    setAskMsg('', ''); // the row count lives in the folded section's title
     // CSV/XLSX export re-runs askSqlCache server-side against BigQuery, so it
     // can't work for a non-SQL answer even though there are rows to show.
     $('#askCsv').disabled = $('#askXlsx').disabled = (data.rows || []).length === 0 || !data.sql;
