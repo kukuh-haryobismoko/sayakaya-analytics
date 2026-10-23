@@ -623,6 +623,11 @@ async function suggestChart(question, rows, hint) {
   }
 }
 
+// The model writes in the language the dashboard is showing (EN or ID toggle).
+const langRule = (lang) => (lang === 'id'
+  ? 'Write in Indonesian. Write amounts as "Rp 12,3 miliar" or "Rp 450 juta".'
+  : 'Write in English. Write amounts as "Rp 12.3 billion" or "Rp 450 million".');
+
 // Plain-text completion for the insight features (digest, narrative, watchdog,
 // result explanation). Callers pass aggregated numbers only: no names, SIDs or
 // emails ever go into a prompt. max_tokens is generous because reasoning models
@@ -642,15 +647,15 @@ async function aiText(system, user, maxTokens = 3000) {
 }
 
 // Plain-language read of a result table, for the Ask tab's "Explain" button.
-async function explainResult(question, rows) {
+async function explainResult(question, rows, lang) {
   if (!Array.isArray(rows) || !rows.length) throw new Error('There are no rows to explain yet.');
   const columns = Object.keys(rows[0]);
   const sample = rows.slice(0, 30).map((r) => Object.fromEntries(columns.map((c) => [c, val(r[c])])));
   const text = await aiText(
-    `You explain a table of query results to a business user at an Indonesian mutual-fund platform. Write 3 to 5 short sentences in Indonesian: what the table shows, the biggest number or pattern, and anything that looks unusual. State only what the rows show, never invent causes or figures. Amounts are rupiah. No headings, no em dashes.`,
+    `You explain a table of query results to a business user at an Indonesian mutual-fund platform. ${langRule(lang)} Write 3 to 5 short sentences: what the table shows, the biggest number or pattern, and anything that looks unusual. State only what the rows show, never invent causes or figures. No headings, no em dashes.`,
     [`Question asked: ${question || '(none)'}`, `Total rows: ${rows.length} (first ${sample.length} shown)`, `Columns: ${columns.join(', ')}`, JSON.stringify(sample)].join('\n\n'),
   );
   return { text };
 }
 
-module.exports = { ask, askEnabled, TABLES, suggestChart, aiText, explainResult };
+module.exports = { ask, askEnabled, TABLES, suggestChart, aiText, explainResult, langRule };

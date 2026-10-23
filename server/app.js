@@ -1329,19 +1329,19 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   app.post('/api/ask/explain', requireTab('ask'), handler(async (req, res) => {
-    const { question, rows } = req.body || {};
-    res.json(await explainResult(question, rows || []));
+    const { question, rows, lang } = req.body || {};
+    res.json(await explainResult(question, rows || [], lang));
   }));
 
   // AI Insights tab. Each call is independent so the page can load them on demand.
-  app.get('/api/ai/digest', requireTab('ai-insights'), handler(async (_req, res) => res.json(await Insights.digest())));
+  app.get('/api/ai/digest', requireTab('ai-insights'), handler(async (req, res) => res.json(await Insights.digest(req.query.lang))));
   app.get('/api/ai/anomalies', requireTab('ai-insights'), handler(async (_req, res) => res.json(await Insights.anomalies())));
   app.get('/api/ai/churn-actions', requireTab('ai-insights'), handler(async (_req, res) => res.json(await Insights.churnActions())));
-  app.get('/api/ai/watchdog', requireTab('ai-insights'), handler(async (_req, res) => res.json(await Insights.watchdog())));
+  app.get('/api/ai/watchdog', requireTab('ai-insights'), handler(async (req, res) => res.json(await Insights.watchdog(req.query.lang))));
   app.post('/api/ai/portfolio-narrative', requireAnyPortfolio, handler(async (req, res) => {
-    const { userId, sid } = req.body || {};
+    const { userId, sid, lang } = req.body || {};
     if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
-    const out = await Insights.portfolioNarrative(userId, sid);
+    const out = await Insights.portfolioNarrative(userId, sid, lang);
     res.json(out);
     await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_narrative', `SID ${sid}`);
   }));

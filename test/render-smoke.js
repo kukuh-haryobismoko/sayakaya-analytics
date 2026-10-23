@@ -443,7 +443,7 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/ai/digest'))        return { facts: { as_of: '2026-10-22' }, text: 'AUM naik 1,2 persen dalam seminggu.' };
   if (path.startsWith('/api/ai/anomalies'))     return [{ metric: 'Buy volume', day: '2026-10-20', value: 9e9, z: 4.2, change_pct: null }];
   if (path.startsWith('/api/ai/churn-actions')) return { summary: { priority_1: 1, priority_2: 0, priority_3: 0, redeemed_all: 1, aum_lost: 2e8 }, rows: [{ priority: 1, status: 'Redeemed all', action: 'Call personally: redeemed everything and has not come back', name: 'A', email: 'a@x.id', phone: '0812', peak_aum: 2e8, peak_date: '2026-01-29', current_aum: 0, change_pct: -100, days_since_redeem_all: 90, last_buy: '2026-01-10', last_sell: '2026-07-01' }] };
-  if (path.startsWith('/api/ai/watchdog'))      return { text: 'Semua sumber segar.', checks: [{ source: 'mi_fee (AUM date)', latest: '2026-10-22', age_days: 1, status: 'ok' }], diffs: [{ day: '2026-10-22', portfolio_with_code: 2.6e11, mi_fee: 2.6e11, goal_snapshots: 2.4e11, goal_snapshots_vs_pwc_pct: -7.7, mi_fee_vs_pwc_pct: 0, status: 'differs' }] };
+  if (path.startsWith('/api/ai/watchdog'))      return { text: 'Semua sumber segar.', checks: [{ source: 'portfolio_fix', latest: '2026-10-22', age_days: 1, status: 'ok' }], diffs: [{ day: '2026-10-22', portfolio_with_code: 2.6e11, portfolio_fix: 2.6e11, goal_snapshots: 2.4e11, goal_snapshots_vs_pwc_pct: -7.7, portfolio_fix_vs_pwc_pct: 0, status: 'differs' }] };
   throw new Error('unexpected path ' + path);
 };
 
@@ -467,7 +467,7 @@ sandbox.api = async (path) => {
     if (typeof sandbox[fn] !== 'function') { errors.push(`${fn} is not defined`); continue; }
     try { await sandbox[fn](); } catch (e) { errors.push(`${fn}: ${e.message}`); }
   }
-  for (const [sel, needle] of [['#aiDigestOut', 'AUM naik'], ['#aiAnomOut', '<table'], ['#aiChurnOut', 'Call personally'], ['#aiWdFresh', '<table'], ['#aiWdDiff', 'differs']]) {
+  for (const [sel, needle] of [['#aiDigestOut', 'AUM naik'], ['#aiAnomOut', '<table'], ['#aiChurnOut', 'Call personally'], ['#aiWdFresh', 'portfolio_fix'], ['#aiWdDiff', 'differs']]) {
     if (get(sel)._html.includes(needle)) console.log(`ok    ${sel} has ${needle}`);
     else errors.push(`${sel} is missing ${needle}: ${get(sel)._html.slice(0, 120)}`);
   }

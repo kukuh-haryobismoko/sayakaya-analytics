@@ -1016,7 +1016,7 @@ const aiText = (text) => `<p class="ai-text">${escapeHtml(text)}</p>`;
 
 function loadAiDigest() {
   return aiRun('#aiDigestBtn', '#aiDigestOut', async (out) => {
-    const { facts, text } = await api('/api/ai/digest');
+    const { facts, text } = await api(`/api/ai/digest?lang=${getLang()}`);
     out.innerHTML = aiText(text) + `<p class="hint">${t('ai_as_of')} ${escapeHtml(val(facts.as_of))}</p>`;
   });
 }
@@ -1041,7 +1041,12 @@ function loadAiChurn() {
       `${t('ai_churn_redeemed')}: ${num(val(summary.redeemed_all))}`, `${t('ai_churn_lost')}: ${idrFull(val(summary.aum_lost))}`,
     ].join(' · ');
     const days = (v) => (v == null ? '' : num(v));
-    genTable('#aiChurnOut', rows, [
+    const tr = (key, fallback) => { const v = t(key); return v === key ? fallback : v; };
+    const shown = rows.map((r) => ({
+      ...r, action: tr(`ai_action_${val(r.action_key)}`, val(r.action)),
+      status: val(r.status) === 'Redeemed all' ? t('ai_status_redeemed') : t('ai_status_dropped'),
+    }));
+    genTable('#aiChurnOut', shown, [
       { key: 'priority', label: t('ai_col_priority'), type: 'num' }, { key: 'status', label: t('ai_col_status') },
       { key: 'name', label: t('col_name') }, { key: 'is_institution', label: t('ai_col_type'), fmt: (v) => (v ? t('ai_type_institution') : t('ai_type_individual')) },
       { key: 'email', label: 'Email' }, { key: 'phone', label: t('ai_col_phone'), text: true },
@@ -1057,7 +1062,7 @@ function loadAiChurn() {
 
 function loadAiWatchdog() {
   return aiRun('#aiWdBtn', '#aiWdOut', async (out) => {
-    const { checks, diffs, text } = await api('/api/ai/watchdog');
+    const { checks, diffs, text } = await api(`/api/ai/watchdog?lang=${getLang()}`);
     out.innerHTML = aiText(text);
     const flag = (v) => `<span style="color:${v === 'ok' ? 'var(--teal)' : 'var(--rose)'}">${escapeHtml(v)}</span>`;
     genTable('#aiWdFresh', checks, [
@@ -1067,9 +1072,9 @@ function loadAiWatchdog() {
     const gap = (v) => (v == null ? 'n/a' : `${v > 0 ? '+' : ''}${Number(v).toFixed(1)}%`);
     genTable('#aiWdDiff', diffs, [
       { key: 'day', label: t('col_date'), type: 'date' },
-      { key: 'portfolio_with_code', label: 'portfolio_with_code', type: 'idr' }, { key: 'mi_fee', label: 'mi_fee', type: 'idr' },
+      { key: 'portfolio_with_code', label: 'portfolio_with_code', type: 'idr' }, { key: 'portfolio_fix', label: 'portfolio_fix', type: 'idr' },
       { key: 'goal_snapshots', label: 'goal_snapshots', type: 'idr' },
-      { key: 'goal_snapshots_vs_pwc_pct', label: t('ai_col_gs_gap'), fmt: gap }, { key: 'mi_fee_vs_pwc_pct', label: t('ai_col_mifee_gap'), fmt: gap },
+      { key: 'goal_snapshots_vs_pwc_pct', label: t('ai_col_gs_gap'), fmt: gap }, { key: 'portfolio_fix_vs_pwc_pct', label: t('ai_col_fix_gap'), fmt: gap },
       { key: 'status', label: 'Status', fmt: (v) => flag(v === 'ok' ? 'ok' : 'differs') },
     ], '');
   });
@@ -1080,7 +1085,7 @@ function loadAiWatchdog() {
 function writeNarrative(btnSel, outSel, selected) {
   if (!selected) return;
   return aiRun(btnSel, outSel, async (out) => {
-    const { text } = await api('/api/ai/portfolio-narrative', { method: 'POST', body: JSON.stringify({ userId: selected.userId, sid: selected.sid }) });
+    const { text } = await api('/api/ai/portfolio-narrative', { method: 'POST', body: JSON.stringify({ userId: selected.userId, sid: selected.sid, lang: getLang() }) });
     out.innerHTML = aiText(text);
   });
 }
@@ -1093,7 +1098,7 @@ async function explainAskResult() {
   out.classList.remove('hidden');
   out.innerHTML = `<div class="loading">${t('ai_working')}</div>`;
   try {
-    const { text } = await api('/api/ask/explain', { method: 'POST', body: JSON.stringify({ question: lastAskQuestion, rows: askRowsCache.slice(0, 30) }) });
+    const { text } = await api('/api/ask/explain', { method: 'POST', body: JSON.stringify({ question: lastAskQuestion, rows: askRowsCache.slice(0, 30), lang: getLang() }) });
     out.innerHTML = aiText(text);
   } catch (e) { out.innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
   finally { btn.disabled = false; }

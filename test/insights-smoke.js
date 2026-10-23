@@ -1,5 +1,5 @@
 // Insights smoke test: the churn list ordering and actions, the watchdog flags and the
-// digest arithmetic, with BigQuery and the AI call stubbed out.
+// digest arithmetic, with BigQuery and the AI call stubbed out. Also checks that the dashboard language reaches the model.
 const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 const stub = (rel, exports) => { const f = require.resolve(rel, { paths: [path.join(__dirname, '../server')] }); require.cache[f] = { id: f, filename: f, loaded: true, exports }; };
@@ -16,15 +16,16 @@ stub('./bigquery', { runQuery: async (sql) => {
     { priority: 1, name: 'big-gone', peak_aum: 9e9, current_aum: 0, days_since_redeem_all: 40 },
     { priority: 1, name: 'big-drop', peak_aum: 3e8, current_aum: 3e7 },
   ];
-  if (sql.includes('FROM `sayakaya.mi_fee_logs.mi_fee`') && sql.includes('AS day, SUM(AUM)')) return [{ day: daysAgo(8), v: 100 }, { day: daysAgo(1), v: 110 }];
+  if (sql.includes('AS day, SUM(p.amount)')) return [{ day: daysAgo(8), v: 100 }, { day: daysAgo(1), v: 110 }];
   if (sql.includes("'buy'  AND d >")) return [{ buy_7d: 300, sell_7d: 100, buy_prev: 200, sell_prev: 150 }];
   if (sql.includes('new_7d')) return [{ new_7d: 12, new_prev: 10 }];
-  if (sql.includes("'mi_fee (AUM date)'")) return [{ source: 'mi_fee (AUM date)', latest: daysAgo(1) }, { source: 'goal_snapshots', latest: daysAgo(6) }];
-  if (sql.includes('goal_snapshots, ROUND') || sql.includes('AS goal_snapshots')) return [{ day: daysAgo(1), goal_snapshots: 90, mi_fee: 100, portfolio_with_code: 100 }];
+  if (sql.includes("'portfolio_with_code' AS source")) return [{ source: 'portfolio_with_code', latest: daysAgo(1) }, { source: 'goal_snapshots', latest: daysAgo(6) }];
+  if (sql.includes('goal_snapshots, ROUND') || sql.includes('AS goal_snapshots')) return [{ day: daysAgo(1), goal_snapshots: 90, portfolio_fix: 100, portfolio_with_code: 100 }];
   return [];
 } });
 stub('./queries', {});
-stub('./ask', { aiText: async (system, user) => { prompts.push(user); return 'ok'; } });
+let systems = [];
+stub('./ask', { aiText: async (system, user) => { systems.push(system); prompts.push(user); return 'ok'; }, langRule: (lang) => (lang === 'id' ? 'Write in Indonesian.' : 'Write in English.') });
 const I = require('../server/insights');
 
 (async () => {
@@ -39,6 +40,9 @@ const I = require('../server/insights');
   const d = await I.digest();
   eq([d.facts.aum_change_7d_pct, d.facts.last_7d.net_flow, d.facts.previous_7d.net_flow, d.facts.new_users_last_7d], [10, 200, 50, 12], 'digest figures');
   if (/@|IDD|sid_code/i.test(prompts[0])) errors.push('digest prompt carries identifying fields');
+
+  await I.digest('id');
+  eq([/Write in English/.test(systems[0]), /Write in Indonesian/.test(systems[1])], [true, true], 'digest prompt follows the dashboard language');
 
   const w = await I.watchdog();
   eq(w.checks.map((c) => c.status), ['ok', 'stale'], 'watchdog freshness flags');

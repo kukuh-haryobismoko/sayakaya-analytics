@@ -1440,20 +1440,20 @@ on('POST', '/api/ask/chart', requireTab('ask', async (req) => {
 
 on('POST', '/api/ask/explain', requireTab('ask', async (req) => {
   const body = await bodyOf(req);
-  const { question, rows } = body as { question?: string; rows?: Record<string, unknown>[] };
-  return json(await explainResult(question, rows || []));
+  const { question, rows, lang } = body as { question?: string; rows?: Record<string, unknown>[]; lang?: string };
+  return json(await explainResult(question, rows || [], lang));
 }));
 
 // AI Insights tab. Each call is independent so the page can load them on demand
 // (the churn list and the watchdog scan real tables, the digest calls the model).
-on('GET', '/api/ai/digest', requireTab('ai-insights', async () => json(await Insights.digest())));
+on('GET', '/api/ai/digest', requireTab('ai-insights', async (_req, _params, url) => json(await Insights.digest(qp(url, 'lang')))));
 on('GET', '/api/ai/anomalies', requireTab('ai-insights', async () => json(await Insights.anomalies())));
 on('GET', '/api/ai/churn-actions', requireTab('ai-insights', async () => json(await Insights.churnActions())));
-on('GET', '/api/ai/watchdog', requireTab('ai-insights', async () => json(await Insights.watchdog())));
+on('GET', '/api/ai/watchdog', requireTab('ai-insights', async (_req, _params, url) => json(await Insights.watchdog(qp(url, 'lang')))));
 on('POST', '/api/ai/portfolio-narrative', requireAnyTab(['portfolio', 'portfolio-explorer', 'portfolio-fix', 'portfolio-tx', 'portfolio-sinvest'], async (req, _params, _url, user) => {
-  const { userId, sid } = await bodyOf(req) as { userId?: string; sid?: string };
+  const { userId, sid, lang } = await bodyOf(req) as { userId?: string; sid?: string; lang?: string };
   if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
-  const out = await Insights.portfolioNarrative(userId, sid);
+  const out = await Insights.portfolioNarrative(userId, sid, lang);
   await A.logEvent(user!.id, user!.username, 'view_portfolio_narrative', `SID ${sid}`);
   return json(out);
 }));

@@ -636,6 +636,11 @@ export async function suggestChart(question: string | undefined, rows: Record<st
   }
 }
 
+// The model writes in the language the dashboard is showing (EN or ID toggle).
+export const langRule = (lang?: string): string => lang === 'id'
+  ? 'Write in Indonesian. Write amounts as "Rp 12,3 miliar" or "Rp 450 juta".'
+  : 'Write in English. Write amounts as "Rp 12.3 billion" or "Rp 450 million".';
+
 // Plain-text completion for the insight features (digest, narrative, watchdog,
 // result explanation). Callers pass aggregated numbers only: no names, SIDs or
 // emails ever go into a prompt. max_tokens is generous because reasoning models
@@ -655,12 +660,12 @@ export async function aiText(system: string, user: string, maxTokens = 3000): Pr
 }
 
 // Plain-language read of a result table, for the Ask tab's "Explain" button.
-export async function explainResult(question: string | undefined, rows: Record<string, unknown>[]): Promise<{ text: string }> {
+export async function explainResult(question: string | undefined, rows: Record<string, unknown>[], lang?: string): Promise<{ text: string }> {
   if (!Array.isArray(rows) || !rows.length) throw new Error('There are no rows to explain yet.');
   const columns = Object.keys(rows[0]);
   const sample = rows.slice(0, 30).map((r) => Object.fromEntries(columns.map((c) => [c, val(r[c])])));
   const text = await aiText(
-    `You explain a table of query results to a business user at an Indonesian mutual-fund platform. Write 3 to 5 short sentences in Indonesian: what the table shows, the biggest number or pattern, and anything that looks unusual. State only what the rows show, never invent causes or figures. Amounts are rupiah. No headings, no em dashes.`,
+    `You explain a table of query results to a business user at an Indonesian mutual-fund platform. ${langRule(lang)} Write 3 to 5 short sentences: what the table shows, the biggest number or pattern, and anything that looks unusual. State only what the rows show, never invent causes or figures. No headings, no em dashes.`,
     [`Question asked: ${question || '(none)'}`, `Total rows: ${rows.length} (first ${sample.length} shown)`, `Columns: ${columns.join(', ')}`, JSON.stringify(sample)].join('\n\n'),
   );
   return { text };
