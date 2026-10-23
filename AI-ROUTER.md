@@ -15,15 +15,15 @@ With none of them set, behaviour is the original Anthropic-direct path. On Supab
 ## Current setup (as of 2026-10-23)
 
 - 9Router runs on the maintainer's Mac at `localhost:20128`. The model name is `combro`, a combo with fallback across several providers.
-- A Supabase edge function runs in the cloud and cannot reach `localhost`, so 9Router is exposed with its built-in tunnel (Endpoint & Key page, Tunnel, Enable). `AI_BASE_URL` is the tunnel's address without the trailing `/v1`, because the code appends `/v1/messages` itself. Current address: `https://rh2fd4s.abc-tunnel.us`. A Cloudflare quick tunnel (`cloudflared tunnel --url http://localhost:20128`) also works as a fallback.
+- A Supabase edge function runs in the cloud and cannot reach `localhost`, so 9Router is exposed with Tailscale Funnel: `tailscale funnel --bg 20128` (once; it keeps running in the background and survives restarts). The address is stable: `https://kukuhs-macbook-pro.tail284225.ts.net`. `AI_BASE_URL` is that address without a trailing `/v1`, because the code appends `/v1/messages` itself. Funnel needs MagicDNS and HTTPS Certificates enabled in the Tailscale admin console and the Funnel permission approved once. 9Router's own Tunnel (Endpoint & Key page) and a Cloudflare quick tunnel are fallbacks, but their addresses can change.
 - The 9Router API key is on its **Endpoint & Key** page. 9Router rejects requests from outside localhost without it (the tunnel returns 401). Never paste the key into chat, commits or issues.
 
 ## When the AI features stop working
 
-Symptom: an AI panel or Ask shows `Cannot reach the AI router ... Make sure 9Router is running`. Usual causes: the Mac slept, 9Router or cloudflared was closed, or cloudflared restarted and the URL changed (quick-tunnel URLs are not stable).
+Symptom: an AI panel or Ask shows `Cannot reach the AI router ... Make sure 9Router is running`. Usual causes: the Mac slept or is offline, 9Router is not running, or Tailscale is disconnected.
 
-1. Make sure 9Router is running and its Tunnel is enabled (Endpoint & Key page). If the tunnel address changed, copy the new one. With the cloudflared fallback, restart it and read the URL from `curl localhost:20241/quicktunnel` (this version does not print it in the log; try ports 20241 to 20246).
-2. Remove any trailing `/v1` from the address.
+1. Make sure 9Router is running and the Tailscale app shows Connected. Check Funnel with `tailscale funnel status`; if it is off, run `tailscale funnel --bg 20128` again.
+2. The address does not change, so Supabase normally needs nothing. Only if you switch to another address, remove any trailing `/v1` from it.
 3. Test it. A 200 with text means the URL and key are good:
    ```
    curl <url>/v1/messages -H "x-api-key: <key>" -H "anthropic-version: 2023-06-01" \
@@ -51,4 +51,5 @@ supabase secrets unset AI_BASE_URL AI_API_KEY AI_MODEL --project-ref josptpfisrs
 - Locally (`server/`), set `AI_BASE_URL=http://localhost:20128` and no tunnel is needed.
 - The `cc/` models in the combo are probably Claude Code subscription logins: account-bound, so moving 9Router to a server or sharing it widely may hit usage limits and terms. A 24/7 option (9Router in Docker on a small VPS, or a hosted router) was discussed and deferred.
 - Prompts for the insight features carry aggregated figures only. Names, SIDs and emails are never sent to the model.
-- The tunnel only works while the Mac is awake with 9Router running.
+- Only the 9Router API is exposed through Funnel. Keep **Require API key** on, and turn off "Allow dashboard access via tunnel" in 9Router so the admin pages are not reachable from the internet.
+- This works only while the Mac is awake and online with 9Router running.
