@@ -3,11 +3,34 @@
 const { runQuery, validateAdHoc, capRows } = require('./bigquery');
 const Auth = require('./auth');
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+// AI_BASE_URL points Ask at an Anthropic-compatible gateway (9Router) instead
+// of api.anthropic.com; AI_API_KEY / AI_MODEL override ANTHROPIC_API_KEY /
+// ANTHROPIC_MODEL. With none of them set this behaves exactly as before.
+const BASE_URL = (process.env.AI_BASE_URL || 'https://api.anthropic.com').replace(/\/+$/, '');
+const VIA_ROUTER = Boolean(process.env.AI_BASE_URL);
+const API_URL = `${BASE_URL}/v1/messages`;
+const MODEL = process.env.AI_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+const apiKey = () => process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY;
+
+// Single place every AI call goes through. A router that is down (9Router
+// closed, tunnel dropped) throws a TypeError from fetch; turn that into a
+// message the user can act on instead of "fetch failed".
+async function callAI(body) {
+  try {
+    return await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey() || '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error(VIA_ROUTER
+      ? `Cannot reach the AI router (${BASE_URL}). Make sure 9Router is running, then try again.`
+      : 'Cannot reach the Anthropic API. Try again in a moment.');
+  }
+}
 
 function askEnabled() {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return Boolean(apiKey());
 }
 
 // The curated set of tables Ask is allowed to reference — kept separate from
@@ -147,8 +170,8 @@ ${SCHEMA}`;
 }
 
 async function questionToSql(question, priorAttempt, context, history) {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set on the server.');
+  const key = apiKey();
+  if (!key) throw new Error('AI_API_KEY (or ANTHROPIC_API_KEY) is not set on the server.');
 
   const userContent = context
     ? `${question}\n\nUser-provided hint (tables/datasets to use, or a related query for context, may be partial or imprecise, verify against the schema above):\n${context}`
@@ -167,14 +190,7 @@ async function questionToSql(question, priorAttempt, context, history) {
     });
   }
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
+  const res = await callAI({
       model: MODEL,
       // Sonnet 5 spends an unpredictable, un-opted-in chunk of this budget on
       // its own internal reasoning before ever writing SQL — for a hard
@@ -186,12 +202,11 @@ async function questionToSql(question, priorAttempt, context, history) {
       max_tokens: 4096,
       system: systemPrompt(),
       messages,
-    }),
-  });
+    });
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    if (res.status === 401) throw new Error('Anthropic rejected the API key (401). Check ANTHROPIC_API_KEY.');
+    if (res.status === 401) throw new Error(`${VIA_ROUTER ? 'The AI router' : 'Anthropic'} rejected the API key (401). Check AI_API_KEY / ANTHROPIC_API_KEY.`);
     throw new Error(`Anthropic API error ${res.status}: ${body.slice(0, 200)}`);
   }
 
@@ -251,16 +266,11 @@ Return [] if the question has no such named entities.`;
 }
 
 async function extractEntityMentions(question) {
-  const key = process.env.ANTHROPIC_API_KEY;
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
+    const res = await callAI({
         model: MODEL, max_tokens: 300, system: entitySystemPrompt(),
         messages: [{ role: 'user', content: question }],
-      }),
-    });
+      });
     if (!res.ok) return [];
     const data = await res.json();
     const text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim()
@@ -442,18 +452,14 @@ Respond with ONLY a JSON object, no markdown, no explanation:
 }
 
 async function questionToActivityLogFilter(question) {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey();
   const empty = { search: '', from: '', to: '' };
   if (!key) return empty;
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
+    const res = await callAI({
         model: MODEL, max_tokens: 200, system: activityLogFilterPrompt(),
         messages: [{ role: 'user', content: question }],
-      }),
-    });
+      });
     if (!res.ok) return empty;
     const data = await res.json();
     const text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim()
@@ -574,7 +580,7 @@ If the user did NOT name a chart type, pick the best fit yourself using these de
 }
 
 async function suggestChart(question, rows, hint) {
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = apiKey();
   if (!key) return { type: 'none', reason: 'Ask is not configured on the server.' };
   if (!Array.isArray(rows) || !rows.length) return { type: 'none', reason: 'There are no rows to chart yet.' };
 
@@ -589,14 +595,10 @@ async function suggestChart(question, rows, hint) {
 
   let text;
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
+    const res = await callAI({
         model: MODEL, max_tokens: 200, system: chartSystemPrompt(),
         messages: [{ role: 'user', content: userContent }],
-      }),
-    });
+      });
     if (!res.ok) return { type: 'none', reason: 'Could not reach the chart suggestion model, try again.' };
     const data = await res.json();
     text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim()
