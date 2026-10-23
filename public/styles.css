@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   /* Brand: Blue (B300/B400) + Purple (P300) — see Sayakaya AssetComponents palette */
   --bg: #f5f6fa;        /* Background / N200 */
   --surface: #ffffff;    /* Background / N0 */
@@ -47,6 +48,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0d1020;
   --surface: #161a2e;
   --surface-alt: #1d2238;
@@ -98,6 +100,17 @@ body {
 .btn-ghost, .btn-primary, .chip, input, select, textarea {
   transition: background-color .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
 }
+/* Baseline for any text field, select or textarea without its own class rule:
+   follows the theme tokens instead of the browser's white default. :where()
+   keeps specificity at 0, so every class-based field style above still wins. */
+:where(input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file], [type=button], [type=submit]), select, textarea) {
+  background-color: var(--input-bg); color: var(--ink); border: 1px solid var(--line); border-radius: 7px;
+  font-family: inherit;
+}
+:where(input, textarea)::placeholder { color: var(--muted); opacity: 1; }
+:where(input, select, textarea):focus-visible { outline: 2px solid var(--indigo); outline-offset: 1px; }
+:where(input, select, textarea):disabled { opacity: .55; cursor: not-allowed; }
+
 /* Tactile press feedback on clickable controls. */
 .btn-primary:active, .btn-ghost:active, .chip:active, .dropdown-multi-btn:active { transform: scale(.97); }
 .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
