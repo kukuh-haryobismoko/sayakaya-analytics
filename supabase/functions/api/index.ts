@@ -1463,6 +1463,9 @@ on('POST', '/api/sql/run', requireTab('sql', async (req, _params, _url, user) =>
   return json({ rows, count: rows.length });
 }));
 
+// A PDF is built in memory page by page; a year of transactions is thousands
+// of pages and exhausts the function, so it is capped (CSV/Excel are not).
+const PDF_MAX_ROWS = 5000;
 // Exports
 on('POST', '/api/export', async (req, _params, _url, user) => {
   const body = await bodyOf(req);
@@ -1809,9 +1812,10 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const searchQ = body.q as string;
     const fundName = body.fundName as string;
     const promo = body.promo as string;
-    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, fundName, promo, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
+    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, fundName, promo, from: body.from as string, to: body.to as string, limit: limit || (format === 'pdf' ? PDF_MAX_ROWS + 1 : 100000), offset: 0, sort: body.sort as string, dir: body.dir as string });
     rows = await runQuery(q.sql, q.params);
     if (format === 'pdf') {
+      if (rows.length > PDF_MAX_ROWS) return json({ error: `Too many rows for a PDF (over ${PDF_MAX_ROWS}). Narrow the filters or date range, or use CSV/Excel.` }, 400);
       const label = [searchQ, fundName && `fund ${fundName}`, promo && `promo ${promo}`].filter(Boolean).join(', ')
         || ['all investors', body.type, body.from && body.to ? `${body.from} to ${body.to}` : body.from ? `from ${body.from}` : body.to ? `until ${body.to}` : ''].filter(Boolean).join(', ');
       const buf = await usersTransactionsReport(rows, { username, query: label });

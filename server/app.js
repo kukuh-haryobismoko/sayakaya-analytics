@@ -16,6 +16,9 @@ const EX = require('./explore');
 const ML = require('./ml');
 const MLTrain = require('./ml-train');
 const PDF = require('./pdf');
+// A PDF is built in memory page by page; a year of transactions is thousands
+// of pages and exhausts the function, so it is capped (CSV/Excel are not).
+const PDF_MAX_ROWS = 5000;
 const SHEETS = require('./sheets');
 const Mail = require('./mail');
 const Auth = require('./auth');
@@ -1678,9 +1681,10 @@ function createApp({ serveStatic = true } = {}) {
       rows = await runQuery(q.sql, q.params);
     } else if (source === 'users_transactions') {
       const { q: searchQ, type, status, fundId, fundName, promo, from, to, sort, dir } = req.body;
-      const q = Q.usersTransactions({ q: searchQ, type, status, fundId, fundName, promo, from, to, limit: limit || 100000, offset: 0, sort, dir });
+      const q = Q.usersTransactions({ q: searchQ, type, status, fundId, fundName, promo, from, to, limit: limit || (format === 'pdf' ? PDF_MAX_ROWS + 1 : 100000), offset: 0, sort, dir });
       rows = await runQuery(q.sql, q.params);
       if (format === 'pdf') {
+        if (rows.length > PDF_MAX_ROWS) return res.status(400).json({ error: `Too many rows for a PDF (over ${PDF_MAX_ROWS}). Narrow the filters or date range, or use CSV/Excel.` });
         const label = [searchQ, fundName && `fund ${fundName}`, promo && `promo ${promo}`].filter(Boolean).join(', ')
           || ['all investors', type, from && to ? `${from} to ${to}` : from ? `from ${from}` : to ? `until ${to}` : ''].filter(Boolean).join(', ');
         const buf = await PDF.usersTransactionsReport(rows, { username, query: label });

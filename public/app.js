@@ -6095,6 +6095,7 @@ function filenameFromResponse(res, fallback) {
 
 async function download(body, filename) {
   try {
+    toast('Preparing export…');
     const res = await fetch(API_BASE + '/api/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -9860,7 +9861,7 @@ function wire() {
   // Recap table above: same client-side exporters as the generic table bar.
   const sumExport = (fn) => () => {
     const table = $('#utxSumTable table');
-    if (!table) return toast(t('utx_sum_empty'));
+    if (!table) return toast(t('utx_sum_pick_range'));
     Promise.resolve(fn(table, 'users_transactions_summary')).catch((err) => toast(err.message));
   };
   $('#utxSumCsv').addEventListener('click', sumExport(exportTableCsv));
