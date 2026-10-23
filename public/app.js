@@ -234,8 +234,21 @@ async function exportTablePdf(table, name) {
   const rows = tableToAoa(table);
   if (!rows.length) return;
   await loadExportLib('pdf');
-  const doc = new window.jspdf.jsPDF({ orientation: rows[0].length > 6 ? 'landscape' : 'portrait' });
-  doc.autoTable({ head: [rows[0]], body: rows.slice(1), styles: { fontSize: 8 } });
+  // Each column is sized to its longest cell (capped, so long text wraps at
+  // word breaks) and the page grows to fit them, instead of squeezing every
+  // column onto A4 where narrow columns break words letter by letter.
+  const fontSize = 7, pad = 3, margin = 20, maxCol = 150;
+  const probe = new window.jspdf.jsPDF({ unit: 'pt' });
+  probe.setFont('helvetica', 'bold').setFontSize(fontSize);
+  const widths = rows[0].map((_, c) => Math.min(maxCol,
+    Math.ceil(Math.max(...rows.map((r) => probe.getTextWidth(r[c] || ''))) + pad * 2 + 2)));
+  const pageW = Math.max(842, widths.reduce((a, w) => a + w, 0) + margin * 2);
+  const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'pt', format: [pageW, 595] });
+  doc.autoTable({
+    head: [rows[0]], body: rows.slice(1), margin,
+    styles: { fontSize, cellPadding: pad, overflow: 'linebreak' },
+    columnStyles: Object.fromEntries(widths.map((w, i) => [i, { cellWidth: w }])),
+  });
   doc.save(`${name}.pdf`);
 }
 // Drawn on a plain <canvas> rather than pulled in via a screenshot library —
@@ -9844,6 +9857,15 @@ function wire() {
   });
   $('#tiCsv').addEventListener('click', () => download({ source: 'top_investors', format: 'csv', filename: 'top_investors', ...tiParams() }, 'top_investors.csv'));
   $('#tiXlsx').addEventListener('click', () => download({ source: 'top_investors', format: 'xlsx', filename: 'top_investors', ...tiParams() }, 'top_investors.xlsx'));
+  // Recap table above: same client-side exporters as the generic table bar.
+  const sumExport = (fn) => () => {
+    const table = $('#utxSumTable table');
+    if (!table) return toast(t('utx_sum_empty'));
+    Promise.resolve(fn(table, 'users_transactions_summary')).catch((err) => toast(err.message));
+  };
+  $('#utxSumCsv').addEventListener('click', sumExport(exportTableCsv));
+  $('#utxSumXlsx').addEventListener('click', sumExport(exportTableXlsx));
+  $('#utxSumPdf').addEventListener('click', sumExport(exportTablePdf));
   $('#utxPrev').addEventListener('click', () => { utx.offset = Math.max(0, utx.offset - utx.limit); loadUtx(); });
   $('#utxNext').addEventListener('click', () => { utx.offset += utx.limit; loadUtx(); });
   $('#utxCsv').addEventListener('click', () => download(

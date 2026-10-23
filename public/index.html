@@ -1121,6 +1121,11 @@
             <button data-g="week" class="on" data-i18n="common_week">Week</button>
             <button data-g="month" data-i18n="common_month">Month</button>
           </div>
+          <div class="exp">
+            <button class="btn-ghost" id="utxSumCsv" data-i18n="common_csv">CSV</button>
+            <button class="btn-ghost" id="utxSumXlsx" data-i18n="common_excel">Excel</button>
+            <button class="btn-ghost" id="utxSumPdf" data-i18n="common_pdf">PDF</button>
+          </div>
         </div>
         <span class="hint" data-i18n="utx_sum_hint">Subscription = buy, redemption = sell, net flow = subscription − redemption, using the same investor, fund, and promo filters as above (type and status only narrow the table below). Only settled orders count, verified_by_operational, verified, completed, completed_payment, at their order amount, with no bonus top-ups (payment_method bonus or manual_bonus); in-flight, expired, and cancelled transactions never count. This is the same rule as the finance check on Metabase, so the totals match it. Days are Jakarta (WIB) days, the same as the Date (WIB) column in the table below. One row per day, Monday–Sunday week, or calendar month, newest first; the first and last bucket can be partial.</span>
         <div id="utxSumKpis" class="kpi-grid cols-3" style="margin-top:14px"></div>
