@@ -1560,6 +1560,17 @@
           <div class="panel-head"><h2 data-i18n="pe_holdings_by_goal">Holdings by goal</h2><span class="hint" data-i18n="pe_holdings_by_goal_hint">Preview only, exports stay merged across goals.</span></div>
           <div id="peByGoal"></div>
         </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_aum_performance">AUM performance</h2><span class="hint" data-i18n="pe_aum_hint">% change in total portfolio value, daily unit × NAV from goal_snapshots.</span></div>
+          <div id="pePerformance" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="port_aum_over_time">AUM over time</h2></div>
+          <div id="peGrowthFinding" class="trend-finding" hidden></div>
+          <div class="chart-wrap"><canvas id="peAumChart"></canvas></div>
+        </div>
       </div>
     </section>
 

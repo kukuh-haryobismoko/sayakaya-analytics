@@ -701,9 +701,9 @@ async function loadPfxUser() {
   } catch (e) { $('#pfxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 
-function renderPfxAumChart(rows) {
-  if (!rows.length) { return; }
-  paint('pfxAumChart', {
+function renderPfxAumChart(rows, canvasId = 'pfxAumChart') {
+  if (!rows.length) { charts[canvasId]?.destroy(); delete charts[canvasId]; return; }
+  paint(canvasId, {
     type: 'line',
     data: {
       labels: rows.map((d) => val(d.bucket)),
@@ -743,15 +743,15 @@ function renderPfxHoldings(rows) {
   }));
 }
 
-function renderPfxPerformance(rows) {
-  if (!rows.length) { $('#pfxPerformance').innerHTML = `<div class="empty">${t('msg_no_aum_history_for_this_sid')}</div>`; return; }
+function renderPfxPerformance(rows, target = '#pfxPerformance') {
+  if (!rows.length) { $(target).innerHTML = `<div class="empty">${t('msg_no_aum_history_for_this_sid')}</div>`; return; }
   const head = rows.map((r) => `<th class="num">${val(r.period)}</th>`).join('');
   const cells = rows.map((r) => {
     const pct = val(r.pct_change);
     if (pct == null) return '<td class="num">n/a</td>';
     return `<td class="num"><span style="color:${pct >= 0 ? 'var(--teal)' : 'var(--rose)'}">${pct >= 0 ? '+' : ''}${Number(pct).toFixed(2)}%</span></td>`;
   }).join('');
-  $('#pfxPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
+  $(target).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
 }
 
 // PORTFOLIO (TX) — holdings with avg_buy_price computed from the
@@ -1032,6 +1032,8 @@ async function selectExplorerUser(userId, sid, name, email) {
   $('#peKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#peHoldings').innerHTML = '';
   $('#peByGoal').innerHTML = '';
+  $('#pePerformance').innerHTML = '';
+  $('#peGrowthFinding').hidden = true;
   await loadExplorerPortfolio();
 }
 
@@ -1041,7 +1043,7 @@ async function loadExplorerPortfolio() {
   $('#peFinding').hidden = true;
   const dateParam = $('#peDate').value ? `&date=${$('#peDate').value}` : '';
   try {
-    const { asOfDate, latestDate, holdings, byGoal } = await api(`/api/portfolio-explorer?userId=${encodeURIComponent(peSelected.userId)}&sid=${encodeURIComponent(peSelected.sid)}${dateParam}`);
+    const { asOfDate, latestDate, holdings, byGoal, performance, history } = await api(`/api/portfolio-explorer?userId=${encodeURIComponent(peSelected.userId)}&sid=${encodeURIComponent(peSelected.sid)}${dateParam}`);
     if (peSelected !== sel || sel.reqId !== reqId) return;
     const asOf = val(asOfDate), latest = val(latestDate);
     peSelected.date = asOf || '';
@@ -1053,6 +1055,9 @@ async function loadExplorerPortfolio() {
     renderPeHoldings(holdings);
     renderPeByGoal(byGoal);
     renderPeFinding(holdings);
+    renderPfxPerformance(performance, '#pePerformance');
+    renderPfxAumChart(history, 'peAumChart');
+    renderSeriesTrendFinding('#peGrowthFinding', history, 'amount', 'Portfolio value');
   } catch (e) { $('#peKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
 

@@ -983,15 +983,19 @@ on('GET', '/api/portfolio-explorer', requireTab('portfolio-explorer', async (_re
   const [dRow] = await runQuery(d.sql, d.params);
   const latestDate = (dRow?.latest_date as string) || null;
   const asOfDate = qp(url, 'date') || latestDate || undefined;
-  if (!asOfDate) return json({ asOfDate: null, latestDate: null, holdings: [], byGoal: [] });
+  if (!asOfDate) return json({ asOfDate: null, latestDate: null, holdings: [], byGoal: [], performance: [], history: [] });
   const h = Q.goalUserHoldings(userId, asOfDate);
   const b = Q.goalUserHoldingsByGoal(userId, asOfDate);
-  const [holdings, byGoal] = await Promise.all([
+  const p = Q.goalAumPerformance(userId);
+  const a = Q.goalAumHistory(userId);
+  const [holdings, byGoal, performance, history] = await Promise.all([
     runQuery(h.sql, h.params),
     runQuery(b.sql, b.params),
+    runQuery(p.sql, p.params),
+    runQuery(a.sql, a.params),
   ]);
   await A.logEvent(user!.id, user!.username, 'view_portfolio', `SID ${qp(url, 'sid') || userId} as of ${asOfDate} (explorer)`);
-  return json({ asOfDate, latestDate, holdings, byGoal });
+  return json({ asOfDate, latestDate, holdings, byGoal, performance, history });
 }));
 
 // HNWI (High Net Worth Individual): investors above an AUM threshold, as

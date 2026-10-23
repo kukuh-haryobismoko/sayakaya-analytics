@@ -950,6 +950,45 @@ export const userPortfolioSplit = (userId: string): Query => ({
 const GOALS = '`sayakaya.main.goals`';
 const GOAL_SNAPSHOTS = '`sayakaya.main.goal_snapshots`';
 
+// Portfolio Explorer AUM history: SUM(unit * nav) per day over the investor's
+// goal_snapshots, the latest row per (goal, fund, date) so a re-written
+// snapshot isn't double counted. Same shape as userAumHistory/userPerformance.
+const goalDailyAum = `SELECT d, SUM(unit * nav) AS amount FROM (
+      SELECT gs.date AS d, gs.unit, gs.nav
+      FROM ${GOAL_SNAPSHOTS} gs JOIN ${GOALS} g ON g.id = gs.goal_id
+      WHERE g.user_id = @userId AND g.deleted_at IS NULL
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY gs.goal_id, gs.fund_id, gs.date ORDER BY gs.created_at DESC) = 1
+    ) GROUP BY d`;
+
+export const goalAumHistory = (userId: string): Query => ({
+  sql: `SELECT FORMAT_DATE('%Y-%m-%d', d) AS bucket, amount FROM (${goalDailyAum}) ORDER BY bucket`,
+  params: { userId },
+});
+
+export const goalAumPerformance = (userId: string): Query => ({
+  sql: `WITH daily AS (${goalDailyAum}),
+    latest AS (
+      SELECT ARRAY_AGG(STRUCT(amount AS v, d AS d) ORDER BY d DESC LIMIT 1)[OFFSET(0)] AS latest_snap
+      FROM daily
+    ),
+    periods AS (
+      SELECT l.latest_snap, pr.period, pr.ord, pr.target
+      FROM latest l, UNNEST(${periodTargets('l.latest_snap.d')}) AS pr
+    ),
+    snaps AS (
+      SELECT p.period, p.ord, p.latest_snap,
+        ARRAY_AGG(IF(daily.d <= p.target, STRUCT(daily.amount AS v, daily.d AS d), NULL) IGNORE NULLS ORDER BY daily.d DESC LIMIT 1)[OFFSET(0)] AS asof_snap
+      FROM periods p CROSS JOIN daily
+      GROUP BY p.period, p.ord, p.latest_snap
+    )
+    SELECT period, ord,
+      latest_snap.v AS latest_amount, asof_snap.v AS base_amount,
+      ROUND(SAFE_DIVIDE(latest_snap.v - asof_snap.v, asof_snap.v) * 100, 2) AS pct_change
+    FROM snaps
+    ORDER BY ord`,
+  params: { userId },
+});
+
 // Latest snapshot date available for this user — used to default the date
 // picker when the caller hasn't picked one yet.
 export const goalLatestSnapshotDate = (userId: string): Query => ({
