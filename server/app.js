@@ -11,7 +11,8 @@ const {
 } = require('./bigquery');
 const Q = require('./queries');
 const { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
-const { ask, askEnabled, TABLES, suggestChart } = require('./ask');
+const { ask, askEnabled, TABLES, suggestChart, explainResult } = require('./ask');
+const Insights = require('./insights');
 const EX = require('./explore');
 const ML = require('./ml');
 const MLTrain = require('./ml-train');
@@ -1325,6 +1326,24 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/ask/chart', requireTab('ask'), handler(async (req, res) => {
     const { question, rows, hint } = req.body || {};
     res.json(await suggestChart(question, rows, hint));
+  }));
+
+  app.post('/api/ask/explain', requireTab('ask'), handler(async (req, res) => {
+    const { question, rows } = req.body || {};
+    res.json(await explainResult(question, rows || []));
+  }));
+
+  // AI Insights tab. Each call is independent so the page can load them on demand.
+  app.get('/api/ai/digest', requireTab('ai-insights'), handler(async (_req, res) => res.json(await Insights.digest())));
+  app.get('/api/ai/anomalies', requireTab('ai-insights'), handler(async (_req, res) => res.json(await Insights.anomalies())));
+  app.get('/api/ai/churn-actions', requireTab('ai-insights'), handler(async (_req, res) => res.json(await Insights.churnActions())));
+  app.get('/api/ai/watchdog', requireTab('ai-insights'), handler(async (_req, res) => res.json(await Insights.watchdog())));
+  app.post('/api/ai/portfolio-narrative', requireAnyPortfolio, handler(async (req, res) => {
+    const { userId, sid } = req.body || {};
+    if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
+    const out = await Insights.portfolioNarrative(userId, sid);
+    res.json(out);
+    await Auth.logEvent(req.user.id, req.user.username, 'view_portfolio_narrative', `SID ${sid}`);
   }));
 
   // SQL Lab

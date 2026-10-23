@@ -619,4 +619,34 @@ async function suggestChart(question, rows, hint) {
   }
 }
 
-module.exports = { ask, askEnabled, TABLES, suggestChart };
+// Plain-text completion for the insight features (digest, narrative, watchdog,
+// result explanation). Callers pass aggregated numbers only: no names, SIDs or
+// emails ever go into a prompt. max_tokens is generous because reasoning models
+// spend part of the budget thinking before they write (see the note in ask()).
+async function aiText(system, user, maxTokens = 3000) {
+  if (!apiKey()) throw new Error('AI is not configured on the server (set AI_API_KEY or ANTHROPIC_API_KEY).');
+  const res = await callAI({ model: MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    if (res.status === 401) throw new Error(`${VIA_ROUTER ? 'The AI router' : 'Anthropic'} rejected the API key (401). Check AI_API_KEY / ANTHROPIC_API_KEY.`);
+    throw new Error(`AI error ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const text = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+  if (!text) throw new Error('The AI returned an empty answer, try again.');
+  return text;
+}
+
+// Plain-language read of a result table, for the Ask tab's "Explain" button.
+async function explainResult(question, rows) {
+  if (!Array.isArray(rows) || !rows.length) throw new Error('There are no rows to explain yet.');
+  const columns = Object.keys(rows[0]);
+  const sample = rows.slice(0, 30).map((r) => Object.fromEntries(columns.map((c) => [c, val(r[c])])));
+  const text = await aiText(
+    `You explain a table of query results to a business user at an Indonesian mutual-fund platform. Write 3 to 5 short sentences in Indonesian: what the table shows, the biggest number or pattern, and anything that looks unusual. State only what the rows show, never invent causes or figures. Amounts are rupiah. No headings, no em dashes.`,
+    [`Question asked: ${question || '(none)'}`, `Total rows: ${rows.length} (first ${sample.length} shown)`, `Columns: ${columns.join(', ')}`, JSON.stringify(sample)].join('\n\n'),
+  );
+  return { text };
+}
+
+module.exports = { ask, askEnabled, TABLES, suggestChart, aiText, explainResult };

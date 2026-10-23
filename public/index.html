@@ -191,6 +191,7 @@
           <button class="nav-link" data-tab="performance"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>Performance</button>
           <button class="nav-link" data-tab="growth"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-sprout"></use></svg></span>Growth</button>
           <button class="nav-link" data-tab="predict"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-forecast"></use></svg></span>Forecast &amp; churn</button>
+          <button class="nav-link" data-tab="ai-insights"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg></span>AI Insights</button>
         </div>
         <div class="nav-group" data-group="investor">
           <div class="nav-label"><span data-i18n="nav_group_investor">Investor</span><span class="nav-group-caret"></span></div>
@@ -390,6 +391,12 @@
         <div class="panel">
           <div class="panel-head"><h2 data-i18n="port_aum_performance">AUM performance</h2><span class="hint" data-i18n="port_aum_performance_hint">% change in total portfolio value, from mi_fee_logs.portfolio_with_code.</span></div>
           <div id="pfPerformance" class="table-wrap"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="pn_title">Portfolio note</h2><span class="hint" data-i18n="pn_hint">A short written summary of this investor's current holdings. Names and SIDs are not sent to the model.</span></div>
+          <div class="filters"><button id="pfNarrativeBtn" class="btn-ghost" data-i18n="pn_btn">Write portfolio note</button></div>
+          <div id="pfNarrative" style="margin-top:12px"></div>
         </div>
       </div>
     </section>
@@ -1571,6 +1578,12 @@
           <div id="peGrowthFinding" class="trend-finding" hidden></div>
           <div class="chart-wrap"><canvas id="peAumChart"></canvas></div>
         </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2 data-i18n="pn_title">Portfolio note</h2><span class="hint" data-i18n="pn_hint">A short written summary of this investor's current holdings. Names and SIDs are not sent to the model.</span></div>
+          <div class="filters"><button id="peNarrativeBtn" class="btn-ghost" data-i18n="pn_btn">Write portfolio note</button></div>
+          <div id="peNarrative" style="margin-top:12px"></div>
+        </div>
       </div>
     </section>
 
@@ -2741,6 +2754,35 @@
     <!-- DORMANT WIN-BACK: computed live from main.transactions on every
          load, not a precomputed table. See queries.js (DORMANT_EPISODES_CTE)
          for the gap/conversion methodology. -->
+    <section id="ai-insights" class="view">
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="ai_digest_title">Weekly digest</h2><span class="hint" data-i18n="ai_digest_hint">The figures come from the database; the model only writes the sentences around them.</span></div>
+        <div class="filters"><button id="aiDigestBtn" class="btn-primary" data-i18n="ai_digest_btn">Write this week's digest</button></div>
+        <div id="aiDigestOut" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="ai_anom_title">Anomaly scan</h2><span class="hint" data-i18n="ai_anom_hint">Days in the last 14 where AUM change, buy volume or sell volume sits 3 or more standard deviations from the previous 28 days.</span></div>
+        <div class="filters"><button id="aiAnomBtn" class="btn-primary" data-i18n="ai_anom_btn">Scan now</button></div>
+        <div id="aiAnomOut" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="ai_churn_title">Churn action list</h2><span class="hint" data-i18n="ai_churn_hint">From the churn model: who to contact first, and how. Large investor means 100 jt or more in lifetime buys.</span></div>
+        <div class="filters"><button id="aiChurnBtn" class="btn-primary" data-i18n="ai_churn_btn">Load list</button></div>
+        <div id="aiChurnSummary" class="hint" style="margin-top:10px"></div>
+        <div id="aiChurnOut" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="ai_wd_title">Data-quality watchdog</h2><span class="hint" data-i18n="ai_wd_hint">How fresh each source is, and whether AUM agrees across sources for the same day. Scans about 2 GB.</span></div>
+        <div class="filters"><button id="aiWdBtn" class="btn-primary" data-i18n="ai_wd_btn">Run checks</button></div>
+        <div id="aiWdOut" style="margin-top:12px"></div>
+        <div id="aiWdFresh" class="table-wrap" style="margin-top:12px"></div>
+        <div id="aiWdDiff" class="table-wrap" style="margin-top:12px"></div>
+      </div>
+    </section>
+
     <section id="dormant" class="view">
       <div class="panel">
         <div class="panel-head"><h2 data-i18n="dw_title">Dormant win-back</h2></div>
@@ -3742,7 +3784,9 @@
             <select id="askChartY"></select>
             <input id="askChartHint" type="text" data-i18n-placeholder="ask_chart_hint_ph" placeholder="Optional: describe the chart you want" style="flex:1; min-width:180px" />
             <button class="btn-ghost" id="askChartSuggest" data-i18n="common_suggest">Suggest</button>
+            <button class="btn-ghost" id="askExplain" data-i18n="ask_explain_btn">Explain result</button>
           </div>
+          <div id="askExplainOut" class="hidden"></div>
           <div id="askChartMsg" class="ask-chart-msg hidden"></div>
           <div id="askChartWrap" class="chart-wrap hidden"><canvas id="askChart"></canvas></div>
 
@@ -3870,6 +3914,10 @@ ORDER BY n DESC"></textarea>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-hourglass"></use></svg> User lifetime</h3>
           <p data-i18n="docs_user_lifetime_desc">The same fee revenue as Revenue (PWC), but answered per investor instead of per fund: what each one earns the platform, next to how long they've been with us, when they registered, when they first bought, and how long they've stayed invested. Click any investor for their month-by-month, fund-by-fund breakdown.</p>
+        </div>
+        <div class="doc-item">
+          <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-target"></use></svg> AI Insights</h3>
+          <p data-i18n="docs_ai_insights_desc">Four on-demand checks, each behind its own button. Weekly digest: AUM, buy minus sell and new users for the last 7 days against the 7 before, computed in SQL, then written up in Indonesian by the model. Anomaly scan: plain statistics, no model, flags days in the last 14 where AUM change, buy volume or sell volume is 3 or more standard deviations from the previous 28 days. Churn action list: the churn model's scores turned into a contact list by simple rules (large investor means 100 jt or more in lifetime buys). Data-quality watchdog: latest date per source and a same-day AUM comparison across portfolio_with_code, mi_fee and goal_snapshots (goal_snapshots normally sits 1 to 2 percent lower). Names, SIDs and emails are never sent to the model. The Portfolio and Portfolio Explorer tabs have a "Portfolio note" button, and Ask has an "Explain result" button, built the same way.</p>
         </div>
         <div class="doc-item">
           <h3><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-user-plus"></use></svg> Dormant win-back</h3>

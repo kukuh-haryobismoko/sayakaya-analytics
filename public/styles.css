@@ -865,3 +865,6 @@ td.neg { color: var(--neg-text); }
 .pivot td .hint { display: block; }
 
 @media (prefers-reduced-motion: reduce) { .conn-dot.live { animation: none; } .view.active { animation: none; } }
+
+/* AI text blocks: written paragraphs, kept to a readable measure. */
+.ai-text { margin: 0 0 8px; line-height: 1.65; max-width: 78ch; white-space: pre-wrap; color: var(--ink); }

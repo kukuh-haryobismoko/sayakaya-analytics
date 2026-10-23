@@ -84,6 +84,11 @@ const TABS = {
     datasets: "mi_fee_logs.portfolio_with_code, main.transactions, main.users",
     computation: "Kolom uang dihitung seperti Revenue (PWC). Tanggal register, beli pertama, dan lama bertahan diambil dari transaksi dan users.created_at, karena portfolio_with_code baru mulai 14 Januari 2026. Klik investor untuk rincian per bulan dan per fund.",
   },
+  "ai-insights": {
+    summary: "Empat pengecekan otomatis yang dijalankan lewat tombol: ringkasan mingguan, pemindaian anomali, daftar tindakan churn, dan pengawas kualitas data.",
+    datasets: "mi_fee_logs.mi_fee, mi_fee_logs.portfolio_with_code, mi_fee_logs.portfolio_fix, main.goal_snapshots, main.snapshots, main.transactions, main.users, ml.churn_model",
+    computation: "Semua angka dan penanda dihitung di SQL dan JavaScript, model hanya menulis kalimat di sekitarnya dan tidak pernah menerima nama, SID, atau email. Digest: AUM terbaru dibanding 7 dan 30 hari sebelumnya (tanggal mi_fee dikoreksi minus 1 hari), buy dan sell completed 7 hari terakhir dibanding 7 hari sebelumnya, dan user baru. Anomali: z-score tiap hari terhadap 28 hari sebelumnya, AUM dinilai dari perubahan harian dan volume buy/sell dari levelnya, ditandai bila 3 atau lebih. Churn: skor model churn, lalu aturan prioritas (risiko 50 persen ke atas dan total beli 100 jt ke atas dihubungi langsung). Watchdog: tanggal terbaru tiap sumber, ditandai stale bila lebih dari 2 hari, dan AUM hari yang sama dari tiga sumber, ditandai bila goal_snapshots berbeda lebih dari 3 persen atau mi_fee berbeda lebih dari 1 persen dari portfolio_with_code.",
+  },
   "dormant": {
     summary: "Dari investor yang lama tidak beli, berapa yang akhirnya beli lagi dan berapa nilainya.",
     datasets: "main.transactions (buy completed)",

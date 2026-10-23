@@ -487,6 +487,7 @@ let pfSelected = null; // { userId, sid, name, date }, used by the export button
 // New user picked from search results — resets the date filter to live.
 async function selectPortfolioUser(userId, sid, name, email) {
   pfSelected = { userId, sid, name: name || sid, date: '' };
+  $('#pfNarrative').innerHTML = '';
   $('#pfDetail').classList.remove('hidden');
   $('#pfUserName').textContent = name || sid;
   $('#pfUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
@@ -998,6 +999,98 @@ function renderPsiPerformance(rows) {
   $('#psiPerformance').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody><tr>${cells}</tr></tbody></table>`;
 }
 
+// AI INSIGHTS
+// Every panel loads on demand from its own button: the digest calls the model,
+// the churn list and the watchdog scan real tables, none should run just
+// because the tab was opened.
+async function aiRun(btnSel, outSel, fn) {
+  const btn = $(btnSel), out = $(outSel);
+  btn.disabled = true;
+  out.innerHTML = `<div class="loading">${t('ai_working')}</div>`;
+  try { await fn(out); }
+  catch (e) { out.innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
+  finally { btn.disabled = false; }
+}
+
+const aiText = (text) => `<p class="ai-text">${escapeHtml(text)}</p>`;
+
+function loadAiDigest() {
+  return aiRun('#aiDigestBtn', '#aiDigestOut', async (out) => {
+    const { facts, text } = await api('/api/ai/digest');
+    out.innerHTML = aiText(text) + `<p class="hint">${t('ai_as_of')} ${escapeHtml(val(facts.as_of))}</p>`;
+  });
+}
+
+function loadAiAnomalies() {
+  return aiRun('#aiAnomBtn', '#aiAnomOut', async () => {
+    const rows = await api('/api/ai/anomalies');
+    genTable('#aiAnomOut', rows, [
+      { key: 'day', label: t('col_date'), type: 'date' }, { key: 'metric', label: t('ai_col_metric') },
+      { key: 'value', label: t('ai_col_value'), type: 'idr' },
+      { key: 'change_pct', label: t('ai_col_change'), fmt: (v) => (v == null ? 'n/a' : `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(2)}%`) },
+      { key: 'z', label: 'Z-score', type: 'num' },
+    ], t('ai_anom_empty'));
+  });
+}
+
+function loadAiChurn() {
+  return aiRun('#aiChurnBtn', '#aiChurnOut', async () => {
+    const { summary, rows } = await api('/api/ai/churn-actions');
+    $('#aiChurnSummary').textContent = `${t('ai_churn_scored')}: ${num(val(summary.scored))} · ${t('ai_churn_high')}: ${num(val(summary.high_risk))} · ${t('ai_churn_medium')}: ${num(val(summary.medium_risk))}`;
+    genTable('#aiChurnOut', rows, [
+      { key: 'priority', label: t('ai_col_priority'), type: 'num' }, { key: 'action', label: t('ai_col_action') },
+      { key: 'name', label: t('col_name') }, { key: 'email', label: 'Email' },
+      { key: 'churn_prob', label: t('ai_col_risk'), fmt: (v) => (v == null ? 'n/a' : `${(Number(v) * 100).toFixed(0)}%`) },
+      { key: 'total_buy_amount', label: t('ai_col_lifetime_buy'), type: 'idr' },
+      { key: 'recency_days', label: t('ai_col_days_since_buy'), type: 'num' },
+    ], t('ai_churn_empty'));
+  });
+}
+
+function loadAiWatchdog() {
+  return aiRun('#aiWdBtn', '#aiWdOut', async (out) => {
+    const { checks, diffs, text } = await api('/api/ai/watchdog');
+    out.innerHTML = aiText(text);
+    const flag = (v) => `<span style="color:${v === 'ok' ? 'var(--teal)' : 'var(--rose)'}">${escapeHtml(v)}</span>`;
+    genTable('#aiWdFresh', checks, [
+      { key: 'source', label: t('ai_col_source') }, { key: 'latest', label: t('ai_col_latest'), type: 'date' },
+      { key: 'age_days', label: t('ai_col_age'), type: 'num' }, { key: 'status', label: 'Status', fmt: flag },
+    ], '');
+    const gap = (v) => (v == null ? 'n/a' : `${v > 0 ? '+' : ''}${Number(v).toFixed(1)}%`);
+    genTable('#aiWdDiff', diffs, [
+      { key: 'day', label: t('col_date'), type: 'date' },
+      { key: 'portfolio_with_code', label: 'portfolio_with_code', type: 'idr' }, { key: 'mi_fee', label: 'mi_fee', type: 'idr' },
+      { key: 'goal_snapshots', label: 'goal_snapshots', type: 'idr' },
+      { key: 'goal_snapshots_vs_pwc_pct', label: t('ai_col_gs_gap'), fmt: gap }, { key: 'mi_fee_vs_pwc_pct', label: t('ai_col_mifee_gap'), fmt: gap },
+      { key: 'status', label: 'Status', fmt: (v) => flag(v === 'ok' ? 'ok' : 'differs') },
+    ], '');
+  });
+}
+
+// "Portfolio note": one short written summary of the selected investor,
+// shared by the Portfolio and Portfolio Explorer tabs.
+function writeNarrative(btnSel, outSel, selected) {
+  if (!selected) return;
+  return aiRun(btnSel, outSel, async (out) => {
+    const { text } = await api('/api/ai/portfolio-narrative', { method: 'POST', body: JSON.stringify({ userId: selected.userId, sid: selected.sid }) });
+    out.innerHTML = aiText(text);
+  });
+}
+
+// Ask: plain-language read of the rows currently on screen.
+async function explainAskResult() {
+  const out = $('#askExplainOut'), btn = $('#askExplain');
+  if (!askRowsCache.length) return;
+  btn.disabled = true;
+  out.classList.remove('hidden');
+  out.innerHTML = `<div class="loading">${t('ai_working')}</div>`;
+  try {
+    const { text } = await api('/api/ask/explain', { method: 'POST', body: JSON.stringify({ question: lastAskQuestion, rows: askRowsCache.slice(0, 30) }) });
+    out.innerHTML = aiText(text);
+  } catch (e) { out.innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
+  finally { btn.disabled = false; }
+}
+
 // PORTFOLIO EXPLORER (goal_snapshots — point-in-time holdings by date,
 // merged by fund and also broken out by goal for the preview only)
 async function searchExplorerUsers() {
@@ -1032,6 +1125,7 @@ async function selectExplorerUser(userId, sid, name, email) {
   $('#peKpis').innerHTML = '<div class="loading">Loading portfolio…</div>';
   $('#peHoldings').innerHTML = '';
   $('#peByGoal').innerHTML = '';
+  $('#peNarrative').innerHTML = '';
   $('#pePerformance').innerHTML = '';
   $('#peGrowthFinding').hidden = true;
   await loadExplorerPortfolio();
@@ -8473,6 +8567,7 @@ function setAskChartMsg(text, isProblem) {
 // hand, instead of firing an extra model call on every question automatically.
 function prepareAskChart(rows) {
   askRowsCache = rows || [];
+  $('#askExplainOut').classList.add('hidden');
   $('#askChartType').value = 'none';
   askChartColor = null;
   setAskChartMsg('');
@@ -9955,6 +10050,13 @@ function wire() {
   $('#askChartType').addEventListener('change', renderAskChart);
   $('#askChartX').addEventListener('change', renderAskChart);
   $('#askChartY').addEventListener('change', renderAskChart);
+  $('#askExplain').addEventListener('click', explainAskResult);
+  $('#aiDigestBtn').addEventListener('click', loadAiDigest);
+  $('#aiAnomBtn').addEventListener('click', loadAiAnomalies);
+  $('#aiChurnBtn').addEventListener('click', loadAiChurn);
+  $('#aiWdBtn').addEventListener('click', loadAiWatchdog);
+  $('#peNarrativeBtn').addEventListener('click', () => writeNarrative('#peNarrativeBtn', '#peNarrative', peSelected));
+  $('#pfNarrativeBtn').addEventListener('click', () => writeNarrative('#pfNarrativeBtn', '#pfNarrative', pfSelected));
   $('#askChartSuggest').addEventListener('click', () =>
     suggestAskChart(lastAskQuestion, askRowsCache, $('#askChartHint').value.trim()));
   // Example chips are standalone demo questions, not a continuation of
