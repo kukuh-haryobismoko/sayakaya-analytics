@@ -46,6 +46,12 @@ supabase secrets unset AI_BASE_URL AI_API_KEY AI_MODEL --project-ref josptpfisrs
 
 `ANTHROPIC_API_KEY` is then used again.
 
+## Usage tracking
+
+9Router's Usage page only records `/v1/chat/completions` calls; `/v1/messages` calls are served but never logged. So when `AI_BASE_URL` is set, `callAI` talks to `/v1/chat/completions` (OpenAI format, `stream: false`) and rewraps the answer in the Anthropic shape. With `AI_BASE_URL` unset it still calls api.anthropic.com `/v1/messages`.
+
+9Router also showed ~2,000 extra prompt tokens on tiny requests and a clipped, ungrammatical writing style: that is its Token Saver. Turn it off for the dashboard's key if the answers should read normally.
+
 ## Notes
 
 - Locally (`server/`), set `AI_BASE_URL=http://localhost:20128` and no tunnel is needed.

@@ -15,17 +15,31 @@ const apiKey = () => process.env.AI_API_KEY || process.env.ANTHROPIC_API_KEY;
 // Single place every AI call goes through. A router that is down (9Router
 // closed, tunnel dropped) throws a TypeError from fetch; turn that into a
 // message the user can act on instead of "fetch failed".
+//
+// Through 9Router the call goes to /v1/chat/completions (OpenAI format), not
+// /v1/messages: 9Router only records the former in its Usage page. The answer is
+// rewrapped in the Anthropic shape so every caller keeps reading data.content.
 async function callAI(body) {
   try {
-    const res = await fetch(API_URL, {
+    if (VIA_ROUTER) {
+      const { system, messages, model, max_tokens } = body;
+      const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${apiKey() || ''}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model, max_tokens, stream: false, messages: [...(system ? [{ role: 'system', content: system }] : []), ...messages] }),
+      });
+      // 9Router can append an SSE terminator ("data: [DONE]") after the JSON body.
+      const raw = (await res.text()).replace(/\s*data:\s*\[DONE\]\s*$/, '');
+      if (!res.ok) return new Response(raw, { status: res.status, headers: { 'content-type': 'application/json' } });
+      const choice = JSON.parse(raw).choices?.[0];
+      return new Response(JSON.stringify({ content: [{ type: 'text', text: choice?.message?.content ?? '' }], stop_reason: choice?.finish_reason }),
+        { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return await fetch(API_URL, {
       method: 'POST',
       headers: { 'x-api-key': apiKey() || '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
-    // 9Router appends an SSE terminator ("data: [DONE]") after the JSON body, which
-    // makes res.json() throw. Strip it here so every caller keeps reading plain JSON.
-    const raw = (await res.text()).replace(/\s*data:\s*\[DONE\]\s*$/, '');
-    return new Response(raw, { status: res.status, headers: { 'content-type': 'application/json' } });
   } catch {
     throw new Error(VIA_ROUTER
       ? `Cannot reach the AI router (${BASE_URL}). Make sure 9Router is running, then try again.`
