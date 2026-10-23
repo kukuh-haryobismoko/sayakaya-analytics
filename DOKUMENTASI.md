@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `5187888 (2026-10-23)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `9d082ad (2026-10-23)`.
 
 ## Cara membaca dokumen ini
 
@@ -689,7 +689,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `portfolio-explorer`
   - Endpoint: `GET /api/portfolio-explorer`
-  - Fungsi query (`server/queries.js`): `goalLatestSnapshotDate`, `goalUserHoldings`, `goalUserHoldingsByGoal`
+  - Fungsi query (`server/queries.js`): `goalAumHistory`, `goalAumPerformance`, `goalLatestSnapshotDate`, `goalUserHoldings`, `goalUserHoldingsByGoal`
   - Tabel BigQuery yang disentuh: `main.funds`, `main.goal_snapshots`, `main.goals`, `main.snapshots`, `main.users`, `mi_fee_logs.portfolio_with_code`
   - Tabel Supabase: `dashboard_audit_log`
 
