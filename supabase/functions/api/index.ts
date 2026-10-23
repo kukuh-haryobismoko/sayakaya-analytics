@@ -2534,7 +2534,7 @@ Deno.serve(async (req) => {
       console.error(`[${req.method} ${pathname}]`, (err as Error).message);
       // BigQuery/Supabase messages carry project, table and SQL text. Only the
       // SQL lab and Ask need them, to fix a query; everything else gets a generic line.
-      return withCors(json({ error: (err as { expose?: boolean }).expose || /^\/api\/(sql|ask)/.test(pathname) ? (err as Error).message || 'Query failed.' : 'Request failed. Try again, or check the server log.' }, 500));
+      return withCors(json({ error: (err as { expose?: boolean }).expose || /^\/api\/(sql|ask|ai)/.test(pathname) ? (err as Error).message || 'Query failed.' : 'Request failed. Try again, or check the server log.' }, 500));
     }
   }
   return withCors(json({ error: 'Not found' }, 404));

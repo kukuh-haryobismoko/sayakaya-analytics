@@ -198,7 +198,7 @@ function createApp({ serveStatic = true } = {}) {
       console.error(`[${req.method} ${req.path}]`, err.message);
       // BigQuery/Supabase messages carry project, table and SQL text. Only the
       // SQL lab and Ask need them, to fix a query; everything else gets a generic line.
-      res.status(500).json({ error: err.expose || /^\/api\/(sql|ask)/.test(req.path) ? err.message || 'Query failed.' : 'Request failed. Try again, or check the server log.' });
+      res.status(500).json({ error: err.expose || /^\/api\/(sql|ask|ai)/.test(req.path) ? err.message || 'Query failed.' : 'Request failed. Try again, or check the server log.' });
     }
   };
 

@@ -137,18 +137,32 @@ export function coerceValue(type: string, v: unknown): unknown {
   }
 }
 
-function parseRows(schema: { fields: { name: string; type: string; mode?: string }[] } | undefined, rows: { f: { v: unknown }[] }[] | undefined): Record<string, unknown>[] {
+type BqField = { name: string; type: string; mode?: string; fields?: BqField[] };
+
+// The REST API returns a STRUCT as {f: [{v}, ...]} in schema order, and an ARRAY
+// as [{v}, ...]. Rebuild named objects (as the Node SDK does) so nested results
+// such as the churn summary and top list read the same on both backends.
+function parseField(field: BqField, raw: unknown): unknown {
+  if (field.mode === 'REPEATED') {
+    return ((raw as { v: unknown }[] | null) || []).map((item) => parseSingle(field, item.v));
+  }
+  return parseSingle(field, raw);
+}
+
+function parseSingle(field: BqField, raw: unknown): unknown {
+  if (raw === null || raw === undefined) return null;
+  if ((field.type === 'RECORD' || field.type === 'STRUCT') && field.fields) {
+    const cells = (raw as { f?: { v: unknown }[] }).f || [];
+    return Object.fromEntries(field.fields.map((sub, i) => [sub.name, parseField(sub, cells[i]?.v)]));
+  }
+  return coerceValue(field.type, raw);
+}
+
+export function parseRows(schema: { fields: BqField[] } | undefined, rows: { f: { v: unknown }[] }[] | undefined): Record<string, unknown>[] {
   const fields = schema?.fields || [];
   return (rows || []).map((row) => {
     const out: Record<string, unknown> = {};
-    fields.forEach((field, i) => {
-      const raw = row.f[i]?.v;
-      // REPEATED fields (e.g. ARRAY_AGG) come back as an array of {v: ...}
-      // wrapper objects, not plain scalars — unwrap each element too.
-      out[field.name] = field.mode === 'REPEATED'
-        ? ((raw as { v: unknown }[] | null) || []).map((item) => coerceValue(field.type, item.v))
-        : coerceValue(field.type, raw);
-    });
+    fields.forEach((field, i) => { out[field.name] = parseField(field, row.f[i]?.v); });
     return out;
   });
 }
@@ -316,3 +330,16 @@ if (import.meta.main) {
 }
 
 export { PROJECT_ID, LOCATION, MAX_BYTES_BILLED };
+
+Deno.test('parseRows rebuilds named objects for STRUCT and ARRAY<STRUCT>', async () => {
+  const { assertEquals } = await import('jsr:@std/assert');
+  const schema = { fields: [
+    { name: 'summary', type: 'RECORD', mode: 'NULLABLE', fields: [{ name: 'scored', type: 'INTEGER' }, { name: 'avg', type: 'FLOAT' }] },
+    { name: 'top', type: 'RECORD', mode: 'REPEATED', fields: [{ name: 'name', type: 'STRING' }, { name: 'p', type: 'FLOAT' }] },
+  ] };
+  const rows = [{ f: [
+    { v: { f: [{ v: '4' }, { v: '0.25' }] } },
+    { v: [{ v: { f: [{ v: 'a' }, { v: '0.9' }] } }, { v: { f: [{ v: 'b' }, { v: null }] } }] },
+  ] }];
+  assertEquals(parseRows(schema, rows), [{ summary: { scored: 4, avg: 0.25 }, top: [{ name: 'a', p: 0.9 }, { name: 'b', p: null }] }]);
+});
