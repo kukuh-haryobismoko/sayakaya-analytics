@@ -18,11 +18,15 @@ const apiKey = () => Deno.env.get('AI_API_KEY') || Deno.env.get('ANTHROPIC_API_K
 // message the user can act on instead of "fetch failed".
 async function callAI(body: Record<string, unknown>): Promise<Response> {
   try {
-    return await fetch(API_URL, {
+    const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'x-api-key': apiKey() ?? '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
+    // 9Router appends an SSE terminator ("data: [DONE]") after the JSON body, which
+    // makes res.json() throw. Strip it here so every caller keeps reading plain JSON.
+    const raw = (await res.text()).replace(/\s*data:\s*\[DONE\]\s*$/, '');
+    return new Response(raw, { status: res.status, headers: { 'content-type': 'application/json' } });
   } catch {
     throw new Error(VIA_ROUTER
       ? `Cannot reach the AI router (${BASE_URL}). Make sure 9Router is running, then try again.`
