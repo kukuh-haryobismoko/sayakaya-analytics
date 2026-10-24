@@ -728,11 +728,19 @@ td.neg { color: var(--neg-text); }
 }
 .ask-thread-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .ask-thread-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-.ask-thread-list { display: flex; flex-direction: column; gap: 5px; }
+.ask-thread-list { display: flex; flex-direction: column; gap: 6px; }
 .ask-chart-msg { color: var(--muted); font-size: 12px; margin: -6px 0 12px; }
 .ask-chart-msg.err { color: var(--neg-text); }
-.ask-thread-item { display: flex; gap: 6px; font-size: 13px; color: var(--ink); }
-.ask-thread-item .n { color: var(--muted); flex-shrink: 0; }
+.ask-thread-item {
+  align-self: flex-end; max-width: 78%; padding: 7px 12px; border-radius: 14px 14px 4px 14px;
+  background: var(--indigo); color: #fff; font-size: 13px; overflow-wrap: anywhere;
+}
+.ask-thread-item.pending { opacity: .65; }
+.ask-pf-title { font-weight: 600; margin-bottom: 10px; }
+.ask-pf .kpi-grid { margin-bottom: 12px; }
+.ask-pf .hint { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.ask-pf-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ask-pf-actions button:disabled { opacity: .6; cursor: progress; }
 #askAdvanced { margin-bottom: 16px; }
 #askAdvanced summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .ask-tables { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }

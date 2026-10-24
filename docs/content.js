@@ -1334,6 +1334,8 @@ const TAB_DETAILS = {
     },
     notes: [
       'Jawaban dibuat oleh model AI, jadi periksa SQL-nya untuk angka penting. Kolom sensitif (password, data KYC) selalu disaring kecuali superuser mengonfirmasi password.',
+      'Pertanyaan tampil sebagai gelembung chat begitu dikirim, dan percakapan tersimpan di browser sampai "Mulai percakapan baru" atau logout.',
+      'Permintaan portfolio investor menampilkan ringkasan (KPI, holding, tabel sumber) seperti tab Portfolio. File PDF, Excel, atau CSV hanya diunduh saat tombolnya ditekan.',
     ],
   },
   explorer: {

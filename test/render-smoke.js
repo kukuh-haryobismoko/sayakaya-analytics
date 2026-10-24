@@ -22,7 +22,7 @@ const mkEl = (id) => {
     getBoundingClientRect: () => ({ top:0, height:0, left:0, width:0 }),
     closest: () => null, appendChild(){}, click(){}, focus(){}, blur(){},
     scrollIntoView(){}, insertAdjacentHTML(){}, remove(){}, setAttribute(){},
-    getAttribute: () => null, removeAttribute(){}, showModal(){}, close(){},
+    getAttribute: () => null, removeAttribute(){}, toggleAttribute(){}, showModal(){}, close(){},
   };
   Object.defineProperty(el, 'innerHTML', {
     get(){ return el._html; },
@@ -636,6 +636,33 @@ sandbox.api = async (path) => {
     console.log(`FAIL  ${sel} missing ${needle}`);
     errors.push(`${sel} is missing ${needle}`);
   }
+  // Ask: the question shows at once, one Enter is one request, and a portfolio action only summarizes —
+  // a file downloads from its button, never by itself.
+  {
+    const calls = [];
+    const realFetch = sandbox.fetch;
+    const act = { type: 'portfolio_export', source: 'portfolio_full', format: 'pdf', userId: 'u1', sid: 'IDD1', name: 'Budi', performance: false };
+    sandbox.fetch = async (url) => {
+      calls.push(String(url));
+      const body = String(url).includes('/api/ask') ? { action: act } : String(url).includes('/api/portfolio') ? { holdings: [], split: null } : {};
+      return { ok: true, json: async () => body, blob: async () => ({}), headers: { get: () => null } };
+    };
+    get('#askInput').value = 'portfolio budi';
+    const first = sandbox.runAsk();
+    const second = sandbox.runAsk(); // second Enter while the first is in flight
+    const bubbleNow = get('#askThreadList')._html;
+    await Promise.all([first, second]);
+    const asked = calls.filter((u) => u.includes('/api/ask')).length;
+    const exported = calls.filter((u) => u.includes('/api/export')).length;
+    const answer = get('#askAnswer')._html;
+    if (asked !== 1) errors.push(`Ask: ${asked} /api/ask requests for one question`);
+    else if (exported !== 0) errors.push(`Ask: portfolio action downloaded ${exported} file(s) without a button press`);
+    else if (get('#askInput').value !== '') errors.push('Ask: input was not cleared after sending');
+    else console.log('ok    Ask: one request, input cleared, nothing downloaded until a button is pressed');
+    void bubbleNow; void answer;
+    sandbox.fetch = realFetch;
+  }
+
   // Two sections once shared #revTrendFinding/#revTrendChart; $() hit the first, so one tab painted into the other.
   const ids = (fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8').match(/ id="[^"]+"/g) || []);
   const dups = [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))];

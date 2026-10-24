@@ -551,16 +551,17 @@ function renderPfAumChart(rows) {
   });
 }
 
-function renderPfKpis(holdings, split) {
+function pfKpisHtml(holdings, split) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   // split is null in "as of date" mode — portfolios/bonus_portfolios only
   // have a live split, not a historical one, so there's nothing real to show.
-  $('#pfKpis').innerHTML = [
+  return [
     kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
     kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
     kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
+function renderPfKpis(holdings, split) { $('#pfKpis').innerHTML = pfKpisHtml(holdings, split); }
 
 // Shared by the Portfolio tab and Portfolio Explorer — both feed rows of the
 // same shape (fund, fund_type, unit, avg_buy_price, nav, value, ...).
@@ -8357,6 +8358,8 @@ let askRowsCache = [];
 let lastAskQuestion = '';
 // Conversation history for follow-up questions ("now split that by month") —
 // sent back to the server so the model can see what "that" refers to.
+let askBusy = false; // one Ask request at a time
+let askPending = null; // question shown as a bubble while its answer is on the way
 let askHistory = (() => { try { const h = JSON.parse(localStorage.getItem(ASK_KEY)); return Array.isArray(h) ? h.slice(-ASK_MAX_TURNS) : []; } catch { return []; } })();
 
 // Renders the running conversation as a numbered list of past questions, with
@@ -8369,8 +8372,8 @@ function renderAskThread() {
   const el = $('#askThread');
   el.innerHTML = '';
   // The example chips only help on an empty conversation; afterwards they just push the answer down.
-  $('.ask-examples').classList.toggle('hidden', askHistory.length > 0);
-  if (!askHistory.length) {
+  $('.ask-examples').classList.toggle('hidden', askHistory.length > 0 || !!askPending);
+  if (!askHistory.length && !askPending) {
     el.classList.add('hidden');
     $('#askHint').textContent = t('ask_hint_default');
     return;
@@ -8395,14 +8398,10 @@ function renderAskThread() {
 
   const list = document.createElement('div');
   list.className = 'ask-thread-list';
-  askHistory.forEach((h, i) => {
+  [...askHistory.map((h) => h.question), ...(askPending ? [askPending] : [])].forEach((question, i, all) => {
     const row = document.createElement('div');
-    row.className = 'ask-thread-item';
-    const n = document.createElement('span');
-    n.className = 'n';
-    n.textContent = `${i + 1}.`;
-    row.appendChild(n);
-    row.appendChild(document.createTextNode(h.question));
+    row.className = 'ask-thread-item' + (askPending && i === all.length - 1 ? ' pending' : '');
+    row.textContent = question;
     list.appendChild(row);
   });
   el.appendChild(list);
@@ -8441,15 +8440,20 @@ function askUnredactBody() {
 }
 
 async function runAsk(q) {
+  if (askBusy) return;
   const question = (q != null ? q : $('#askInput').value).trim();
   if (!question) return;
-  if (q != null) $('#askInput').value = question;
   const unredactBody = askUnredactBody();
   if (unredactBody.unredact && !unredactBody.password) {
     setAskMsg('Enter your password to include restricted columns.', 'err');
     return;
   }
   lastAskQuestion = question;
+  askBusy = true;
+  askPending = question;
+  $('#askBtn').disabled = true;
+  $('#askInput').value = '';
+  renderAskThread();
   setAskMsg('Thinking…', '');
   $('#askResult').innerHTML = '<div class="loading">Generating SQL and querying BigQuery…</div>';
   $('#askSql').classList.add('hidden');
@@ -8479,18 +8483,19 @@ async function runAsk(q) {
     else { askSqlCache = ''; $('#askSql').classList.add('hidden'); }
     if (!res.ok) {
       $('#askResult').innerHTML = '';
+      $('#askInput').value = question; // keep what was typed so it can be retried
       setAskMsg(data.error || 'Request failed', 'err');
       // A blocked query still shows its SQL, so open the folded section for it.
       if (data.sql) { $('#askData').classList.remove('hidden'); $('#askData').open = true; }
       return;
     }
-    $('#askInput').value = '';
     // Answers and actions join the conversation too, as the reply the model gave, so a follow-up such as
     // "the second one" or a bare SID after "several investors match" still knows what was asked.
     if (data.action) {
       askHistory = [...askHistory, { question, sql: `ACTION: ${JSON.stringify(data.action)}` }].slice(-ASK_MAX_TURNS);
+      askPending = null;
       renderAskThread();
-      setAskMsg('', ''); askSqlCache = ''; return runAskAction(data.action);
+      setAskMsg('', ''); askSqlCache = ''; return await runAskAction(data.action);
     }
     renderGenericTable('#askResult', data.rows || []);
     const c = data.count || 0;
@@ -8501,14 +8506,20 @@ async function runAsk(q) {
     const reply = data.sql || (data.answer ? `ANSWER: ${data.answer}` : '');
     if (reply) {
       askHistory = [...askHistory, { question, sql: reply }].slice(-ASK_MAX_TURNS);
+      askPending = null;
       renderAskThread();
     }
     prepareAskChart(data.rows || []);
     showAskAnswer(data, question);
   } catch (e) {
     $('#askResult').innerHTML = '';
+    $('#askInput').value = question;
     setAskMsg(e.message, 'err');
   } finally {
+    askBusy = false;
+    askPending = null;
+    $('#askBtn').disabled = false;
+    renderAskThread();
     // Never keep a typed password around longer than the one request it authorized.
     $('#askUnredactPassword').value = '';
   }
@@ -8539,15 +8550,49 @@ async function runAskAction(a) {
   }
   if (a.type === 'table_export') {
     say('ask_action_table', { table: a.table, format: a.format.toUpperCase() });
-    return download({ source: a.source, format: a.format, filename: a.table, from: a.from, to: a.to, date: a.date, granularity: a.granularity }, `${a.table}.${a.format}`);
+    return askDownloadBar(box, [[a.format, ASK_FMT[a.format]]], a.format, (f) => [
+      { source: a.source, format: f, filename: a.table, from: a.from, to: a.to, date: a.date, granularity: a.granularity }, `${a.table}.${f}`]);
   }
+  // Portfolio: show the same summary as the Portfolio tab first; the file only downloads from a button.
   const file = `portfolio_${a.sid}${a.date ? '_' + a.date : ''}`;
-  say('ask_action_export', { name: a.name, sid: a.sid, format: a.format.toUpperCase() });
-  return download({
-    source: a.source, format: a.format, filename: file, userId: a.userId, sid: a.sid,
-    ...(a.date ? { date: a.date } : {}),
-    ...(a.format === 'pdf' ? { includePerformance: a.performance, columns: selectedPdfColumns() } : {}),
-  }, `${file}.${a.format}`);
+  const [path, liveTables, pastTables] = ASK_PF[a.source];
+  const tables = a.date ? pastTables : liveTables;
+  box.innerHTML = `<div class="loading">${t('ai_working')}</div>`;
+  try {
+    const { holdings, split, asOfDate } = await api(`${path}?userId=${encodeURIComponent(a.userId)}&sid=${encodeURIComponent(a.sid)}${a.date ? `&date=${encodeURIComponent(a.date)}` : ''}`);
+    const title = t('ask_action_export').replace('{name}', escapeHtml(a.name)).replace('{sid}', escapeHtml(a.sid)) + (asOfDate ? ` · ${escapeHtml(asOfDate)}` : '');
+    box.innerHTML = `<div class="ask-pf"><div class="ask-pf-title">${title}</div>
+      <div class="kpi-grid cols-3">${pfKpisHtml(holdings, split)}</div>
+      <div class="table-wrap">${holdings.length ? holdingsTableHtml(holdings) : `<div class="empty">${t('msg_no_active_holdings')}</div>`}</div>
+      <p class="hint">${t('ask_pf_source').replace('{tables}', escapeHtml(tables))}</p></div>`;
+    askDownloadBar(box, [['pdf', 'common_pdf'], ['xlsx', 'common_excel'], ['csv', 'common_csv']], a.format, (f) => [{
+      source: a.source, format: f, filename: file, userId: a.userId, sid: a.sid,
+      ...(a.date ? { date: a.date } : {}),
+      ...(f === 'pdf' ? { includePerformance: a.performance, columns: selectedPdfColumns() } : {}),
+    }, `${file}.${f}`]);
+  } catch (e) { box.innerHTML = aiText(e.message); }
+}
+
+const ASK_FMT = { pdf: 'common_pdf', xlsx: 'common_excel', csv: 'common_csv' };
+// Portfolio source -> [summary endpoint, tables when live, tables for a past date]; same endpoints as the Portfolio tabs.
+const ASK_PF = {
+  portfolio_full: ['/api/portfolio', 'main.portfolios, main.bonus_portfolios, main.funds', 'mi_fee_logs.portfolio_with_code, main.snapshots'],
+  portfolio_fix_full: ['/api/portfolio-fix', 'main.portfolios, main.bonus_portfolios, main.funds', 'mi_fee_logs.portfolio_fix, main.snapshots'],
+  portfolio_tx_full: ['/api/portfolio-tx', 'main.transactions, main.portfolios, main.bonus_portfolios, main.funds', 'main.transactions, main.funds, main.snapshots'],
+  portfolio_sinvest_full: ['/api/portfolio-sinvest', 'sinvest.trx_history, main.funds', 'sinvest.trx_history, main.funds, main.snapshots'],
+};
+// A file leaves the browser only when its button is pressed, and the button is off while the export runs.
+function askDownloadBar(box, formats, preferred, make) {
+  const bar = document.createElement('div');
+  bar.className = 'ask-pf-actions';
+  for (const [f, key] of formats) {
+    const b = document.createElement('button');
+    b.className = f === preferred ? 'btn-primary' : 'btn-ghost';
+    b.textContent = t(key);
+    b.addEventListener('click', async () => { b.disabled = true; try { await download(...make(f)); } finally { b.disabled = false; } });
+    bar.appendChild(b);
+  }
+  box.appendChild(bar);
 }
 
 function setAskEditable(on) {
@@ -10136,7 +10181,7 @@ function wire() {
   // ask
   $('#askAdvanced').addEventListener('toggle', (e) => { if (e.target.open) loadAskTables(); });
   $('#askBtn').addEventListener('click', () => runAsk());
-  $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') runAsk(); });
+  $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat && !e.isComposing) runAsk(); });
   $('#askCopy').addEventListener('click', copyAskSql);
   $('#askEdit').addEventListener('click', () => setAskEditable($('#askSqlText').hasAttribute('readonly')));
   $('#askRun').addEventListener('click', () => runAskSql());
