@@ -1298,7 +1298,7 @@ function createApp({ serveStatic = true } = {}) {
     // that by month") — capped so the prompt doesn't grow unbounded.
     const rawHistory = (req.body && req.body.history) || [];
     const history = Array.isArray(rawHistory)
-      ? rawHistory.filter((h) => h && typeof h.question === 'string' && typeof h.sql === 'string').slice(-6)
+      ? rawHistory.filter((h) => h && typeof h.question === 'string' && typeof h.sql === 'string').slice(-20)
       : [];
     if (!question) return res.status(400).json({ error: 'Type a question first.' });
     // Same step-up check as /api/sql/run: a superuser can lift column

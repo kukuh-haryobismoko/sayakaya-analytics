@@ -3,6 +3,8 @@
 // tiny helpers
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
+const ASK_KEY = 'sk_ask_history'; // Ask conversation, kept until "Start new conversation" or logout
+const ASK_MAX_TURNS = 20;
 const AUTH_KEY = 'sk_auth'; // { token, user: { id, username, isSuperuser, allowedTabs } }
 
 function getAuth() {
@@ -13,7 +15,7 @@ function setAuth(auth) { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); }
 // shouldn't hand the next person to log in whatever language the last
 // person happened to leave it on. Still persists normally for as long as
 // the current session stays logged in (reloads, other tabs).
-function clearAuth() { localStorage.removeItem(AUTH_KEY); resetLangToDefault(); }
+function clearAuth() { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ASK_KEY); resetLangToDefault(); }
 
 // On Netlify this is served same-origin, so relative /api/* paths just work.
 // GitHub Pages is static-only — it can't run a backend — so this mirror calls
@@ -8355,7 +8357,7 @@ let askRowsCache = [];
 let lastAskQuestion = '';
 // Conversation history for follow-up questions ("now split that by month") —
 // sent back to the server so the model can see what "that" refers to.
-let askHistory = [];
+let askHistory = (() => { try { const h = JSON.parse(localStorage.getItem(ASK_KEY)); return Array.isArray(h) ? h.slice(-ASK_MAX_TURNS) : []; } catch { return []; } })();
 
 // Renders the running conversation as a numbered list of past questions, with
 // its own header explaining what's going on (this is the thing people found
@@ -8363,6 +8365,7 @@ let askHistory = [];
 // was being remembered) and the reset action right there instead of off in
 // the ask-bar looking like a third, unrelated button.
 function renderAskThread() {
+  localStorage.setItem(ASK_KEY, JSON.stringify(askHistory));
   const el = $('#askThread');
   el.innerHTML = '';
   // The example chips only help on an empty conversation; afterwards they just push the answer down.
@@ -8482,17 +8485,22 @@ async function runAsk(q) {
       return;
     }
     $('#askInput').value = '';
-    if (data.action) { setAskMsg('', ''); askSqlCache = ''; return runAskAction(data.action); }
+    // Answers and actions join the conversation too, as the reply the model gave, so a follow-up such as
+    // "the second one" or a bare SID after "several investors match" still knows what was asked.
+    if (data.action) {
+      askHistory = [...askHistory, { question, sql: `ACTION: ${JSON.stringify(data.action)}` }].slice(-ASK_MAX_TURNS);
+      renderAskThread();
+      setAskMsg('', ''); askSqlCache = ''; return runAskAction(data.action);
+    }
     renderGenericTable('#askResult', data.rows || []);
     const c = data.count || 0;
     setAskMsg('', ''); // the row count lives in the folded section's title
     // CSV/XLSX export re-runs askSqlCache server-side against BigQuery, so it
     // can't work for a non-SQL answer even though there are rows to show.
     $('#askCsv').disabled = $('#askXlsx').disabled = (data.rows || []).length === 0 || !data.sql;
-    // Only SQL-backed turns join the follow-up conversation — there's no SQL
-    // to hand back to the model as an assistant turn otherwise.
-    if (data.sql) {
-      askHistory = [...askHistory, { question, sql: data.sql }].slice(-6);
+    const reply = data.sql || (data.answer ? `ANSWER: ${data.answer}` : '');
+    if (reply) {
+      askHistory = [...askHistory, { question, sql: reply }].slice(-ASK_MAX_TURNS);
       renderAskThread();
     }
     prepareAskChart(data.rows || []);
@@ -10145,6 +10153,7 @@ function wire() {
     suggestAskChart(lastAskQuestion, askRowsCache, $('#askChartHint').value.trim()));
   // Example chips are standalone demo questions, not a continuation of
   // whatever's currently being asked about — start a fresh conversation.
+  renderAskThread();
   $$('#ask .chip').forEach((c) => c.addEventListener('click', () => { clearAskConversation(); runAsk(c.textContent); }));
   $('#askCsv').addEventListener('click', () => askSqlCache && download({ source: 'ask_result', format: 'csv', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.csv'));
   $('#askXlsx').addEventListener('click', () => askSqlCache && download({ source: 'ask_result', format: 'xlsx', filename: 'ask_result', sql: askSqlCache, limit: 100000 }, 'ask_result.xlsx'));

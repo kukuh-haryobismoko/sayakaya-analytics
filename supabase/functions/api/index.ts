@@ -1407,7 +1407,7 @@ on('POST', '/api/ask', requireTab('ask', async (req, _params, _url, user) => {
   const history = Array.isArray(rawHistory)
     ? rawHistory.filter((h): h is { question: string; sql: string } =>
         !!h && typeof (h as { question?: unknown }).question === 'string' && typeof (h as { sql?: unknown }).sql === 'string')
-      .slice(-6)
+      .slice(-20)
     : [];
   if (!question) return json({ error: 'Type a question first.' }, 400);
   // Same step-up check as /api/sql/run: a superuser can lift column
