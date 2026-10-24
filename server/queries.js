@@ -5640,7 +5640,8 @@ const promoRecapData = (from, to, codes) => {
 // Dates are UTC in the warehouse; +7h gives the WIB day the booth saw.
 const INVESTMENT_PLANS = '`sayakaya.main.investment_plans`';
 const INVESTMENT_PLAN_FUNDS = '`sayakaya.main.investment_plan_funds`';
-const boothPeopleCte = () => `people AS (
+// anyStatus: only the transaction list counts a promo buy before it is completed (verified, completed_payment), so the Transactions panel shows it.
+const boothPeopleCte = (anyStatus = false) => `people AS (
       SELECT u.id AS user_id,
         IF(UPPER(u.referrer_code) IN UNNEST(@codes), UPPER(u.referrer_code), UPPER(u.sales_code)) AS code,
         'code' AS via
@@ -5651,7 +5652,8 @@ const boothPeopleCte = () => `people AS (
       SELECT t.user_id, ARRAY_AGG(UPPER(t.promo_code) ORDER BY t.created_at LIMIT 1)[OFFSET(0)], 'promo'
       FROM ${TX} t
       JOIN ${USERS} u ON u.id = t.user_id
-      WHERE UPPER(t.promo_code) IN UNNEST(@promo) AND t.type = 'buy' AND t.status = 'completed'
+      WHERE UPPER(t.promo_code) IN UNNEST(@promo) AND t.type = 'buy'
+        AND ${anyStatus ? "IFNULL(t.status, '') NOT IN ('expired', 'cancelled')" : "t.status = 'completed'"}
         AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
         AND NOT ((UPPER(u.referrer_code) IN UNNEST(@codes) OR UPPER(u.sales_code) IN UNNEST(@codes))
           AND DATE(DATETIME_ADD(u.created_at, INTERVAL 7 HOUR)) BETWEEN @from AND @to)
@@ -5743,7 +5745,7 @@ const boothEventData = (opts) => {
 const boothEventTransactions = (opts) => {
   const params = { ...boothParams(opts), hold: Math.max(1, Math.min(365, Math.round(Number(opts.holdDays) || 30))) };
   return {
-    sql: `WITH ${boothPeopleCte()},
+    sql: `WITH ${boothPeopleCte(true)},
       ev_tx AS (
         SELECT t.id AS tx_id, t.user_id, p.code, p.via, t.type, t.status, t.payment_method, t.fund_id, UPPER(t.promo_code) AS promo,
           CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount,

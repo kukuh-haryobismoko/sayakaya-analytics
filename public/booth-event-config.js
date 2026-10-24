@@ -131,6 +131,6 @@ const BOOTH_EVENT = {
     // dalam holdingDays hari + payung / tumbler.
     topUp: { minAmount: 5000000, cashbackPct: 0.5, cashbackMax: 250000, holdingDays: 30, extra: 'Payung SayaKaya / tumbler' },
     // Kode promo tambahan per program, kalau nanti dibuat (selain kode sales).
-    promoCodes: [],
+    promoCodes: ['SYKYMALL'],
   },
 };
