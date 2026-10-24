@@ -875,12 +875,13 @@ td.neg { color: var(--neg-text); }
 @media (prefers-reduced-motion: reduce) { .conn-dot.live { animation: none; } .view.active { animation: none; } }
 
 /* AI Insights: written paragraphs at a readable measure, spacing from the stylesheet. */
-.ai-text { max-width: 72ch; color: var(--ink); }
+.ai-text { color: var(--ink); }
 .ai-text p { margin: 0 0 .65em; line-height: 1.6; }
 .ai-text p:last-child { margin-bottom: 0; }
 #ai-insights .kpi-grid { margin-bottom: 16px; }
 #ai-insights .table-wrap:empty { display: none; }
 #ai-insights .hint:empty { display: none; }
+#ai-insights .panel-head .hint { flex-basis: 100%; } /* hint under the title, full width, not squeezed to the right half */
 
 /* Ask: written answer first, the SQL and the table folded underneath. */
 .ask-answer { margin: 8px 0 10px; padding: 14px 18px; background: var(--surface-alt); border: 1px solid var(--line); border-radius: 10px; }
