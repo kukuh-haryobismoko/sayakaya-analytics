@@ -1422,9 +1422,9 @@ on('POST', '/api/ask', requireTab('ask', async (req, _params, _url, user) => {
     redact = false;
   }
   try {
-    const { sql, rows, answer } = await ask(question, context, history, user, { redact });
-    await A.logEvent(user!.id, user!.username, 'ask', `${question} (${answer ? 'answered without data' : `${rows.length} rows`})` + (redact ? '' : ' [unredacted]'));
-    return json({ sql, rows, count: rows.length, answer });
+    const { sql, rows, answer, action } = await ask(question, context, history, user, { redact, tabs: body.tabs });
+    await A.logEvent(user!.id, user!.username, 'ask', `${question} (${action ? `action ${action.type}` : answer ? 'answered without data' : `${rows.length} rows`})` + (redact ? '' : ' [unredacted]'));
+    return json({ sql, rows, count: rows.length, answer, action });
   } catch (err) {
     console.error('[POST /api/ask]', (err as Error).message);
     await A.logEvent(user!.id, user!.username, 'ask', `${question}, failed: ${(err as Error).message}`);

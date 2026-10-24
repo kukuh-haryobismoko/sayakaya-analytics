@@ -8466,7 +8466,7 @@ async function runAsk(q) {
     const res = await fetch(API_BASE + '/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ question, context: context || undefined, history: askHistory, ...unredactBody }),
+      body: JSON.stringify({ question, context: context || undefined, history: askHistory, tabs: askTabs(), ...unredactBody }),
     });
     const data = await res.json().catch(() => ({}));
     // Show the generated SQL even if it was blocked, so the user can see it.
@@ -8482,6 +8482,7 @@ async function runAsk(q) {
       return;
     }
     $('#askInput').value = '';
+    if (data.action) { setAskMsg('', ''); askSqlCache = ''; return runAskAction(data.action); }
     renderGenericTable('#askResult', data.rows || []);
     const c = data.count || 0;
     setAskMsg('', ''); // the row count lives in the folded section's title
@@ -8503,6 +8504,42 @@ async function runAsk(q) {
     // Never keep a typed password around longer than the one request it authorized.
     $('#askUnredactPassword').value = '';
   }
+}
+
+// The tabs this user can open, so Ask can offer them by name. The server re-checks access before it acts.
+const askTabs = () => $$('.nav-link').filter((l) => userCan(l.dataset.tab))
+  .map((l) => ({ id: l.dataset.tab, label: l.querySelector('.nav-label-text')?.textContent.trim() || l.dataset.tab }));
+
+// What Ask asked the browser to do. The server already checked access; /api/export checks it again.
+const ASK_AI = { digest: loadAiDigest, anomalies: loadAiAnomalies, churn: loadAiChurn, watchdog: loadAiWatchdog };
+
+async function runAskAction(a) {
+  const box = $('#askAnswer');
+  $('#askResult').innerHTML = '';
+  $('#askData').classList.add('hidden');
+  box.classList.remove('hidden');
+  const say = (key, vars) => { box.innerHTML = aiText(Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, v), t(key))); };
+  if (a.type === 'open_tab') { say('ask_action_open', { tab: a.label }); return switchTab(a.tab); }
+  if (a.type === 'ai_insight') { say('ask_action_ai', { kind: a.kind }); switchTab('ai-insights'); return ASK_AI[a.kind](); }
+  if (a.type === 'portfolio_note') {
+    box.innerHTML = `<div class="loading">${t('ai_working')}</div>`;
+    try {
+      const { text } = await api('/api/ai/portfolio-narrative', { method: 'POST', body: JSON.stringify({ userId: a.userId, sid: a.sid, lang: getLang() }) });
+      box.innerHTML = aiText(text);
+    } catch (e) { box.innerHTML = aiText(e.message); }
+    return;
+  }
+  if (a.type === 'table_export') {
+    say('ask_action_table', { table: a.table, format: a.format.toUpperCase() });
+    return download({ source: a.source, format: a.format, filename: a.table, from: a.from, to: a.to, date: a.date, granularity: a.granularity }, `${a.table}.${a.format}`);
+  }
+  const file = `portfolio_${a.sid}${a.date ? '_' + a.date : ''}`;
+  say('ask_action_export', { name: a.name, sid: a.sid, format: a.format.toUpperCase() });
+  return download({
+    source: a.source, format: a.format, filename: file, userId: a.userId, sid: a.sid,
+    ...(a.date ? { date: a.date } : {}),
+    ...(a.format === 'pdf' ? { includePerformance: a.performance, columns: selectedPdfColumns() } : {}),
+  }, `${file}.${a.format}`);
 }
 
 function setAskEditable(on) {

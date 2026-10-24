@@ -1313,9 +1313,9 @@ function createApp({ serveStatic = true } = {}) {
       redact = false;
     }
     try {
-      const { sql, rows, answer } = await ask(question, context, history, req.user, { redact });
-      await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question} (${answer ? 'answered without data' : `${rows.length} rows`})` + (redact ? '' : ' [unredacted]'));
-      res.json({ sql, rows, count: rows.length, answer });
+      const { sql, rows, answer, action } = await ask(question, context, history, req.user, { redact, tabs: req.body.tabs });
+      await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question} (${action ? `action ${action.type}` : answer ? 'answered without data' : `${rows.length} rows`})` + (redact ? '' : ' [unredacted]'));
+      res.json({ sql, rows, count: rows.length, answer, action });
     } catch (err) {
       console.error('[POST /api/ask]', err.message);
       await Auth.logEvent(req.user.id, req.user.username, 'ask', `${question}, failed: ${err.message}`);
