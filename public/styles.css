@@ -882,9 +882,8 @@ td.neg { color: var(--neg-text); }
 #ai-insights .table-wrap:empty { display: none; }
 #ai-insights .hint:empty { display: none; }
 
-/* Ask: written answer first, the SQL and the table folded underneath. The card is as wide
-   as its text (not the whole panel), so there is no empty right half. */
-.ask-answer { margin: 8px 0 10px; padding: 14px 18px; max-width: 78ch; background: var(--surface-alt); border: 1px solid var(--line); border-radius: 10px; }
+/* Ask: written answer first, the SQL and the table folded underneath. */
+.ask-answer { margin: 8px 0 10px; padding: 14px 18px; background: var(--surface-alt); border: 1px solid var(--line); border-radius: 10px; }
 .ask-answer .ai-text { max-width: none; font-size: 15px; }
 .ask-answer .ai-text p { line-height: 1.55; margin-bottom: .5em; }
 .ask-data { margin-top: 2px; }
