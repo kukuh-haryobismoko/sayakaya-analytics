@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `2712de3 (2026-10-24)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `cb83adb (2026-10-24)`.
 
 ## Cara membaca dokumen ini
 
@@ -1621,7 +1621,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 
 - **Untuk apa**: Tanya bebas seperti ngobrol (mis. "kenapa AUM turun bulan lalu?" atau "apa itu NAV?") dan dapatkan jawaban tertulis, dengan SQL, tabel, dan chart di bawahnya.
 - **Data yang dibaca**: Dataset BigQuery utama, lewat server/ask.js
-- **Cara hitung**: Pertanyaan yang butuh data diterjemahkan jadi query read-only, lalu hasilnya dijelaskan model dalam kalimat (bahasa mengikuti toggle EN atau ID) dan SQL serta tabelnya dilipat di bawah jawaban; pertanyaan yang tidak butuh data (definisi, cara hitung, saran) dijawab langsung tanpa query. Kolom nama, email, telepon, SID, dan IFUA tidak dikirim ke model saat menulis jawaban. Pertanyaan bisa ditindaklanjuti dan diminta tipe chart. Kolom terbatas (password, KYC) selalu dibuang, kecuali superuser mencentang opsi dan mengonfirmasi password.
+- **Cara hitung**: Pertanyaan yang butuh data diterjemahkan jadi query read-only, lalu hasilnya dijelaskan model dalam kalimat (bahasa mengikuti toggle EN atau ID) dan SQL serta tabelnya dilipat di bawah jawaban; pertanyaan yang tidak butuh data (definisi, cara hitung, tab mana yang dipakai) dijawab langsung tanpa query; pertanyaan di luar Sayakaya ditolak. Perintah dijalankan Ask, hanya jika akun itu boleh membuka tab terkait: buka tab, laporan AI Insights (digest, anomali, churn, watchdog), PDF/Excel/CSV portfolio satu investor (sumber Portfolio, Fix, TX, SInvest), catatan tertulis satu investor, dan ekspor tabel AUM, revenue, top fund, product performance. Ask tidak mengirim email dan tidak mengubah data. Kolom nama, email, telepon, SID, dan IFUA tidak dikirim ke model saat menulis jawaban. Pertanyaan bisa ditindaklanjuti dan diminta tipe chart. Kolom terbatas (password, KYC) selalu dibuang, kecuali superuser mencentang opsi dan mengonfirmasi password.
 - **Isi tab**:
   - *Talk, with, Data* (Tanya, Data): Ketik pertanyaan dalam bahasa biasa; jawaban berupa tabel dan grafik, beserta SQL yang dipakai (bisa disalin, diedit, dan dijalankan ulang). Kolom hasil mengikuti pertanyaan.
 - **Catatan penting**:
