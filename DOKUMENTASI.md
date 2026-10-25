@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `f2410a1 (2026-10-25)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `5b08a8c (2026-10-25)`.
 
 ## Cara membaca dokumen ini
 
@@ -1628,6 +1628,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Jawaban dibuat oleh model AI, jadi periksa SQL-nya untuk angka penting. Kolom sensitif (password, data KYC) selalu disaring kecuali superuser mengonfirmasi password.
   - Pertanyaan tampil sebagai gelembung chat begitu dikirim, dan percakapan tersimpan di browser sampai "Mulai percakapan baru" atau logout.
   - Permintaan portfolio investor menampilkan ringkasan (KPI, holding, tabel sumber) seperti tab Portfolio. File PDF, Excel, atau CSV hanya diunduh saat tombolnya ditekan.
+  - Satu prompt bisa meminta banyak investor: N teratas menurut AUM (maks 50) atau daftar SID/email. Hasilnya daftar investor dengan total AUM, lalu tombol untuk satu file gabungan atau ZIP berisi satu file per investor, lewat jalur yang sama dengan bulk export. Tidak ada pengiriman email.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `ask`
   - Endpoint: `GET /api/ask/tables`, `POST /api/ask`, `POST /api/ask/chart`, `POST /api/ask/explain`
