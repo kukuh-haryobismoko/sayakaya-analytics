@@ -57,7 +57,7 @@ const PCT_FMT = '0.00"%"';
 
 function num(v: unknown): unknown { return v === '' || v == null ? v : Number(v as string); }
 
-export async function toXlsxBuffer(rows: Record<string, unknown>[], sheetName = 'Data', pctCols: string[] = [], username?: string): Promise<ArrayBuffer> {
+export async function toXlsxBuffer(rows: Record<string, unknown>[], sheetName = 'Data', pctCols: string[] = [], username?: string | null): Promise<ArrayBuffer> {
   const ExcelJS = await loadExcel();
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';
@@ -83,7 +83,7 @@ export async function toXlsxBuffer(rows: Record<string, unknown>[], sheetName = 
 }
 
 // sheets: [{ name, rows, pctCols }] — one worksheet per entry, e.g. one per fund type.
-export async function toXlsxMultiSheet(sheets: { name: string; rows: Record<string, unknown>[]; pctCols?: string[] }[], username?: string): Promise<ArrayBuffer> {
+export async function toXlsxMultiSheet(sheets: { name: string; rows: Record<string, unknown>[]; pctCols?: string[] }[], username?: string | null): Promise<ArrayBuffer> {
   const ExcelJS = await loadExcel();
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Sayakaya Analytics';

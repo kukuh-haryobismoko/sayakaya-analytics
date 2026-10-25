@@ -1328,11 +1328,12 @@ export const userHoldingsAsOfFix = (sid: string, date: string): Query => ({
 export const allInvestorsWithAum = (): Query => ({
   sql: `WITH latest AS (
       SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS d FROM ${PORT_FIX}
+      WHERE DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
     ),
     aum AS (
       SELECT sid_code, SUM(buy_amount) AS total_aum
       FROM ${PORT_FIX}, latest
-      WHERE DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = latest.d AND total_unit > 0
+      WHERE DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY) AND DATE_SUB(DATE(created_at), INTERVAL 1 DAY) = latest.d AND total_unit > 0
       GROUP BY sid_code
       HAVING SUM(buy_amount) > 0
     )
@@ -5297,7 +5298,7 @@ const EVC_IN_WINDOW = `(DATE(u.created_at) BETWEEN @from AND @to
 // (about 1 GB in Oct 2026); partition it on created_at if that grows.
 // Status: invested = AUM > 0 on the latest portfolio_fix day; redeemed = had
 // a completed buy but holds nothing then; never = no completed buy at all.
-const eventCodePortfolioCtes = (field?: string): string => `WITH tagged AS (
+const eventCodePortfolioCtes = (field?: string, history = false): string => `WITH tagged AS (
         SELECT u.id AS user_id, u.sid_code, u.email, u.referrer_code, u.sales_code,
           u.created_at, u.verified_at, u.verification_status
         FROM ${USERS} u
@@ -5315,12 +5316,12 @@ const eventCodePortfolioCtes = (field?: string): string => `WITH tagged AS (
         WHERE t.status = 'completed'
         GROUP BY t.user_id
       ),
-      snap AS (SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS d FROM ${PORT_FIX}),
+      snap AS (SELECT MAX(DATE_SUB(DATE(created_at), INTERVAL 1 DAY)) AS d FROM ${PORT_FIX} WHERE DATE(created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)),
       pf AS (
         SELECT DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY) AS date, p.sid_code, SUM(p.amount) AS aum
         FROM ${PORT_FIX} p
         JOIN tagged tg ON tg.sid_code = p.sid_code
-        WHERE p.total_unit > 0
+        WHERE ${history ? '' : `DATE(p.created_at) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY) AND `}p.total_unit > 0
         GROUP BY date, p.sid_code
       ),
       aum AS (
@@ -5476,7 +5477,8 @@ export const eventCodePortfolio = (
 ): Query & { summarySql: string } => {
   const part = grain === 'week' ? 'WEEK' : 'MONTH';
   const n = Math.min(parseInt(String(periods), 10) || 12, 52);
-  const ctes = eventCodePortfolioCtes(field);
+  // Cohort retention reads past period ends, so pf keeps the full history here.
+  const ctes = eventCodePortfolioCtes(field, true);
   return {
     sql: `${ctes},
       inv AS (

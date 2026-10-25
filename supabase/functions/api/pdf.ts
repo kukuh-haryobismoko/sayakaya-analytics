@@ -353,7 +353,7 @@ function perfSheetPage(doc: any, sheet: PerfSheet, width: number) {
 // "Reksa Dana Update" NAV sheet, one landscape page per fund type (the extra
 // width fits all 13 columns without wrapping; landscape is scoped to this
 // report only — the embedded pages inside portfolioReport() stay portrait).
-export async function fundPerformanceReport(sheets: PerfSheet[], options: { username?: string } = {}): Promise<Buffer> {
+export async function fundPerformanceReport(sheets: PerfSheet[], options: { username?: string | null } = {}): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
   const doc: any = await newDoc({ size: 'A4', layout: 'landscape', margin: 40 });
   if (options.username) doc.info.Author = options.username;
@@ -433,7 +433,7 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: 
 export async function portfolioReport(
   { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] },
   performanceSheets: PerfSheet[],
-  options: { columns?: string[]; username?: string; password?: string } = {},
+  options: { columns?: string[]; username?: string | null; password?: string } = {},
 ): Promise<Buffer> {
   // pdfkit's bundled .d.ts doesn't fully describe PDFDocument's fluent
   // instance API (font/text/moveDown etc. all really exist at runtime) —
@@ -463,7 +463,7 @@ export async function portfolioReport(
 export async function portfolioReportBatch(
   entries: { contact?: Contact; holdings: Record<string, unknown>[] }[],
   performanceSheets: PerfSheet[],
-  options: { columns?: string[]; username?: string } = {},
+  options: { columns?: string[]; username?: string | null } = {},
 ): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
   const doc: any = await newDoc({ size: 'A4', margin: 40 });
@@ -494,7 +494,7 @@ export const TX_COLS = (width: number): Column[] => [
 export async function transactionStatement(
   { contact, transactions }: { contact?: Contact; transactions: Record<string, unknown>[] },
   monthLabel: string,
-  options: { username?: string; password?: string } = {},
+  options: { username?: string | null; password?: string } = {},
 ): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
   const doc: any = await newDoc({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
@@ -536,7 +536,7 @@ export const USERS_TX_COLS = (width: number): Column[] => [
 
 export async function usersTransactionsReport(
   rows: Record<string, unknown>[],
-  options: { username?: string; query?: string } = {},
+  options: { username?: string | null; query?: string } = {},
 ): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
   const doc: any = await newDoc({ size: 'A4', layout: 'landscape', margin: 40 });

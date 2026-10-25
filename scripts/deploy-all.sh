@@ -31,6 +31,8 @@ fi
 
 echo "== 2/6 Tests"
 npm test --silent
+# The edge function is the production runtime; Node tests never type-check it.
+deno check supabase/functions/api/index.ts
 
 echo "== 3/6 Supabase migrations (before the function that may need them)"
 supabase migration list --linked

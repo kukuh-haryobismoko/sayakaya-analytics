@@ -155,7 +155,7 @@ function boldShaded(sheetId: number, rowIndex: number, colCount: number) {
 
 export async function portfolioReport(
   { contact, holdings }: { contact: Record<string, unknown> | undefined; holdings: Record<string, unknown>[] },
-  options: { columns?: string[]; username?: string } = {},
+  options: { columns?: string[]; username?: string | null } = {},
 ): Promise<{ url: string }> {
   const { columns, username } = options;
   const spreadsheetId = Deno.env.get('GSHEET_TRACKER_ID');

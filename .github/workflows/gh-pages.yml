@@ -10,6 +10,9 @@ on:
     branches: [main]
     paths:
       - "public/**"
+      - "server/**"
+      - "supabase/functions/**"
+      - "test/**"
       - ".github/workflows/gh-pages.yml"
   workflow_dispatch:
 
@@ -31,8 +34,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       - run: npm ci
       - run: npm test
+      - run: deno check supabase/functions/api/index.ts
 
   deploy:
     needs: test

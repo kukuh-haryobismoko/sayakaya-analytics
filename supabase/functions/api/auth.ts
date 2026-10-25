@@ -57,7 +57,7 @@ export function hashPassword(plain: string): string {
   return `${salt}:${hash}`;
 }
 
-export function verifyPassword(plain: string, stored: string): boolean {
+export function verifyPassword(plain: string, stored: string | null): boolean {
   const [salt, hash] = (stored || '').split(':');
   if (!salt || !hash) return false;
   const candidate = new Uint8Array(crypto.scryptSync(plain, salt, 64));
@@ -254,7 +254,7 @@ export interface AuditLogRow {
 
 // username is stored as a plain snapshot (not just a join through user_id) so
 // the record survives the account later being deleted.
-export async function logEvent(userId: string | null, username: string, action: string, detail?: string | null): Promise<void> {
+export async function logEvent(userId: string | null, username: string | null, action: string, detail?: string | null): Promise<void> {
   try {
     await rest('/dashboard_audit_log', {
       method: 'POST',

@@ -130,7 +130,7 @@ interface StatementAttachmentArgs {
   portfolioDate?: string;
   sendStatement?: boolean;
   statementMonth?: string;
-  username: string;
+  username: string | null;
   // Rows already fetched for a chunk of investors at once (the schedules
   // drain); omitted, they are queried for this investor.
   holdings?: Record<string, unknown>[];

@@ -34,7 +34,7 @@ async function callAI(body: Record<string, unknown>): Promise<Response> {
       const raw = (await res.text()).replace(/\s*data:\s*\[DONE\]\s*$/, '');
       if (!res.ok) return new Response(raw, { status: res.status, headers: { 'content-type': 'application/json' } });
       let choice;
-      try { choice = JSON.parse(raw).choices?.[0]; }
+      try { const j = JSON.parse(raw); choice = j.choices?.[0]; console.log(`[ai] ${model} in=${j.usage?.prompt_tokens ?? '?'} out=${j.usage?.completion_tokens ?? '?'}`); }
       catch { throw Object.assign(new Error(`The AI router answered, but not with valid JSON: ${raw.slice(0, 120).replace(/\s+/g, ' ')}`), { reachable: true }); }
       return new Response(JSON.stringify({ content: [{ type: 'text', text: choice?.message?.content ?? '' }], stop_reason: choice?.finish_reason }),
         { status: 200, headers: { 'content-type': 'application/json' } });

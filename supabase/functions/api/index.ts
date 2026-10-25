@@ -171,12 +171,12 @@ function json(data: unknown, status = 200): Response {
 // Every exported file is remarked with the requesting user: appended to the
 // filename, and (for xlsx) written into the file's own "last modified by"
 // document property — mirrors server/app.js's filenameWithUser.
-function filenameWithUser(name: string, username: string): string {
+function filenameWithUser(name: string, username: string | null): string {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
   return `${name}_${username}_${ts}`;
 }
 
-function csvResponse(rows: Record<string, unknown>[], name: string, username: string): Response {
+function csvResponse(rows: Record<string, unknown>[], name: string, username: string | null): Response {
   return new Response('﻿' + toCsv(rows), {
     headers: {
       'content-type': 'text/csv; charset=utf-8',
@@ -185,7 +185,7 @@ function csvResponse(rows: Record<string, unknown>[], name: string, username: st
   });
 }
 
-function txtResponse(rows: Record<string, unknown>[], name: string, username: string): Response {
+function txtResponse(rows: Record<string, unknown>[], name: string, username: string | null): Response {
   return new Response('﻿' + toTxt(rows, '|'), {
     headers: {
       'content-type': 'text/plain; charset=utf-8',
@@ -194,7 +194,7 @@ function txtResponse(rows: Record<string, unknown>[], name: string, username: st
   });
 }
 
-async function xlsxResponse(rows: Record<string, unknown>[], name: string, username: string, pctCols: string[] = []): Promise<Response> {
+async function xlsxResponse(rows: Record<string, unknown>[], name: string, username: string | null, pctCols: string[] = []): Promise<Response> {
   const buf = await toXlsxBuffer(rows, name, pctCols, username);
   return new Response(buf, {
     headers: {
@@ -204,7 +204,7 @@ async function xlsxResponse(rows: Record<string, unknown>[], name: string, usern
   });
 }
 
-async function xlsxMultiResponse(sheets: { name: string; rows: Record<string, unknown>[]; pctCols?: string[] }[], name: string, username: string): Promise<Response> {
+async function xlsxMultiResponse(sheets: { name: string; rows: Record<string, unknown>[]; pctCols?: string[] }[], name: string, username: string | null): Promise<Response> {
   const buf = await toXlsxMultiSheet(sheets, username);
   return new Response(buf, {
     headers: {
