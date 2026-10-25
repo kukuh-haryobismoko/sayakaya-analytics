@@ -115,7 +115,7 @@ export async function buildFundPerformancePdf({ asOf, fundFilter, username }: { 
 }
 
 // PDF open-password: the investor's own birthdate as DDMMYYYY. null when
-// there's no birthdate on file, so the caller skips encrypting the PDF.
+// there's no birthdate on file (buildStatementAttachments then refuses to send).
 export function birthdatePassword(birthdate: unknown): string | null {
   const s = val(birthdate) as string | null;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
@@ -155,7 +155,10 @@ export function statementMonthRange(statementMonth?: string): { from: string; to
 export async function buildStatementAttachments(
   { userId, sid, contact, sendPortfolio, portfolioDate, sendStatement, statementMonth, username, holdings, transactions }: StatementAttachmentArgs,
 ): Promise<{ filename: string; content: Uint8Array }[]> {
-  const password = birthdatePassword(contact.birthdate) ?? undefined;
+  const password = birthdatePassword(contact.birthdate);
+  // The email body tells the investor to open the PDF with their birthdate, so
+  // a PDF without that password must not go out.
+  if (!password) throw new Error('no birthdate on file');
   const attachments: { filename: string; content: Uint8Array }[] = [];
 
   if (sendPortfolio) {

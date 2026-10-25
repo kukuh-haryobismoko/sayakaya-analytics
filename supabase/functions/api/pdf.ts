@@ -480,8 +480,18 @@ export async function portfolioReportBatch(
   return bufferDoc(doc);
 }
 
+// Convert UTC timestamp (ISO string or Date) to WIB date string YYYY-MM-DD.
+// BigQuery returns TIMESTAMP as ISO string in UTC; shift by +7h for WIB display.
+function wibDate(v: unknown): string {
+  const s = String(v || '');
+  if (!s) return 'n/a';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return 'n/a';
+  return new Date(d.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 export const TX_COLS = (width: number): Column[] => [
-  { key: 'created_at', label: 'Date', width: width * 0.14, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : 'n/a'; } },
+  { key: 'created_at', label: 'Date', width: width * 0.14, format: (v) => wibDate(val(v)) },
   { key: 'fund', label: 'Fund', width: width * 0.30 },
   { key: 'type', label: 'Type', width: width * 0.16 },
   { key: 'status', label: 'Status', width: width * 0.14 },
@@ -523,7 +533,7 @@ export async function transactionStatement(
 // so each row carries its own SID/name/email/phone. Landscape for the extra
 // columns, same as fundPerformanceReport.
 export const USERS_TX_COLS = (width: number): Column[] => [
-  { key: 'created_at', label: 'Date', width: width * 0.08, format: (v) => { const s = String(val(v) || ''); return s ? s.slice(0, 10) : 'n/a'; } },
+  { key: 'created_at', label: 'Date', width: width * 0.08, format: (v) => wibDate(val(v)) },
   { key: 'type', label: 'Type', width: width * 0.08 },
   { key: 'status', label: 'Status', width: width * 0.10 },
   { key: 'sid', label: 'SID', width: width * 0.10 },

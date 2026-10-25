@@ -26,7 +26,7 @@ stub('bigquery', {
     if (sql.includes('up.birthdate')) {
       return [
         { user_id: 'u1', sid: 'SID1', email: 'one@example.com', name: 'One', birthdate: { value: '1990-08-17' } },
-        { user_id: 'u2', sid: 'SID2', email: 'two@example.com', name: 'Two', birthdate: null },
+        { user_id: 'u2', sid: 'SID2', email: 'two@example.com', name: 'Two', birthdate: { value: '1991-01-02' } },
       ];
     }
     if (sql.includes('avg_buy_price')) return params.userIds.map((id) => ({ user_id: id, fund: `Fund of ${id}`, fund_type: 'MONEY_MARKET', unit: 1, avg_buy_price: 1000, nav: 1100, nav_date: '2026-10-12', fund_value: 1000, value: 1100, gain_loss: 100, gain_pct: 10 }));
@@ -74,6 +74,10 @@ const Sched = require('../server/schedules');
   assert.strictEqual(mails[0].attachments.length, 2, 'portfolio + e-statement');
   assert.strictEqual(mails[0].attachments[1].filename, 'Transaction_Statement_SID1_2026-09.pdf', "the job's month, not last month");
   assert.strictEqual(mails[0].log.source, 'batch', 'a group send logs as a batch send');
+  await assert.rejects(
+    require('../server/report-helpers').buildStatementAttachments({ userId: 'u9', sid: 'SID9', contact: { birthdate: null }, sendPortfolio: true, sendStatement: false }),
+    /no birthdate on file/, 'no birthdate, no unprotected PDF',
+  );
   const preview = await Sched.previewRecipientCount({ kind: 'fund_performance', recipientType: 'csv_list', recipientList: ['in@example.com', 'OUT@example.com'] });
   assert.deepStrictEqual(preview, { count: 1, excluded: 1 }, 'excluded emails match case-insensitively');
   const verified = await Sched.previewRecipientCount({ kind: 'statement', recipientType: 'active_aum_verified' });

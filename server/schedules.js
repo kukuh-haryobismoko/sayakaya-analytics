@@ -34,13 +34,36 @@ const { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatem
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const MAX_OTP_ATTEMPTS = 5;
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes, same order as dashboard_password_resets
 const JAKARTA_OFFSET_MIN = 7 * 60; // WIB, UTC+7, no DST, same convention as the rest of the dashboard
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const VALID_FREQUENCIES = new Set(['daily', 'weekly', 'monthly_last_day', 'monthly_day', 'once']);
+const RUN_TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 // Message safe to show the user (the API's generic 500 line hides everything else).
 const userError = (m) => Object.assign(new Error(m), { expose: true });
 
 function jktDateStr(d) { return new Date(d.getTime() + JAKARTA_OFFSET_MIN * 60000).toISOString().slice(0, 10); }
+
+// Validate schedule params at the trust boundary (requestOtp). Throws userError.
+// shortcut: groups turned off for now (230k-320k people, mostly nothing to send); delete from this set (and RECIPIENT_POOLS_OFF in public/app.js) to allow again.
+const POOLS_OFF = new Set(['all_aum', 'all_registered']);
+function validateSchedule(p) {
+  if (POOLS_OFF.has(p.recipientType)) throw userError('This recipient group is turned off for now. Pick verified investors holding an active fund instead.');
+  const freq = String(p.frequency || '').trim();
+  if (!VALID_FREQUENCIES.has(freq)) throw userError('Invalid frequency. Must be one of: daily, weekly, monthly_last_day, monthly_day, once.');
+  if (freq === 'weekly') {
+    const dow = Number(p.dayOfWeek);
+    if (!Number.isInteger(dow) || dow < 0 || dow > 6) throw userError('dayOfWeek must be an integer 0..6 (Sun..Sat) for weekly schedules.');
+  }
+  if (freq === 'monthly_day') {
+    const dom = Number(p.dayOfMonth);
+    if (!Number.isInteger(dom) || dom < 1 || dom > 31) throw userError('dayOfMonth must be an integer 1..31 for monthly_day schedules.');
+  }
+  if (p.runTime && !RUN_TIME_RE.test(String(p.runTime).trim())) {
+    throw userError('runTime must be HH:MM (24h, WIB), e.g. "08:00".');
+  }
+}
 
 // Queue rows one runner claims per call (dashboard_claim_queue): a statement
 // builds its own PDFs, fund performance shares one. Throughput comes from
@@ -82,7 +105,7 @@ function genOtpCode() { return String(crypto.randomInt(0, 1000000)).padStart(6, 
 // offset.
 function parseRunTime(runTime) {
   const [h, m] = String(runTime || '08:00').split(':').map(Number);
-  return { h: h || 0, m: m || 0 };
+  return { h: Math.max(0, Math.min(23, h || 0)), m: Math.max(0, Math.min(59, m || 0)) };
 }
 
 function computeNextRun(job, from = new Date()) {
@@ -120,7 +143,7 @@ function computeNextRun(job, from = new Date()) {
   }
 
   if (job.frequency === 'monthly_day') {
-    const targetDom = Number(job.day_of_month) || 1;
+    const targetDom = Math.max(1, Math.min(31, Number(job.day_of_month) || 1));
     const dayInMonth = (y, mo) => Math.min(targetDom, new Date(Date.UTC(y, mo + 1, 0)).getUTCDate());
     let next = atTime(fromJkt.getUTCFullYear(), fromJkt.getUTCMonth(), dayInMonth(fromJkt.getUTCFullYear(), fromJkt.getUTCMonth()));
     if (toUtc(next) <= from) {
@@ -243,6 +266,7 @@ async function requestOtp(payload) {
   if (!payload.confirmationEmail || !EMAIL_RE.test(payload.confirmationEmail)) {
     throw userError('A valid confirmation email is required.');
   }
+  validateSchedule(payload);
   const code = genOtpCode();
   const [row] = await rest('/dashboard_schedule_otps', {
     method: 'POST',
@@ -268,7 +292,16 @@ async function confirmOtp(otpId, code) {
     await rest(`/dashboard_schedule_otps?id=eq.${otpId}`, { method: 'DELETE' });
     throw userError('Confirmation code expired, request a new one.');
   }
-  if (sha256Hex(String(code || '').trim()) !== otp.code_hash) throw userError('Incorrect confirmation code.');
+  if (sha256Hex(String(code || '').trim()) !== otp.code_hash) {
+    // shortcut: counter lives in payload._attempts (no migration), racy under parallel guesses; move to a column if abuse shows up
+    const attempts = (otp.payload._attempts || 0) + 1;
+    if (attempts >= MAX_OTP_ATTEMPTS) {
+      await rest(`/dashboard_schedule_otps?id=eq.${otpId}`, { method: 'DELETE' });
+      throw userError('Too many incorrect codes, request a new one.');
+    }
+    await rest(`/dashboard_schedule_otps?id=eq.${otpId}`, { method: 'PATCH', body: JSON.stringify({ payload: { ...otp.payload, _attempts: attempts } }) });
+    throw userError('Incorrect confirmation code.');
+  }
 
   const p = otp.payload;
   const seed = { frequency: p.frequency, day_of_week: p.dayOfWeek, day_of_month: p.dayOfMonth, run_time: p.runTime };
@@ -359,16 +392,8 @@ async function deleteJob(id) {
 }
 
 // Execution: called by POST /api/cron/run-due-schedules
-
-// Snapshots resolveRecipients() into queue rows for one due job. Recipients
-// are fixed at this moment even if the underlying investor pool changes
-// mid-drain (e.g. "all registered users" gaining a new signup partway
-// through a multi-tick drain doesn't retroactively add them to this run).
-async function enqueueJob(job) {
-  const { recipients } = await resolveSendable({
-    kind: job.kind, recipientType: job.recipient_type,
-    recipientEmail: job.recipient_email, recipientList: job.recipient_list,
-  });
+// Inserts the queue rows for recipients already resolved by runDueJobs.
+async function enqueueJob(job, recipients) {
   const toInsert = recipients.map((r) => ({
     job_id: job.id, recipient_email: r.email, recipient_user_id: r.userId, recipient_sid: r.sid,
   }));
@@ -398,6 +423,7 @@ async function mapLimit(items, limit, fn) {
 
 // SES rejects a burst over the account's send rate (or past its daily quota)
 // with a throttling error; those rows go back to the queue, nothing was sent.
+const MAX_RETRIES = 3;
 const THROTTLED_RE = /throttl|rate exceeded|quota exceeded|\b454\b/i;
 
 // Groups BigQuery rows by user_id.
@@ -455,7 +481,10 @@ async function drainChunk() {
           `${label.toLowerCase()} fund-performance (${fundScopeLabel(job.fund_filter)}) to ${row.recipient_email}`);
       };
     } else {
-      const statementMonth = job.statement_month || previousMonthYYYYMM(); // recurring sends cover the last completed month
+      // For recurring jobs, freeze statement month at claim time (row.created_at
+      // is when the queue row was inserted). Once jobs already have job.statement_month set.
+      const claimDate = rows[0]?.created_at ? new Date(rows[0].created_at) : new Date();
+      const statementMonth = job.statement_month || previousMonthYYYYMM(claimDate);
       const { from, to } = statementMonthRange(statementMonth);
       const ids = rows.map((r) => r.recipient_user_id);
       const c = Q.userContactBatch(ids);
@@ -471,6 +500,12 @@ async function drainChunk() {
       const txOf = byUser(transactions);
       const docs = statementDocsLabel({ sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth });
       const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
+      // Month label for {{month}} placeholder in subject/body (e.g. "September 2026")
+      const [y, m] = statementMonth.split('-').map(Number);
+      const monthLabel = new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      // Blank subject: name the statement's month, not the month of the send (defaultSubject).
+      const subject = (job.subject || `Your Sayakaya Statement, ${monthLabel}`).replaceAll('{{month}}', monthLabel);
+      const body = job.body && job.body.replaceAll('{{month}}', monthLabel);
       send = async (row) => {
         const userId = row.recipient_user_id;
         const contact = contactOf.get(userId);
@@ -483,7 +518,7 @@ async function drainChunk() {
         });
         const name = PDF.val(contact.name) || row.recipient_sid;
         await Mail.sendStatementEmail({
-          to: contact.email, subject: job.subject, body: job.body, name: contact.name, attachments, from: senderEmail,
+          to: contact.email, subject, body, name: contact.name, attachments, from: senderEmail,
           log: {
             category: 'statement', source, sentBy: job.created_by_username, jobId: job.id,
             userId, sid: row.recipient_sid, description: `${label} ${docs} for ${name}`,
@@ -495,8 +530,17 @@ async function drainChunk() {
     }
   } catch (e) {
     // Nothing went out: the chunk's shared data (PDF, BigQuery rows) failed.
-    await Promise.all(rows.map((row) => markQueueRow(row.id, 'failed', e.message)));
-    return { sent: 0, failed: rows.length };
+    // A transient error (timeout, 5xx, BigQuery rate limit) puts the rows back
+    // for up to MAX_RETRIES more tries; anything else fails them for good.
+    const transient = /timeout|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|socket hang up|\b5\d\d\b|rateLimit|backendError|internalError/i.test(e.message);
+    let failed = 0;
+    await Promise.all(rows.map((row) => {
+      const attempt = Number((/^retry (\d+):/.exec(row.error || '') || [])[1] || 0) + 1;
+      if (transient && attempt <= MAX_RETRIES) return markQueueRow(row.id, 'pending', `retry ${attempt}: ${e.message}`);
+      failed++;
+      return markQueueRow(row.id, 'failed', e.message);
+    }));
+    return { sent: 0, failed };
   }
 
   let sent = 0, failed = 0;
@@ -517,10 +561,10 @@ async function drainChunk() {
   return { sent, failed };
 }
 
-// tick: (1) claim newly-due jobs by populating their queue and pushing
-// next_run_at forward — done first and atomically-enough (see the
-// conditional PATCH below) so a job is never enqueued twice even if two
-// ticks overlap; (2) send one claimed chunk of the queue (drainChunk).
+// tick: (1) resolve recipients for newly-due jobs, (2) claim by advancing
+// next_run_at — done with a conditional PATCH so a job is never enqueued
+// twice even if two ticks overlap; (3) insert queue rows; (4) send one
+// claimed chunk of the queue (drainChunk).
 // jobId (optional): limit the tick to one job — used by resumeJob().
 async function runDueJobs(jobId) {
   const nowIso = new Date().toISOString();
@@ -541,6 +585,21 @@ async function runDueJobs(jobId) {
     // run: end the job now instead of advancing next_run_at into the future,
     // so the table doesn't show a "Next run" for a schedule that's done.
     const isLastRun = job.frequency === 'once' || (job.end_date && jktDateStr(nextRun) > job.end_date);
+
+    // Resolve recipients FIRST — if BigQuery/recipient resolution fails,
+    // the job stays due and will be retried next tick. No state changed.
+    let recipients;
+    try {
+      const resolved = await resolveSendable({
+        kind: job.kind, recipientType: job.recipient_type,
+        recipientEmail: job.recipient_email, recipientList: job.recipient_list,
+      });
+      recipients = resolved.recipients;
+    } catch (e) {
+      console.error(`[runDueJobs] resolveSendable failed for job ${job.id}:`, e.message);
+      continue; // job stays due, retry next tick
+    }
+
     // Conditional claim: only proceed if next_run_at still matches what we
     // just read — if another concurrent tick already claimed it, this PATCH
     // affects zero rows and we skip, avoiding a double-enqueue.
@@ -558,7 +617,19 @@ async function runDueJobs(jobId) {
       },
     );
     if (!claimed || !claimed.length) continue;
-    enqueued += await enqueueJob(job);
+
+    // Insert failed half-way: drop this run's rows and re-arm the job, so the
+    // next tick redoes the run instead of losing the month.
+    try {
+      enqueued += await enqueueJob(job, recipients);
+    } catch (e) {
+      console.error(`[runDueJobs] enqueueJob failed for job ${job.id}, rolling back claim:`, e.message);
+      await rest(`/dashboard_schedule_queue?job_id=eq.${job.id}&status=eq.pending&created_at=gte.${encodeURIComponent(new Date(Date.parse(nowIso) - 60000).toISOString())}`, { method: 'DELETE' });
+      await rest(`/dashboard_scheduled_jobs?id=eq.${job.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ next_run_at: job.next_run_at, last_run_at: job.last_run_at || null, run_count: job.run_count || 0, status: job.status }),
+      });
+    }
   }
 
   // Ended jobs still drain (a job's last run flips it to ended at claim time,

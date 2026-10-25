@@ -2393,10 +2393,12 @@ on('PATCH', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-pe
   const body = await bodyOf(req);
   const status = body.status as string;
   if (status !== 'active' && status !== 'paused') return json({ error: 'status must be "active" or "paused".' }, 400);
-  const job = status === 'active' ? await Sched.resumeJob(params.id) : await Sched.setJobStatus(params.id, status);
+  const job = await Sched.getJob(params.id);
   if (!job) return json({ error: 'Schedule not found.' }, 404);
+  if (!A.userCan(user, SCHEDULE_KIND_TAB[job.kind])) return json({ error: 'You do not have access to this schedule kind.' }, 403);
+  const updated = status === 'active' ? await Sched.resumeJob(params.id) : await Sched.setJobStatus(params.id, status);
   await A.logEvent(user!.id, user!.username, 'schedule_update', `${status === 'paused' ? 'paused' : 'resumed'} ${job.kind} schedule ${job.id}`);
-  return json({ ok: true, job });
+  return json({ ok: true, job: updated });
 }));
 
 // Exclusion list (both Send tabs share it)
@@ -2433,8 +2435,11 @@ on('DELETE', '/api/send-exclusions/:id', requireAnyTab(['send-statement', 'send-
 }));
 
 on('DELETE', '/api/schedules/:id', requireAnyTab(['send-statement', 'send-fund-performance'], async (_req, params, _url, user) => {
+  const job = await Sched.getJob(params.id);
+  if (!job) return json({ error: 'Schedule not found.' }, 404);
+  if (!A.userCan(user, SCHEDULE_KIND_TAB[job.kind])) return json({ error: 'You do not have access to this schedule kind.' }, 403);
   await Sched.deleteJob(params.id);
-  await A.logEvent(user!.id, user!.username, 'schedule_delete', `deleted schedule ${params.id}`);
+  await A.logEvent(user!.id, user!.username, 'schedule_delete', `deleted ${job.kind} schedule ${job.id}`);
   return json({ ok: true });
 }));
 

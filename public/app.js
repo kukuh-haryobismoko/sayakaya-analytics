@@ -6540,7 +6540,7 @@ function selectSendStatementUser(userId, sid, name, email) {
   $('#ssUserName').textContent = name || sid;
   $('#ssUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
   $('#ssPortfolioDate').value = '';
-  $('#ssStatementMonth').value = new Date().toISOString().slice(0, 7);
+  $('#ssStatementMonth').value = prevMonthWib();
   loadSsPreview();
 }
 
@@ -6577,23 +6577,14 @@ async function loadSsPreview() {
 
 // Editable default for the compose modal — the server falls back to similar
 // text if subject/body come through blank (see server/mail.js).
-function defaultStatementEmail({ name, sendPortfolio, portfolioDate, sendStatement, statementMonth }) {
+function defaultStatementEmail({ name, sendPortfolio, portfolioDate, sendStatement, statementMonth, monthText }) {
   const parts = [];
   if (sendPortfolio) parts.push(`your portfolio statement${portfolioDate ? ` as of ${portfolioDate}` : ' (current holdings)'}`);
-  let periodLabel = null;
-  if (sendStatement) {
-    periodLabel = new Date(statementMonth + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    parts.push(`your transaction e-statement for ${periodLabel}`);
-  }
-  // The subject's month follows the statement being sent, not today's date —
-  // falls back to the portfolio date's month, then today, when there's no
-  // transaction e-statement to anchor it to.
-  if (!periodLabel) {
-    const anchor = portfolioDate ? new Date(portfolioDate) : new Date();
-    periodLabel = anchor.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  }
+  // monthText: schedules pass '{{month}}', which the server fills in per send.
+  const period = sendStatement ? (monthText || new Date(statementMonth + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })) : null;
+  if (sendStatement) parts.push(`your transaction e-statement for ${period}`);
   return {
-    subject: `Your Sayakaya Statement, ${periodLabel}`,
+    subject: sendStatement ? `Your Sayakaya ${sendPortfolio ? 'Statement' : 'E-Statement'}, ${period}` : `Your Sayakaya Portfolio Statement${portfolioDate ? `, as of ${portfolioDate}` : ''}`,
     body: `Dear ${name || 'Investor'},\n\nPlease find attached ${parts.join(' and ')}, issued by PT Sayakaya Lahir Batin.\n\nTo open the attached PDF file(s), use your date of birth as registered with us in DDMMYYYY format (e.g. 17081990 for 17 August 1990).\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin`,
   };
 }
@@ -6722,7 +6713,7 @@ function openSsBatchCompose() {
     return;
   }
   const { subject, body } = defaultStatementEmail({ sendPortfolio, portfolioDate, sendStatement, statementMonth });
-  $('#ssBatchEmailTo').textContent = `Will be matched against ${ssBatchIdentifiers.length} picked or pasted email/SID${ssBatchIdentifiers.length === 1 ? '' : 's'} and sent to each investor found.`;
+  setSendConfirm($('#ssBatchEmailTo'), ssBatchIdentifiers.length, [`To: up to ${plural(ssBatchIdentifiers.length, 'investor')}, picked or pasted (matched by email/SID, each gets their own email)`, 'When: right away', sendingLine('statement', { sendPortfolio, portfolioDate, sendStatement, statementMonth })]);
   $('#ssBatchEmailSubject').value = subject;
   $('#ssBatchEmailBody').value = body;
   $('#ssBatchEmailModal').showModal();
@@ -6851,7 +6842,7 @@ function openFpeCompose() {
       fpeDefaultEmail(asOf), fpeRecipients);
     return;
   }
-  $('#fpeEmailTo').textContent = `Will be sent to ${fpeRecipients.length} recipient${fpeRecipients.length === 1 ? '' : 's'}.`;
+  setSendConfirm($('#fpeEmailTo'), fpeRecipients.length, [`To: ${plural(fpeRecipients.length, 'recipient')}, picked or pasted emails`, 'When: right away', sendingLine('fund_performance', { fundFilter: fpeFundFilter, navAsOf: asOf || null })]);
   const { subject, body } = fpeDefaultEmail(asOf);
   $('#fpeEmailSubject').value = subject;
   $('#fpeEmailBody').value = body;
@@ -6915,7 +6906,9 @@ async function loadSchedules(kind) {
 }
 const schedRefreshTimer = {};
 
-const SCHED_RECIPIENT_LABEL = { single_email: null, csv_list: null, all_aum: 'All investors with AUM', active_aum: 'Investors with AUM in active funds', active_aum_verified: 'Verified investors with AUM in active funds', all_registered: 'All registered users' };
+// Recipient groups shown but not selectable for now; the server refuses them too (POOLS_OFF in server/schedules.js).
+const RECIPIENT_POOLS_OFF = ['all_aum', 'all_registered'];
+const SCHED_RECIPIENT_LABEL = { single_email: null, csv_list: null, all_aum: 'All investors with AUM', active_aum: 'All investors holding an active fund, incl. unverified', active_aum_verified: 'Verified investors holding an active fund', all_registered: 'All registered users' };
 function schedRecipientSummary(row) {
   if (row.recipient_type === 'single_email') return val(row.recipient_email);
   if (row.recipient_type === 'csv_list') return `${(row.recipient_list || []).length} emails`;
@@ -7053,13 +7046,16 @@ function schedResetModal(kind) {
   schedEl(prefix, 'Endless').checked = true;
   schedEl(prefix, 'EndDate').value = '';
   schedEl(prefix, 'EndDate').min = new Date().toISOString().slice(0, 10);
-  schedEl(prefix, 'Subject').value = kind === 'statement' ? 'Your Sayakaya Statement' : 'Sayakaya Fund Performance Update';
-  schedEl(prefix, 'Body').value = kind === 'statement'
-    ? 'Dear Investor,\n\nPlease find your portfolio/e-statement attached, issued by PT Sayakaya Lahir Batin.\n\nTo open the attached PDF file(s), use your date of birth as registered with us in DDMMYYYY format (e.g. 17081990 for 17 August 1990).\n\nIf any details appear incorrect, please contact our support team.\n\nBest regards,\nPT Sayakaya Lahir Batin'
-    : 'Dear Investor,\n\nPlease find attached our latest fund performance update (Reksa Dana Update), issued by PT Sayakaya Lahir Batin.\n\nBest regards,\nPT Sayakaya Lahir Batin';
   schedEl(prefix, 'ConfirmEmail').value = '';
-  if (kind === 'statement') { schedEl(prefix, 'SendPortfolio').checked = true; schedEl(prefix, 'SendStatement').checked = true; }
-  else fpeSchedScope.reset();
+  if (kind === 'statement') {
+    schedEl(prefix, 'SendPortfolio').checked = true;
+    schedEl(prefix, 'SendStatement').checked = true;
+    schedApplyDefaultText(kind, true);
+  } else {
+    schedEl(prefix, 'Subject').value = 'Sayakaya Fund Performance Update';
+    schedEl(prefix, 'Body').value = 'Dear Investor,\n\nPlease find attached our latest fund performance update (Reksa Dana Update), issued by PT Sayakaya Lahir Batin.\n\nBest regards,\nPT Sayakaya Lahir Batin';
+    fpeSchedScope.reset();
+  }
   schedUpdateFieldVisibility(kind);
 }
 
@@ -7139,6 +7135,49 @@ function schedSetOnceMode(kind, on) {
   schedEl(prefix, 'ConfirmBtn').textContent = t(on ? 'sched_once_confirm' : 'sched_confirm');
   if (!on && schedOnce && schedOnce.kind === kind) schedOnce = null;
 }
+// A send to this many people or more gets the red warning box (preview + code step).
+const BULK_WARN_AT = 10;
+const wibMonth = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 7);
+const stmtMonthStillOpen = (x) => !!(x.sendStatement && x.statementMonth && x.statementMonth >= wibMonth());
+const STMT_OPEN_NOTE = 'This month is not over yet, so the e-statement will be incomplete.';
+// The month before this one in WIB: what a statement sent today covers.
+const prevMonthWib = () => { const [y, m] = wibMonth().split('-').map(Number); return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7); };
+// What a send carries, in one phrase: documents + month.
+function schedDocsSummary(kind, x) {
+  if (kind !== 'statement') return `fund performance report (${fundScopeSummary(x.fundFilter)}, NAV ${x.navAsOf ? `as of ${x.navAsOf}` : 'of the latest date'})`;
+  const month = x.statementMonth
+    ? new Date(x.statementMonth + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    : 'the month before each send';
+  return [x.sendPortfolio && (x.portfolioDate ? `portfolio as of ${x.portfolioDate}` : 'live portfolio'), x.sendStatement && `e-statement for ${month}`].filter(Boolean).join(' + ');
+}
+const sendingLine = (kind, x) => `Sending: ${schedDocsSummary(kind, x)}${stmtMonthStillOpen(x) ? `\n${STMT_OPEN_NOTE}` : ''}`;
+// Confirmation box in every send dialog, one fact per line: who (count + group), when, what.
+function setSendConfirm(el, count, lines) {
+  const bulk = count >= BULK_WARN_AT;
+  el.className = `callout confirm${bulk ? ' warn' : ''}`;
+  el.textContent = [bulk && 'Large send: check every line below. Sent emails cannot be recalled.', ...lines].filter(Boolean).join('\n');
+}
+// Picked recipient group as the dropdown names it, minus the "(recommended)" tag.
+const groupLabel = (select) => select.selectedOptions[0].textContent.replace(/\s*\([^)]*\)$/, '').trim();
+const plural = (n, word) => `${num(n)} ${word}${n === 1 ? '' : 's'}`;
+function schedWhen(prefix, x) {
+  if (x.frequency === 'once') return 'right away';
+  const day = { daily: 'every day', weekly: `every week on ${schedEl(prefix, 'DayOfWeek').selectedOptions[0].textContent}`,
+    monthly_last_day: 'on the last day of each month', monthly_day: `on day ${x.dayOfMonth} of each month` }[x.frequency];
+  return `${day} at ${x.runTime} WIB`;
+}
+// Default schedule text follows the ticked documents; text the admin edited stays.
+function schedApplyDefaultText(kind, force) {
+  const { prefix } = schedCfg(kind);
+  const sendPortfolio = schedEl(prefix, 'SendPortfolio').checked;
+  const sendStatement = schedEl(prefix, 'SendStatement').checked;
+  if (!sendPortfolio && !sendStatement) return;
+  const text = defaultStatementEmail({ sendPortfolio, sendStatement, monthText: '{{month}}' });
+  [['Subject', text.subject], ['Body', text.body]].forEach(([name, value]) => {
+    const el = schedEl(prefix, name);
+    if (force || el.value === el.dataset.auto) { el.value = value; el.dataset.auto = value; }
+  });
+}
 function openSchedOnce(kind, recipientType, extras, note, { subject, body }, list = null) {
   const { prefix } = schedCfg(kind);
   schedResetModal(kind);
@@ -7170,7 +7209,8 @@ async function batchGroupChanged(kind, px) {
   try {
     const { count, excluded } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify({ kind, recipientType: type }) });
     if (seq !== batchGroupSeq) return;
-    textEl.textContent = `${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'} right now.${exclNote(excluded)}`
+    $(`#${px}GroupCount`).classList.toggle('warn', count >= BULK_WARN_AT);
+    textEl.textContent = `${count >= BULK_WARN_AT ? 'Large send. ' : ''}${plural(count, kind === 'statement' ? 'investor' : 'recipient')} (${groupLabel($(`#${px}RecipientType`))}) right now.${exclNote(excluded)}`
       + ' Compose asks for a confirmation code, then the emails go out from a queue, several at a time; progress shows under Automated sending.'
       + (kind === 'statement' ? ' A group always gets the live portfolio as of the send date.' : '');
   } catch (e) { if (seq === batchGroupSeq) textEl.textContent = e.message; }
@@ -7265,8 +7305,12 @@ async function schedPreviewCount(kind) {
     const spec = await schedBuildSpec(kind);
     const { count, excluded } = await api('/api/schedules/preview', { method: 'POST', body: JSON.stringify(spec) });
     if (seq !== schedPreviewSeq) return;
-    const people = `${num(count)} ${kind === 'statement' ? 'investor' : 'recipient'}${count === 1 ? '' : 's'}`;
-    textEl.textContent = (schedOnce && schedOnce.kind === kind ? `This will reach ${people}.` : `This will reach approximately ${people} per send.`) + exclNote(excluded);
+    const people = plural(count, kind === 'statement' ? 'investor' : 'recipient');
+    const once = schedOnce && schedOnce.kind === kind;
+    const typeLabel = groupLabel(schedEl(prefix, 'RecipientType'));
+    el.classList.toggle('warn', count >= BULK_WARN_AT);
+    textEl.textContent = (count >= BULK_WARN_AT ? 'Large send. ' : '') + (once ? `This will reach ${people}` : `This will reach approximately ${people} per send`)
+      + ` (${typeLabel}).` + exclNote(excluded);
   } catch (e) { if (seq === schedPreviewSeq) textEl.textContent = e.message; }
 }
 
@@ -7297,10 +7341,14 @@ async function schedSendOtp(kind) {
     schedOtpState = { kind, otpId };
     schedEl(prefix, 'Step1').classList.add('hidden');
     schedEl(prefix, 'Step2').classList.remove('hidden');
-    const people = `${num(recipientCount)} recipient${recipientCount === 1 ? '' : 's'}`;
-    schedEl(prefix, 'Step2Hint').textContent = payload.frequency === 'once'
-      ? `We sent a 6-digit code to ${payload.confirmationEmail}. Enter it below to start sending to ${people}.`
-      : `We sent a 6-digit code to ${payload.confirmationEmail}. Enter it below to create this schedule (reaches ~${people} per send).`;
+    const type = schedEl(prefix, 'RecipientType').value;
+    const who = type === 'single_email' ? payload.recipientEmail : type === 'csv_list' ? 'uploaded or pasted list' : groupLabel(schedEl(prefix, 'RecipientType'));
+    setSendConfirm(schedEl(prefix, 'Step2Hint'), recipientCount, [
+      `To: ${plural(recipientCount, 'recipient')}, ${who}`,
+      `When: ${schedWhen(prefix, payload)}`,
+      sendingLine(kind, payload),
+      `Code sent to ${payload.confirmationEmail}. Enter it below to ${payload.frequency === 'once' ? 'start sending' : 'create this schedule'}.`,
+    ]);
     schedEl(prefix, 'Code').value = '';
   } catch (e) { toast(e.message); }
 }
@@ -9587,7 +9635,7 @@ function wire() {
     const statementMonth = $('#ssStatementMonth').value;
     if (sendStatement && !statementMonth) { toast(t('msg_pick_a_month_for_the_transaction_e_state')); return; }
     const { subject, body } = defaultStatementEmail({ name: ssSelected.name, sendPortfolio, portfolioDate, sendStatement, statementMonth });
-    $('#ssEmailTo').textContent = `Will be sent to ${ssSelected.name}'s email on file.`;
+    setSendConfirm($('#ssEmailTo'), 1, [`To: 1 investor, ${ssSelected.name} (email on file)`, 'When: right away', sendingLine('statement', { sendPortfolio, portfolioDate, sendStatement, statementMonth })]);
     $('#ssEmailSubject').value = subject;
     $('#ssEmailBody').value = body;
     $('#ssEmailModal').showModal();
@@ -9607,7 +9655,7 @@ function wire() {
 
   // send statement (batch)
   ssBatchPicker = setupRecipientPicker('ssBatch');
-  $('#ssBatchStatementMonth').value = new Date().toISOString().slice(0, 7);
+  $('#ssBatchStatementMonth').value = prevMonthWib();
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
   ['bePeriod', 'beBooth', 'bePerson'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothEvent));
   ['beTxKind', 'beTxStatus', 'beTxType'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothTx));
@@ -9649,11 +9697,13 @@ function wire() {
     schedEl(prefix, 'CsvFile').addEventListener('change', () => schedPreviewCount(kind));
     schedEl(prefix, 'CsvPaste').addEventListener('change', () => schedPreviewCount(kind));
     schedEl(prefix, 'SendCodeBtn').addEventListener('click', () => schedSendOtp(kind));
+    if (kind === 'statement') ['SendPortfolio', 'SendStatement'].forEach((n) => schedEl(prefix, n).addEventListener('change', () => schedApplyDefaultText(kind, false)));
     schedEl(prefix, 'CancelBtn1').addEventListener('click', () => schedEl(prefix, 'Modal').close());
     schedEl(prefix, 'BackBtn').addEventListener('click', () => { schedEl(prefix, 'Step2').classList.add('hidden'); schedEl(prefix, 'Step1').classList.remove('hidden'); });
     schedEl(prefix, 'ConfirmBtn').addEventListener('click', () => schedConfirmOtp(kind));
     schedEl(prefix, 'DetailCloseBtn').addEventListener('click', () => schedEl(prefix, 'DetailModal').close());
   }
+  RECIPIENT_POOLS_OFF.forEach((v) => document.querySelectorAll(`select[id$="RecipientType"] option[value="${v}"]`).forEach((o) => { o.disabled = true; }));
   wireSchedModal('statement');
   wireSchedModal('fund_performance');
 

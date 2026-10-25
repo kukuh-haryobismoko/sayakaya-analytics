@@ -56,6 +56,19 @@ const preview = (type) => { $('#ssSchedRecipientType').value = type; return vm.r
     ['budi@example.com', 'IDD2302A8215347', 'ani@example.com'], 'statement: emails + SIDs, deduped, header and names dropped');
   assert.deepStrictEqual(JSON.parse(vm.runInContext(`JSON.stringify(extractRecipients(${JSON.stringify(csv)}, false))`, sandbox)),
     ['budi@example.com', 'ani@example.com'], 'fund performance: emails only');
+  // Default email wording follows the documents; schedules keep {{month}} for the server to fill.
+  const mail = (o) => JSON.parse(vm.runInContext(`JSON.stringify(defaultStatementEmail(${JSON.stringify(o)}))`, sandbox));
+  const both = mail({ sendPortfolio: true, sendStatement: true, statementMonth: '2026-09' });
+  assert.strictEqual(both.subject, 'Your Sayakaya Statement, September 2026');
+  assert.match(both.body, /portfolio statement \(current holdings\) and your transaction e-statement for September 2026/);
+  const only = mail({ sendPortfolio: false, sendStatement: true, statementMonth: '2026-09' });
+  assert.strictEqual(only.subject, 'Your Sayakaya E-Statement, September 2026');
+  assert.ok(!/portfolio statement/.test(only.body));
+  const pf = mail({ sendPortfolio: true, sendStatement: false });
+  assert.strictEqual(pf.subject, 'Your Sayakaya Portfolio Statement');
+  assert.ok(!/e-statement/.test(pf.body));
+  assert.strictEqual(mail({ sendStatement: true, monthText: '{{month}}' }).subject, 'Your Sayakaya E-Statement, {{month}}');
+  assert.match(vm.runInContext('prevMonthWib()', sandbox), /^\d{4}-\d{2}$/);
   console.log('sched-preview smoke test passed');
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

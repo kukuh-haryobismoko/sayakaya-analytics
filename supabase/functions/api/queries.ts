@@ -694,7 +694,7 @@ export const userTransactions = (userId: string, from: string, to: string): Quer
   sql: `SELECT t.created_at, t.type, t.status, f.name AS fund, t.unit, t.amount, t.final_amount
     FROM ${TX} t
     LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
-    WHERE t.user_id = @userId AND DATE(t.created_at) BETWEEN @from AND @to
+    WHERE t.user_id = @userId AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
       AND t.status IN ('completed', 'verified', 'completed_payment')
     ORDER BY t.created_at`,
   params: { userId, from, to },
@@ -741,7 +741,7 @@ export const userTransactionsBatch = (userIds: string[], from: string, to: strin
   sql: `SELECT t.user_id, t.created_at, t.type, t.status, f.name AS fund, t.unit, t.amount, t.final_amount
     FROM ${TX} t
     LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
-    WHERE t.user_id IN UNNEST(@userIds) AND DATE(t.created_at) BETWEEN @from AND @to
+    WHERE t.user_id IN UNNEST(@userIds) AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
       AND t.status IN ('completed', 'verified', 'completed_payment')
     ORDER BY t.user_id, t.created_at`,
   params: { userIds, from, to },
@@ -783,7 +783,7 @@ export const scheduleRecipientRecap = (userIds: string[], from: string, to: stri
   sql: `SELECT u.id AS user_id, u.sid_code AS sid, up.name,
       (EXISTS (SELECT 1 FROM ${PORT} p WHERE p.deleted_at IS NULL AND p.unit > 0 AND p.user_id = u.id)
         OR EXISTS (SELECT 1 FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id = u.id)) AS has_portfolio,
-      EXISTS (SELECT 1 FROM ${TX} t WHERE t.user_id = u.id AND DATE(t.created_at) BETWEEN @from AND @to) AS had_transaction_last_month
+      EXISTS (SELECT 1 FROM ${TX} t WHERE t.user_id = u.id AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to) AS had_transaction_last_month
     FROM ${USERS} u
     LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
     WHERE u.id IN UNNEST(@userIds)`,
@@ -2488,7 +2488,7 @@ export const behaviorUserTimeline = (userId: string, from?: string, to?: string)
           t.final_amount AS amount, t.status, CAST(NULL AS INT64) AS session_id, CAST(NULL AS STRING) AS platform
         FROM ${TX} t
         LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
-        WHERE t.user_id = @userId AND DATE(t.created_at) BETWEEN @from AND @to
+        WHERE t.user_id = @userId AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
       )
       SELECT FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', ts, 'Asia/Jakarta') AS time_wib, source, event, detail, amount, status, session_id, platform
       FROM (SELECT * FROM app UNION ALL SELECT * FROM tx)

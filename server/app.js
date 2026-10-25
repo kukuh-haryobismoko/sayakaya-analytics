@@ -2210,10 +2210,12 @@ function createApp({ serveStatic = true } = {}) {
   app.patch('/api/schedules/:id', requireEitherScheduleTab, handler(async (req, res) => {
     const { status } = req.body || {};
     if (status !== 'active' && status !== 'paused') return res.status(400).json({ error: 'status must be "active" or "paused".' });
-    const job = status === 'active' ? await Sched.resumeJob(req.params.id) : await Sched.setJobStatus(req.params.id, status);
+    const job = await Sched.getJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'Schedule not found.' });
+    if (!Auth.userCan(req.user, SCHEDULE_KIND_TAB[job.kind])) return res.status(403).json({ error: 'You do not have access to this schedule kind.' });
+    const updated = status === 'active' ? await Sched.resumeJob(req.params.id) : await Sched.setJobStatus(req.params.id, status);
     await Auth.logEvent(req.user.id, req.user.username, 'schedule_update', `${status === 'paused' ? 'paused' : 'resumed'} ${job.kind} schedule ${job.id}`);
-    res.json({ ok: true, job });
+    res.json({ ok: true, job: updated });
   }));
 
   // Exclusion list (both Send tabs share it)
@@ -2249,8 +2251,11 @@ function createApp({ serveStatic = true } = {}) {
   }));
 
   app.delete('/api/schedules/:id', requireEitherScheduleTab, handler(async (req, res) => {
+    const job = await Sched.getJob(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Schedule not found.' });
+    if (!Auth.userCan(req.user, SCHEDULE_KIND_TAB[job.kind])) return res.status(403).json({ error: 'You do not have access to this schedule kind.' });
     await Sched.deleteJob(req.params.id);
-    await Auth.logEvent(req.user.id, req.user.username, 'schedule_delete', `deleted schedule ${req.params.id}`);
+    await Auth.logEvent(req.user.id, req.user.username, 'schedule_delete', `deleted ${job.kind} schedule ${job.id}`);
     res.json({ ok: true });
   }));
 

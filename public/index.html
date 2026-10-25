@@ -460,11 +460,18 @@
           <label class="field-card-top" for="ssBatchRecipientType" data-i18n="sched_recipient_type">Recipients</label>
           <select id="ssBatchRecipientType" class="field-card-input">
             <option value="list" data-i18n="batch_recipient_list">Picked or pasted investors</option>
-            <option value="active_aum" data-i18n="sched_recipient_active_aum">Investors with AUM in active funds</option>
-            <option value="active_aum_verified" data-i18n="sched_recipient_active_aum_verified">Verified investors with AUM in active funds</option>
-            <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM</option>
-            <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users</option>
+            <option value="active_aum_verified" data-i18n="sched_recipient_active_aum_verified">Verified investors holding an active fund (recommended)</option>
+            <option value="active_aum" data-i18n="sched_recipient_active_aum">All investors holding an active fund, incl. unverified</option>
+            <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM, incl. inactive funds (off for now)</option>
+            <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users (off for now)</option>
           </select>
+          <details class="recipient-info">
+            <summary><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info"></use></svg><span data-i18n="sched_recipient_info_toggle">What do these groups mean?</span></summary>
+            <div class="callout"><span data-i18n="sched_recipient_info">Verified investors holding an active fund: KYC-verified accounts that hold units of an active fund today. This is the usual choice.
+All investors holding an active fund: the same, plus accounts that are not verified yet.
+The two groups marked &quot;off for now&quot; cannot be picked for now. They reach 230,000 to 320,000 people, and most of them hold nothing in an active fund (sign-up promo leftovers, accounts that never invested), so their statements would be empty or fail for lack of a birthdate.
+The exact number of people shows below once you pick a group, and again before you confirm.</span></div>
+          </details>
         </div>
         <div class="callout hidden" id="ssBatchGroupCount" style="margin-top:12px">
           <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>
@@ -554,7 +561,7 @@
 
       <dialog id="ssEmailModal" class="admin-modal">
         <div class="panel-head wrap"><h2 data-i18n="ss_modal_title">Email investor</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
-        <span class="hint" id="ssEmailTo"></span>
+        <div class="callout" id="ssEmailTo" role="status"></div>
         <div class="filters" style="margin-top:12px; flex-direction:column; align-items:stretch">
           <input type="text" id="ssEmailSubject" style="width:100%" />
           <textarea id="ssEmailBody" rows="10" style="width:100%; margin-top:10px; font:inherit"></textarea>
@@ -567,7 +574,7 @@
 
       <dialog id="ssBatchEmailModal" class="admin-modal">
         <div class="panel-head wrap"><h2 data-i18n="ss_batch_modal_title">Email batch statement</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
-        <span class="hint" id="ssBatchEmailTo"></span>
+        <div class="callout" id="ssBatchEmailTo" role="status"></div>
         <div class="filters" style="margin-top:12px; flex-direction:column; align-items:stretch">
           <input type="text" id="ssBatchEmailSubject" style="width:100%" />
           <textarea id="ssBatchEmailBody" rows="10" style="width:100%; margin-top:10px; font:inherit"></textarea>
@@ -587,11 +594,18 @@
             <select id="ssSchedRecipientType" class="field-card-input">
               <option value="single_email" data-i18n="sched_recipient_single">Single email</option>
               <option value="csv_list" data-i18n="sched_recipient_csv">Upload CSV / paste emails</option>
-              <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM</option>
-              <option value="active_aum" data-i18n="sched_recipient_active_aum">Investors with AUM in active funds</option>
-              <option value="active_aum_verified" data-i18n="sched_recipient_active_aum_verified">Verified investors with AUM in active funds</option>
-              <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users</option>
+              <option value="active_aum_verified" data-i18n="sched_recipient_active_aum_verified">Verified investors holding an active fund (recommended)</option>
+              <option value="active_aum" data-i18n="sched_recipient_active_aum">All investors holding an active fund, incl. unverified</option>
+              <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM, incl. inactive funds (off for now)</option>
+              <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users (off for now)</option>
             </select>
+            <details class="recipient-info">
+              <summary><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info"></use></svg><span data-i18n="sched_recipient_info_toggle">What do these groups mean?</span></summary>
+              <div class="callout"><span data-i18n="sched_recipient_info">Verified investors holding an active fund: KYC-verified accounts that hold units of an active fund today. This is the usual choice.
+All investors holding an active fund: the same, plus accounts that are not verified yet.
+The two groups marked &quot;off for now&quot; cannot be picked for now. They reach 230,000 to 320,000 people, and most of them hold nothing in an active fund (sign-up promo leftovers, accounts that never invested), so their statements would be empty or fail for lack of a birthdate.
+The exact number of people shows below once you pick a group, and again before you confirm.</span></div>
+            </details>
           </div>
 
           <div class="field-card" id="ssSchedSingleEmailField" style="margin-top:10px">
@@ -686,7 +700,7 @@
         </div>
 
         <div id="ssSchedStep2" class="hidden">
-          <span class="hint" id="ssSchedStep2Hint"></span>
+          <div class="callout" id="ssSchedStep2Hint" role="status"></div>
           <div class="field-card" style="margin-top:12px">
             <label class="field-card-top" for="ssSchedCode" data-i18n="sched_code_label">Confirmation code</label>
             <input type="text" id="ssSchedCode" class="field-card-input" maxlength="6" placeholder="123456" />
@@ -717,11 +731,18 @@
           <label class="field-card-top" for="fpeRecipientType" data-i18n="sched_recipient_type">Recipients</label>
           <select id="fpeRecipientType" class="field-card-input">
             <option value="list" data-i18n="batch_recipient_list_people">Picked or pasted emails</option>
-            <option value="active_aum" data-i18n="sched_recipient_active_aum">Investors with AUM in active funds</option>
-            <option value="active_aum_verified" data-i18n="sched_recipient_active_aum_verified">Verified investors with AUM in active funds</option>
-            <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM</option>
-            <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users</option>
+            <option value="active_aum_verified" data-i18n="sched_recipient_active_aum_verified">Verified investors holding an active fund (recommended)</option>
+            <option value="active_aum" data-i18n="sched_recipient_active_aum">All investors holding an active fund, incl. unverified</option>
+            <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM, incl. inactive funds (off for now)</option>
+            <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users (off for now)</option>
           </select>
+          <details class="recipient-info">
+            <summary><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info"></use></svg><span data-i18n="sched_recipient_info_toggle">What do these groups mean?</span></summary>
+            <div class="callout"><span data-i18n="sched_recipient_info">Verified investors holding an active fund: KYC-verified accounts that hold units of an active fund today. This is the usual choice.
+All investors holding an active fund: the same, plus accounts that are not verified yet.
+The two groups marked &quot;off for now&quot; cannot be picked for now. They reach 230,000 to 320,000 people, and most of them hold nothing in an active fund (sign-up promo leftovers, accounts that never invested), so their statements would be empty or fail for lack of a birthdate.
+The exact number of people shows below once you pick a group, and again before you confirm.</span></div>
+          </details>
         </div>
         <div class="callout hidden" id="fpeGroupCount" style="margin-top:12px">
           <span class="callout-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>
@@ -828,7 +849,7 @@
 
       <dialog id="fpeEmailModal" class="admin-modal">
         <div class="panel-head wrap"><h2 data-i18n="fpe_modal_title">Email fund performance</h2><button type="button" class="modal-close" aria-label="Close">✕</button></div>
-        <span class="hint" id="fpeEmailTo"></span>
+        <div class="callout" id="fpeEmailTo" role="status"></div>
         <div class="filters" style="margin-top:12px; flex-direction:column; align-items:stretch">
           <input type="text" id="fpeEmailSubject" style="width:100%" />
           <textarea id="fpeEmailBody" rows="10" style="width:100%; margin-top:10px; font:inherit"></textarea>
@@ -848,11 +869,18 @@
             <select id="fpeSchedRecipientType" class="field-card-input">
               <option value="single_email" data-i18n="sched_recipient_single">Single email</option>
               <option value="csv_list" data-i18n="sched_recipient_csv">Upload CSV / paste emails</option>
-              <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM</option>
-              <option value="active_aum" data-i18n="sched_recipient_active_aum">Investors with AUM in active funds</option>
-              <option value="active_aum_verified" data-i18n="sched_recipient_active_aum_verified">Verified investors with AUM in active funds</option>
-              <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users</option>
+              <option value="active_aum_verified" data-i18n="sched_recipient_active_aum_verified">Verified investors holding an active fund (recommended)</option>
+              <option value="active_aum" data-i18n="sched_recipient_active_aum">All investors holding an active fund, incl. unverified</option>
+              <option value="all_aum" data-i18n="sched_recipient_all_aum">All investors with AUM, incl. inactive funds (off for now)</option>
+              <option value="all_registered" data-i18n="sched_recipient_all_registered">All registered users (off for now)</option>
             </select>
+            <details class="recipient-info">
+              <summary><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info"></use></svg><span data-i18n="sched_recipient_info_toggle">What do these groups mean?</span></summary>
+              <div class="callout"><span data-i18n="sched_recipient_info">Verified investors holding an active fund: KYC-verified accounts that hold units of an active fund today. This is the usual choice.
+All investors holding an active fund: the same, plus accounts that are not verified yet.
+The two groups marked &quot;off for now&quot; cannot be picked for now. They reach 230,000 to 320,000 people, and most of them hold nothing in an active fund (sign-up promo leftovers, accounts that never invested), so their statements would be empty or fail for lack of a birthdate.
+The exact number of people shows below once you pick a group, and again before you confirm.</span></div>
+            </details>
           </div>
 
           <div class="field-card" id="fpeSchedSingleEmailField" style="margin-top:10px">
@@ -950,7 +978,7 @@
         </div>
 
         <div id="fpeSchedStep2" class="hidden">
-          <span class="hint" id="fpeSchedStep2Hint"></span>
+          <div class="callout" id="fpeSchedStep2Hint" role="status"></div>
           <div class="field-card" style="margin-top:12px">
             <label class="field-card-top" for="fpeSchedCode" data-i18n="sched_code_label">Confirmation code</label>
             <input type="text" id="fpeSchedCode" class="field-card-input" maxlength="6" placeholder="123456" />
