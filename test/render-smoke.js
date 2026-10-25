@@ -444,6 +444,7 @@ sandbox.api = async (path) => {
   if (path.startsWith('/api/ai/anomalies'))     return [{ metric: 'Buy volume', day: '2026-10-20', value: 9e9, z: 4.2, change_pct: null }];
   if (path.startsWith('/api/ai/churn-actions')) return { summary: { priority_1: 1, priority_2: 0, priority_3: 0, redeemed_all: 1, aum_lost: 2e8 }, rows: [{ priority: 1, status: 'Redeemed all', action: 'Call personally: redeemed everything and has not come back', name: 'A', email: 'a@x.id', phone: '0812', peak_aum: 2e8, peak_date: '2026-01-29', current_aum: 0, change_pct: -100, days_since_redeem_all: 90, last_buy: '2026-01-10', last_sell: '2026-07-01' }] };
   if (path.startsWith('/api/ai/watchdog'))      return { text: 'Semua sumber segar.', checks: [{ source: 'portfolio_fix', latest: '2026-10-22', age_days: 1, status: 'ok' }], diffs: [{ day: '2026-10-22', portfolio_with_code: 2.6e11, portfolio_fix: 2.6e11, goal_snapshots: 2.4e11, goal_snapshots_vs_pwc_pct: -7.7, portfolio_fix_vs_pwc_pct: 0, status: 'differs' }] };
+  if (path.startsWith('/api/portfolio/bulk-summary')) return { count: 2, totalAum: 3000000, funds: [], investors: [{ sid: 'IDD1', name: 'Budi', aum: 2000000 }, { sid: 'IDD2', name: 'Sari', aum: 1000000 }] };
   throw new Error('unexpected path ' + path);
 };
 
@@ -660,6 +661,25 @@ sandbox.api = async (path) => {
     else if (get('#askInput').value !== '') errors.push('Ask: input was not cleared after sending');
     else console.log('ok    Ask: one request, input cleared, nothing downloaded until a button is pressed');
     void bubbleNow; void answer;
+    sandbox.fetch = realFetch;
+  }
+  // Ask, several investors: a summary list and buttons, no file until a button is pressed.
+  {
+    const calls = [];
+    const realFetch = sandbox.fetch;
+    const act = { type: 'portfolio_bulk', source: 'portfolio_full', format: 'pdf', mode: 'combined', missing: ['IDD404'], users: [{ userId: 'u1', sid: 'IDD1' }, { userId: 'u2', sid: 'IDD2' }] };
+    sandbox.fetch = async (url) => {
+      calls.push(String(url));
+      const body = String(url).includes('/api/ask') ? { action: act } : {};
+      return { ok: true, json: async () => body, blob: async () => ({}), headers: { get: () => null } };
+    };
+    get('#askInput').value = 'top 2 portfolio';
+    await sandbox.runAsk();
+    const box = get('#askAnswer');
+    const html = box._html;
+    if (calls.some((u) => u.includes('/api/export'))) errors.push('Ask bulk: downloaded a file without a button press');
+    else if (!html.includes('IDD2') || !html.includes('IDD404')) errors.push(`Ask bulk: list or missing SIDs not shown: ${html.slice(0, 200)}`);
+    else console.log('ok    Ask bulk: investor list and not-found SIDs shown, nothing downloaded until a button is pressed');
     sandbox.fetch = realFetch;
   }
 

@@ -10,8 +10,15 @@ const stub = (rel, exports) => { const f = require.resolve(rel, { paths: [path.j
 
 let people = [];
 let prompts = [];
-stub('./bigquery', { runQuery: async () => people, validateAdHoc: () => ({ ok: true, sql: 'SELECT 1' }), capRows: (s) => s });
-stub('./queries', { userSearch: (q) => ({ sql: 'search', params: { q } }) });
+let top = [];
+let ranDay = null;
+stub('./bigquery', { runQuery: async (sql) => (sql === 'top' ? top : sql === 'latest' ? [{ latest_date: { value: '2026-10-24' } }] : people), validateAdHoc: () => ({ ok: true, sql: 'SELECT 1' }), capRows: (s) => s });
+stub('./queries', {
+  userSearch: (q) => ({ sql: 'search', params: { q } }),
+  hnwiLatestDate: () => ({ sql: 'latest', params: {} }),
+  hnwiTotal: (day, min, max, limit) => { ranDay = { day, limit }; return { sql: 'top', params: {} }; },
+  usersByIdentifiers: (ids) => ({ sql: 'ids', params: { ids } }),
+});
 stub('./auth', { userCan: (u, tab) => u.is_superuser || (u.allowed_tabs || []).includes(tab), logEvent: async () => {} });
 
 let reply = '';
@@ -87,6 +94,28 @@ const allowed = { allowed_tabs: ['portfolio', 'aum'] };
   assert.ok(!r.action, 'tables with personal data are not on the list');
   r = await run(allowed, 'ACTION: {"type":"send_email","to":"a@b.c"}');
   assert.ok(!r.action, 'unknown action types, such as email, are refused');
+
+  // Bulk: top N by AUM, or a typed list, resolved on the server.
+  people = [{ user_id: 'u1', sid: 'IDD123' }, { user_id: 'u2', sid: 'IDD999' }];
+  top = [{ sid_code: 'IDD123' }, { sid_code: 'IDD999' }];
+  const hnwi = { allowed_tabs: ['portfolio', 'hnwi'] };
+  r = await run(hnwi, 'ACTION: {"type":"portfolio_bulk","top":2,"format":"pdf","mode":"separate","date":"2026-10-10"}');
+  assert.deepStrictEqual(r.action, { type: 'portfolio_bulk', users: [{ userId: 'u1', sid: 'IDD123' }, { userId: 'u2', sid: 'IDD999' }], missing: [], source: 'portfolio_full', format: 'pdf', mode: 'separate', date: '2026-10-10' });
+  assert.deepStrictEqual(ranDay, { day: '2026-10-10', limit: 2 });
+  r = await run(hnwi, 'ACTION: {"type":"portfolio_bulk","top":2}');
+  assert.strictEqual(ranDay.day, '2026-10-24', 'no date: latest HNWI day');
+  assert.strictEqual(r.action.mode, 'combined');
+  r = await run(allowed, 'ACTION: {"type":"portfolio_bulk","top":2}');
+  assert.ok(!r.action && /access/i.test(r.answer), 'top N needs the hnwi tab');
+  r = await run(allowed, 'ACTION: {"type":"portfolio_bulk","queries":["idd123","IDD404"],"format":"xlsx"}');
+  assert.deepStrictEqual(r.action.users, [{ userId: 'u1', sid: 'IDD123' }]);
+  assert.deepStrictEqual(r.action.missing, ['IDD404']);
+  r = await run(hnwi, 'ACTION: {"type":"portfolio_bulk","top":51}');
+  assert.ok(!r.action, 'over 50 refused');
+  r = await run({ allowed_tabs: ['hnwi'] }, 'ACTION: {"type":"portfolio_bulk","queries":["IDD123"]}');
+  assert.ok(!r.action, 'no Portfolio tab, no bulk');
+  r = await run(allowed, 'ACTION: {"type":"portfolio_bulk","queries":[]}');
+  assert.ok(!r.action, 'empty list refused');
 
   console.log('ask-action-smoke ok');
 })().catch((e) => { console.error(e); process.exit(1); });

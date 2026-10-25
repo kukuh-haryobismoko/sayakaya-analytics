@@ -8553,6 +8553,7 @@ async function runAskAction(a) {
     return askDownloadBar(box, [[a.format, ASK_FMT[a.format]]], a.format, (f) => [
       { source: a.source, format: f, filename: a.table, from: a.from, to: a.to, date: a.date, granularity: a.granularity }, `${a.table}.${f}`]);
   }
+  if (a.type === 'portfolio_bulk') return askBulk(a, box);
   // Portfolio: show the same summary as the Portfolio tab first; the file only downloads from a button.
   const file = `portfolio_${a.sid}${a.date ? '_' + a.date : ''}`;
   const [path, liveTables, pastTables] = ASK_PF[a.source];
@@ -8573,6 +8574,55 @@ async function runAskAction(a) {
   } catch (e) { box.innerHTML = aiText(e.message); }
 }
 
+// Several investors: the same summary as the Portfolio tabs' bulk export, then one file or a ZIP from buttons only.
+async function askBulk(a, box) {
+  box.innerHTML = `<div class="loading">${t('ai_working')}</div>`;
+  const users = a.users.map((u) => ({ ...u, ...(a.date ? { date: a.date } : {}) }));
+  try {
+    const sum = await api('/api/portfolio/bulk-summary', { method: 'POST', body: JSON.stringify({ source: a.source, users }) });
+    const title = t('ask_bulk_title').replace('{n}', sum.count).replace('{aum}', idrFull(sum.totalAum)) + (a.date ? ` · ${escapeHtml(a.date)}` : '');
+    const missing = a.missing.length ? `<p class="hint">${t('ask_bulk_missing').replace('{ids}', escapeHtml(a.missing.join(', ')))}</p>` : '';
+    box.innerHTML = `<div class="ask-pf"><div class="ask-pf-title">${title}</div>
+      <div class="table-wrap"><table><thead><tr><th>SID</th><th>${t('col_name')}</th><th class="num">AUM</th></tr></thead><tbody>${sum.investors.map((i) => `<tr><td>${escapeHtml(i.sid)}</td><td>${escapeHtml(i.name)}</td><td class="num">${idrFull(i.aum)}</td></tr>`).join('')}</tbody></table></div>
+      ${missing}<p class="hint">${t('ask_pf_source').replace('{tables}', escapeHtml(ASK_PF[a.source][a.date ? 2 : 1]))}</p></div>`;
+    const fmts = [['pdf', 'common_pdf'], ['xlsx', 'common_excel'], ['csv', 'common_csv']];
+    for (const mode of ['combined', 'zip']) {
+      const h = document.createElement('p');
+      h.className = 'hint';
+      h.textContent = t(mode === 'zip' ? 'ask_bulk_zip' : 'ask_bulk_one');
+      box.appendChild(h);
+      askDownloadBar(box, fmts, (a.mode === 'separate') === (mode === 'zip') ? a.format : '', (f) => [f, mode], (f, m) => askBulkFile(a, users, f, m));
+    }
+  } catch (e) { box.innerHTML = aiText(e.message); }
+}
+
+async function askBulkFile(a, users, format, mode) {
+  const stem = `portfolio_batch_${users.length}${a.date ? '_' + a.date : ''}`;
+  const post = async (list, filename) => {
+    const res = await fetch(API_BASE + '/api/export/batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ source: a.source, format, filename, users: list, ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}) }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Export failed'); }
+    return { blob: await res.blob(), name: filenameFromResponse(res, `${filename}.${format}`) };
+  };
+  toast('Preparing export…');
+  try {
+    if (mode !== 'zip') {
+      const r = await post(users, stem);
+      downloadBlob(r.blob, r.name);
+    } else {
+      await loadExportLib('zip');
+      const zip = new JSZip();
+      const done = (await mapLimit(users, 5, (u) => post([u], `portfolio_${u.sid}${a.date ? '_' + a.date : ''}`).catch(() => null))).filter(Boolean);
+      if (!done.length) throw new Error('No exportable data found for these investors.');
+      done.forEach((r) => zip.file(r.name, r.blob));
+      downloadBlob(await zip.generateAsync({ type: 'blob' }), `${stem}.zip`);
+    }
+    toast(t('msg_export_ready'));
+  } catch (e) { toast(e.message); }
+}
+
 const ASK_FMT = { pdf: 'common_pdf', xlsx: 'common_excel', csv: 'common_csv' };
 // Portfolio source -> [summary endpoint, tables when live, tables for a past date]; same endpoints as the Portfolio tabs.
 const ASK_PF = {
@@ -8582,14 +8632,14 @@ const ASK_PF = {
   portfolio_sinvest_full: ['/api/portfolio-sinvest', 'sinvest.trx_history, main.funds', 'sinvest.trx_history, main.funds, main.snapshots'],
 };
 // A file leaves the browser only when its button is pressed, and the button is off while the export runs.
-function askDownloadBar(box, formats, preferred, make) {
+function askDownloadBar(box, formats, preferred, make, run = download) {
   const bar = document.createElement('div');
   bar.className = 'ask-pf-actions';
   for (const [f, key] of formats) {
     const b = document.createElement('button');
     b.className = f === preferred ? 'btn-primary' : 'btn-ghost';
     b.textContent = t(key);
-    b.addEventListener('click', async () => { b.disabled = true; try { await download(...make(f)); } finally { b.disabled = false; } });
+    b.addEventListener('click', async () => { b.disabled = true; try { await run(...make(f)); } finally { b.disabled = false; } });
     bar.appendChild(b);
   }
   box.appendChild(bar);
