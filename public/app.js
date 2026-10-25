@@ -3742,8 +3742,8 @@ function riskTag(p) {
 function renderChurnTable(rows) {
   if (!rows.length) { $('#churnTable').innerHTML = `<div class="empty">${t('msg_no_holders_to_score')}</div>`; return; }
   const body = rows.map((r) => `<tr>
-      <td>${val(r.name) || val(r.user_id)}</td>
-      <td>${val(r.email) || 'n/a'}</td>
+      <td>${escapeHtml(val(r.name) || val(r.user_id))}</td>
+      <td>${escapeHtml(val(r.email) || 'n/a')}</td>
       <td class="num">${(Number(val(r.churn_prob)) * 100).toFixed(1)}%</td>
       <td>${riskTag(val(r.churn_prob))}</td>
       <td class="num">${num(val(r.buys))}</td>
@@ -6492,9 +6492,9 @@ function setupBulkExport({ prefix: p, source }) {
 // investor straight to the tab's bulk-export basket without opening their
 // full detail view (which fires several extra queries the basket doesn't need).
 function bulkAddCell(r) {
-  const name = String(val(r.name) || val(r.sid) || '').replace(/"/g, '&quot;');
+  const name = escapeHtml(val(r.name) || val(r.sid) || '');
   const attr = (v) => escapeHtml(val(v) || '');
-  return `<td><button type="button" class="btn-ghost bulk-add-btn" data-id="${val(r.user_id)}" data-sid="${val(r.sid) || ''}" data-name="${name}" data-email="${val(r.email) || ''}" data-ref="${attr(r.referrer_code)}" data-sales="${attr(r.sales_code)}" title="Add to export list">+ Add</button></td>`;
+  return `<td><button type="button" class="btn-ghost bulk-add-btn" data-id="${attr(r.user_id)}" data-sid="${attr(r.sid)}" data-name="${name}" data-email="${attr(r.email)}" data-ref="${attr(r.referrer_code)}" data-sales="${attr(r.sales_code)}" title="Add to export list">+ Add</button></td>`;
 }
 function wireBulkAddButtons(containerSel, bulk) {
   $$(`${containerSel} .bulk-add-btn`).forEach((btn) => btn.addEventListener('click', (e) => {

@@ -7,7 +7,7 @@ const path = require('path');
 const vm = require('vm');
 const { JSDOM } = require('jsdom');
 
-process.on('unhandledRejection', () => {});
+process.on('unhandledRejection', (e) => { if (!/null \(setting 'value'\)/.test(e.message)) throw e; });
 const { window } = new JSDOM('<!doctype html><html><body><div id="toast"></div></body></html>', { url: 'http://localhost/' });
 window.Chart = Object.assign(class { destroy() {} }, { defaults: { font: {}, plugins: { legend: { labels: {} } }, scale: { grid: {} } }, register() {} });
 window.matchMedia = () => ({ matches: false, addEventListener() {}, addListener() {} });

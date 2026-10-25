@@ -9,7 +9,7 @@ const path = require('path');
 const vm = require('vm');
 const { JSDOM } = require('jsdom');
 
-process.on('unhandledRejection', () => {}); // app.js's init() rejects in this minimal page
+process.on('unhandledRejection', (e) => { if (!/null \(setting 'value'\)/.test(e.message)) throw e; }); // app.js's init() rejects in this minimal page
 
 const dom = new JSDOM(`<!doctype html><html><body><div id="toast"></div>
   <select id="ssSchedRecipientType">

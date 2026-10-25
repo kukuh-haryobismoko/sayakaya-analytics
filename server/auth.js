@@ -233,7 +233,7 @@ async function logEvent(userId, username, action, detail) {
   try {
     await rest('/dashboard_audit_log', {
       method: 'POST',
-      body: JSON.stringify({ user_id: userId || null, username, action, detail: detail || null }),
+      body: JSON.stringify({ user_id: userId || null, username: username || userId, action, detail: detail || null }),
     });
   } catch (err) {
     // Logging must never be able to break the login/export it's recording.

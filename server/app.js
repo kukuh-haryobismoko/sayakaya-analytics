@@ -2290,7 +2290,7 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/cron/run-due-schedules', handler(async (req, res) => {
     const expected = process.env.CRON_SECRET;
     if (!expected) return res.status(500).json({ error: 'CRON_SECRET is not configured on the server.' });
-    if (req.get('x-cron-key') !== expected) return res.status(401).json({ error: 'Unauthorized.' });
+    if (!EmailLog.secretMatches(req.get('x-cron-key'), expected)) return res.status(401).json({ error: 'Unauthorized.' });
     res.json(await Sched.runDueJobs());
   }));
 
@@ -2301,7 +2301,7 @@ function createApp({ serveStatic = true } = {}) {
   app.post('/api/cron/retrain-models', handler(async (req, res) => {
     const expected = process.env.CRON_SECRET;
     if (!expected) return res.status(500).json({ error: 'CRON_SECRET is not configured on the server.' });
-    if (req.get('x-cron-key') !== expected) return res.status(401).json({ error: 'Unauthorized.' });
+    if (!EmailLog.secretMatches(req.get('x-cron-key'), expected)) return res.status(401).json({ error: 'Unauthorized.' });
     const result = await MLTrain.retrainModels();
     const detail = result.steps.map((s) => `${s.step}: ${s.ok ? 'ok' : `failed (${s.error})`}`).join('; ');
     await Auth.logEvent(null, 'cron', 'ml_retrain', detail);

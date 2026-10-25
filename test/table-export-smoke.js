@@ -16,11 +16,12 @@ const { JSDOM } = require('jsdom');
 // file; it rejects in this minimal stub (no #from/#to inputs etc.) since
 // this test only cares about the synchronous top-level setup (the
 // MutationObserver wiring under test) — swallow that expected rejection.
-process.on('unhandledRejection', () => {});
+process.on('unhandledRejection', (e) => { if (!/null \(setting 'value'\)/.test(e.message)) throw e; });
 
 const dom = new JSDOM(`<!doctype html><html><body>
   <div id="pfResults" class="table-wrap"></div>
   <div class="chart-wrap"><canvas id="pfAumChart"></canvas></div>
+  <div id="toast"></div>
 </body></html>`, { pretendToBeVisual: true, url: 'http://localhost/' });
 const { window } = dom;
 

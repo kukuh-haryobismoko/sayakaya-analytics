@@ -2471,7 +2471,7 @@ on('POST', '/api/webhooks/ses', async (req, _params, url) => {
 on('POST', '/api/cron/run-due-schedules', async (req) => {
   const expected = Deno.env.get('CRON_SECRET');
   if (!expected) return json({ error: 'CRON_SECRET is not configured on the server.' }, 500);
-  if (req.headers.get('x-cron-key') !== expected) return json({ error: 'Unauthorized.' }, 401);
+  if (!EmailLog.secretMatches(req.headers.get('x-cron-key'), expected)) return json({ error: 'Unauthorized.' }, 401);
   return json(await Sched.runDueJobs());
 });
 
@@ -2481,7 +2481,7 @@ on('POST', '/api/cron/run-due-schedules', async (req) => {
 on('POST', '/api/cron/retrain-models', async (req) => {
   const expected = Deno.env.get('CRON_SECRET');
   if (!expected) return json({ error: 'CRON_SECRET is not configured on the server.' }, 500);
-  if (req.headers.get('x-cron-key') !== expected) return json({ error: 'Unauthorized.' }, 401);
+  if (!EmailLog.secretMatches(req.headers.get('x-cron-key'), expected)) return json({ error: 'Unauthorized.' }, 401);
   const result = await MLTrain.retrainModels();
   const detail = result.steps.map((s) => `${s.step}: ${s.ok ? 'ok' : `failed (${s.error})`}`).join('; ');
   await A.logEvent(null, 'cron', 'ml_retrain', detail);
