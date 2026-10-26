@@ -5218,6 +5218,7 @@ export const boothEventTransactions = (opts: { codes: string[]; promoCodes?: str
         JOIN people p ON p.user_id = t.user_id
         WHERE IFNULL(t.status, '') NOT IN ('expired', 'cancelled')
           AND DATE(t.created_at, 'Asia/Jakarta') >= @from
+          AND (p.via = 'code' OR (t.type = 'buy' AND UPPER(t.promo_code) IN UNNEST(@promo)))
       ),
       buys AS (
         SELECT e.tx_id, e.fund_id, e.done_day, u.sid_code
