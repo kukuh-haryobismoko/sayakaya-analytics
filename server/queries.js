@@ -5748,14 +5748,14 @@ const boothEventTransactions = (opts) => {
   return {
     sql: `WITH ${boothPeopleCte(true)},
       ev_tx AS (
-        SELECT t.id AS tx_id, t.user_id, p.code, p.via, t.type, t.status, t.payment_method, t.fund_id, UPPER(t.promo_code) AS promo,
+        SELECT t.id AS tx_id, t.user_id, p.code, p.via, t.type, t.status, t.payment_method, t.fund_id, UPPER(t.promo_code) AS promo, t.investment_plan_id AS plan_id,
           CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount,
           t.created_at, DATE(COALESCE(t.completed_at, t.created_at), 'Asia/Jakarta') AS done_day
         FROM ${TX} t
         JOIN people p ON p.user_id = t.user_id
         WHERE IFNULL(t.status, '') NOT IN ('expired', 'cancelled')
           AND DATE(t.created_at, 'Asia/Jakarta') >= @from
-          AND (p.via = 'code' OR (t.type = 'buy' AND UPPER(t.promo_code) IN UNNEST(@promo)))
+          AND (p.via = 'code' OR (t.type = 'buy' AND (UPPER(t.promo_code) IN UNNEST(@promo) OR t.investment_plan_id IS NOT NULL)))
       ),
       buys AS (
         SELECT e.tx_id, e.fund_id, e.done_day, u.sid_code
@@ -5792,7 +5792,7 @@ const boothEventTransactions = (opts) => {
         LEFT JOIN snaps s ON s.sid_code = bs.sid_code AND s.fund_id = bs.fund_id AND s.snap_date = day
         GROUP BY bs.tx_id
       )
-      SELECT e.tx_id, e.user_id, e.code, e.via, e.promo, e.type, e.status, e.payment_method, e.amount, f.name AS fund,
+      SELECT e.tx_id, e.user_id, e.code, e.via, e.promo, e.plan_id, e.type, e.status, e.payment_method, e.amount, f.name AS fund,
         FORMAT_DATE('%F', DATE(DATETIME_ADD(u.created_at, INTERVAL 7 HOUR))) AS registered_on,
         FORMAT_TIMESTAMP('%F %H:%M', e.created_at, 'Asia/Jakarta') AS created_wib,
         FORMAT_DATE('%F', e.done_day) AS done_day,
