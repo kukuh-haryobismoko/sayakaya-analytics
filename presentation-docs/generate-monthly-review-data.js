@@ -82,7 +82,9 @@ function todayJakarta() {
 async function main() {
   const argMonth = process.argv[2];
   const today = todayJakarta();
-  const currentYm = today.slice(0, 7);
+  // Day D carries the close of D-1, so on the 1st the newest data still belongs to the month
+  // that just ended: its deck is finalised then and the new month starts on the 2nd, with 1+ days.
+  const currentYm = new Date(Date.parse(`${today}T00:00:00Z`) - 86400000).toISOString().slice(0, 7);
   const reviewMonth = argMonth || ymAdd(currentYm, -1);
   const comparisonMonth = ymAdd(reviewMonth, -1);
   const partialMonth = currentYm;

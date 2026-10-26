@@ -108,11 +108,15 @@ is the quickest way to tell whether a slide change fits before presenting.
 
 ## New month (automatic)
 
-The daily refresh follows the Jakarta calendar. On 1 November it stops touching
-`review-october.pdf` and builds the November deck instead:
+The daily refresh follows the Jakarta calendar. Day D carries the close of D-1,
+so the 1 November run still belongs to October: it rebuilds `review-october.pdf`
+once more with all 31 days (the final version). From 2 November it stops touching
+October and builds the November deck instead:
 
-1. The current month is the partial one; the month before it is the review
-   month (`REVIEW_MONTH` overrides).
+1. The partial month is the month of the newest close (today minus one day); the
+   month before it is the review month (`REVIEW_MONTH` overrides). On 2 November
+   the partial month has one day, and the deck builds with a "still out" wording
+   for the Rp 50 B account if it has not returned.
 2. If `design-deck-2026-11/` is committed, it builds from there. If not, it
    copies the newest committed deck's `build-deck.py` into the git-ignored
    `.draft-deck-2026-11/`. Figures, charts and every sentence computed from

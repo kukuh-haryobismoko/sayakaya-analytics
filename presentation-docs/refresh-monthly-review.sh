@@ -10,8 +10,10 @@
 #   ./presentation-docs/refresh-monthly-review.sh --force       # rebuild even if the date is unchanged
 #   ./presentation-docs/refresh-monthly-review.sh --skip-generate
 #
-# The deck follows the calendar. Each month has its own deck: the current month
-# is the partial one and the month before it is the one under review. October
+# The deck follows the calendar. Each month has its own deck: the month of the
+# newest close (today - 1 day) is the partial one and the month before it is the
+# one under review. So on the 1st this still rebuilds the month that just ended,
+# with all its days (the final version); the new month's deck starts on the 2nd. October
 # lives in design-deck-october/; any later month builds from
 # design-deck-YYYY-MM/ if that is committed, otherwise from an auto-draft copy
 # of the newest committed deck in .draft-deck-YYYY-MM/ (git-ignored, banner on
@@ -23,7 +25,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 export REVIEW_TODAY="${REVIEW_TODAY:-$(TZ=Asia/Jakarta date +%F)}"
-PART="${REVIEW_TODAY:0:7}"
+# Month of the last close (today - 1 day): on the 1st that is still the month that just ended.
+PART="$(python3 -c 'import datetime as d,os;print((d.date.fromisoformat(os.environ["REVIEW_TODAY"]) - d.timedelta(days=1)).isoformat()[:7])')"
 py=${PART:0:4}; pm=$((10#${PART:5:2}))
 if [ "$pm" -eq 1 ]; then py=$((py - 1)); pm=12; else pm=$((pm - 1)); fi
 REVIEW_MONTH="${REVIEW_MONTH:-$(printf '%04d-%02d' "$py" "$pm")}"
