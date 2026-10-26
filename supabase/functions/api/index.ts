@@ -925,9 +925,9 @@ on('GET', '/api/portfolio-fix', requireTab('portfolio-fix', async (_req, _params
 // trusting portfolios.initial_price. An as-of-date reconstructs holdings
 // purely from transactions up to that date (userHoldingsFromTxAsOf) — bonus
 // units are excluded in that mode since bonus_portfolios has no history to
-// reconstruct from (see its comment in queries.ts). AUM chart/performance
-// reuse portfolio_fix, since that data (market value, not cost basis) was
-// never wrong.
+// reconstruct from (see its comment in queries.ts). AUM chart
+// comes from the ledger x NAV (userAumHistoryFromTx), performance reuses
+// portfolio_fix.
 on('GET', '/api/portfolio-tx', requireTab('portfolio-tx', async (_req, _params, url, user) => {
   const userId = qp(url, 'userId'); const sid = qp(url, 'sid');
   if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
@@ -935,7 +935,7 @@ on('GET', '/api/portfolio-tx', requireTab('portfolio-tx', async (_req, _params, 
   const h = date ? Q.userHoldingsFromTxAsOf(userId, date) : Q.userHoldingsFromTx(userId);
   const s = Q.userPortfolioSplit(userId);
   const p = Q.userPerformanceFix(sid);
-  const a = Q.userAumHistoryFix(sid);
+  const a = Q.userAumHistoryFromTx(userId);
   const rt = Q.userRecentTransactions(userId);
   const [holdings, splitRows, performance, history, recentTx] = await Promise.all([
     runQuery(h.sql, h.params),

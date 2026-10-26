@@ -622,7 +622,7 @@ const TAB_DETAILS = {
     ],
     panels: {
       'Bulk export': { note: 'Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.', },
-      'AUM over time': { note: 'AUM harian investor ini dari mi_fee_logs.portfolio_fix.', },
+      'AUM over time': { note: 'AUM harian investor ini, dihitung dari unit hasil ledger transaksi (status completed, verified, verified_by_operational, completed_payment; sama dengan Holdings) dikali NAV harian main.snapshots. Mulai dari transaksi pertama; unit bonus tidak ikut. AUM performance di bawahnya tetap dari mi_fee_logs.portfolio_fix.', },
       Holdings: { note: 'Harga beli rata-rata dihitung ulang dari riwayat transaksi: hanya pembelian dan switch masuk yang mengubah rata-rata, penjualan hanya mengurangi unit. Centang Export memilih fund yang ikut file ekspor.', columns: [
         ['Average NAV', 'Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).'],
         ['Fund Value', 'Modal: Unit Balance dikali Average NAV.'],

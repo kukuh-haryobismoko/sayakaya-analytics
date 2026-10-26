@@ -810,15 +810,15 @@ function createApp({ serveStatic = true } = {}) {
   // purely from transactions up to that date (userHoldingsFromTxAsOf) —
   // bonus units are excluded in that mode since bonus_portfolios has no
   // history to reconstruct from (see its comment in queries.js). AUM
-  // chart/performance reuse portfolio_fix, since that data (market value, not
-  // cost basis) was never wrong.
+  // chart comes from the ledger x NAV (userAumHistoryFromTx), performance
+  // reuses portfolio_fix.
   app.get('/api/portfolio-tx', requireTab('portfolio-tx'), handler(async (req, res) => {
     const { userId, sid, date } = req.query;
     if (!userId || !sid) return res.status(400).json({ error: 'userId and sid are required.' });
     const h = date ? Q.userHoldingsFromTxAsOf(userId, date) : Q.userHoldingsFromTx(userId);
     const s = Q.userPortfolioSplit(userId);
     const p = Q.userPerformanceFix(sid);
-    const a = Q.userAumHistoryFix(sid);
+    const a = Q.userAumHistoryFromTx(userId);
     const rt = Q.userRecentTransactions(userId);
     const [holdings, splitRows, performance, history, recentTx] = await Promise.all([
       runQuery(h.sql, h.params),

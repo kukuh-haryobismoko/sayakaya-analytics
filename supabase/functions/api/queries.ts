@@ -808,7 +808,7 @@ export const userHoldingsFromTx = (userId: string): Query => ({
       FROM ${TX}
       WHERE user_id = @userId
         AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in')
-        AND status NOT IN ('expired', 'cancelled')
+        AND status IN ('completed', 'verified', 'verified_by_operational', 'completed_payment')
     ),
     regular_avg AS (
       SELECT fund_id, SAFE_DIVIDE(SUM(unit * value_per_unit), SUM(unit)) AS avg_price
@@ -874,7 +874,7 @@ export const userHoldingsFromTxAsOf = (userId: string, date: string): Query => (
       FROM ${TX}
       WHERE user_id = @userId
         AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in')
-        AND status NOT IN ('expired', 'cancelled')
+        AND status IN ('completed', 'verified', 'verified_by_operational', 'completed_payment')
         AND DATE(created_at) <= @date
     ),
     outgoing_tx AS (
@@ -882,7 +882,7 @@ export const userHoldingsFromTxAsOf = (userId: string, date: string): Query => (
       FROM ${TX}
       WHERE user_id = @userId
         AND type IN ('sell', 'SWITCH_OUT', 'transfer_out', 'liquidation', 'unit_adjustment')
-        AND status NOT IN ('expired', 'cancelled')
+        AND status IN ('completed', 'verified', 'verified_by_operational', 'completed_payment')
         AND DATE(created_at) <= @date
     ),
     regular_avg AS (
@@ -908,7 +908,9 @@ export const userHoldingsFromTxAsOf = (userId: string, date: string): Query => (
     canon_nav AS (
       SELECT product_id AS fund_id, value AS nav
       FROM ${SNAPSHOTS}
-      WHERE type = 'NAV' AND DATE(created_at) = @date
+      WHERE type = 'NAV'
+        AND DATE(created_at) BETWEEN DATE_SUB(CAST(@date AS DATE), INTERVAL 10 DAY) AND CAST(@date AS DATE)
+      QUALIFY ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY created_at DESC) = 1
     )
     SELECT *, value - fund_value AS gain_loss,
       SAFE_DIVIDE(value - fund_value, fund_value) * 100 AS gain_pct
@@ -1256,6 +1258,48 @@ export const userAumHistoryFix = (sid: string): Query => ({
     WHERE sid_code = @sid
     GROUP BY bucket ORDER BY bucket`,
   params: { sid },
+});
+
+// Portfolio (TX) AUM-over-time: daily units per fund rebuilt from the
+// transaction ledger (same in/out types as userHoldingsFromTxAsOf) x that
+// day's NAV from main.snapshots, last known NAV carried over weekends.
+// portfolio_fix only exists since Aug 2026 and has no row for a SID with no
+// holdings, so it can't show older history. Status filter is the same as the
+// holdings queries (pending_payment, expired, cancelled don't count).
+export const userAumHistoryFromTx = (userId: string): Query => ({
+  sql: `WITH tx AS (
+      SELECT fund_id, DATE(created_at) AS d,
+        CAST(unit AS NUMERIC) * IF(type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in'), 1, -1) AS du
+      FROM ${TX}
+      WHERE user_id = @userId AND status IN ('completed', 'verified', 'verified_by_operational', 'completed_payment')
+        AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in',
+                     'sell', 'SWITCH_OUT', 'transfer_out', 'liquidation', 'unit_adjustment')
+    ),
+    first_d AS (SELECT MIN(d) AS d FROM tx),
+    fund_ids AS (SELECT DISTINCT fund_id FROM tx),
+    grid AS (
+      SELECT d, fund_id
+      FROM first_d, UNNEST(GENERATE_DATE_ARRAY(DATE_SUB(first_d.d, INTERVAL 7 DAY), CURRENT_DATE('Asia/Jakarta'))) AS d
+      CROSS JOIN fund_ids
+    ),
+    nav AS (
+      SELECT product_id AS fund_id, DATE(created_at) AS d, CAST(value AS NUMERIC) AS nav
+      FROM ${SNAPSHOTS}
+      WHERE type = 'NAV' AND product_id IN (SELECT fund_id FROM fund_ids)
+    ),
+    daily AS (
+      SELECT g.d, g.fund_id,
+        SUM(IFNULL(t.du, 0)) OVER (PARTITION BY g.fund_id ORDER BY g.d) AS unit,
+        LAST_VALUE(n.nav IGNORE NULLS) OVER (PARTITION BY g.fund_id ORDER BY g.d) AS nav
+      FROM grid g
+      LEFT JOIN (SELECT fund_id, d, SUM(du) AS du FROM tx GROUP BY fund_id, d) t USING (fund_id, d)
+      LEFT JOIN nav n USING (fund_id, d)
+    )
+    SELECT FORMAT_DATE('%Y-%m-%d', d) AS bucket, ROUND(SUM(GREATEST(unit, 0) * nav)) AS amount
+    FROM daily
+    WHERE d >= (SELECT d FROM first_d)
+    GROUP BY d ORDER BY d`,
+  params: { userId },
 });
 
 export const userPerformanceFix = (sid: string): Query => ({
