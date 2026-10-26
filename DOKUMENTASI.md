@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `1e873c3 (2026-10-26)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `ed892c8 (2026-10-26)`.
 
 ## Cara membaca dokumen ini
 
@@ -747,7 +747,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Regular portfolio / Portofolio reguler**: Bagian dari unit hasil pembelian sendiri (main.portfolios). Tidak tersedia untuk tanggal lampau.
     - **Bonus portfolio / Portofolio bonus**: Bagian dari unit bonus kampanye yang masih on_going (main.bonus_portfolios). Tidak tersedia untuk tanggal lampau.
   - *Bulk, export* (Ekspor, massal): Kumpulkan beberapa investor (per kode referral atau sales, atau satu per satu) untuk melihat AUM gabungannya atau mengekspor portofolio mereka sekaligus. Kontak hanya tampil di layar, tidak ikut file ekspor.
-  - *AUM, over, time* (AUM, dari, waktu, ke, waktu): AUM harian investor ini dari mi_fee_logs.portfolio_fix.
+  - *AUM, over, time* (AUM, dari, waktu, ke, waktu): AUM harian investor ini, dihitung dari unit hasil ledger transaksi (status completed, verified, verified_by_operational, completed_payment; sama dengan Holdings) dikali NAV harian main.snapshots. Mulai dari transaksi pertama; unit bonus tidak ikut. AUM performance di bawahnya tetap dari mi_fee_logs.portfolio_fix.
   - *Holdings* (Kepemilikan): Harga beli rata-rata dihitung ulang dari riwayat transaksi: hanya pembelian dan switch masuk yang mengubah rata-rata, penjualan hanya mengurangi unit. Centang Export memilih fund yang ikut file ekspor.
     - **Average NAV / NAV rata-rata**: Harga beli rata-rata per unit (sumbernya berbeda per tab, lihat catatan tab).
     - **Fund Value / Nilai reksa dana**: Modal: Unit Balance dikali Average NAV.
@@ -760,7 +760,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `portfolio-tx`
   - Endpoint: `GET /api/portfolio-tx`
-  - Fungsi query (`server/queries.js`): `userAumHistoryFix`, `userHoldingsFromTx`, `userHoldingsFromTxAsOf`, `userPerformanceFix`, `userPortfolioSplit`, `userRecentTransactions`
+  - Fungsi query (`server/queries.js`): `userAumHistoryFromTx`, `userHoldingsFromTx`, `userHoldingsFromTxAsOf`, `userPerformanceFix`, `userPortfolioSplit`, `userRecentTransactions`
   - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.snapshots`, `main.transactions`, `mi_fee_logs.portfolio_fix`
   - Tabel Supabase: `dashboard_audit_log`
 
