@@ -3211,7 +3211,7 @@ function renderMisSales() {
   if (!rows) return;
   const col = (key, label, type = 'num') => ({ key, label: t(label), type });
   genTable('#misTable', rows, [
-    { key: 'date', label: t('col_date'), type: 'date' }, col('download', 'mis_col_download'), col('activation_kyc', 'mis_col_kyc'),
+    { key: 'date', label: t('col_date'), type: 'date' }, col('ios', 'mis_col_ios'), col('android', 'mis_col_android'), col('download', 'mis_col_download'), col('activation_kyc', 'mis_col_kyc'),
     col('new_investor', 'mis_col_new_investor'), col('new_aum_invested', 'mis_col_new_aum', 'idr'),
     col('subs_app', 'mis_col_subs_app'), col('redeem_app', 'mis_col_redeem_app'),
     col('subs_manual', 'mis_col_subs_manual'), col('redeem_manual', 'mis_col_redeem_manual'),

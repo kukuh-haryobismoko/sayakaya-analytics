@@ -6276,6 +6276,7 @@ export const misDailyReport = (from?: string, to?: string): Query => {
           SUM(IF(event_name = 'first_open' AND platform = 'ANDROID', cnt, 0)) AS ga4_android,
           SUM(IF(event_name = 'app_remove' AND platform = 'ANDROID', cnt, 0)) AS ga4_uninstall
         FROM ga4
+        WHERE date >= DATE '2026-02-07' -- shortcut: GA4 export incomplete before this date, use the sheet rows
         GROUP BY date
       ),
       manual AS (
@@ -6284,20 +6285,28 @@ export const misDailyReport = (from?: string, to?: string): Query => {
         WHERE date BETWEEN DATE(@from) AND DATE(@to)
           AND source = 'manual'
       ),
+        sheet AS (
+          SELECT date, ios, android, uninstall
+          FROM ${MIS_MANUAL_TABLE}
+          WHERE date BETWEEN DATE(@from) AND DATE(@to)
+          AND source = 'sheet'
+        ),
       combined AS (
         SELECT
           d AS date,
-          COALESCE(m.ios, g.ga4_ios, 0) AS ios,
-          COALESCE(m.android, g.ga4_android, 0) AS android,
-          COALESCE(m.uninstall, g.ga4_uninstall, 0) AS uninstall,
-          (COALESCE(m.ios, g.ga4_ios, 0) + COALESCE(m.android, g.ga4_android, 0)) AS total_download,
+          COALESCE(m.ios, g.ga4_ios, s.ios, 0) AS ios,
+          COALESCE(m.android, g.ga4_android, s.android, 0) AS android,
+          COALESCE(m.uninstall, g.ga4_uninstall, s.uninstall, 0) AS uninstall,
+          (COALESCE(m.ios, g.ga4_ios, s.ios, 0) + COALESCE(m.android, g.ga4_android, s.android, 0)) AS total_download,
           CASE
             WHEN m.ios IS NOT NULL OR m.android IS NOT NULL OR m.uninstall IS NOT NULL THEN 'manual'
+            WHEN g.date IS NULL THEN 'sheet'
             ELSE 'ga4'
           END AS source
         FROM UNNEST(GENERATE_DATE_ARRAY(DATE(@from), LEAST(DATE(@to), CURRENT_DATE()))) AS d
         LEFT JOIN ga4_pivot g ON g.date = d
         LEFT JOIN manual m ON m.date = d
+        LEFT JOIN sheet s ON s.date = d
       )
       SELECT date, ios, android, total_download, uninstall, source
       FROM combined
@@ -6329,6 +6338,7 @@ export const misSalesDaily = (from?: string, to?: string): Query => {
           SUM(IF(event_name = 'first_open' AND platform = 'ANDROID', cnt, 0)) AS ga4_android,
           SUM(IF(event_name = 'app_remove' AND platform = 'ANDROID', cnt, 0)) AS ga4_uninstall
         FROM ga4
+        WHERE date >= DATE '2026-02-07' -- shortcut: GA4 export incomplete before this date, use the sheet rows
         GROUP BY date
       ),
       manual AS (
@@ -6337,16 +6347,23 @@ export const misSalesDaily = (from?: string, to?: string): Query => {
         WHERE date BETWEEN DATE(@from) AND DATE(@to)
           AND source = 'manual'
       ),
+        sheet AS (
+          SELECT date, ios, android, uninstall
+          FROM ${MIS_MANUAL_TABLE}
+          WHERE date BETWEEN DATE(@from) AND DATE(@to)
+          AND source = 'sheet'
+        ),
       download AS (
         SELECT
           d AS date,
-          COALESCE(m.ios, g.ga4_ios, 0) AS ios,
-          COALESCE(m.android, g.ga4_android, 0) AS android,
-          COALESCE(m.uninstall, g.ga4_uninstall, 0) AS uninstall,
-          (COALESCE(m.ios, g.ga4_ios, 0) + COALESCE(m.android, g.ga4_android, 0)) AS total_download
+          COALESCE(m.ios, g.ga4_ios, s.ios, 0) AS ios,
+          COALESCE(m.android, g.ga4_android, s.android, 0) AS android,
+          COALESCE(m.uninstall, g.ga4_uninstall, s.uninstall, 0) AS uninstall,
+          (COALESCE(m.ios, g.ga4_ios, s.ios, 0) + COALESCE(m.android, g.ga4_android, s.android, 0)) AS total_download
         FROM UNNEST(GENERATE_DATE_ARRAY(DATE(@from), LEAST(DATE(@to), CURRENT_DATE()))) AS d
         LEFT JOIN ga4_pivot g ON g.date = d
         LEFT JOIN manual m ON m.date = d
+        LEFT JOIN sheet s ON s.date = d
       ),
       -- Users & KYC
       users_daily AS (
@@ -6555,6 +6572,8 @@ export const misSalesDaily = (from?: string, to?: string): Query => {
       base AS (
         SELECT
           d.date,
+          d.ios,
+          d.android,
           d.total_download AS download,
           u.kyc AS activation_kyc,
           COALESCE(f.first_tx_users, 0) AS new_investor,
@@ -6577,6 +6596,8 @@ export const misSalesDaily = (from?: string, to?: string): Query => {
       )
       SELECT
         date,
+        ios,
+        android,
         download,
         activation_kyc,
         new_investor,
