@@ -6426,10 +6426,10 @@ const misSalesDaily = (from, to) => {
           u.kyc AS activation_kyc,
           COALESCE(f.first_tx_users, 0) AS new_investor,
           COALESCE(f.first_tx_amount, 0) AS new_aum_invested,
-          COALESCE(a.subs_app, 0) AS subs_app,
-          COALESCE(a.redeem_app, 0) AS redeem_app,
-          COALESCE(m.subs_manual, 0) AS subs_manual,
-          COALESCE(m.redeem_manual, 0) AS redeem_manual,
+          COALESCE(a.inflow_app, 0) AS subs_app,
+          COALESCE(a.outflow_app, 0) AS redeem_app,
+          COALESCE(m.inflow_manual, 0) AS subs_manual,
+          COALESCE(m.outflow_manual, 0) AS redeem_manual,
           COALESCE(aum_a.aum_app, 0) AS aum_app,
           COALESCE(aum_m.aum_manual, 0) AS aum_manual,
           d.uninstall AS uninstall
@@ -6513,8 +6513,8 @@ const misMonthlySummary = (from, to) => {
           SUM(redeem_app) AS redeem_app,
           SUM(subs_manual) AS subs_manual,
           SUM(redeem_manual) AS redeem_manual,
-          MAX(aum_app) AS aum_app,
-          MAX(aum_manual) AS aum_manual,
+          ARRAY_AGG(aum_app ORDER BY date DESC LIMIT 1)[OFFSET(0)] AS aum_app,
+          ARRAY_AGG(aum_manual ORDER BY date DESC LIMIT 1)[OFFSET(0)] AS aum_manual,
           SUM(uninstall) AS uninstall
         FROM daily
         GROUP BY month
