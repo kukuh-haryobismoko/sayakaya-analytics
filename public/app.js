@@ -3231,8 +3231,8 @@ function renderMisMonthly() {
   ].join('');
 }
 MIS_TAB.sections = [
-  ['mis-report/sales', '#misTable', renderMisSales],
-  ['mis-report/monthly', '#misKpis', renderMisMonthly],
+  ['mis/sales', '#misTable', renderMisSales],
+  ['mis/monthly', '#misKpis', renderMisMonthly],
 ];
 const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB, MIS_TAB];
 function loadSubscription() { return loadAnalysis(SA_TAB); }
