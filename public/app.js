@@ -3317,7 +3317,8 @@ function buildMisPdf(JsPDF, sales, monthly, from, to) {
   return doc;
 }
 // Dashboard theme: brand indigo header, one tint per column group, hairline rows, no grid.
-function buildMisPdfV2(JsPDF, sales, monthly, from, to, logo) {
+function buildMisPdfV2(JsPDF, sales, monthly, from, to, opts = {}) {
+  const { logo, note = true } = opts;
   const d = misPdfData(sales, monthly, from, to);
   const ink = [28, 29, 31], muted = [86, 91, 107], hair = [225, 228, 237], white = [255, 255, 255], paper = [245, 246, 250];
   const indigo = [58, 80, 171], teal = [8, 107, 72], amber = [143, 92, 0];
@@ -3325,17 +3326,19 @@ function buildMisPdfV2(JsPDF, sales, monthly, from, to, logo) {
   const doc = new JsPDF({ unit: 'pt', format: 'a4' });
   const M = 30, W = doc.internal.pageSize.getWidth() - 2 * M, pageH = doc.internal.pageSize.getHeight();
   if (logo) {
-    doc.addImage(logo, 'PNG', M, 28, 36, 35);
-    doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...ink).text('Daily Sales Report', M + 46, 50);
+    // Same horizontal wordmark as the portfolio PDF (1856x456 PNG with ~5% padding): draw it
+    // 150pt wide and shift left/up by the padding so the visible letters meet the page margin.
+    doc.addImage(logo, 'PNG', M - 7.4, 25, 150, 36.85);
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...muted).text('Daily Sales Report', M, 68);
   } else {
     doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(...ink).text('Sayakaya', M, 46);
     doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...muted).text('Daily Sales Report', M, 59);
   }
-  const py = logo ? 41 : 46; // centre the period block on the logo tile
+  const py = 46;
   doc.setFontSize(8).text('Periode', M + W, py, { align: 'right' });
   doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...ink).text(d.period, M + W, py + 13, { align: 'right' });
-  doc.setDrawColor(...indigo).setLineWidth(1.5).line(M, 68, M + W, 68);
-  let y = 86;
+  doc.setDrawColor(...indigo).setLineWidth(1.5).line(M, 78, M + W, 78);
+  let y = 96;
   if (d.summary) {
     doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...ink).text(d.summary.title, M, y);
     const pad = (i) => ({ top: 3.5, bottom: 3.5, left: i ? 18 : 8, right: 4 });
@@ -3376,18 +3379,27 @@ function buildMisPdfV2(JsPDF, sales, monthly, from, to, logo) {
       if ([1, 5, 8, 11].includes(c.column.index)) doc.setDrawColor(...hair).setLineWidth(0.4).line(x, top, x, top + height);
     },
   });
-  let fy = doc.lastAutoTable.finalY + 14;
-  if (fy > pageH - 40) { doc.addPage(); fy = 50; }
-  doc.setFont('helvetica', 'italic').setFontSize(7).setTextColor(...muted).text(doc.splitTextToSize(d.note, W), M, fy);
+  if (note) {
+    let fy = doc.lastAutoTable.finalY + 14;
+    if (fy > pageH - 40) { doc.addPage(); fy = 50; }
+    doc.setFont('helvetica', 'italic').setFontSize(7).setTextColor(...muted).text(doc.splitTextToSize(d.note, W), M, fy);
+  }
   return doc;
+}
+// The * footnote only makes sense while the month is still open: hide it when the period ends on the last day of a month.
+const misIsMonthEnd = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate() === d; };
+function misSyncNote() {
+  const box = $('#misNoteShow'); box.dataset.touched = ''; box.checked = !misIsMonthEnd($('#misTo').value || '2000-01-01');
 }
 async function exportMisPdf(build = buildMisPdf, suffix = '') {
   const sales = MIS_TAB.cache.sales;
   if (!sales || !sales.length) { toast(t('an_empty')); return; }
   const from = $('#misFrom').value, to = $('#misTo').value;
   await loadExportLib('pdf');
-  const logo = await fetch('logo.png').then((r) => r.blob()).then((b) => new Promise((ok) => { const f = new FileReader(); f.onload = () => ok(f.result); f.readAsDataURL(b); })).catch(() => null); // no logo -> text header
-  const doc = build(window.jspdf.jsPDF, sales, (MIS_TAB.cache.monthly || [])[0], from, to, logo);
+  const box = $('#misNoteShow');
+  if (!box.dataset.touched) misSyncNote();
+  const logo = await fetch('logo-horizontal.png').then((r) => r.blob()).then((b) => new Promise((ok) => { const f = new FileReader(); f.onload = () => ok(f.result); f.readAsDataURL(b); })).catch(() => null); // no logo -> text header
+  const doc = build(window.jspdf.jsPDF, sales, (MIS_TAB.cache.monthly || [])[0], from, to, { logo, note: box.checked });
   const mon = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[Number(to.slice(5, 7)) - 1];
   doc.save(`MIS - ${Number(to.slice(8, 10))} ${mon}${suffix}.pdf`);
 }
@@ -10075,6 +10087,10 @@ function wire() {
   $('#bhSearchBtn').addEventListener('click', searchBehaviorUsers);
   ANALYSIS_TABS.forEach((tab) => $(`#${tab.prefix}Apply`).addEventListener('click', () => loadAnalysis(tab)));
   $('#misPdf').addEventListener('click', () => exportMisPdf().catch((e) => toast(e.message)));
+  $('#misNoteShow').addEventListener('change', (e) => { e.target.dataset.touched = '1'; });
+  ['#misFrom', '#misTo'].forEach((id) => $(id).addEventListener('change', misSyncNote));
+  $('#misApply').addEventListener('click', () => { if (!$('#misNoteShow').dataset.touched) misSyncNote(); });
+  misSyncNote();
   $('#misPdf2').addEventListener('click', () => exportMisPdf(buildMisPdfV2, ' v2').catch((e) => toast(e.message)));
   $('#misSave').addEventListener('click', async () => {
     const body = { date: $('#misManDate').value, ios: $('#misManIos').value, android: $('#misManAndroid').value, uninstall: $('#misManUninstall').value };
