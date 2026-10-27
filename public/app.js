@@ -3217,8 +3217,20 @@ function renderMisSales() {
     col('subs_manual', 'mis_col_subs_manual'), col('redeem_manual', 'mis_col_redeem_manual'),
     col('aum_app', 'mis_col_aum_app', 'idr'), col('aum_manual', 'mis_col_aum_manual', 'idr'), col('uninstall', 'mis_col_uninstall'),
   ], t('an_empty'));
+  renderMisEdit(rows);
   const to = $('#misTo').value;
   $('#misNote').textContent = tf('mis_note', { date: new Date(`${to}T00:00:00Z`).toLocaleDateString(getLang() === 'id' ? 'id-ID' : 'en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' }) });
+}
+// Manual download input: one row per date in the period. A box holds only a manual
+// figure; empty means Google Analytics, whose figure shows as the grey placeholder.
+function renderMisEdit(rows) {
+  const cols = ['ios', 'android', 'uninstall'];
+  const cell = (r, c) => {
+    const m = val(r[`man_${c}`]);
+    return `<td class="num"><input type="number" min="0" step="1" data-col="${c}" data-man="${m ?? ''}" value="${m ?? ''}" placeholder="${nval(r[`auto_${c}`])}" aria-label="${c} ${String(val(r.date)).slice(0, 10)}" /></td>`;
+  };
+  const tr = (r) => `<tr data-date="${String(val(r.date)).slice(0, 10)}"${cols.some((c) => val(r[`man_${c}`]) != null) ? ' class="is-manual"' : ''}><td>${String(val(r.date)).slice(0, 10)}</td>${cols.map((c) => cell(r, c)).join('')}<td><button type="button" class="link-btn" data-act="ga">${t('mis_use_ga')}</button></td></tr>`;
+  $('#misEdit').innerHTML = `<table><thead><tr><th>${t('col_date')}</th><th class="num">iOS</th><th class="num">Android</th><th class="num">Uninstall</th><th></th></tr></thead><tbody>${rows.map(tr).join('')}</tbody></table>`;
 }
 function renderMisMonthly() {
   const m = (MIS_TAB.cache.monthly || [])[0];
@@ -10092,18 +10104,21 @@ function wire() {
   $('#misApply').addEventListener('click', () => { if (!$('#misNoteShow').dataset.touched) misSyncNote(); });
   misSyncNote();
   $('#misPdf2').addEventListener('click', () => exportMisPdf(buildMisPdfV2, ' v2').catch((e) => toast(e.message)));
+  $('#misEdit').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act="ga"]');
+    if (b) b.closest('tr').querySelectorAll('input').forEach((i) => { i.value = ''; });
+  });
   $('#misSave').addEventListener('click', async () => {
+    const rows = [...$$('#misEdit tbody tr')].map((tr) => {
+      const row = { date: tr.dataset.date };
+      let changed = false;
+      tr.querySelectorAll('input').forEach((i) => { row[i.dataset.col] = i.value.trim(); changed = changed || i.value.trim() !== i.dataset.man; });
+      return changed && row;
+    }).filter(Boolean);
+    if (!rows.length) return toast(t('mis_nothing'));
     try {
-      const rows = $('#misManRows').value.split('\n').map((l) => l.trim()).filter(Boolean).map((l, i) => {
-        const [d, ...n] = l.split(/[\s,;]+/);
-        const date = d.replace(/^(\d{2})[-/](\d{2})[-/](\d{4})$/, '$3-$2-$1');
-        const [ios, android, uninstall] = [0, 1, 2].map((k) => (n[k] === '-' ? '' : n[k] ?? ''));
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || n.length > 3 || [ios, android, uninstall].some((v) => !/^\d*$/.test(v))) throw new Error(tf('mis_bad_line', { n: i + 1 }));
-        return { date, ios, android, uninstall };
-      });
       await api('/api/mis/download', { method: 'POST', body: JSON.stringify(rows) });
-      $('#misManRows').value = '';
-      toast(t('mis_saved')); loadAnalysis(MIS_TAB);
+      toast(`${t('mis_saved')}: ${rows.length}`); loadAnalysis(MIS_TAB);
     } catch (e) { toast(e.message); }
   });
   $('#saDriverFlow').addEventListener('change', renderSaDrivers);

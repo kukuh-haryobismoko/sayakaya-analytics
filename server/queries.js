@@ -6207,7 +6207,10 @@ const misSalesDaily = (from, to) => {
           COALESCE(m.ios, g.ga4_ios, s.ios, 0) AS ios,
           COALESCE(m.android, g.ga4_android, s.android, 0) AS android,
           COALESCE(m.uninstall, g.ga4_uninstall, s.uninstall, 0) AS uninstall,
-          (COALESCE(m.ios, g.ga4_ios, s.ios, 0) + COALESCE(m.android, g.ga4_android, s.android, 0)) AS total_download
+          (COALESCE(m.ios, g.ga4_ios, s.ios, 0) + COALESCE(m.android, g.ga4_android, s.android, 0)) AS total_download,
+          m.ios AS man_ios, m.android AS man_android, m.uninstall AS man_uninstall,
+          COALESCE(g.ga4_ios, s.ios, 0) AS auto_ios, COALESCE(g.ga4_android, s.android, 0) AS auto_android,
+          COALESCE(g.ga4_uninstall, s.uninstall, 0) AS auto_uninstall
         FROM UNNEST(GENERATE_DATE_ARRAY(DATE(@from), LEAST(DATE(@to), CURRENT_DATE()))) AS d
         LEFT JOIN ga4_pivot g ON g.date = d
         LEFT JOIN manual m ON m.date = d
@@ -6432,7 +6435,8 @@ const misSalesDaily = (from, to) => {
           COALESCE(m.outflow_manual, 0) AS redeem_manual,
           COALESCE(aum_a.aum_app, 0) AS aum_app,
           COALESCE(aum_m.aum_manual, 0) AS aum_manual,
-          d.uninstall AS uninstall
+          d.uninstall AS uninstall,
+          d.man_ios, d.man_android, d.man_uninstall, d.auto_ios, d.auto_android, d.auto_uninstall
         FROM download d
         LEFT JOIN users_daily u ON u.date = d.date
         LEFT JOIN first_tx f ON f.date = d.date
@@ -6456,7 +6460,8 @@ const misSalesDaily = (from, to) => {
         redeem_manual,
         aum_app,
         aum_manual,
-        uninstall
+        uninstall,
+        man_ios, man_android, man_uninstall, auto_ios, auto_android, auto_uninstall
       FROM base
       ORDER BY date`,
     params: r,
