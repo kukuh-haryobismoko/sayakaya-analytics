@@ -1031,7 +1031,7 @@ function createApp({ serveStatic = true } = {}) {
     if (rows.some((r) => !/^\d{4}-\d{2}-\d{2}$/.test(r && r.date) || ['ios', 'android', 'uninstall'].some((k) => r[k] != null && r[k] !== '' && !Number.isInteger(Number(r[k]))))) {
       return res.status(400).json({ error: 'date YYYY-MM-DD and integer ios/android/uninstall required' });
     }
-    for (const r of rows) { const q = Q.misDownloadUpsert(r); await runQuery(q.sql, q.params); }
+    const q = Q.misDownloadUpsert(rows); await runQuery(q.sql, q.params);
     res.json({ ok: true, updated: rows.length });
   }));
 

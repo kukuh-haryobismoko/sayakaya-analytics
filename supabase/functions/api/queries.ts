@@ -6680,14 +6680,16 @@ export const misMonthlySummary = (from?: string, to?: string): Query => {
   };
 };
 
-export const misDownloadUpsert = (row: { date: string; ios?: number | string; android?: number | string; uninstall?: number | string }) => ({
-  // Empty string = no override for that column (SAFE_CAST gives NULL, so COALESCE falls back to GA4).
+export const misDownloadUpsert = (rows: Array<{ date: string; ios?: number | string; android?: number | string; uninstall?: number | string }>) => ({
+  // One MERGE for all rows ('date|ios|android|uninstall' strings). Empty field = no override for that column
+  // (SAFE_CAST gives NULL, so COALESCE falls back to GA4). Last line wins when a date repeats.
   sql: `MERGE ${MIS_MANUAL_TABLE} t
-    USING (SELECT DATE(@date) AS date, SAFE_CAST(NULLIF(@ios, '') AS INT64) AS ios,
-                  SAFE_CAST(NULLIF(@android, '') AS INT64) AS android, SAFE_CAST(NULLIF(@uninstall, '') AS INT64) AS uninstall) s
+    USING (SELECT DATE(p[OFFSET(0)]) AS date, SAFE_CAST(NULLIF(p[OFFSET(1)], '') AS INT64) AS ios,
+                  SAFE_CAST(NULLIF(p[OFFSET(2)], '') AS INT64) AS android, SAFE_CAST(NULLIF(p[OFFSET(3)], '') AS INT64) AS uninstall
+           FROM (SELECT SPLIT(x, '|') AS p FROM UNNEST(@rows) x)) s
     ON t.date = s.date AND t.source = 'manual'
     WHEN MATCHED THEN UPDATE SET ios = s.ios, android = s.android, uninstall = s.uninstall, updated_at = CURRENT_TIMESTAMP()
     WHEN NOT MATCHED THEN INSERT (date, ios, android, uninstall, source, created_at, updated_at)
       VALUES (s.date, s.ios, s.android, s.uninstall, 'manual', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())`,
-  params: { date: String(row.date), ios: String(row.ios ?? ''), android: String(row.android ?? ''), uninstall: String(row.uninstall ?? '') },
+  params: { rows: [...new Map(rows.map((r) => [String(r.date), r])).values()].map((r) => [r.date, r.ios ?? '', r.android ?? '', r.uninstall ?? ''].join('|')) },
 });

@@ -1147,7 +1147,7 @@ on('POST', '/api/mis/download', requireTab('mis-report', async (req, _params, _u
   if (rows.some((r) => !/^\d{4}-\d{2}-\d{2}$/.test(r?.date) || (['ios', 'android', 'uninstall'] as const).some((k) => r[k] != null && (r[k] as unknown) !== '' && !Number.isInteger(Number(r[k]))))) {
     return json({ error: 'date YYYY-MM-DD and integer ios/android/uninstall required' }, 400);
   }
-  for (const r of rows) { const q = Q.misDownloadUpsert(r); await runQuery(q.sql, q.params); }
+  const q = Q.misDownloadUpsert(rows); await runQuery(q.sql, q.params);
   return json({ ok: true, updated: rows.length });
 }));
 

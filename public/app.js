@@ -10093,8 +10093,18 @@ function wire() {
   misSyncNote();
   $('#misPdf2').addEventListener('click', () => exportMisPdf(buildMisPdfV2, ' v2').catch((e) => toast(e.message)));
   $('#misSave').addEventListener('click', async () => {
-    const body = { date: $('#misManDate').value, ios: $('#misManIos').value, android: $('#misManAndroid').value, uninstall: $('#misManUninstall').value };
-    try { await api('/api/mis/download', { method: 'POST', body: JSON.stringify(body) }); toast(t('mis_saved')); loadAnalysis(MIS_TAB); } catch (e) { toast(e.message); }
+    try {
+      const rows = $('#misManRows').value.split('\n').map((l) => l.trim()).filter(Boolean).map((l, i) => {
+        const [d, ...n] = l.split(/[\s,;]+/);
+        const date = d.replace(/^(\d{2})[-/](\d{2})[-/](\d{4})$/, '$3-$2-$1');
+        const [ios, android, uninstall] = [0, 1, 2].map((k) => (n[k] === '-' ? '' : n[k] ?? ''));
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || n.length > 3 || [ios, android, uninstall].some((v) => !/^\d*$/.test(v))) throw new Error(tf('mis_bad_line', { n: i + 1 }));
+        return { date, ios, android, uninstall };
+      });
+      await api('/api/mis/download', { method: 'POST', body: JSON.stringify(rows) });
+      $('#misManRows').value = '';
+      toast(t('mis_saved')); loadAnalysis(MIS_TAB);
+    } catch (e) { toast(e.message); }
   });
   $('#saDriverFlow').addEventListener('change', renderSaDrivers);
   $('#rdSignalFlow').addEventListener('change', renderRdSignals);
