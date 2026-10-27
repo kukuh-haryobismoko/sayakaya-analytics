@@ -1303,8 +1303,9 @@ const TAB_DETAILS = {
     kpis: [
       ['Registered', 'Nasabah yang daftar dengan salah satu kode event selama event.'],
       ['KYC verified (new SID)', 'Yang KYC-nya verified; inilah SID baru untuk target.'],
-      ['Made a purchase', 'Yang sudah punya beli completed.'],
-      ['Funded', 'Yang dana bersihnya (beli dikurangi jual) pernah mencapai minimum funded sales (Rp 1 jt).'],
+      ['Made a purchase', 'Nasabah unik yang punya pembelian di daftar Transaksi (semua status kecuali expired dan cancelled), mengikuti filter booth dan sales. Keterangan di bawah angka: berapa nasabah baru (dan berapa di antaranya sudah settle, angka yang sama dengan transaksi pertama di rekap) dan berapa existing/lainnya.'],
+      ['Transactions', 'Jumlah baris di daftar Transaksi (beli dan jual), dengan jumlah nasabah unik dan berapa yang belum settle.'],
+      ['Funded', 'Nasabah baru yang dana bersihnya (beli dikurangi jual, hanya yang completed) pernah mencapai minimum funded sales (Rp 1 jt). Rekap, insentif, dan bonus nasabah juga hanya menghitung transaksi completed, jadi bisa lebih kecil dari kartu Transaksi sampai pembayaran settle.'],
       ['Net money in', 'Total beli dikurangi jual nasabah baru.'],
       ['Avg days holding', 'Rata-rata hari dari beli pertama sampai hari ini, atau sampai jual terakhir bagi yang sudah jual semua.'],
     ],
