@@ -3224,13 +3224,13 @@ function renderMisSales() {
 // Manual download input: one row per date in the period. A box holds only a manual
 // figure; empty means Google Analytics, whose figure shows as the grey placeholder.
 function renderMisEdit(rows) {
-  const cols = ['ios', 'android', 'uninstall'];
+  const cols = ['ios', 'android'];
   const cell = (r, c) => {
     const m = val(r[`man_${c}`]);
     return `<td class="num"><input type="number" min="0" step="1" data-col="${c}" data-man="${m ?? ''}" value="${m ?? ''}" placeholder="${nval(r[`auto_${c}`])}" aria-label="${c} ${String(val(r.date)).slice(0, 10)}" /></td>`;
   };
   const tr = (r) => `<tr data-date="${String(val(r.date)).slice(0, 10)}"${cols.some((c) => val(r[`man_${c}`]) != null) ? ' class="is-manual"' : ''}><td>${String(val(r.date)).slice(0, 10)}</td>${cols.map((c) => cell(r, c)).join('')}<td><button type="button" class="link-btn" data-act="ga">${t('mis_use_ga')}</button></td></tr>`;
-  $('#misEdit').innerHTML = `<table><thead><tr><th>${t('col_date')}</th><th class="num">iOS</th><th class="num">Android</th><th class="num">Uninstall</th><th></th></tr></thead><tbody>${rows.map(tr).join('')}</tbody></table>`;
+  $('#misEdit').innerHTML = `<table><thead><tr><th>${t('col_date')}</th><th class="num">iOS</th><th class="num">Android</th><th></th></tr></thead><tbody>${rows.map(tr).join('')}</tbody></table>`;
 }
 function renderMisMonthly() {
   const m = (MIS_TAB.cache.monthly || [])[0];
