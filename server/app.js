@@ -1006,6 +1006,9 @@ function createApp({ serveStatic = true } = {}) {
       steps: Q.productFunnelSteps, timing: Q.productFunnelTiming, stops: Q.productFunnelStops, installs: Q.productFunnelInstalls,
       uninstalls: Q.productFunnelUninstalls,
     }],
+    ['mis-report', 'mis', {
+      daily: Q.misDailyReport, weekly: Q.misWeeklyReport, monthly: Q.misMonthlySummary, sales: Q.misSalesDaily,
+    }],
   ];
   ANALYSIS_ROUTES.forEach(([tab, prefix, builders]) => Object.entries(builders).forEach(([key, build]) => (
     app.get(`/api/${prefix}/${key}`, requireTab(tab), handler(async (req, res) => {
@@ -1019,6 +1022,17 @@ function createApp({ serveStatic = true } = {}) {
   ), handler(async (req, res) => {
     const q = Q.analysisCoverage(req.query.from, req.query.to);
     res.json(await runQuery(q.sql, q.params));
+  }));
+
+  // MIS Report manual download input (upsert)
+  app.post('/api/mis/download', requireTab('mis-report'), handler(async (req, res) => {
+    const rows = Array.isArray(req.body) ? req.body : [req.body];
+    if (!rows.length || rows.length > 62) return res.status(400).json({ error: 'rows: 1-62 required' });
+    if (rows.some((r) => !/^\d{4}-\d{2}-\d{2}$/.test(r && r.date) || ['ios', 'android', 'uninstall'].some((k) => r[k] != null && r[k] !== '' && !Number.isInteger(Number(r[k]))))) {
+      return res.status(400).json({ error: 'date YYYY-MM-DD and integer ios/android/uninstall required' });
+    }
+    for (const r of rows) { const q = Q.misDownloadUpsert(r); await runQuery(q.sql, q.params); }
+    res.json({ ok: true, updated: rows.length });
   }));
 
   // Product performance (NAV % change per fund type, external Apollo DB) --

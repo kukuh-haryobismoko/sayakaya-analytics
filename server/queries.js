@@ -1870,6 +1870,7 @@ const appPerfTraces = (from, to) => {
 // mostly older Google accounts adding a phone number), so it is counted
 // apart and kept out of every funnel number.
 const GA4_EVENTS = '`sayakaya.analytics_266759216.events_*`';
+const MIS_PF = '`sayakaya.mi_fee_logs.portfolios`';
 const pfnSource = (d) => `CONCAT(IFNULL(${d}.source, '(none)'), IF(IFNULL(${d}.medium, '(none)') = '(none)', '', CONCAT(' / ', ${d}.medium)))`;
 // One row per device that started sign-up in the period. GA4 is read from
 // the period start to today, so the scan grows with the range, not with
@@ -6097,6 +6098,427 @@ const eventCodePortfolio = (field, codes, from, to, grain, periods) => {
 // transactors = users whose first completed transaction of `type` ever
 // lands on that day. Ongoing rows keep final_amount NULL until they settle,
 // so their nominal is the requested amount.
+// MIS Report — daily download (GA4 + manual), weekly, monthly summary
+const MIS_GA4_EVENTS = '`sayakaya.analytics_266759216.events_*`';
+const MIS_MANUAL_TABLE = '`sayakaya.mis.download_manual`';
+
+const misDailyReport = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH
+      ga4 AS (
+        SELECT
+          PARSE_DATE('%Y%m%d', event_date) AS date,
+          platform,
+          event_name,
+          COUNT(*) AS cnt
+        FROM ${MIS_GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE(@from)) AND FORMAT_DATE('%Y%m%d', DATE(@to))
+          AND event_name IN ('first_open', 'app_remove')
+        GROUP BY 1, 2, 3
+      ),
+      ga4_pivot AS (
+        SELECT
+          date,
+          SUM(IF(event_name = 'first_open' AND platform = 'IOS', cnt, 0)) AS ga4_ios,
+          SUM(IF(event_name = 'first_open' AND platform = 'ANDROID', cnt, 0)) AS ga4_android,
+          SUM(IF(event_name = 'app_remove' AND platform = 'ANDROID', cnt, 0)) AS ga4_uninstall
+        FROM ga4
+        GROUP BY date
+      ),
+      manual AS (
+        SELECT date, ios, android, uninstall
+        FROM ${MIS_MANUAL_TABLE}
+        WHERE date BETWEEN DATE(@from) AND DATE(@to)
+          AND source = 'manual'
+      ),
+      combined AS (
+        SELECT
+          d AS date,
+          COALESCE(m.ios, g.ga4_ios, 0) AS ios,
+          COALESCE(m.android, g.ga4_android, 0) AS android,
+          COALESCE(m.uninstall, g.ga4_uninstall, 0) AS uninstall,
+          (COALESCE(m.ios, g.ga4_ios, 0) + COALESCE(m.android, g.ga4_android, 0)) AS total_download,
+          CASE
+            WHEN m.ios IS NOT NULL OR m.android IS NOT NULL OR m.uninstall IS NOT NULL THEN 'manual'
+            ELSE 'ga4'
+          END AS source
+        FROM UNNEST(GENERATE_DATE_ARRAY(DATE(@from), LEAST(DATE(@to), CURRENT_DATE()))) AS d
+        LEFT JOIN ga4_pivot g ON g.date = d
+        LEFT JOIN manual m ON m.date = d
+      )
+      SELECT date, ios, android, total_download, uninstall, source
+      FROM combined
+      ORDER BY date`,
+    params: r,
+  };
+};
+
+const misSalesDaily = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH
+      -- GA4 downloads
+      ga4 AS (
+        SELECT
+          PARSE_DATE('%Y%m%d', event_date) AS date,
+          platform,
+          event_name,
+          COUNT(*) AS cnt
+        FROM ${MIS_GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE(@from)) AND FORMAT_DATE('%Y%m%d', DATE(@to))
+          AND event_name IN ('first_open', 'app_remove')
+        GROUP BY 1, 2, 3
+      ),
+      ga4_pivot AS (
+        SELECT
+          date,
+          SUM(IF(event_name = 'first_open' AND platform = 'IOS', cnt, 0)) AS ga4_ios,
+          SUM(IF(event_name = 'first_open' AND platform = 'ANDROID', cnt, 0)) AS ga4_android,
+          SUM(IF(event_name = 'app_remove' AND platform = 'ANDROID', cnt, 0)) AS ga4_uninstall
+        FROM ga4
+        GROUP BY date
+      ),
+      manual AS (
+        SELECT date, ios, android, uninstall
+        FROM ${MIS_MANUAL_TABLE}
+        WHERE date BETWEEN DATE(@from) AND DATE(@to)
+          AND source = 'manual'
+      ),
+      download AS (
+        SELECT
+          d AS date,
+          COALESCE(m.ios, g.ga4_ios, 0) AS ios,
+          COALESCE(m.android, g.ga4_android, 0) AS android,
+          COALESCE(m.uninstall, g.ga4_uninstall, 0) AS uninstall,
+          (COALESCE(m.ios, g.ga4_ios, 0) + COALESCE(m.android, g.ga4_android, 0)) AS total_download
+        FROM UNNEST(GENERATE_DATE_ARRAY(DATE(@from), LEAST(DATE(@to), CURRENT_DATE()))) AS d
+        LEFT JOIN ga4_pivot g ON g.date = d
+        LEFT JOIN manual m ON m.date = d
+      ),
+      -- Users & KYC
+      users_daily AS (
+        SELECT
+          DATE(created_at) AS date,
+          COUNT(*) AS registered,
+          COUNTIF(verification_status IN ('verified','failed')) AS kyc,
+          COUNTIF(verification_status = 'verified') AS verified,
+          COUNTIF(verification_status = 'failed') AS failed
+        FROM ${USERS}
+        WHERE DATE(created_at) BETWEEN DATE(@from) AND DATE(@to)
+        GROUP BY date
+      ),
+      -- Transactions
+      raw_tx AS (
+        SELECT
+          user_id,
+          DATE(created_at) AS date,
+          type,
+          status,
+          payment_method,
+          amount,
+          transaction_on
+        FROM ${TX}
+        WHERE DATE(created_at) BETWEEN DATE(@from) AND DATE(@to)
+          AND type IN ('buy','sell')
+      ),
+      -- TA ratio per user (all time)
+      user_ta_ratio AS (
+        SELECT
+          user_id,
+          COUNTIF(transaction_on = 'TA') AS ta_count,
+          COUNT(*) AS total_count,
+          SAFE_DIVIDE(COUNTIF(transaction_on = 'TA'), COUNT(*)) AS ta_ratio
+        FROM ${TX}
+        WHERE type IN ('buy','sell')
+        GROUP BY user_id
+      ),
+      eligible_users AS (
+        SELECT user_id
+        FROM user_ta_ratio
+        WHERE ta_ratio >= 0.75
+      ),
+      ineligible_users AS (
+        SELECT user_id
+        FROM user_ta_ratio
+        WHERE ta_ratio < 0.75
+      ),
+      -- Daily tx per user (eligible = app)
+      tx_app_day AS (
+        SELECT
+          DATE(t.created_at) AS date,
+          t.user_id,
+          COUNT(CASE
+            WHEN t.type = 'buy'
+              AND t.status NOT IN ('cancelled','expired')
+              AND LOWER(t.payment_method) NOT LIKE '%bonus%'
+            THEN 1
+          END) AS subs_app,
+          COALESCE(SUM(CASE
+            WHEN t.type = 'buy'
+              AND t.status NOT IN ('cancelled','expired')
+              AND LOWER(t.payment_method) NOT LIKE '%bonus%'
+            THEN t.amount
+          END),0) AS inflow_app,
+          COUNT(CASE
+            WHEN t.type = 'sell'
+              AND t.status NOT IN ('cancelled','expired')
+            THEN 1
+          END) AS redeem_app,
+          COALESCE(SUM(CASE
+            WHEN t.type = 'sell'
+              AND t.status NOT IN ('cancelled','expired')
+            THEN t.amount
+          END),0) AS outflow_app
+        FROM ${TX} t
+        JOIN eligible_users eu ON eu.user_id = t.user_id
+        WHERE DATE(t.created_at) BETWEEN DATE(@from) AND DATE(@to)
+          AND t.type IN ('buy','sell')
+        GROUP BY date, t.user_id
+      ),
+      -- Daily tx per user (ineligible = manual)
+      tx_manual_day AS (
+        SELECT
+          DATE(t.created_at) AS date,
+          t.user_id,
+          COUNT(CASE
+            WHEN t.type = 'buy'
+              AND t.status NOT IN ('cancelled','expired')
+              AND LOWER(t.payment_method) NOT LIKE '%bonus%'
+            THEN 1
+          END) AS subs_manual,
+          COALESCE(SUM(CASE
+            WHEN t.type = 'buy'
+              AND t.status NOT IN ('cancelled','expired')
+              AND LOWER(t.payment_method) NOT LIKE '%bonus%'
+            THEN t.amount
+          END),0) AS inflow_manual,
+          COUNT(CASE
+            WHEN t.type = 'sell'
+              AND t.status NOT IN ('cancelled','expired')
+            THEN 1
+          END) AS redeem_manual,
+          COALESCE(SUM(CASE
+            WHEN t.type = 'sell'
+              AND t.status NOT IN ('cancelled','expired')
+            THEN t.amount
+          END),0) AS outflow_manual
+        FROM ${TX} t
+        JOIN ineligible_users iu ON iu.user_id = t.user_id
+        WHERE DATE(t.created_at) BETWEEN DATE(@from) AND DATE(@to)
+          AND t.type IN ('buy','sell')
+        GROUP BY date, t.user_id
+      ),
+      -- Aggregate daily
+      tx_app_daily AS (
+        SELECT
+          date,
+          SUM(subs_app) AS subs_app,
+          SUM(inflow_app) AS inflow_app,
+          SUM(redeem_app) AS redeem_app,
+          SUM(outflow_app) AS outflow_app
+        FROM tx_app_day
+        GROUP BY date
+      ),
+      tx_manual_daily AS (
+        SELECT
+          date,
+          SUM(subs_manual) AS subs_manual,
+          SUM(inflow_manual) AS inflow_manual,
+          SUM(redeem_manual) AS redeem_manual,
+          SUM(outflow_manual) AS outflow_manual
+        FROM tx_manual_day
+        GROUP BY date
+      ),
+      -- First transaction (all time, first completed buy on TA/TM)
+      first_tx AS (
+        SELECT
+          DATE(x.created_at) AS date,
+          COUNT(DISTINCT x.user_id) AS first_tx_users,
+          SUM(x.amount) AS first_tx_amount
+        FROM (
+          SELECT
+            t.user_id,
+            t.created_at,
+            t.amount,
+            ROW_NUMBER() OVER (PARTITION BY t.user_id ORDER BY t.created_at) AS rn
+          FROM ${TX} t
+          WHERE t.type = 'buy'
+            AND t.status NOT IN ('cancelled','expired')
+            AND t.transaction_on IN ('TA','TM')
+        ) x
+        WHERE x.rn = 1
+        GROUP BY date
+      ),
+      -- Bonus (separate, not filtered by eligibility)
+      tx_bonus_day AS (
+        SELECT
+          DATE(t.created_at) AS date,
+          COUNT(CASE
+            WHEN t.type = 'buy'
+              AND t.status NOT IN ('cancelled','expired')
+              AND LOWER(t.payment_method) LIKE '%bonus%'
+            THEN 1
+          END) AS bonus_count,
+          COALESCE(SUM(CASE
+            WHEN t.type = 'buy'
+              AND t.status NOT IN ('cancelled','expired')
+              AND LOWER(t.payment_method) LIKE '%bonus%'
+            THEN t.amount
+          END),0) AS bonus_amount
+        FROM ${TX} t
+        WHERE DATE(t.created_at) BETWEEN DATE(@from) AND DATE(@to)
+        GROUP BY date
+      ),
+      -- AUM app (ta_ratio >= 0.75)
+      aum_app AS (
+        SELECT
+          DATE(p.created_at) AS date,
+          SUM(p.amount) AS aum_app
+        FROM ${MIS_PF} p
+        JOIN (
+          SELECT DISTINCT ru.sid_code
+          FROM user_ta_ratio r
+          JOIN ${USERS} ru ON ru.id = r.user_id
+          WHERE r.ta_ratio >= 0.75
+        ) eu USING (sid_code)
+        WHERE DATE(p.created_at) BETWEEN DATE(@from) AND DATE(@to)
+        GROUP BY date
+      ),
+      -- AUM manual (ta_ratio < 0.75)
+      aum_manual AS (
+        SELECT
+          DATE(p.created_at) AS date,
+          SUM(p.amount) AS aum_manual
+        FROM ${MIS_PF} p
+        JOIN (
+          SELECT DISTINCT ru.sid_code
+          FROM user_ta_ratio r
+          JOIN ${USERS} ru ON ru.id = r.user_id
+          WHERE r.ta_ratio < 0.75
+        ) iu USING (sid_code)
+        WHERE DATE(p.created_at) BETWEEN DATE(@from) AND DATE(@to)
+        GROUP BY date
+      ),
+      base AS (
+        SELECT
+          d.date,
+          d.total_download AS download,
+          u.kyc AS activation_kyc,
+          COALESCE(f.first_tx_users, 0) AS new_investor,
+          COALESCE(f.first_tx_amount, 0) AS new_aum_invested,
+          COALESCE(a.subs_app, 0) AS subs_app,
+          COALESCE(a.redeem_app, 0) AS redeem_app,
+          COALESCE(m.subs_manual, 0) AS subs_manual,
+          COALESCE(m.redeem_manual, 0) AS redeem_manual,
+          COALESCE(aum_a.aum_app, 0) AS aum_app,
+          COALESCE(aum_m.aum_manual, 0) AS aum_manual,
+          d.uninstall AS uninstall
+        FROM download d
+        LEFT JOIN users_daily u ON u.date = d.date
+        LEFT JOIN first_tx f ON f.date = d.date
+        LEFT JOIN tx_app_daily a ON a.date = d.date
+        LEFT JOIN tx_manual_daily m ON m.date = d.date
+        LEFT JOIN aum_app aum_a ON aum_a.date = d.date
+        LEFT JOIN aum_manual aum_m ON aum_m.date = d.date
+        LEFT JOIN tx_bonus_day b ON b.date = d.date
+      )
+      SELECT
+        date,
+        download,
+        activation_kyc,
+        new_investor,
+        new_aum_invested,
+        subs_app,
+        redeem_app,
+        subs_manual,
+        redeem_manual,
+        aum_app,
+        aum_manual,
+        uninstall
+      FROM base
+      ORDER BY date`,
+    params: r,
+  };
+};
+
+const misWeeklyReport = (from, to) => {
+  const r = range(from, to);
+  return {
+    sql: `WITH
+      daily AS (
+        SELECT * FROM (${misDailyReport(from, to).sql})
+      ),
+      weekly AS (
+        SELECT
+          DATE_TRUNC(date, WEEK(MONDAY)) AS week_start,
+          SUM(ios) AS ios,
+          SUM(android) AS android,
+          SUM(total_download) AS total_download,
+          SUM(uninstall) AS uninstall
+        FROM daily
+        GROUP BY week_start
+      )
+      SELECT week_start, ios, android, total_download, uninstall
+      FROM weekly
+      ORDER BY week_start`,
+    params: r,
+  };
+};
+
+const misMonthlySummary = (from, to) => {
+  const r = range(from, to);
+  // Previous month range computed in JS for correct prior-month totals
+  const toDate = new Date(to + 'T00:00:00Z');
+  const prevMonthEnd = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), 0));
+  const prevMonthStart = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth() - 1, 1));
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const prevFrom = fmt(prevMonthStart);
+  const prevTo = fmt(prevMonthEnd);
+  const prevRange = range(prevFrom, prevTo);
+  return {
+    sql: `WITH
+      daily AS (
+        SELECT * FROM (${misSalesDaily(prevFrom, prevTo).sql})
+      ),
+      monthly AS (
+        SELECT
+          DATE_TRUNC(date, MONTH) AS month,
+          SUM(download) AS download,
+          SUM(activation_kyc) AS activation_kyc,
+          SUM(new_investor) AS new_investor,
+          SUM(new_aum_invested) AS new_aum_invested,
+          SUM(subs_app) AS subs_app,
+          SUM(redeem_app) AS redeem_app,
+          SUM(subs_manual) AS subs_manual,
+          SUM(redeem_manual) AS redeem_manual,
+          MAX(aum_app) AS aum_app,
+          MAX(aum_manual) AS aum_manual,
+          SUM(uninstall) AS uninstall
+        FROM daily
+        GROUP BY month
+      )
+      SELECT month, download, activation_kyc, new_investor, new_aum_invested,
+             subs_app, redeem_app, subs_manual, redeem_manual,
+             aum_app, aum_manual, uninstall
+      FROM monthly
+      ORDER BY month`,
+    params: prevRange,
+  };
+};
+
+const misDownloadUpsert = (row) => ({
+  // Empty string = no override for that column (SAFE_CAST gives NULL, so COALESCE falls back to GA4).
+  sql: `MERGE ${MIS_MANUAL_TABLE} t
+    USING (SELECT DATE(@date) AS date, SAFE_CAST(NULLIF(@ios, '') AS INT64) AS ios,
+                  SAFE_CAST(NULLIF(@android, '') AS INT64) AS android, SAFE_CAST(NULLIF(@uninstall, '') AS INT64) AS uninstall) s
+    ON t.date = s.date AND t.source = 'manual'
+    WHEN MATCHED THEN UPDATE SET ios = s.ios, android = s.android, uninstall = s.uninstall, updated_at = CURRENT_TIMESTAMP()
+    WHEN NOT MATCHED THEN INSERT (date, ios, android, uninstall, source, created_at, updated_at)
+      VALUES (s.date, s.ios, s.android, s.uninstall, 'manual', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())`,
+  params: { date: String(row.date), ios: String(row.ios ?? ''), android: String(row.android ?? ''), uninstall: String(row.uninstall ?? '') },
+});
+
 const eventCodeRecap = (field, codes, from, to, type, newOnly) => {
   const params = { ...range(from, to), codes: codePatterns(codes) };
   let typeCond = '';
@@ -6210,4 +6632,5 @@ module.exports = {
   remisierRevenuePwcDetail, remisierRevenuePwcSummary, remisierTransactions,
   usersTransactions, usersTransactionsSummary,
   codePatterns, eventCodeUsers, eventCodeFunnel, eventCodeCohort, eventCodeRecap, eventCodePortfolio,
+  misDailyReport, misWeeklyReport, misMonthlySummary, misSalesDaily, misDownloadUpsert,
 };

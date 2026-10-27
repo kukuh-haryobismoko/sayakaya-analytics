@@ -3205,7 +3205,36 @@ PFN_TAB.sections = [
   ['product-funnel/installs', ['#pfnInstallsTable', '#pfnDailyTable'], () => { renderPfnInstalls(); renderPfnDaily(); }],
   ['product-funnel/uninstalls', '#pfnUninstallsTable', renderPfnUninstalls],
 ];
-const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB];
+const MIS_TAB = { id: 'mis-report', prefix: 'mis', cache: {}, loaded: false, coverage: false, charts: [] };
+function renderMisSales() {
+  const rows = MIS_TAB.cache.sales;
+  if (!rows) return;
+  const col = (key, label, type = 'num') => ({ key, label: t(label), type });
+  genTable('#misTable', rows, [
+    { key: 'date', label: t('col_date'), type: 'date' }, col('download', 'mis_col_download'), col('activation_kyc', 'mis_col_kyc'),
+    col('new_investor', 'mis_col_new_investor'), col('new_aum_invested', 'mis_col_new_aum', 'idr'),
+    col('subs_app', 'mis_col_subs_app'), col('redeem_app', 'mis_col_redeem_app'),
+    col('subs_manual', 'mis_col_subs_manual'), col('redeem_manual', 'mis_col_redeem_manual'),
+    col('aum_app', 'mis_col_aum_app', 'idr'), col('aum_manual', 'mis_col_aum_manual', 'idr'), col('uninstall', 'mis_col_uninstall'),
+  ], t('an_empty'));
+  const to = $('#misTo').value;
+  $('#misNote').textContent = tf('mis_note', { date: new Date(`${to}T00:00:00Z`).toLocaleDateString(getLang() === 'id' ? 'id-ID' : 'en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' }) });
+}
+function renderMisMonthly() {
+  const m = (MIS_TAB.cache.monthly || [])[0];
+  if (!m) { $('#misKpis').innerHTML = `<div class="empty">${t('an_empty')}</div>`; return; }
+  $('#misSummaryTitle').textContent = tf('mis_summary_title', { month: new Date(`${val(m.month)}T00:00:00Z`).toLocaleDateString(getLang() === 'id' ? 'id-ID' : 'en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }) });
+  const k = (key, label, f = num) => kpi(t(label), f(nval(m[key])));
+  $('#misKpis').innerHTML = [
+    k('aum_app', 'mis_col_aum_app', idr), k('new_investor', 'mis_col_new_investor'), k('subs_manual', 'mis_col_subs_manual'),
+    k('download', 'mis_col_download'), k('activation_kyc', 'mis_col_kyc'), k('uninstall', 'mis_col_uninstall'),
+  ].join('');
+}
+MIS_TAB.sections = [
+  ['mis-report/sales', '#misTable', renderMisSales],
+  ['mis-report/monthly', '#misKpis', renderMisMonthly],
+];
+const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB, MIS_TAB];
 function loadSubscription() { return loadAnalysis(SA_TAB); }
 function loadOnboarding() { return loadAnalysis(OB_TAB); }
 function loadRedemption() { return loadAnalysis(RD_TAB); }
@@ -9887,6 +9916,10 @@ function wire() {
   $('#bhApply').addEventListener('click', loadBehaviorUser);
   $('#bhSearchBtn').addEventListener('click', searchBehaviorUsers);
   ANALYSIS_TABS.forEach((tab) => $(`#${tab.prefix}Apply`).addEventListener('click', () => loadAnalysis(tab)));
+  $('#misSave').addEventListener('click', async () => {
+    const body = { date: $('#misManDate').value, ios: $('#misManIos').value, android: $('#misManAndroid').value, uninstall: $('#misManUninstall').value };
+    try { await api('/api/mis/download', { method: 'POST', body: JSON.stringify(body) }); toast(t('mis_saved')); loadAnalysis(MIS_TAB); } catch (e) { toast(e.message); }
+  });
   $('#saDriverFlow').addEventListener('change', renderSaDrivers);
   $('#rdSignalFlow').addEventListener('change', renderRdSignals);
   wireSeg('#saSplit', 'split', (v) => { saView.split = v; renderSaFunnel(); });

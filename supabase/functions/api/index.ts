@@ -79,6 +79,9 @@ const EXPORT_SOURCE_TAB: Record<string, string> = {
   referral_program_invited: 'referral-program',
   referral_program_alt_invited: 'referral-program-alt',
   event_code_transactions: 'event-code',
+  mis_daily: 'mis-report',
+  mis_weekly: 'mis-report',
+  mis_monthly: 'mis-report',
 };
 
 // Splits flat detail rows into one worksheet per distinct value of keyField —
@@ -1118,6 +1121,9 @@ const ANALYSIS_ROUTES: [string, string, Record<string, (from?: string, to?: stri
     steps: Q.productFunnelSteps, timing: Q.productFunnelTiming, stops: Q.productFunnelStops, installs: Q.productFunnelInstalls,
     uninstalls: Q.productFunnelUninstalls,
   }],
+  ['mis-report', 'mis', {
+    daily: Q.misDailyReport, weekly: Q.misWeeklyReport, monthly: Q.misMonthlySummary, sales: Q.misSalesDaily,
+  }],
 ];
 for (const [tab, prefix, builders] of ANALYSIS_ROUTES) {
   for (const [key, build] of Object.entries(builders)) {
@@ -1131,6 +1137,18 @@ for (const [tab, prefix, builders] of ANALYSIS_ROUTES) {
 on('GET', '/api/analysis/coverage', requireAnyTab(ANALYSIS_ROUTES.map(([tab]) => tab), async (_req, _params, url) => {
   const q = Q.analysisCoverage(qp(url, 'from'), qp(url, 'to'));
   return json(await runQuery(q.sql, q.params));
+}));
+
+// MIS Report manual download input (upsert)
+on('POST', '/api/mis/download', requireTab('mis-report', async (req, _params, _url, _user) => {
+  const body = await bodyOf(req);
+  const rows = (Array.isArray(body) ? body : [body]) as Array<{ date: string; ios?: number; android?: number; uninstall?: number }>;
+  if (!rows.length || rows.length > 62) return json({ error: 'rows: 1-62 required' }, 400);
+  if (rows.some((r) => !/^\d{4}-\d{2}-\d{2}$/.test(r?.date) || (['ios', 'android', 'uninstall'] as const).some((k) => r[k] != null && (r[k] as unknown) !== '' && !Number.isInteger(Number(r[k]))))) {
+    return json({ error: 'date YYYY-MM-DD and integer ios/android/uninstall required' }, 400);
+  }
+  for (const r of rows) { const q = Q.misDownloadUpsert(r); await runQuery(q.sql, q.params); }
+  return json({ ok: true, updated: rows.length });
 }));
 
 // Product performance (NAV % change per fund type)
