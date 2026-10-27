@@ -3235,49 +3235,28 @@ MIS_TAB.sections = [
   ['mis/monthly', '#misKpis', renderMisMonthly],
 ];
 // MIS PDF START
-// Same layout as the weekly Google Sheets printout: A4 portrait, previous-month
-// summary box on top, 12-column daily table, cut-off footnote below. Labels stay
-// English (like the sheet) whatever language the dashboard is set to.
+// Weekly Google Sheets printout as PDF. Both themes (buildMisPdf = sheet look,
+// buildMisPdfV2 = dashboard look) render the same misPdfData(), so numbers never differ.
+// Labels stay English (like the sheet) whatever language the dashboard is set to.
 const misAbbr = (n) => { const a = Math.abs(n); return a >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : a >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${(n / 1e3).toFixed(1)}K`; };
-function buildMisPdf(JsPDF, sales, monthly, from, to) {
+function misPdfData(sales, monthly, from, to) {
   const monthName = (iso, loc) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(loc, { month: 'long', timeZone: 'UTC' });
   const rows = [...sales].sort((a, b) => (val(a.date) < val(b.date) ? -1 : 1));
   const sum = (k) => rows.reduce((s, r) => s + nval(r[k]), 0);
-  const cw = [30, 42, 56, 42, 44, 56, 52, 38, 56, 52, 38, 38];
-  const doc = new JsPDF({ unit: 'pt', format: 'a4' });
-  const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
-  const L = (pageW - cw.reduce((a, w) => a + w, 0)) / 2;
-  const black = [0, 0, 0], blue = [164, 194, 244], green = [182, 215, 168], yellow = [255, 242, 204], white = [255, 255, 255];
-  const base = { font: 'helvetica', fontSize: 6.5, textColor: black, lineColor: black, lineWidth: 0.4, cellPadding: { top: 2.2, bottom: 2.2, left: 3, right: 3 } };
-  let y = 50;
-  if (monthly) {
-    const g = (k) => nval(monthly[k]);
-    const lab = (c) => ({ content: c, styles: { fontStyle: 'italic' } });
-    const num = (c) => ({ content: c, styles: { fontStyle: 'bolditalic', halign: 'right' } });
-    const body = [
-      [lab('AUM - app'), num(misAbbr(g('aum_app'))), lab('New Investor - app'), num(String(g('new_investor'))), lab('Subscription - manual'), num(misAbbr(g('subs_manual')))],
-      [lab('Total Download'), num(String(g('download'))), lab('New Invested - app'), num(misAbbr(g('new_aum_invested'))), lab('Redemption - manual'), num(misAbbr(g('redeem_manual')))],
-      [lab('Attrition'), num(String(g('uninstall'))), lab('Subscription - app'), num(misAbbr(g('subs_app'))), lab('AUM - manual'), num(misAbbr(g('aum_manual')))],
-      [lab('KYC'), num(String(g('activation_kyc'))), lab('Redemption - app'), num(misAbbr(g('redeem_app'))), lab(''), num('')],
-    ];
-    const boxL = L + cw.reduce((a, w) => a + w, 0) - 300;
-    doc.autoTable({
-      startY: y, theme: 'grid', margin: { left: boxL }, tableWidth: 300, styles: base,
-      head: [[{ content: `${monthName(val(monthly.month), 'en-US')} Summary`, colSpan: 6, styles: { fontStyle: 'bold', halign: 'left', fillColor: white, textColor: black } }]],
-      body,
-      columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 30 }, 2: { cellWidth: 70 }, 3: { cellWidth: 30 }, 4: { cellWidth: 70 }, 5: { cellWidth: 30 } },
-    });
-    y = doc.lastAutoTable.finalY;
-  }
+  const g = (k) => nval(monthly[k]);
+  const summary = monthly && {
+    title: `${monthName(val(monthly.month), 'en-US')} Summary`,
+    rows: [
+      [['AUM - app', misAbbr(g('aum_app'))], ['New Investor - app', String(g('new_investor'))], ['Subscription - manual', misAbbr(g('subs_manual'))]],
+      [['Total Download', String(g('download'))], ['New Invested - app', misAbbr(g('new_aum_invested'))], ['Redemption - manual', misAbbr(g('redeem_manual'))]],
+      [['Attrition', String(g('uninstall'))], ['Subscription - app', misAbbr(g('subs_app'))], ['AUM - manual', misAbbr(g('aum_manual'))]],
+      [['KYC', String(g('activation_kyc'))], ['Redemption - app', misAbbr(g('redeem_app'))], ['', '']],
+    ],
+  };
   const [fy, fm, fd] = from.split('-').map(Number), [ty, tm, td] = to.split('-').map(Number);
   const period = fy === ty && fm === tm
     ? (fd === 1 ? `${monthName(to, 'id-ID')} ${ty}` : `${fd}-${td} ${monthName(to, 'id-ID')} ${ty}`)
     : `${fd} ${monthName(from, 'id-ID')} ${fy} - ${td} ${monthName(to, 'id-ID')} ${ty}`;
-  y += 18;
-  doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(0, 0, 0);
-  doc.text('Sayakaya - DAILY SALES REPORT', L, y);
-  doc.text(`Periode - ${period}`, L, y + 12);
-  const H = (content, fill, extra = {}) => ({ content, ...extra, styles: { halign: 'center', valign: 'middle', fontStyle: 'bold', fillColor: fill || white } });
   const blank0 = (a, b) => (a === 0 && b === 0);
   const body = rows.map((r) => {
     const dt = String(val(r.date)).slice(0, 10).split('-');
@@ -3286,6 +3265,37 @@ function buildMisPdf(JsPDF, sales, monthly, from, to) {
       app0 ? '' : misAbbr(nval(r.subs_app)), app0 ? '' : misAbbr(nval(r.redeem_app)), misAbbr(nval(r.aum_app)),
       man0 ? '' : misAbbr(nval(r.subs_manual)), man0 ? '' : misAbbr(nval(r.redeem_manual)), misAbbr(nval(r.aum_manual)), String(nval(r.uninstall))];
   });
+  const foot = ['Total', String(sum('download')), String(sum('activation_kyc')), String(sum('new_investor')), misAbbr(sum('new_aum_invested')),
+    misAbbr(sum('subs_app')), misAbbr(sum('redeem_app')), '', misAbbr(sum('subs_manual')), misAbbr(sum('redeem_manual')), '', String(sum('uninstall'))];
+  const note = `*Transactions made after the ${td} ${monthName(to, 'en-US')} cut-off time (COT) have not yet been completed.`;
+  return { summary, period, body, foot, note };
+}
+function buildMisPdf(JsPDF, sales, monthly, from, to) {
+  const d = misPdfData(sales, monthly, from, to);
+  const cw = [30, 42, 56, 42, 44, 56, 52, 38, 56, 52, 38, 38];
+  const doc = new JsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+  const L = (pageW - cw.reduce((a, w) => a + w, 0)) / 2;
+  const black = [0, 0, 0], blue = [164, 194, 244], green = [182, 215, 168], yellow = [255, 242, 204], white = [255, 255, 255];
+  const base = { font: 'helvetica', fontSize: 6.5, textColor: black, lineColor: black, lineWidth: 0.4, cellPadding: { top: 2.2, bottom: 2.2, left: 3, right: 3 } };
+  let y = 50;
+  if (d.summary) {
+    const lab = (c) => ({ content: c, styles: { fontStyle: 'italic' } });
+    const num = (c) => ({ content: c, styles: { fontStyle: 'bolditalic', halign: 'right' } });
+    const boxL = L + cw.reduce((a, w) => a + w, 0) - 300;
+    doc.autoTable({
+      startY: y, theme: 'grid', margin: { left: boxL }, tableWidth: 300, styles: base,
+      head: [[{ content: d.summary.title, colSpan: 6, styles: { fontStyle: 'bold', halign: 'left', fillColor: white, textColor: black } }]],
+      body: d.summary.rows.map((r) => r.flatMap(([l, v]) => [lab(l), num(v)])),
+      columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 30 }, 2: { cellWidth: 70 }, 3: { cellWidth: 30 }, 4: { cellWidth: 70 }, 5: { cellWidth: 30 } },
+    });
+    y = doc.lastAutoTable.finalY;
+  }
+  y += 18;
+  doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(0, 0, 0);
+  doc.text('Sayakaya - DAILY SALES REPORT', L, y);
+  doc.text(`Periode - ${d.period}`, L, y + 12);
+  const H = (content, fill, extra = {}) => ({ content, ...extra, styles: { halign: 'center', valign: 'middle', fontStyle: 'bold', fillColor: fill || white } });
   doc.autoTable({
     startY: y + 22, theme: 'grid', margin: { left: L, right: L }, styles: base, showFoot: 'lastPage',
     head: [
@@ -3294,10 +3304,8 @@ function buildMisPdf(JsPDF, sales, monthly, from, to) {
         H('New Subscription\nThis Month', green), H('Redemption\nThis Month', green), H('AUM MTD', green),
         H('New Subscription\nThis Month', yellow), H('Redemption\nThis Month', yellow), H('AUM MTD', yellow)],
     ],
-    body,
-    foot: [['Total', String(sum('download')), String(sum('activation_kyc')), String(sum('new_investor')), misAbbr(sum('new_aum_invested')),
-      misAbbr(sum('subs_app')), misAbbr(sum('redeem_app')), '', misAbbr(sum('subs_manual')), misAbbr(sum('redeem_manual')), '', String(sum('uninstall'))]
-      .map((c, i) => ({ content: c, styles: { halign: i === 0 ? 'left' : 'right' } }))],
+    body: d.body,
+    foot: [d.foot.map((c, i) => ({ content: c, styles: { halign: i === 0 ? 'left' : 'right' } }))],
     headStyles: { fillColor: white },
     footStyles: { fillColor: [106, 168, 79], textColor: black, fontStyle: 'bold' },
     columnStyles: Object.fromEntries(cw.map((w, i) => [i, { cellWidth: w, halign: i === 0 ? 'left' : 'right' }])),
@@ -3305,17 +3313,76 @@ function buildMisPdf(JsPDF, sales, monthly, from, to) {
   let fyy = doc.lastAutoTable.finalY + 12;
   if (fyy > pageH - 40) { doc.addPage(); fyy = 50; }
   doc.setFont('helvetica', 'italic').setFontSize(6.5);
-  doc.text(`*Transactions made after the ${td} ${monthName(to, 'en-US')} cut-off time (COT) have not yet been completed.`, L, fyy);
+  doc.text(d.note, L, fyy);
   return doc;
 }
-async function exportMisPdf() {
+// Dashboard theme: brand indigo header, one tint per column group, hairline rows, no grid.
+function buildMisPdfV2(JsPDF, sales, monthly, from, to) {
+  const d = misPdfData(sales, monthly, from, to);
+  const ink = [28, 29, 31], muted = [86, 91, 107], hair = [225, 228, 237], white = [255, 255, 255], paper = [245, 246, 250];
+  const indigo = [58, 80, 171], teal = [8, 107, 72], amber = [143, 92, 0];
+  const tint = { indigo: [220, 226, 248], teal: [208, 240, 225], amber: [250, 232, 190] };
+  const doc = new JsPDF({ unit: 'pt', format: 'a4' });
+  const M = 30, W = doc.internal.pageSize.getWidth() - 2 * M, pageH = doc.internal.pageSize.getHeight();
+  doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(...ink).text('Sayakaya', M, 46);
+  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...muted).text('Daily Sales Report', M, 59);
+  doc.setFontSize(8).text('Periode', M + W, 46, { align: 'right' });
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...ink).text(d.period, M + W, 59, { align: 'right' });
+  doc.setDrawColor(...indigo).setLineWidth(1.5).line(M, 68, M + W, 68);
+  let y = 86;
+  if (d.summary) {
+    doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...ink).text(d.summary.title, M, y);
+    const pad = (i) => ({ top: 3.5, bottom: 3.5, left: i ? 18 : 8, right: 4 });
+    doc.autoTable({
+      startY: y + 6, theme: 'plain', margin: { left: M, right: M }, tableWidth: W,
+      styles: { font: 'helvetica', fontSize: 7.5, textColor: ink, fillColor: paper },
+      body: d.summary.rows.map((r) => r.flatMap(([l, v], i) => [
+        { content: l, styles: { textColor: ink, cellPadding: pad(i) } },
+        { content: v, styles: { fontStyle: 'bold', halign: 'right', cellPadding: pad(0) } },
+      ])),
+    });
+    y = doc.lastAutoTable.finalY + 20;
+  }
+  const cw = [28, 46, 46, 38, 44, 54, 54, 42, 54, 54, 42];
+  cw.push(W - cw.reduce((a, w) => a + w, 0)); // last column takes the rest so the table meets the right margin
+  const H = (content, fill, extra = {}, color = white) => ({ content, ...extra, styles: { halign: 'center', valign: 'middle', fontStyle: 'bold', fillColor: fill, textColor: color } });
+  const sub = (c, k) => H(c, tint[k], {}, ink);
+  doc.autoTable({
+    startY: y, theme: 'plain', margin: { left: M, right: M }, showFoot: 'lastPage',
+    styles: { font: 'helvetica', fontSize: 7, textColor: ink, cellPadding: { top: 4.2, bottom: 4.2, left: 3, right: 4 } },
+    head: [
+
+      [H('Date', ink, { rowSpan: 2 }), H('New Customer', indigo, { colSpan: 4 }), H('App AUM', teal, { colSpan: 3 }), H('Manual AUM', amber, { colSpan: 3 }), H('User\nAttrition', ink, { rowSpan: 2 })],
+      [sub('Download', 'indigo'), sub('Activation/\nKYC', 'indigo'), sub('New\nInvestor', 'indigo'), sub('New AUM\nInvested', 'indigo'),
+        sub('Subscription\nThis Month', 'teal'), sub('Redemption\nThis Month', 'teal'), sub('AUM\nMTD', 'teal'),
+        sub('Subscription\nThis Month', 'amber'), sub('Redemption\nThis Month', 'amber'), sub('AUM\nMTD', 'amber')],
+    ],
+    headStyles: { lineWidth: 0.6, lineColor: white },
+    body: d.body,
+    foot: [d.foot.map((c, i) => ({ content: c, styles: { halign: i === 0 ? 'left' : 'right' } }))],
+    footStyles: { fillColor: tint.indigo, fontStyle: 'bold' },
+    columnStyles: Object.fromEntries(cw.map((w, i) => [i, { cellWidth: w, halign: i === 0 ? 'left' : 'right' }])),
+    didDrawCell: (c) => {
+      if (c.section === 'head') return;
+      const { x, y: top, width, height } = c.cell;
+      if (c.section === 'foot') doc.setDrawColor(...indigo).setLineWidth(1).line(x, top, x + width, top);
+      else doc.setDrawColor(...hair).setLineWidth(0.4).line(x, top + height, x + width, top + height);
+      if ([1, 5, 8, 11].includes(c.column.index)) doc.setDrawColor(...hair).setLineWidth(0.4).line(x, top, x, top + height);
+    },
+  });
+  let fy = doc.lastAutoTable.finalY + 14;
+  if (fy > pageH - 40) { doc.addPage(); fy = 50; }
+  doc.setFont('helvetica', 'italic').setFontSize(7).setTextColor(...muted).text(doc.splitTextToSize(d.note, W), M, fy);
+  return doc;
+}
+async function exportMisPdf(build = buildMisPdf, suffix = '') {
   const sales = MIS_TAB.cache.sales;
   if (!sales || !sales.length) { toast(t('an_empty')); return; }
   const from = $('#misFrom').value, to = $('#misTo').value;
   await loadExportLib('pdf');
-  const doc = buildMisPdf(window.jspdf.jsPDF, sales, (MIS_TAB.cache.monthly || [])[0], from, to);
+  const doc = build(window.jspdf.jsPDF, sales, (MIS_TAB.cache.monthly || [])[0], from, to);
   const mon = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[Number(to.slice(5, 7)) - 1];
-  doc.save(`MIS - ${Number(to.slice(8, 10))} ${mon}.pdf`);
+  doc.save(`MIS - ${Number(to.slice(8, 10))} ${mon}${suffix}.pdf`);
 }
 // MIS PDF END
 const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB, MIS_TAB];
@@ -10001,6 +10068,7 @@ function wire() {
   $('#bhSearchBtn').addEventListener('click', searchBehaviorUsers);
   ANALYSIS_TABS.forEach((tab) => $(`#${tab.prefix}Apply`).addEventListener('click', () => loadAnalysis(tab)));
   $('#misPdf').addEventListener('click', () => exportMisPdf().catch((e) => toast(e.message)));
+  $('#misPdf2').addEventListener('click', () => exportMisPdf(buildMisPdfV2, ' v2').catch((e) => toast(e.message)));
   $('#misSave').addEventListener('click', async () => {
     const body = { date: $('#misManDate').value, ios: $('#misManIos').value, android: $('#misManAndroid').value, uninstall: $('#misManUninstall').value };
     try { await api('/api/mis/download', { method: 'POST', body: JSON.stringify(body) }); toast(t('mis_saved')); loadAnalysis(MIS_TAB); } catch (e) { toast(e.message); }
