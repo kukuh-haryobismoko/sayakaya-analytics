@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `ed892c8 (2026-10-26)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `e71d820 (2026-10-27)`.
 
 ## Cara membaca dokumen ini
 
@@ -1343,8 +1343,9 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Kartu ringkasan di atas tab*:
     - **Registered / Mendaftar**: Nasabah yang daftar dengan salah satu kode event selama event.
     - **KYC verified (new SID)**: Yang KYC-nya verified; inilah SID baru untuk target.
-    - **Made a purchase**: Yang sudah punya beli completed.
-    - **Funded**: Yang dana bersihnya (beli dikurangi jual) pernah mencapai minimum funded sales (Rp 1 jt).
+    - **Made a purchase**: Nasabah unik yang punya pembelian di daftar Transaksi (semua status kecuali expired dan cancelled), mengikuti filter booth dan sales. Keterangan di bawah angka: berapa nasabah baru (dan berapa di antaranya sudah settle, angka yang sama dengan transaksi pertama di rekap) dan berapa existing/lainnya.
+    - **Transactions / Transaksi**: Jumlah baris di daftar Transaksi (beli dan jual), dengan jumlah nasabah unik dan berapa yang belum settle.
+    - **Funded**: Nasabah baru yang dana bersihnya (beli dikurangi jual, hanya yang completed) pernah mencapai minimum funded sales (Rp 1 jt). Rekap, insentif, dan bonus nasabah juga hanya menghitung transaksi completed, jadi bisa lebih kecil dari kartu Transaksi sampai pembayaran settle.
     - **Net money in**: Total beli dikurangi jual nasabah baru.
     - **Avg days holding**: Rata-rata hari dari beli pertama sampai hari ini, atau sampai jual terakhir bagi yang sudah jual semua.
   - *Recap, per, booth* (Rekap, per, booth): Satu baris per booth untuk rentang tanggal sendiri (bawaan: seluruh event), plus baris semua booth. Mengikuti filter booth dan sales di halaman; tanggalnya sendiri menggantikan filter periode. Daftar = daftar di rentang; KYC = dari yang daftar di rentang, berapa yang sudah verified (tidak mungkin lebih besar dari Daftar), dengan persentasenya. Transaksi pertama = beli completed pertama di rentang; Capai minimum = dana bersih pertama kali mencapai minimum funded di rentang; Beli dan Jual = transaksi completed di rentang. Pembelian yang belum settle tidak masuk kolom nominal, jumlah dan nominalnya disebut di bawah tabel. Kalau tanggal akhir = hari terakhir event, verifikasi dan pembelian sesudah event ikut dihitung supaya totalnya sama dengan kartu KPI.
