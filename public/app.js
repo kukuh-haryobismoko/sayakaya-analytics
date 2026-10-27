@@ -3317,17 +3317,23 @@ function buildMisPdf(JsPDF, sales, monthly, from, to) {
   return doc;
 }
 // Dashboard theme: brand indigo header, one tint per column group, hairline rows, no grid.
-function buildMisPdfV2(JsPDF, sales, monthly, from, to) {
+function buildMisPdfV2(JsPDF, sales, monthly, from, to, logo) {
   const d = misPdfData(sales, monthly, from, to);
   const ink = [28, 29, 31], muted = [86, 91, 107], hair = [225, 228, 237], white = [255, 255, 255], paper = [245, 246, 250];
   const indigo = [58, 80, 171], teal = [8, 107, 72], amber = [143, 92, 0];
   const tint = { indigo: [220, 226, 248], teal: [208, 240, 225], amber: [250, 232, 190] };
   const doc = new JsPDF({ unit: 'pt', format: 'a4' });
   const M = 30, W = doc.internal.pageSize.getWidth() - 2 * M, pageH = doc.internal.pageSize.getHeight();
-  doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(...ink).text('Sayakaya', M, 46);
-  doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...muted).text('Daily Sales Report', M, 59);
-  doc.setFontSize(8).text('Periode', M + W, 46, { align: 'right' });
-  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...ink).text(d.period, M + W, 59, { align: 'right' });
+  if (logo) {
+    doc.addImage(logo, 'PNG', M, 28, 36, 35);
+    doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...ink).text('Daily Sales Report', M + 46, 50);
+  } else {
+    doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(...ink).text('Sayakaya', M, 46);
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...muted).text('Daily Sales Report', M, 59);
+  }
+  const py = logo ? 41 : 46; // centre the period block on the logo tile
+  doc.setFontSize(8).text('Periode', M + W, py, { align: 'right' });
+  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...ink).text(d.period, M + W, py + 13, { align: 'right' });
   doc.setDrawColor(...indigo).setLineWidth(1.5).line(M, 68, M + W, 68);
   let y = 86;
   if (d.summary) {
@@ -3380,7 +3386,8 @@ async function exportMisPdf(build = buildMisPdf, suffix = '') {
   if (!sales || !sales.length) { toast(t('an_empty')); return; }
   const from = $('#misFrom').value, to = $('#misTo').value;
   await loadExportLib('pdf');
-  const doc = build(window.jspdf.jsPDF, sales, (MIS_TAB.cache.monthly || [])[0], from, to);
+  const logo = await fetch('logo.png').then((r) => r.blob()).then((b) => new Promise((ok) => { const f = new FileReader(); f.onload = () => ok(f.result); f.readAsDataURL(b); })).catch(() => null); // no logo -> text header
+  const doc = build(window.jspdf.jsPDF, sales, (MIS_TAB.cache.monthly || [])[0], from, to, logo);
   const mon = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ')[Number(to.slice(5, 7)) - 1];
   doc.save(`MIS - ${Number(to.slice(8, 10))} ${mon}${suffix}.pdf`);
 }
