@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `4121aa8 (2026-10-27)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `ec466dd (2026-10-28)`.
 
 ## Cara membaca dokumen ini
 
@@ -335,6 +335,7 @@ Ekspor Adjust (atribusi iklan): klik, install, dan event dari setiap channel ikl
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `events` | Event atribusi iklan per tracker/channel. | Marketing attribution |
 
 #### `analytics_266759216`
@@ -343,6 +344,7 @@ Ekspor Google Analytics 4 (Firebase) dari aplikasi mobile Android dan iOS: setia
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `events_*` | Semua event aplikasi; dibaca per rentang tanggal lewat _TABLE_SUFFIX. | Engagement analysis, Investor journey, MIS Report, Onboarding analysis, Product funnel, Redemption analysis, Subscription analysis |
 
 #### `firebase_crashlytics`
@@ -351,6 +353,7 @@ Ekspor Firebase Crashlytics: crash dan error aplikasi, satu tabel per platform.
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `com_sayakaya_android_ANDROID` |  | App health |
 | `com_sayakaya_ios_IOS` |  | App health |
 
@@ -360,6 +363,7 @@ Log pengiriman push notification Firebase Cloud Messaging (FCM): diterima atau g
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `data` | Satu baris per status pengiriman push. | Push delivery |
 
 #### `firebase_performance`
@@ -368,6 +372,7 @@ Ekspor Firebase Performance Monitoring: durasi pemanggilan API (GraphQL) dan pem
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `com_sayakaya_android_ANDROID` |  | App health |
 | `com_sayakaya_ios_IOS` |  | App health |
 
@@ -412,6 +417,7 @@ Hasil pipeline perhitungan fee: fee harian per manajer investasi dan snapshot po
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
 | `INFORMATION_SCHEMA` |  | HNWI, Overview, Referral activity |
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `mi_fee` | Fee harian per fund dan AUM harian platform. | AUM history, Forecast & churn |
 | `portfolio_fix` | Versi portfolio_with_code dengan harga beli rata-rata yang sudah dikoreksi. | Booth event, Event code tracking, Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Referral program, Referral program (KYC based), Send e-statement & portfolio |
 | `portfolio_with_code` | Snapshot portofolio harian per investor (sumber "PWC"), mulai 14 Januari 2026. | HNWI, Overview, Portfolio (PWC), Portfolio Explorer (GS), Referral activity, Remisier sharing (PWC), Revenue (PWC), Revenue trend, User lifetime |
@@ -423,6 +429,7 @@ Hasil pipeline perhitungan fee: fee harian per manajer investasi dan snapshot po
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `download_manual` |  | MIS Report |
 
 #### `ml`
@@ -431,6 +438,7 @@ Model BigQuery ML yang dibuat oleh dashboard (forecast AUM dan transaksi, model 
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `aum_forecast` |  | Forecast & churn |
 | `churn_features` |  | Forecast & churn |
 | `churn_model` |  | Forecast & churn |
@@ -442,6 +450,7 @@ Feed transaksi dari S-INVEST (KSEI), sistem kustodian. Sumber independen untuk m
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
+| `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `trx_history` | Riwayat transaksi dari kustodian. | Data explorer, Portfolio (SInvest), Reconciliation, SInvest transactions |
 
 ### 5.2 Tabel, view, dan fungsi Supabase
@@ -1793,6 +1802,7 @@ Endpoint yang tidak terikat pada satu tab: login dan akun, admin, ekspor, jadwal
 | `GET /api/funds/list` | `fundList` | `main.funds` |
 | `GET /api/users/search` | `userSearch` | `main.user_profiles`, `main.users` |
 | `GET /api/users/by-code` | `remisierUsers` | `main.user_profiles`, `main.users` |
+| `GET /api/data-freshness` | `dataFreshness` | `adjust_analytics.__TABLES__`, `analytics_266759216.__TABLES__`, `firebase_crashlytics.__TABLES__`, `firebase_messaging.__TABLES__`, `firebase_performance.__TABLES__`, `main.__TABLES__`, `mi_fee_logs.__TABLES__`, `mis.__TABLES__`, `ml.__TABLES__`, `sinvest.__TABLES__` |
 | `GET /api/remisier/users` | `remisierUsers` | `main.user_profiles`, `main.users` |
 | `POST /api/ml/retrain` | - | `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.mi_fee`, `ml.aum_forecast`, `ml.churn_features`, `ml.churn_model`, `ml.tx_forecast`, `dashboard_audit_log` |
 | `POST /api/ai/portfolio-narrative` | - | `dashboard_audit_log` |
