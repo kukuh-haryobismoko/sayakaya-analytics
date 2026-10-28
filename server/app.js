@@ -1024,6 +1024,12 @@ function createApp({ serveStatic = true } = {}) {
     res.json(await runQuery(q.sql, q.params));
   }));
 
+  // "Data as of" note under each section: last write time per warehouse table. Any logged-in user.
+  app.get('/api/data-freshness', handler(async (_req, res) => {
+    const q = Q.dataFreshness();
+    res.json(await runQuery(q.sql, q.params));
+  }));
+
   // MIS Report manual download input (upsert)
   app.post('/api/mis/download', requireTab('mis-report'), handler(async (req, res) => {
     const rows = Array.isArray(req.body) ? req.body : [req.body];

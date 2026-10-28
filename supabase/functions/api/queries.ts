@@ -2908,6 +2908,25 @@ const SELL_DONE_SQL = `SELECT id, user_id, fund_id, created_at, is_all_unit, COA
 const USER_AUM_SQL = `SELECT user_id, CAST(SUM(amount) AS FLOAT64) AS aum FROM (${HOLDINGS_NOW_SQL}) GROUP BY user_id`;
 const ga4Screens = (names: string) => `(event_name = 'screen_view' AND ${GA4_SCREEN} IN (${names}))`;
 
+// When each warehouse table was last written, for the "Data as of" note under every
+// section. Metadata only, no scan. The GA4 daily export tables collapse to one
+// events_* row (newest export).
+export const dataFreshness = (): Query => ({
+  sql: `SELECT dataset, table_id, FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%SZ', TIMESTAMP_MILLIS(modified)) AS modified_at FROM (
+      SELECT 'main' AS dataset, table_id, last_modified_time AS modified FROM \`sayakaya.main.__TABLES__\`
+      UNION ALL SELECT 'mi_fee_logs', table_id, last_modified_time FROM \`sayakaya.mi_fee_logs.__TABLES__\`
+      UNION ALL SELECT 'sinvest', table_id, last_modified_time FROM \`sayakaya.sinvest.__TABLES__\`
+      UNION ALL SELECT 'mis', table_id, last_modified_time FROM \`sayakaya.mis.__TABLES__\`
+      UNION ALL SELECT 'ml', table_id, last_modified_time FROM \`sayakaya.ml.__TABLES__\`
+      UNION ALL SELECT 'firebase_messaging', table_id, last_modified_time FROM \`sayakaya.firebase_messaging.__TABLES__\`
+      UNION ALL SELECT 'firebase_crashlytics', table_id, last_modified_time FROM \`sayakaya.firebase_crashlytics.__TABLES__\`
+      UNION ALL SELECT 'firebase_performance', table_id, last_modified_time FROM \`sayakaya.firebase_performance.__TABLES__\`
+      UNION ALL SELECT 'adjust_analytics', table_id, last_modified_time FROM \`sayakaya.adjust_analytics.__TABLES__\`
+      UNION ALL SELECT 'analytics_266759216', 'events_*', MAX(last_modified_time) FROM \`sayakaya.analytics_266759216.__TABLES__\`
+        WHERE REGEXP_CONTAINS(table_id, r'^events_[0-9]{8}$'))`,
+  params: {},
+});
+
 // How well the two sides line up for the period: logged-in app users found
 // in main.users, and main-database buy, sell and switch rows with the
 // matching app event within 10 minutes (the rest came from outside the app,

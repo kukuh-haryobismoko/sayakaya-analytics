@@ -1139,6 +1139,12 @@ on('GET', '/api/analysis/coverage', requireAnyTab(ANALYSIS_ROUTES.map(([tab]) =>
   return json(await runQuery(q.sql, q.params));
 }));
 
+// "Data as of" note under each section: last write time per warehouse table. Any logged-in user.
+on('GET', '/api/data-freshness', async () => {
+  const q = Q.dataFreshness();
+  return json(await runQuery(q.sql, q.params));
+});
+
 // MIS Report manual download input (upsert)
 on('POST', '/api/mis/download', requireTab('mis-report', async (req, _params, _url, _user) => {
   const body = await bodyOf(req);

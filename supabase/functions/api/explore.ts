@@ -336,6 +336,7 @@ export function meta() {
     key, label: d.label, columns: d.columns,
     filters: d.filters.map((f) => ({ key: f.key, bool: Boolean(f.bool), values: f.values || null })),
     hasDate: Boolean(d.dateCol),
+    tables: [...new Set(d.from.match(/sayakaya\.\w+\.\w+/g))],
   }));
 }
 

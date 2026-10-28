@@ -6262,6 +6262,7 @@ async function selectDataset(key) {
   $$('#exTabs .ex-tab').forEach((b) => b.classList.toggle('on', b.dataset.ds === key));
   const d = currentDataset();
   $('#exTitle').textContent = d.label;
+  if (d.tables) showDataNote('explorer', specFromSql(d.tables.join(' '))); // absent until the API with `tables` is deployed
   buildExFilters(d);
   loadExplore();
 }
@@ -6358,6 +6359,7 @@ async function runSql() {
     const { rows, count } = await api('/api/sql/run', { method: 'POST', body: JSON.stringify(body) });
     sqlCache = rows;
     renderGenericTable('#sqlResult', rows);
+    showDataNote('sql', specFromSql(sql));
     setSqlMsg(`${num(count)} row${count === 1 ? '' : 's'}`, 'ok');
     $('#sqlCsv').disabled = $('#sqlXlsx').disabled = rows.length === 0;
   } catch (e) {
@@ -8181,15 +8183,20 @@ function boothCustomerBonuses(people, plans, cfg, today) {
   return { welcome, nabung, topUp };
 }
 
+// Oldest modified_at as 'YYYY-MM-DD HH:mm' in WIB, '' when none parse.
+function oldestWib(fresh) {
+  const times = (fresh || []).map((r) => Date.parse(r.modified_at)).filter((n) => !Number.isNaN(n));
+  if (!times.length) return '';
+  const wib = new Date(Math.min(...times) + 7 * 3600000).toISOString();
+  return `${wib.slice(0, 10)} ${wib.slice(11, 16)}`;
+}
 // "Data as of" line: the warehouse copies of users, user_profiles and
 // transactions are refreshed by scheduled queries, so the oldest copy time is
 // the moment up to which registrations and purchases are guaranteed to show.
 // `fresh` is [{ table_id, modified_at (UTC ISO) }]; returns '' when unknown.
 function boothFreshText(fresh) {
-  const times = (fresh || []).map((r) => Date.parse(r.modified_at)).filter((n) => !Number.isNaN(n));
-  if (!times.length) return '';
-  const wib = new Date(Math.min(...times) + 7 * 3600000).toISOString();
-  const at = `${wib.slice(0, 10)} ${wib.slice(11, 16)}`;
+  const at = oldestWib(fresh);
+  if (!at) return '';
   return bL(
     `Data as of ${at} WIB. Registrations, KYC and purchases come from copies of the main database that refresh on a schedule, so anyone who signed up after that time appears after the next refresh.`,
     `Data per ${at} WIB. Pendaftaran, KYC, dan transaksi dibaca dari salinan database utama yang diperbarui berkala, jadi yang daftar setelah jam itu baru muncul di refresh berikutnya.`);
@@ -8752,6 +8759,7 @@ async function runAsk(q) {
     // BigQuery at all, so there's no SQL — keep the box hidden for those.
     if (data.sql) { askSqlCache = data.sql; $('#askSqlText').value = data.sql; $('#askSql').classList.remove('hidden'); }
     else { askSqlCache = ''; $('#askSql').classList.add('hidden'); }
+    showDataNote('ask', specFromSql(data.sql || ''));
     if (!res.ok) {
       $('#askResult').innerHTML = '';
       $('#askInput').value = question; // keep what was typed so it can be retried
@@ -8944,6 +8952,7 @@ async function runAskSql() {
   try {
     const { rows, count } = await api('/api/sql/run', { method: 'POST', body: JSON.stringify({ sql, ...unredactBody }) });
     renderGenericTable('#askResult', rows);
+    showDataNote('ask', specFromSql(sql));
     setAskMsg(`${num(count)} row${count === 1 ? '' : 's'}`, 'ok');
     $('#askCsv').disabled = $('#askXlsx').disabled = rows.length === 0;
     prepareAskChart(rows);
@@ -9417,6 +9426,92 @@ function showNavTooltip(link, label) {
 }
 function hideNavTooltip() { $('#navTooltip').classList.remove('show'); }
 
+// Source + freshness note under the first heading of each data section, same look as the
+// booth event's "Data as of" line. Per section: the warehouse tables its queries read
+// (dataset:table,table|dataset:...). Update when a section's query gains a table.
+const DATA_SOURCES = {
+  'overview': 'main:bonus_portfolios,funds,geo,investment_managers,portfolios,transactions,user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'remisier-tx': 'main:funds,investment_managers,transactions,user_profiles,users|mi_fee_logs:mi_fee,portfolio_with_code',
+  'sinvest-tx': 'main:bonus_portfolios,funds,goal_snapshots,goals,investment_managers,management_fee_logs,portfolios,snapshots,transactions,user_profiles,users|mi_fee_logs:portfolio_with_code|sinvest:trx_history',
+  'users-tx': 'main:funds,transactions,user_profiles,users',
+  'hnwi-bonus': 'main:funds,investment_managers,transactions,user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'promo-recap': 'main:bonus_portfolios,campaigns,funds,investment_managers,management_fee_logs,transactions,user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'event-code': 'main:bonus_portfolios,funds,portfolios,transactions,user_profiles,users|mi_fee_logs:portfolio_fix',
+  'aum': 'main:funds,investment_managers,management_fee_logs,transactions|mi_fee_logs:mi_fee,portfolio_with_code',
+  'revenue-trend': 'main:funds,investment_managers,management_fee_logs,transactions|mi_fee_logs:mi_fee,portfolio_with_code',
+  'top-investors': 'main:transactions,user_profiles,users',
+  'portfolio': 'main:bonus_portfolios,funds,goals,investment_managers,management_fee_logs,portfolios,snapshots,transactions,user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'portfolio-fix': 'main:bonus_portfolios,funds,portfolios,snapshots,transactions|mi_fee_logs:portfolio_fix',
+  'portfolio-tx': 'main:bonus_portfolios,funds,goal_snapshots,goals,investment_managers,management_fee_logs,portfolios,snapshots,transactions,user_profiles,users|mi_fee_logs:portfolio_fix,portfolio_with_code',
+  'portfolio-sinvest': 'main:bonus_portfolios,funds,goal_snapshots,goals,investment_managers,management_fee_logs,portfolios,snapshots,transactions,user_profiles,users|mi_fee_logs:portfolio_fix,portfolio_with_code|sinvest:trx_history',
+  'portfolio-explorer': 'main:bonus_portfolios,funds,goal_snapshots,goals,investment_managers,management_fee_logs,portfolios,snapshots,transactions,user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'hnwi': 'main:user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'dormant': 'main:transactions',
+  'kalcer': 'main:user_profiles,user_referrals,users|mi_fee_logs:portfolio_with_code',
+  'push': 'firebase_messaging:data',
+  'marketing': 'adjust_analytics:events',
+  'app-health': 'firebase_crashlytics:com_sayakaya_android_ANDROID,com_sayakaya_ios_IOS|firebase_performance:com_sayakaya_android_ANDROID,com_sayakaya_ios_IOS',
+  'user-behavior': 'analytics_266759216:events_*|main:bonus_portfolios,funds,portfolios,transactions,user_profiles,users',
+  'mis-report': 'analytics_266759216:events_*|main:transactions,users|mi_fee_logs:portfolios|mis:download_manual',
+  'performance': 'main:funds,snapshots',
+  'growth': 'main:bonus_portfolios,campaigns,funds,investment_managers,portfolios,switching_transactions,transactions,user_profiles,user_referrals,users|mi_fee_logs:portfolio_fix',
+  'reconciliation': 'main:transactions|sinvest:trx_history',
+  'revenue': 'main:funds,investment_managers,management_fee_logs|mi_fee_logs:portfolio_with_code',
+  'user-lifetime': 'main:funds,investment_managers,management_fee_logs,transactions,user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'campaign-revenue': 'main:bonus_portfolios,campaigns,funds,investment_managers,management_fee_logs,snapshots,transactions',
+  'referral-program': 'main:bonus_portfolios,funds,investment_managers,portfolios,transactions,user_profiles,user_referrals,users|mi_fee_logs:portfolio_fix',
+  'referral-program-alt': 'main:bonus_portfolios,funds,investment_managers,portfolios,transactions,user_profiles,user_referrals,users|mi_fee_logs:portfolio_fix',
+  'remisier': 'main:funds,goals,investment_managers,management_fee_logs,user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'remisier-pwc': 'main:funds,goals,investment_managers,management_fee_logs,user_profiles,users|mi_fee_logs:portfolio_with_code',
+  'send-statement': 'main:bonus_portfolios,funds,portfolios,snapshots,transactions,user_profiles,users|mi_fee_logs:portfolio_fix',
+  'subscription-analysis': 'analytics_266759216:events_*|main:bonus_portfolios,funds,portfolios,transactions,user_profiles,users',
+  'onboarding-analysis': 'analytics_266759216:events_*|main:transactions,user_profiles,user_status_logs,users',
+  'redemption-analysis': 'analytics_266759216:events_*|main:bonus_portfolios,funds,portfolios,switching_transactions,transactions',
+  'engagement-analysis': 'analytics_266759216:events_*|main:bonus_portfolios,funds,portfolios,transactions,users',
+  'product-funnel': 'analytics_266759216:events_*|main:bonus_portfolios,funds,portfolios,transactions,users',
+  'revenue2': 'main:funds,goal_snapshots,goals,investment_managers,management_fee_logs',
+  'predict': 'main:bonus_portfolios,funds,portfolios,transactions,user_profiles,users|mi_fee_logs:mi_fee,portfolios|ml:aum_forecast,churn_features,churn_model,tx_forecast',
+};
+let dataFresh = { at: 0, p: null };
+// One shared fetch of every table's last write time, reused for 10 minutes.
+function loadDataFresh() {
+  if (!dataFresh.p || Date.now() - dataFresh.at > 600000) {
+    dataFresh.at = Date.now();
+    dataFresh.p = api('/api/data-freshness').catch(() => { dataFresh.at = 0; return []; });
+  }
+  return dataFresh.p;
+}
+// Spec from `sayakaya.<dataset>.<table>` refs in SQL, for tabs whose tables are only known at run time.
+function specFromSql(sql) {
+  const g = {};
+  for (const [, d, t] of String(sql).matchAll(/sayakaya\.(\w+)\.([\w*]+)/g)) (g[d] ||= new Set()).add(t.replace(/^events_.*/, 'events_*'));
+  return Object.entries(g).map(([d, t]) => `${d}:${[...t]}`).join('|');
+}
+// `spec` is passed by Ask, SQL lab and Explorer; later calls (tab switch, language) reuse the stored one.
+async function showDataNote(tab, spec) {
+  const sec = document.getElementById(tab);
+  if (!sec) return;
+  let el = sec.querySelector('.data-note');
+  spec ??= el?.dataset.spec ?? DATA_SOURCES[tab];
+  if (spec == null && tab !== 'ask' && tab !== 'sql') return;
+  if (!el) {
+    el = document.createElement('span');
+    el.className = 'hint data-note';
+    el.style.cssText = 'display:block; margin-top:4px';
+    const head = sec.querySelector('.panel-head');
+    if (head) head.after(el); else sec.querySelector('.panel')?.prepend(el);
+  }
+  el.dataset.spec = spec ?? '';
+  if (!spec) { el.textContent = bL('Source: BigQuery project sayakaya, the tables your query reads. Data as of shows after a query runs.', 'Sumber: BigQuery project sayakaya, tabel yang dibaca query kamu. Data per muncul setelah query dijalankan.'); return; }
+  const groups = spec.split('|').map((g) => g.split(':'));
+  const src = groups.map(([d, t]) => `${d} (${t.replace(/,/g, ', ')})`).join(' · ');
+  const base = bL(`Source: ${src}.`, `Sumber: ${src}.`);
+  el.textContent = base;
+  const want = new Set(groups.flatMap(([d, t]) => t.split(',').map((x) => `${d}.${x}`)));
+  const at = oldestWib((await loadDataFresh()).filter((r) => want.has(`${r.dataset}.${r.table_id}`)));
+  if (at) el.textContent = base + bL(` Data as of ${at} WIB (oldest of these tables).`, ` Data per ${at} WIB (tabel yang paling lama diperbarui).`);
+}
+
 function switchTab(name) {
   // Real enforcement is the backend 403 on every route — this is just UX
   // polish so a restricted user never even sees a tab they can't use.
@@ -9429,6 +9524,7 @@ function switchTab(name) {
   if (activeLink) {
     $('#pageTitle').textContent = activeLink.querySelector('.nav-label-text')?.textContent || '';
   }
+  showDataNote(name);
   if (name === 'explorer' && !ex.meta.length) loadExplorerMeta();
   if (name === 'aum' && !aumCache.length) loadAumHistory();
   if (name === 'revenue-trend' && !revTrendLoaded) loadRevenueTrend();
@@ -10693,7 +10789,7 @@ function setConnStatus(live) {
 }
 // i18n.js calls this after a language switch, to re-render text this app
 // builds dynamically in JS rather than via a static data-i18n attribute.
-window.onLanguageChange = () => { setConnStatus(lastConnLive); renderAskThread(); updateOverviewUserFilterBtn(); repaintActiveTab(); };
+window.onLanguageChange = () => { setConnStatus(lastConnLive); renderAskThread(); updateOverviewUserFilterBtn(); repaintActiveTab(); showDataNote(document.querySelector('.view.active')?.id); };
 
 async function pollHealth() {
   try {

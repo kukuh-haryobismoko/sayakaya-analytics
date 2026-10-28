@@ -137,6 +137,9 @@ const fresh = [
 ctx.__fresh = fresh;
 assert.ok(run('boothFreshText(__fresh)').includes('2026-10-19 03:30 WIB'), 'oldest copy (20:30 UTC) = 03:30 WIB next day');
 assert.strictEqual(run('boothFreshText([])'), '');
+assert.strictEqual(run("specFromSql('SELECT 1 FROM `sayakaya.main.users` u JOIN sayakaya.main.users x, `sayakaya.analytics_266759216.events_2026*`')"), 'main:users|analytics_266759216:events_*');
+assert.strictEqual(run("specFromSql('SELECT 1')"), '');
+assert.strictEqual(run("oldestWib([{ modified_at: '2026-10-28T04:26:10Z' }, { modified_at: '2026-10-27T20:30:00Z' }])"), '2026-10-28 03:30', 'oldest-first, shown in WIB');
 assert.strictEqual(run('boothFreshText(undefined)'), '');
 assert.strictEqual(run("boothFreshText([{ table_id: 'users', modified_at: 'nope' }])"), '');
 
