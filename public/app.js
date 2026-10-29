@@ -8081,6 +8081,8 @@ function boothHoldState(r, cfg, today) {
   return { key: days >= need ? 'held' : 'holding', days };
 }
 
+// Booth SID target: one seat per sales code of the booth, so a new sales in the roster raises it.
+const boothSidTarget = (cfg, booth, period) => cfg.roster.filter((r) => r.role === 'sales' && r.booth === booth).length * cfg.teamLead.dailySidTarget * period.workDays;
 // Incentives for one period: sales and flying team per person, team leads per booth.
 function boothIncentives(people, cfg, period, today) {
   const scale = period.workDays / cfg.fullMonthWorkDays;
@@ -8121,7 +8123,7 @@ function boothIncentives(people, cfg, period, today) {
   const leads = Object.keys(cfg.booths).map((booth) => {
     const lead = cfg.roster.find((r) => r.role === 'team_lead' && r.booth === booth);
     const m = measure(inPeriod.filter((x) => x.booth === booth), T.minFunded, T.rule4.minAmount);
-    const target = T.salesPerBooth * T.dailySidTarget * period.workDays;
+    const target = boothSidTarget(cfg, booth, period);
     const sidPct = target ? (m.sid / target) * 100 : 0;
     const gate = sidPct >= T.gate.minSidPct && m.fundedPct >= T.gate.minFundedPct;
     const r1 = gate ? bTier(T.rule1, (tr) => sidPct >= tr.minSidPct) : 0;
@@ -8593,8 +8595,8 @@ function renderBoothRules(cfg, period, scale) {
   const tiers = (list, fmt) => list.map(fmt).join('; ');
   $('#beRules').innerHTML = `
     <h3>${bL('Periods', 'Periode')}</h3><ul>${cfg.periods.map((pd) => li(
-      `${bEsc(pd.label)}: ${pd.from} to ${pd.to}, ${pd.workDays.toFixed(1)} working days, sales target ${(S.dailySidTarget * pd.workDays).toFixed(1)} SID, booth target ${(T.salesPerBooth * T.dailySidTarget * pd.workDays).toFixed(1)} SID; M1 ${pd.m1.from} to ${pd.m1.to}.`,
-      `${bEsc(pd.label)}: ${pd.from} s.d. ${pd.to}, ${pd.workDays.toFixed(1)} hari kerja, target sales ${(S.dailySidTarget * pd.workDays).toFixed(1)} SID, target booth ${(T.salesPerBooth * T.dailySidTarget * pd.workDays).toFixed(1)} SID; M1 ${pd.m1.from} s.d. ${pd.m1.to}.`)).join('')}</ul>
+      `${bEsc(pd.label)}: ${pd.from} to ${pd.to}, ${pd.workDays.toFixed(1)} working days, sales target ${(S.dailySidTarget * pd.workDays).toFixed(1)} SID, booth target ${Object.keys(cfg.booths).map((k) => `${k} ${boothSidTarget(cfg, k, pd).toFixed(1)}`).join(', ')} SID; M1 ${pd.m1.from} to ${pd.m1.to}.`,
+      `${bEsc(pd.label)}: ${pd.from} s.d. ${pd.to}, ${pd.workDays.toFixed(1)} hari kerja, target sales ${(S.dailySidTarget * pd.workDays).toFixed(1)} SID, target booth ${Object.keys(cfg.booths).map((k) => `${k} ${boothSidTarget(cfg, k, pd).toFixed(1)}`).join(', ')} SID; M1 ${pd.m1.from} s.d. ${pd.m1.to}.`)).join('')}</ul>
     <h3>${bL('Definitions', 'Definisi')}</h3><ul>
       ${li('New SID: registered with an event code during the event (referral or sales code, exact match) and KYC verified. Counted in the period of the verification date; a verification after the event counts in the last period.', 'SID baru: daftar dengan kode event selama event (kode referral atau sales, sama persis) dan KYC verified. Dihitung di periode tanggal verifikasi; verifikasi sesudah event masuk periode terakhir.')}
       ${li('Transactions: completed buys and sells only; bonus units given by admin (manual_bonus) do not count. Net money in = buys minus sells from registration to the end of the period.', 'Transaksi: hanya beli dan jual berstatus completed; bonus unit dari admin (manual_bonus) tidak dihitung. Dana bersih = beli dikurangi jual dari daftar sampai akhir periode.')}

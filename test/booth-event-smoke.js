@@ -166,6 +166,8 @@ const who = JSON.parse(run(`JSON.stringify({
   named: bWho(BOOTH_EVENT, 'Sales PIM 1'), lead: bWho(BOOTH_EVENT, 'Team Lead GC'), dotted: bWho(BOOTH_EVENT, 'Sales PIM 5'),
   flying: bWho(BOOTH_EVENT, 'Flying Team 1'), noName: bWho(BOOTH_EVENT, 'Sales GC 6'), emptyLead: bWho(BOOTH_EVENT, 'Team Lead CP'),
   none: bWho(BOOTH_EVENT, null), unknown: bWho(BOOTH_EVENT, 'Nobody'),
+  tpl: boothRoster({ CP: { lead: 'L', sales: ['a', null, 'c'] } }, ['f']).map((r) => r.code + ':' + r.person + ':' + r.role).join(' '),
+  target: boothSidTarget(BOOTH_EVENT, 'CP', { workDays: 21 }), more: boothSidTarget({ ...BOOTH_EVENT, roster: boothRoster({ CP: { lead: null, sales: Array(10).fill(null) } }, []) }, 'CP', { workDays: 21 }),
   filled: BOOTH_EVENT.roster.filter((r) => r.name).length, total: BOOTH_EVENT.roster.length,
   badName: BOOTH_EVENT.roster.filter((r) => r.name !== null && (typeof r.name !== 'string' || r.name !== r.name.trim() || !r.name)).map((r) => r.code),
   nameByCode: Object.fromEntries(BOOTH_EVENT.roster.filter((r) => r.name).map((r) => [r.code, r.name])),
@@ -175,14 +177,16 @@ assert.strictEqual(who.lead, 'Sandy (Team Lead GC)');
 assert.strictEqual(who.dotted, 'M. Zhafran (Sales PIM 5)');
 assert.strictEqual(who.flying, 'Flying Team 1', 'flying team has no names yet: falls back to the position');
 assert.strictEqual(who.noName, 'Sales GC 6');
-assert.strictEqual(who.emptyLead, 'Team Lead CP');
+assert.strictEqual(who.emptyLead, 'Widya Sartika (Team Lead CP)', 'TLCP and SCP5 are both Widya: same name on two positions');
+assert.strictEqual(who.tpl, 'TLCP:Team Lead CP:team_lead SCP1:Sales CP 1:sales SCP2:Sales CP 2:sales SCP3:Sales CP 3:sales FT1CP:Flying Team 1:flying', 'codes and positions come from the template');
+assert.deepStrictEqual([who.target, who.more], [378, 630], 'booth SID target follows the number of sales codes: 6 sales = 378, SCP1-SCP10 = 630');
 assert.strictEqual(who.none, '');
 assert.strictEqual(who.unknown, 'Nobody');
-assert.deepStrictEqual([who.filled, who.total], [19, 27], '19 of 27 codes have a name so far (6 flying team, TLCP and SGC6 are empty)');
+assert.deepStrictEqual([who.filled, who.total], [20, 27], '20 of 27 codes have a name so far (6 flying team and SGC6 are empty)');
 assert.deepStrictEqual(who.badName, []);
 assert.deepStrictEqual(who.nameByCode, {
   TLPIM: 'Herlangga', SPIM1: 'Viki Setiadi', SPIM2: 'Ilham Ramadhan', SPIM3: 'Gabriel Rizal Pratama', SPIM4: 'Novi Yulianti', SPIM5: 'M. Zhafran', SPIM6: 'Zulham Donni',
-  SCP1: 'Nur Haliza', SCP2: 'Khairy Harianto', SCP3: 'M. Ilham Saputra', SCP4: 'Milza Anindya Putri', SCP5: 'Widya Sartika', SCP6: 'Marlinda',
+  SCP1: 'Nur Haliza', SCP2: 'Khairy Harianto', SCP3: 'M. Ilham Saputra', SCP4: 'Milza Anindya Putri', SCP5: 'Widya Sartika', SCP6: 'Marlinda', TLCP: 'Widya Sartika',
   TLGC: 'Sandy', SGC1: 'Eka Muhammad Rizki', SGC2: 'Jihan', SGC3: 'Arfan Herdian', SGC4: 'Agus Rinaldi Rusli', SGC5: 'Edi Sudrajat',
 });
 

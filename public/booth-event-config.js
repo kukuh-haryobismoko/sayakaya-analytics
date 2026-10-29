@@ -4,6 +4,17 @@
 // cukup di file ini lalu deploy. Angka per bulan penuh ditulis seperti di
 // tabel insentif; periode yang tidak penuh diprorate otomatis (lihat periods).
 
+// Roster template: team = { booth: { lead, sales: [names] } }, flying = [names], one
+// flying person per entry with a code for every booth. role: sales | team_lead | flying.
+function boothRoster(team, flying) {
+  const row = (code, person, name, role, booth) => ({ code, person, name, role, booth, email: `andreagibras+${code.toLowerCase()}@gmail.com` });
+  const booths = Object.keys(team);
+  return booths.flatMap((b) => [
+    row(`TL${b}`, `Team Lead ${b}`, team[b].lead, 'team_lead', b),
+    ...team[b].sales.map((name, i) => row(`S${b}${i + 1}`, `Sales ${b} ${i + 1}`, name, 'sales', b)),
+  ]).concat(flying.flatMap((name, k) => booths.map((b) => row(`FT${k + 1}${b}`, `Flying Team ${k + 1}`, name, 'flying', b))));
+}
+
 const BOOTH_EVENT = {
   name: 'Booth SayaKaya x Sucor AM',
   start: '2026-10-19', // hari pertama booth buka (WIB)
@@ -32,42 +43,21 @@ const BOOTH_EVENT = {
   ],
   fullMonthWorkDays: 21,
 
-  // Kode dari "sales_code dan email.csv". Nasabah dihitung ke kode ini kalau
+  // Kode dari sheet "Nama Sales/TL". Nasabah dihitung ke kode ini kalau
   // users.referrer_code ATAU users.sales_code-nya sama persis (huruf besar/kecil
-  // diabaikan). role: sales | team_lead | flying. person mengelompokkan kode
-  // milik orang yang sama (flying team punya 3 kode, satu per mall); name = nama
-  // orangnya dari sheet "Nama Sales/TL" (null kalau belum diisi; person tetap
-  // jadi kunci filter dan pengelompokan); booth = mall
-  // tempat kode itu dipakai, jadi SID flying team masuk ke target tim mall itu.
-  roster: [
-    { code: 'TLPIM', person: 'Team Lead PIM', name: 'Herlangga', role: 'team_lead', booth: 'PIM', email: 'andreagibras+tlpim@gmail.com' },
-    { code: 'SPIM1', person: 'Sales PIM 1', name: 'Viki Setiadi', role: 'sales', booth: 'PIM', email: 'andreagibras+spim1@gmail.com' },
-    { code: 'SPIM2', person: 'Sales PIM 2', name: 'Ilham Ramadhan', role: 'sales', booth: 'PIM', email: 'andreagibras+spim2@gmail.com' },
-    { code: 'SPIM3', person: 'Sales PIM 3', name: 'Gabriel Rizal Pratama', role: 'sales', booth: 'PIM', email: 'andreagibras+spim3@gmail.com' },
-    { code: 'SPIM4', person: 'Sales PIM 4', name: 'Novi Yulianti', role: 'sales', booth: 'PIM', email: 'andreagibras+spim4@gmail.com' },
-    { code: 'SPIM5', person: 'Sales PIM 5', name: 'M. Zhafran', role: 'sales', booth: 'PIM', email: 'andreagibras+spim5@gmail.com' },
-    { code: 'SPIM6', person: 'Sales PIM 6', name: 'Zulham Donni', role: 'sales', booth: 'PIM', email: 'andreagibras+spim6@gmail.com' },
-    { code: 'TLGC', person: 'Team Lead GC', name: 'Sandy', role: 'team_lead', booth: 'GC', email: 'andreagibras+tlgc@gmail.com' },
-    { code: 'SGC1', person: 'Sales GC 1', name: 'Eka Muhammad Rizki', role: 'sales', booth: 'GC', email: 'andreagibras+sgc1@gmail.com' },
-    { code: 'SGC2', person: 'Sales GC 2', name: 'Jihan', role: 'sales', booth: 'GC', email: 'andreagibras+sgc2@gmail.com' },
-    { code: 'SGC3', person: 'Sales GC 3', name: 'Arfan Herdian', role: 'sales', booth: 'GC', email: 'andreagibras+sgc3@gmail.com' },
-    { code: 'SGC4', person: 'Sales GC 4', name: 'Agus Rinaldi Rusli', role: 'sales', booth: 'GC', email: 'andreagibras+sgc4@gmail.com' },
-    { code: 'SGC5', person: 'Sales GC 5', name: 'Edi Sudrajat', role: 'sales', booth: 'GC', email: 'andreagibras+sgc5@gmail.com' },
-    { code: 'SGC6', person: 'Sales GC 6', name: null, role: 'sales', booth: 'GC', email: 'andreagibras+sgc6@gmail.com' },
-    { code: 'TLCP', person: 'Team Lead CP', name: null, role: 'team_lead', booth: 'CP', email: 'andreagibras+tlcp@gmail.com' },
-    { code: 'SCP1', person: 'Sales CP 1', name: 'Nur Haliza', role: 'sales', booth: 'CP', email: 'andreagibras+scp1@gmail.com' },
-    { code: 'SCP2', person: 'Sales CP 2', name: 'Khairy Harianto', role: 'sales', booth: 'CP', email: 'andreagibras+scp2@gmail.com' },
-    { code: 'SCP3', person: 'Sales CP 3', name: 'M. Ilham Saputra', role: 'sales', booth: 'CP', email: 'andreagibras+scp3@gmail.com' },
-    { code: 'SCP4', person: 'Sales CP 4', name: 'Milza Anindya Putri', role: 'sales', booth: 'CP', email: 'andreagibras+scp4@gmail.com' },
-    { code: 'SCP5', person: 'Sales CP 5', name: 'Widya Sartika', role: 'sales', booth: 'CP', email: 'andreagibras+scp5@gmail.com' },
-    { code: 'SCP6', person: 'Sales CP 6', name: 'Marlinda', role: 'sales', booth: 'CP', email: 'andreagibras+scp6@gmail.com' },
-    { code: 'FT1PIM', person: 'Flying Team 1', name: null, role: 'flying', booth: 'PIM', email: 'andreagibras+ft1pim@gmail.com' },
-    { code: 'FT1GC', person: 'Flying Team 1', name: null, role: 'flying', booth: 'GC', email: 'andreagibras+ft1gc@gmail.com' },
-    { code: 'FT1CP', person: 'Flying Team 1', name: null, role: 'flying', booth: 'CP', email: 'andreagibras+ft1cp@gmail.com' },
-    { code: 'FT2PIM', person: 'Flying Team 2', name: null, role: 'flying', booth: 'PIM', email: 'andreagibras+ft2pim@gmail.com' },
-    { code: 'FT2GC', person: 'Flying Team 2', name: null, role: 'flying', booth: 'GC', email: 'andreagibras+ft2gc@gmail.com' },
-    { code: 'FT2CP', person: 'Flying Team 2', name: null, role: 'flying', booth: 'CP', email: 'andreagibras+ft2cp@gmail.com' },
-  ],
+  // diabaikan). Roster dibuat dari template boothRoster di atas: TL<booth>,
+  // S<booth><n>, FT<n><booth>. Sales baru = tambah satu nama di ujung daftar booth
+  // itu (null kalau belum ada nama); kode, posisi, dan akun mengikuti template.
+  // Kode yang tidak ada di roster tidak dihitung: kode baru wajib ditambah di sini.
+  // person = posisi (kunci filter, kode flying team satu person untuk 3 mall);
+  // name = nama orang, hanya tampilan. Satu orang boleh punya beberapa kode
+  // (Widya: SCP5 dan TLCP), cukup tulis namanya di tiap posisi. booth = mall
+  // tempat kode dipakai, jadi SID flying team masuk ke target tim mall itu.
+  roster: boothRoster({
+    PIM: { lead: 'Herlangga', sales: ['Viki Setiadi', 'Ilham Ramadhan', 'Gabriel Rizal Pratama', 'Novi Yulianti', 'M. Zhafran', 'Zulham Donni'] },
+    GC: { lead: 'Sandy', sales: ['Eka Muhammad Rizki', 'Jihan', 'Arfan Herdian', 'Agus Rinaldi Rusli', 'Edi Sudrajat', null] },
+    CP: { lead: 'Widya Sartika', sales: ['Nur Haliza', 'Khairy Harianto', 'M. Ilham Saputra', 'Milza Anindya Putri', 'Widya Sartika', 'Marlinda'] },
+  }, [null, null]),
 
   // Definisi yang dipakai semua rule.
   // - SID baru: nasabah yang daftar dengan kode selama event dan KYC-nya
@@ -100,8 +90,7 @@ const BOOTH_EVENT = {
   // Insentif team lead (tabel "Incentive Team Lead"). Target tim = semua kode
   // di booth itu: kode TL sendiri, 6 sales, dan kode flying team untuk mall itu.
   teamLead: {
-    salesPerBooth: 6,
-    dailySidTarget: 3,           // target booth = 6 x 3 x hari kerja = 378 per bulan penuh
+    dailySidTarget: 3,           // target booth = jumlah kode sales booth itu x 3 x hari kerja (6 sales = 378 per bulan penuh)
     minFunded: 1500000,          // dinaikkan ke 1,5 jt agar tim terdorong di atas target
     // Syarat (gate): SID booth > 80% target DAN funded >= 60% dari SID booth.
     gate: { minSidPct: 80, minFundedPct: 60 },
