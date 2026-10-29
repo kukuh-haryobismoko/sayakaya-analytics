@@ -16,7 +16,7 @@ stub('./bigquery', { runQuery: async (sql) => (sql === 'top' ? top : sql === 'la
 stub('./queries', {
   userSearch: (q) => ({ sql: 'search', params: { q } }),
   hnwiLatestDate: () => ({ sql: 'latest', params: {} }),
-  hnwiTotal: (day, min, max, limit) => { ranDay = { day, limit }; return { sql: 'top', params: {} }; },
+  hnwiTotal: (day, min, max, limit, near) => { ranDay = { day, limit, near }; return { sql: 'top', params: {} }; },
   usersByIdentifiers: (ids) => ({ sql: 'ids', params: { ids } }),
 });
 stub('./auth', { userCan: (u, tab) => u.is_superuser || (u.allowed_tabs || []).includes(tab), logEvent: async () => {} });
@@ -101,10 +101,14 @@ const allowed = { allowed_tabs: ['portfolio', 'aum'] };
   const hnwi = { allowed_tabs: ['portfolio', 'hnwi'] };
   r = await run(hnwi, 'ACTION: {"type":"portfolio_bulk","top":2,"format":"pdf","mode":"separate","date":"2026-10-10"}');
   assert.deepStrictEqual(r.action, { type: 'portfolio_bulk', users: [{ userId: 'u1', sid: 'IDD123' }, { userId: 'u2', sid: 'IDD999' }], missing: [], source: 'portfolio_full', format: 'pdf', mode: 'separate', date: '2026-10-10' });
-  assert.deepStrictEqual(ranDay, { day: '2026-10-10', limit: 2 });
+  assert.deepStrictEqual(ranDay, { day: '2026-10-10', limit: 2, near: undefined });
   r = await run(hnwi, 'ACTION: {"type":"portfolio_bulk","top":2}');
   assert.strictEqual(ranDay.day, '2026-10-24', 'no date: latest HNWI day');
   assert.strictEqual(r.action.mode, 'combined');
+  r = await run(hnwi, 'ACTION: {"type":"portfolio_bulk","top":5,"near":7700000}');
+  assert.deepStrictEqual([ranDay.limit, ranDay.near], [5, 7700000], 'near reaches the AUM query');
+  r = await run(hnwi, 'ACTION: {"type":"portfolio_bulk","top":5,"near":"abc"}');
+  assert.ok(!r.action, 'non-numeric near refused');
   r = await run(allowed, 'ACTION: {"type":"portfolio_bulk","top":2}');
   assert.ok(!r.action && /access/i.test(r.answer), 'top N needs the hnwi tab');
   r = await run(allowed, 'ACTION: {"type":"portfolio_bulk","queries":["idd123","IDD404"],"format":"xlsx"}');

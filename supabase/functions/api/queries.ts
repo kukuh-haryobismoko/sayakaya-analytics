@@ -1461,7 +1461,7 @@ function hnwiBase(date: string) {
 }
 
 // Filtered by the investor's TOTAL AUM across all funds.
-export const hnwiTotal = (date: string, minAum?: number | string, maxAum?: number | string, limit: number | string = 500): Query => {
+export const hnwiTotal = (date: string, minAum?: number | string, maxAum?: number | string, limit: number | string = 500, near?: number): Query => {
   const { cte, params } = hnwiBase(date);
   const { min, max } = aumRange(minAum, maxAum);
   return {
@@ -1473,9 +1473,9 @@ export const hnwiTotal = (date: string, minAum?: number | string, maxAum?: numbe
       JOIN ${USERS} u ON u.sid_code = pu.sid_code
       LEFT JOIN ${USER_PROFILES} up ON up.user_id = u.id
       WHERE pu.total_aum BETWEEN @minAum AND @maxAum
-      ORDER BY pu.total_aum DESC
+      ORDER BY ${near == null ? 'pu.total_aum DESC' : 'ABS(pu.total_aum - @near), pu.total_aum DESC'}
       LIMIT @limit`,
-    params: { ...params, minAum: min, maxAum: max, limit: parseInt(String(limit), 10) || 500 },
+    params: { ...params, minAum: min, maxAum: max, limit: parseInt(String(limit), 10) || 500, ...(near == null ? {} : { near }) },
   };
 };
 

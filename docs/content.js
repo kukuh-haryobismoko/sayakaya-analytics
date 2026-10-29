@@ -1337,7 +1337,7 @@ const TAB_DETAILS = {
       'Jawaban dibuat oleh model AI, jadi periksa SQL-nya untuk angka penting. Kolom sensitif (password, data KYC) selalu disaring kecuali superuser mengonfirmasi password.',
       'Pertanyaan tampil sebagai gelembung chat begitu dikirim, dan percakapan tersimpan di browser sampai "Mulai percakapan baru" atau logout.',
       'Permintaan portfolio investor menampilkan ringkasan (KPI, holding, tabel sumber) seperti tab Portfolio. File PDF, Excel, atau CSV hanya diunduh saat tombolnya ditekan.',
-      'Satu prompt bisa meminta banyak investor: N teratas menurut AUM (maks 50) atau daftar SID/email. Hasilnya daftar investor dengan total AUM, lalu tombol untuk satu file gabungan atau ZIP berisi satu file per investor, lewat jalur yang sama dengan bulk export. Tidak ada pengiriman email.',
+      'Satu prompt bisa meminta banyak investor: N teratas menurut AUM, N yang AUM-nya paling mendekati angka tertentu (maks 50), atau daftar SID/email. Hasilnya daftar investor dengan total AUM, lalu tombol untuk satu file gabungan atau ZIP berisi satu file per investor, lewat jalur yang sama dengan bulk export. Tidak ada pengiriman email.',
     ],
   },
   explorer: {
