@@ -56,7 +56,7 @@ const BOOTH_EVENT = {
   roster: boothRoster({
     PIM: { lead: 'Herlangga', sales: ['Viki Setiadi', 'Ilham Ramadhan', 'Gabriel Rizal Pratama', 'Novi Yulianti', 'M. Zhafran', 'Zulham Donni'] },
     GC: { lead: 'Sandy', sales: ['Eka Muhammad Rizki', 'Jihan', 'Arfan Herdian', 'Agus Rinaldi Rusli', 'Edi Sudrajat', null] },
-    CP: { lead: 'Widya Sartika', sales: ['Nur Haliza', 'Khairy Harianto', 'M. Ilham Saputra', 'Milza Anindya Putri', 'Widya Sartika', 'Marlinda'] },
+    CP: { lead: 'Widya Sartika', sales: ['Nur Haliza', 'Khairy Harianto', 'M. Ilham Saputra', 'Milza Anindya Putri', 'Widya Sartika', 'Marlinda', null] },
   }, [null, null]),
 
   // Definisi yang dipakai semua rule.

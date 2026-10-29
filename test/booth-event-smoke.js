@@ -179,10 +179,10 @@ assert.strictEqual(who.flying, 'Flying Team 1', 'flying team has no names yet: f
 assert.strictEqual(who.noName, 'Sales GC 6');
 assert.strictEqual(who.emptyLead, 'Widya Sartika (Team Lead CP)', 'TLCP and SCP5 are both Widya: same name on two positions');
 assert.strictEqual(who.tpl, 'TLCP:Team Lead CP:team_lead SCP1:Sales CP 1:sales SCP2:Sales CP 2:sales SCP3:Sales CP 3:sales FT1CP:Flying Team 1:flying', 'codes and positions come from the template');
-assert.deepStrictEqual([who.target, who.more], [378, 630], 'booth SID target follows the number of sales codes: 6 sales = 378, SCP1-SCP10 = 630');
+assert.deepStrictEqual([who.target, who.more], [441, 630], 'booth SID target follows the number of sales codes: SCP1-SCP7 = 441, SCP1-SCP10 = 630');
 assert.strictEqual(who.none, '');
 assert.strictEqual(who.unknown, 'Nobody');
-assert.deepStrictEqual([who.filled, who.total], [20, 27], '20 of 27 codes have a name so far (6 flying team and SGC6 are empty)');
+assert.deepStrictEqual([who.filled, who.total], [20, 28], '20 of 28 codes have a name so far (6 flying team, SGC6 and SCP7 are empty)');
 assert.deepStrictEqual(who.badName, []);
 assert.deepStrictEqual(who.nameByCode, {
   TLPIM: 'Herlangga', SPIM1: 'Viki Setiadi', SPIM2: 'Ilham Ramadhan', SPIM3: 'Gabriel Rizal Pratama', SPIM4: 'Novi Yulianti', SPIM5: 'M. Zhafran', SPIM6: 'Zulham Donni',
