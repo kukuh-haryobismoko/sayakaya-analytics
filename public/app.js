@@ -10817,6 +10817,8 @@ async function init() {
   const er90 = daysAgoRange(90); $('#erFrom').value = er90.from; $('#erTo').value = er90.to;
   const bh30 = daysAgoRange(30); $('#bhFrom').value = bh30.from; $('#bhTo').value = bh30.to;
   ANALYSIS_TABS.forEach((tab) => { $(`#${tab.prefix}From`).value = bh30.from; $(`#${tab.prefix}To`).value = bh30.to; });
+  // MIS opens on month to date up to yesterday (today's GA4 is incomplete); on the 1st that is the whole previous month.
+  const misTo = new Date(Date.now() - 864e5).toLocaleDateString('en-CA'); $('#misFrom').value = `${misTo.slice(0, 8)}01`; $('#misTo').value = misTo;
   // Product funnel follows sign-ups for weeks, so it opens on 90 days.
   const pfn90 = daysAgoRange(90); $('#pfnFrom').value = pfn90.from; $('#pfnTo').value = pfn90.to;
   $('#remFrom').value = r.from; $('#remTo').value = r.to;
