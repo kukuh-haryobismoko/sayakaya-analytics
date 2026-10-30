@@ -9455,7 +9455,7 @@ const DATA_SOURCES = {
   'marketing': 'adjust_analytics:events',
   'app-health': 'firebase_crashlytics:com_sayakaya_android_ANDROID,com_sayakaya_ios_IOS|firebase_performance:com_sayakaya_android_ANDROID,com_sayakaya_ios_IOS',
   'user-behavior': 'analytics_266759216:events_*|main:bonus_portfolios,funds,portfolios,transactions,user_profiles,users',
-  'mis-report': 'analytics_266759216:events_*|main:transactions,users|mi_fee_logs:portfolios|mis:download_manual',
+  'mis-report': 'analytics_266759216:events_*|main:transactions,users|mi_fee_logs:portfolios',
   'performance': 'main:funds,snapshots',
   'growth': 'main:bonus_portfolios,campaigns,funds,investment_managers,portfolios,switching_transactions,transactions,user_profiles,user_referrals,users|mi_fee_logs:portfolio_fix',
   'reconciliation': 'main:transactions|sinvest:trx_history',
