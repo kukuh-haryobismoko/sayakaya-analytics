@@ -3380,6 +3380,7 @@ function buildMisPdfV2(JsPDF, sales, monthly, from, to, opts = {}) {
     ],
     headStyles: { lineWidth: 0.6, lineColor: white },
     body: d.body,
+    alternateRowStyles: { fillColor: [236, 237, 240] }, // zebra: every 2nd row grey so the eye can follow a row across 12 columns
     foot: [d.foot.map((c, i) => ({ content: c, styles: { halign: i === 0 ? 'left' : 'right' } }))],
     footStyles: { fillColor: tint.indigo, fontStyle: 'bold' },
     columnStyles: Object.fromEntries(cw.map((w, i) => [i, { cellWidth: w, halign: i === 0 ? 'left' : 'right' }])),
