@@ -164,7 +164,7 @@ assert.strictEqual(cfgInfo.lastDay, '2027-01', 'KYC on the last event day (10 Ja
 // Sales names from the sheet: the position (person) stays the key, the name is display only.
 const who = JSON.parse(run(`JSON.stringify({
   named: bWho(BOOTH_EVENT, 'Sales PIM 1'), lead: bWho(BOOTH_EVENT, 'Team Lead GC'), dotted: bWho(BOOTH_EVENT, 'Sales PIM 5'),
-  flying: bWho(BOOTH_EVENT, 'Flying Team 1'), noName: bWho(BOOTH_EVENT, 'Sales GC 6'), emptyLead: bWho(BOOTH_EVENT, 'Team Lead CP'),
+  flying: bWho(BOOTH_EVENT, 'Flying Team 1'), noName: bWho(BOOTH_EVENT, 'Sales CP 7'), emptyLead: bWho(BOOTH_EVENT, 'Team Lead CP'),
   none: bWho(BOOTH_EVENT, null), unknown: bWho(BOOTH_EVENT, 'Nobody'),
   tpl: boothRoster({ CP: { lead: 'L', sales: ['a', null, 'c'] } }, ['f']).map((r) => r.code + ':' + r.person + ':' + r.role).join(' '),
   target: boothSidTarget(BOOTH_EVENT, 'CP', { workDays: 21 }), more: boothSidTarget({ ...BOOTH_EVENT, roster: boothRoster({ CP: { lead: null, sales: Array(10).fill(null) } }, []) }, 'CP', { workDays: 21 }),
@@ -175,19 +175,20 @@ const who = JSON.parse(run(`JSON.stringify({
 assert.strictEqual(who.named, 'Viki Setiadi (Sales PIM 1)');
 assert.strictEqual(who.lead, 'Sandy (Team Lead GC)');
 assert.strictEqual(who.dotted, 'M. Zhafran (Sales PIM 5)');
-assert.strictEqual(who.flying, 'Flying Team 1', 'flying team has no names yet: falls back to the position');
-assert.strictEqual(who.noName, 'Sales GC 6');
+assert.strictEqual(who.flying, 'Kiki Wulansari (Flying Team 1)', 'one flying person for the 3 mall codes');
+assert.strictEqual(who.noName, 'Sales CP 7');
 assert.strictEqual(who.emptyLead, 'Widya Sartika (Team Lead CP)', 'TLCP and SCP5 are both Widya: same name on two positions');
 assert.strictEqual(who.tpl, 'TLCP:Team Lead CP:team_lead SCP1:Sales CP 1:sales SCP2:Sales CP 2:sales SCP3:Sales CP 3:sales FT1CP:Flying Team 1:flying', 'codes and positions come from the template');
 assert.deepStrictEqual([who.target, who.more], [441, 630], 'booth SID target follows the number of sales codes: SCP1-SCP7 = 441, SCP1-SCP10 = 630');
 assert.strictEqual(who.none, '');
 assert.strictEqual(who.unknown, 'Nobody');
-assert.deepStrictEqual([who.filled, who.total], [20, 28], '20 of 28 codes have a name so far (6 flying team, SGC6 and SCP7 are empty)');
+assert.deepStrictEqual([who.filled, who.total], [24, 28], '24 of 28 codes have a name so far (FT2 x3 and SCP7 are empty)');
 assert.deepStrictEqual(who.badName, []);
 assert.deepStrictEqual(who.nameByCode, {
   TLPIM: 'Herlangga', SPIM1: 'Viki Setiadi', SPIM2: 'Ilham Ramadhan', SPIM3: 'Gabriel Rizal Pratama', SPIM4: 'Novi Yulianti', SPIM5: 'M. Zhafran', SPIM6: 'Zulham Donni',
   SCP1: 'Nur Haliza', SCP2: 'Khairy Harianto', SCP3: 'M. Ilham Saputra', SCP4: 'Milza Anindya Putri', SCP5: 'Widya Sartika', SCP6: 'Marlinda', TLCP: 'Widya Sartika',
-  TLGC: 'Sandy', SGC1: 'Eka Muhammad Rizki', SGC2: 'Jihan', SGC3: 'Arfan Herdian', SGC4: 'Agus Rinaldi Rusli', SGC5: 'Edi Sudrajat',
+  TLGC: 'Sandy', SGC1: 'Eka Muhammad Rizki', SGC2: 'Jihan', SGC3: 'Arfan Herdian', SGC4: 'Agus Rinaldi Rusli', SGC5: 'Edi Sudrajat', SGC6: 'Mira Yuliyana',
+  FT1PIM: 'Kiki Wulansari', FT1GC: 'Kiki Wulansari', FT1CP: 'Kiki Wulansari',
 });
 
 // Transaction list: filters (status, type, amount, booth, sales) and the 30-day hold check.
@@ -219,20 +220,24 @@ const txr = JSON.parse(run(`(() => {
     notBuy: hs('t4', '2026-12-10'), notDone: hs('t2', '2026-12-10'), pendingPay: hs('t3', '2026-12-10'),
     need: BOOTH_EVENT.txHoldDays,
     skipDefault: ids(boothStatusPick('')), skipAll: ids(boothStatusPick('all')), skipOne: ids(boothStatusPick('pending_payment')),
-    bonusNet: boothTxCount([{ user_id: 'x', type: 'buy', status: 'completed', kind: 'new', amount: 5, payment_method: 'manual_bonus' }]).net,
+    bonusBuy: boothTxCount([{ user_id: 'x', type: 'buy', status: 'completed', kind: 'new', amount: 5, payment_method: 'manual_bonus' }]).buy.all,
     cnt: boothTxCount(boothTxFilter(__tx, BOOTH_EVENT, {})), cntPim: boothTxCount(boothTxFilter(__tx, BOOTH_EVENT, { booth: 'PIM' })), cntNone: boothTxCount([]),
   });
 })()`));
 assert.strictEqual(txr.all, 't1,t2,t3,t4,t5,t6,t7,t8', 'no filter keeps every row the server sent (expired and cancelled are dropped in SQL)');
 assert.strictEqual(txr.completed, 't1,t5,t6,t7,t8');
 // 8 rows, users u1..u7 (u1 has a buy and a sell), all 7 bought, 4 of them new (u1 u2 u5 u7) and 3 of those settled (u2 is completed_payment), t2/t3/t4 are not completed.
-// new = t1 t2 t4 t6 t8 (net 1.000.000 + 25.000 - 1.000.000 + 1.500.000 + 1.000.000 = 2.525.000); existing and other = t3 t5 t7 (5.000.000 + 2.500.000 + 1.000.000 = 8.500.000).
-assert.deepStrictEqual(txr.cnt, { rows: 8, users: 7, buyers: 7, newBuyers: 4, newSettled: 3, waiting: 3, newRows: 5, existingRows: 3, net: 11025000, newNet: 2525000, existingNet: 8500000 }, 'KPI counts come from the list rows');
-assert.deepStrictEqual(txr.cntNone, { rows: 0, users: 0, buyers: 0, newBuyers: 0, newSettled: 0, waiting: 0, newRows: 0, existingRows: 0, net: 0, newNet: 0, existingNet: 0 });
+// buys: new = t1 t2 t6 t8 (1.000.000 + 25.000 + 1.500.000 + 1.000.000 = 3.525.000, users u1 u2 u5 u7); existing and other = t3 t5 t7 (5.000.000 + 2.500.000 + 1.000.000 = 8.500.000, users u3 u4 u6). Sell: t4 (new, u1, 1.000.000).
+const none = { n: 0, users: 0, rp: 0 };
+assert.deepStrictEqual(txr.cnt, { rows: 8, users: 7, buyers: 7, newBuyers: 4, newSettled: 3, waiting: 3, newRows: 5, existingRows: 3,
+  buy: { all: { n: 7, users: 7, rp: 12025000 }, new: { n: 4, users: 4, rp: 3525000 }, old: { n: 3, users: 3, rp: 8500000 } },
+  sell: { all: { n: 1, users: 1, rp: 1000000 }, new: { n: 1, users: 1, rp: 1000000 }, old: none } }, 'KPI counts come from the list rows');
+assert.deepStrictEqual(txr.cntNone, { rows: 0, users: 0, buyers: 0, newBuyers: 0, newSettled: 0, waiting: 0, newRows: 0, existingRows: 0,
+  buy: { all: none, new: none, old: none }, sell: { all: none, new: none, old: none } });
 assert.strictEqual(txr.skipDefault, 't1,t2,t4,t5,t6,t7,t8', 'KPI default status drops pending_payment (t3); expired and cancelled never reach the browser');
 assert.strictEqual(txr.skipAll, txr.all, 'status All keeps every row');
 assert.strictEqual(txr.skipOne, 't3', 'one status picked');
-assert.strictEqual(txr.bonusNet, 0, 'admin bonus units are not money in');
+assert.deepStrictEqual(txr.bonusBuy, none, 'admin bonus units are not money in');
 assert.strictEqual(txr.cntPim.rows, txr.booth.split(',').length, 'the card follows the booth filter like the list');
 assert.strictEqual(txr.sells, 't4');
 assert.strictEqual(txr.min, 't1,t3,t4,t5,t6,t7,t8', 'min is inclusive');

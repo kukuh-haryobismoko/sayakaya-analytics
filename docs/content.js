@@ -1306,7 +1306,9 @@ const TAB_DETAILS = {
       ['Made a purchase', 'Nasabah unik (baru dan existing, termasuk pembelian dengan kode promo SYKYMALL) yang punya pembelian di daftar Transaksi, mengikuti filter booth, sales, dan Status di atas halaman. Default Status: semua kecuali expired, cancelled, dan pending payment. Keterangan di bawah angka: berapa nasabah baru (dan berapa di antaranya sudah settle, angka yang sama dengan transaksi pertama di rekap) dan berapa existing.'],
       ['Transactions', 'Jumlah baris di daftar Transaksi (beli dan jual) menurut filter Status di atas halaman, dengan pembagian baris user baru dan user existing serta jumlah nasabah unik.'],
       ['Funded', 'Nasabah baru yang dana bersihnya (beli dikurangi jual, hanya yang completed) pernah mencapai minimum funded sales (Rp 1 jt). Rekap, insentif, dan bonus nasabah juga hanya menghitung transaksi completed, jadi bisa lebih kecil dari kartu Transaksi sampai pembayaran settle.'],
-      ['Net money in', 'Total beli dikurangi jual dari daftar Transaksi (nasabah baru dan existing) menurut filter Status; bonus unit dari admin tidak dihitung. Keterangan: bagian nasabah baru dan bagian existing.'],
+      ['Bought', 'Total rupiah pembelian di daftar Transaksi (nasabah baru dan existing) menurut filter Status; bonus unit dari admin tidak dihitung. Keterangan: jumlah transaksi beli, nasabah unik, lalu bagian nasabah baru dan existing (Rp dan jumlah transaksi).'],
+      ['Sold', 'Total rupiah penjualan dengan aturan yang sama seperti Bought.'],
+      ['Net money in', 'Bought dikurangi Sold, menurut filter Status. Keterangan: bagian nasabah baru dan bagian existing.'],
       ['Avg days holding', 'Rata-rata hari dari beli pertama sampai hari ini, atau sampai jual terakhir bagi yang sudah jual semua.'],
     ],
     panels: {

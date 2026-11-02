@@ -55,9 +55,9 @@ const BOOTH_EVENT = {
   // tempat kode dipakai, jadi SID flying team masuk ke target tim mall itu.
   roster: boothRoster({
     PIM: { lead: 'Herlangga', sales: ['Viki Setiadi', 'Ilham Ramadhan', 'Gabriel Rizal Pratama', 'Novi Yulianti', 'M. Zhafran', 'Zulham Donni'] },
-    GC: { lead: 'Sandy', sales: ['Eka Muhammad Rizki', 'Jihan', 'Arfan Herdian', 'Agus Rinaldi Rusli', 'Edi Sudrajat', null] },
+    GC: { lead: 'Sandy', sales: ['Eka Muhammad Rizki', 'Jihan', 'Arfan Herdian', 'Agus Rinaldi Rusli', 'Edi Sudrajat', 'Mira Yuliyana'] },
     CP: { lead: 'Widya Sartika', sales: ['Nur Haliza', 'Khairy Harianto', 'M. Ilham Saputra', 'Milza Anindya Putri', 'Widya Sartika', 'Marlinda', null] },
-  }, [null, null]),
+  }, ['Kiki Wulansari', null]),
 
   // Definisi yang dipakai semua rule.
   // - SID baru: nasabah yang daftar dengan kode selama event dan KYC-nya
