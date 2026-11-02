@@ -5799,8 +5799,7 @@ const boothEventTransactions = (opts) => {
           t.created_at, DATE(COALESCE(t.completed_at, t.created_at), 'Asia/Jakarta') AS done_day
         FROM ${TX} t
         JOIN people p ON p.user_id = t.user_id
-        WHERE IFNULL(t.status, '') NOT IN ('expired', 'cancelled')
-          AND DATE(t.created_at, 'Asia/Jakarta') >= @from
+        WHERE DATE(t.created_at, 'Asia/Jakarta') >= @from
           AND (p.via = 'code' OR (t.type = 'buy' AND (UPPER(t.promo_code) IN UNNEST(@promo) OR t.investment_plan_id IS NOT NULL)))
       ),
       buys AS (

@@ -8086,6 +8086,35 @@ function boothTxCount(rows) {
 // KPI cards: default skips what is not paid yet (expired and cancelled never arrive from the server).
 const BOOTH_STATUS_SKIP = ['expired', 'cancelled', 'pending_payment'];
 const boothStatusPick = (v) => (v === 'all' ? {} : v ? { status: v } : { skip: BOOTH_STATUS_SKIP });
+// Journey of the registered customers (`mine`): KYC outcome, then the best result of their buys
+// (3 paid or settling > 2 waiting for payment > 1 only expired/cancelled > none). Admin bonus units ignored.
+const BOOTH_FAIL_STATUS = ['expired', 'cancelled'];
+function boothJourney(mine, txRows) {
+  const kyc = { ok: 0, fail: 0, wait: 0 };
+  for (const x of mine) kyc[x.verified ? 'ok' : x.verification_status === 'failed' ? 'fail' : 'wait']++;
+  const ids = new Set(mine.map((x) => x.user_id)), best = new Map();
+  for (const r of txRows) {
+    if (r.type !== 'buy' || r.payment_method === 'manual_bonus' || !ids.has(r.user_id)) continue;
+    const k = r.status === 'pending_payment' ? 2 : BOOTH_FAIL_STATUS.includes(r.status) ? 1 : 3;
+    if (k > (best.get(r.user_id) || 0)) best.set(r.user_id, k);
+  }
+  const c = [0, 0, 0, 0];
+  for (const id of ids) c[best.get(id) || 0]++;
+  return { reg: mine.length, kyc, tx: { paid: c[3], waiting: c[2], failed: c[1], none: c[0] } };
+}
+// Transaction rows per status: count, customers, buy / sell Rp (bonus units are not money), share of all rows.
+function boothStatusRecap(rows) {
+  const by = new Map();
+  for (const r of rows) {
+    const s = by.get(r.status) || { status: r.status, n: 0, ids: new Set(), buy: 0, sell: 0 };
+    s.n++; s.ids.add(r.user_id);
+    if (r.payment_method !== 'manual_bonus' && (r.type === 'buy' || r.type === 'sell')) s[r.type] += r.amount;
+    by.set(r.status, s);
+  }
+  const group = (st) => (st === 'pending_payment' ? 2 : BOOTH_FAIL_STATUS.includes(st) ? 3 : 1);
+  return [...by.values()].map((s) => ({ ...s, users: s.ids.size, group: group(s.status), pct: rows.length ? (s.n / rows.length) * 100 : 0 }))
+    .sort((a, b) => a.group - b.group || b.n - a.n);
+}
 // Holding check of one completed buy (server: hold_days, hold_broken_on; same rule as
 // the referral program). null for any other row. A buy with no snapshot yet is
 // "pending" for a week (the snapshot job runs about a day behind), after that
@@ -8294,8 +8323,8 @@ function renderBoothTx() {
   const cfg = BOOTH_EVENT;
   const need = cfg.txHoldDays || 30;
   $('#beTxHint').textContent = bL(
-    `One row per transaction, except expired and cancelled. New customers (registered with an event code): all their transactions. Existing users: only buys made with the program promo code (SYKYMALL) or a sales code as promo code; buys with any other promo code are not listed. investment_plan_id is filled for recurring-plan (nabung rutin) buys, which are listed for every customer in this list. Customer type: New = registered with an event code during the event; Existing = registered before the event; Other = signed up during the event without an event code (counts for neither bonus). The promo code column is the code typed on that transaction (the top up cashback needs a SAM purchase of ${idr(cfg.customer.topUp.minAmount)}+ with a sales code, see the rules at the top of the tab). Hold days (completed buys only): days in a row the fund's units stayed at or above the units right after the purchase, up to ${need}. Same check as the referral program, read from the daily snapshot, so it runs about a day behind.`,
-    `Satu baris per transaksi, kecuali expired dan cancelled. Nasabah baru (daftar dengan kode event): semua transaksinya. User existing: hanya pembelian dengan kode promo program (SYKYMALL) atau kode sales sebagai kode promo; pembelian dengan kode promo lain tidak ditampilkan. investment_plan_id terisi untuk pembelian rencana nabung rutin, dan ditampilkan untuk semua nasabah di daftar ini. Tipe nasabah: Baru = daftar dengan kode event selama event; Existing = daftar sebelum event; Lainnya = daftar saat event tanpa kode event (tidak masuk bonus apa pun). Kolom kode promo = kode yang dipakai di transaksi itu (cashback top up butuh pembelian SAM ${idr(cfg.customer.topUp.minAmount)}+ dengan kode sales, aturannya ada di atas tab ini). Hari holding (hanya beli completed): berapa hari berturut-turut unit produk tidak turun di bawah unit sesaat setelah pembelian, maksimal ${need} hari. Pengecekannya sama dengan program referral, dibaca dari snapshot harian, jadi tertinggal sekitar sehari.`);
+    `One row per transaction; expired and cancelled are hidden unless picked in Status. New customers (registered with an event code): all their transactions. Existing users: only buys made with the program promo code (SYKYMALL) or a sales code as promo code; buys with any other promo code are not listed. investment_plan_id is filled for recurring-plan (nabung rutin) buys, which are listed for every customer in this list. Customer type: New = registered with an event code during the event; Existing = registered before the event; Other = signed up during the event without an event code (counts for neither bonus). The promo code column is the code typed on that transaction (the top up cashback needs a SAM purchase of ${idr(cfg.customer.topUp.minAmount)}+ with a sales code, see the rules at the top of the tab). Hold days (completed buys only): days in a row the fund's units stayed at or above the units right after the purchase, up to ${need}. Same check as the referral program, read from the daily snapshot, so it runs about a day behind.`,
+    `Satu baris per transaksi; expired dan cancelled disembunyikan kecuali dipilih di Status. Nasabah baru (daftar dengan kode event): semua transaksinya. User existing: hanya pembelian dengan kode promo program (SYKYMALL) atau kode sales sebagai kode promo; pembelian dengan kode promo lain tidak ditampilkan. investment_plan_id terisi untuk pembelian rencana nabung rutin, dan ditampilkan untuk semua nasabah di daftar ini. Tipe nasabah: Baru = daftar dengan kode event selama event; Existing = daftar sebelum event; Lainnya = daftar saat event tanpa kode event (tidak masuk bonus apa pun). Kolom kode promo = kode yang dipakai di transaksi itu (cashback top up butuh pembelian SAM ${idr(cfg.customer.topUp.minAmount)}+ dengan kode sales, aturannya ada di atas tab ini). Hari holding (hanya beli completed): berapa hari berturut-turut unit produk tidak turun di bawah unit sesaat setelah pembelian, maksimal ${need} hari. Pengecekannya sama dengan program referral, dibaca dari snapshot harian, jadi tertinggal sekitar sehari.`);
   if (tx.loading) {
     $('#beTx').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
     $('#beTxSummary').textContent = '';
@@ -8321,7 +8350,7 @@ function renderBoothTx() {
   const today = bWibToday();
   const rows = boothTxFilter(tx.rows, cfg, {
     booth: $('#beBooth').value, person: $('#bePerson').value, kind: $('#beTxKind').value,
-    status: $('#beTxStatus').value, type: $('#beTxType').value, min: $('#beTxMin').value, max: $('#beTxMax').value,
+    status: $('#beTxStatus').value, skip: $('#beTxStatus').value ? [] : BOOTH_FAIL_STATUS, type: $('#beTxType').value, min: $('#beTxMin').value, max: $('#beTxMax').value,
   });
   const buys = rows.filter((r) => r.type === 'buy');
   $('#beTxSummary').textContent = bL(
@@ -8430,7 +8459,7 @@ function renderBoothRecapNote() {
   if (!tx || !tx.rows) return;
   const from = $('#beRecapAllFrom').value, to = $('#beRecapAllTo').value;
   if (!from || !to) return;
-  const pending = boothTxFilter(tx.rows, BOOTH_EVENT, { kind: 'new', booth: $('#beBooth').value, person: $('#bePerson').value })
+  const pending = boothTxFilter(tx.rows, BOOTH_EVENT, { kind: 'new', skip: BOOTH_FAIL_STATUS, booth: $('#beBooth').value, person: $('#bePerson').value })
     .filter((r) => r.type === 'buy' && r.status !== 'completed' && r.created_wib.slice(0, 10) >= from && r.created_wib.slice(0, 10) <= to);
   if (!pending.length) return;
   const money = pending.reduce((a, r) => a + r.amount, 0);
@@ -8464,14 +8493,16 @@ function renderBoothEvent() {
   const held = mine.filter((x) => x.heldDays != null);
   const stEl = $('#beStatus'), stKeep = stEl.value;
   const stList = BOOTH.tx && BOOTH.tx.rows ? [...new Set(BOOTH.tx.rows.map((r) => r.status))].sort() : [];
-  stEl.innerHTML = `<option value="">${bL('Paid (not expired, cancelled, pending payment)', 'Sudah bayar (bukan expired, cancelled, pending payment)')}</option><option value="all">${bL('All (except expired, cancelled)', 'Semua (kecuali expired, cancelled)')}</option>` + stList.map((s) => `<option value="${bEsc(s)}">${bEsc(s)}</option>`).join('');
+  stEl.innerHTML = `<option value="">${bL('Paid (not expired, cancelled, pending payment)', 'Sudah bayar (bukan expired, cancelled, pending payment)')}</option><option value="all">${bL('All statuses', 'Semua status')}</option>` + stList.map((s) => `<option value="${bEsc(s)}">${bEsc(s)}</option>`).join('');
   stEl.value = stKeep === 'all' || stList.includes(stKeep) ? stKeep : '';
   const tc = BOOTH.tx && BOOTH.tx.rows ? boothTxCount(boothTxFilter(BOOTH.tx.rows, cfg, { booth, person, ...boothStatusPick(stEl.value) })) : null;
   const txv = (k) => (tc ? num(tc[k]) : '...');
+  const jy = boothJourney(mine, tc ? BOOTH.tx.rows : []);
+  const jPct = (n, d) => (d ? `${((n / d) * 100).toFixed(1)}%` : 'n/a');
   const flow = (s, en, id) => (s ? bL(`${num(s.all.n)} ${en} by ${num(s.all.users)} customers; new ${idr(s.new.rp)} (${num(s.new.n)}), existing ${idr(s.old.rp)} (${num(s.old.n)})`, `${num(s.all.n)} ${id} dari ${num(s.all.users)} nasabah; baru ${idr(s.new.rp)} (${num(s.new.n)}), existing ${idr(s.old.rp)} (${num(s.old.n)})`) : '');
   $('#beKpis').innerHTML = [
     kpi(bL('Registered', 'Daftar'), num(mine.length), bL('with an event code', 'dengan kode event'), 'accent', ICONS.userPlus),
-    kpi(bL('KYC verified (new SID)', 'KYC verified (SID baru)'), num(mine.filter((x) => x.verified).length), '', '', ICONS.check),
+    kpi(bL('KYC verified (new SID)', 'KYC verified (SID baru)'), num(jy.kyc.ok), bL(`${jPct(jy.kyc.ok, jy.reg)} of registered; ${num(jy.kyc.fail)} failed, ${num(jy.kyc.wait)} not processed`, `${jPct(jy.kyc.ok, jy.reg)} dari yang daftar; ${num(jy.kyc.fail)} gagal, ${num(jy.kyc.wait)} belum diproses`), '', ICONS.check),
     kpi(bL('Made a purchase', 'Sudah transaksi'), txv('buyers'), tc ? bL(`${num(tc.newBuyers)} new (${num(tc.newSettled)} settled), ${num(tc.buyers - tc.newBuyers)} existing`, `${num(tc.newBuyers)} baru (${num(tc.newSettled)} settle), ${num(tc.buyers - tc.newBuyers)} existing`) : '', '', ICONS.receipt),
     kpi(bL('Transactions', 'Transaksi'), txv('rows'), tc ? bL(`${num(tc.newRows)} new users, ${num(tc.existingRows)} existing users; ${num(tc.users)} unique customers`, `${num(tc.newRows)} user baru, ${num(tc.existingRows)} user existing; ${num(tc.users)} nasabah unik`) : '', '', ICONS.receipt),
     kpi(bL('Funded', 'Funded'), num(mine.filter((x) => x.fundedOn).length), bL(`settled net purchases reached ${idr(cfg.sales.minFunded)}`, `dana bersih settle pernah mencapai ${idr(cfg.sales.minFunded)}`), '', ICONS.coin),
@@ -8481,6 +8512,38 @@ function renderBoothEvent() {
     kpi(bL('Avg days holding', 'Rata-rata lama menahan'), held.length ? `${num(Math.round(held.reduce((a, x) => a + x.heldDays, 0) / held.length))} ${bL('days', 'hari')}` : 'n/a',
       bL(`${num(mine.filter((x) => x.holding === 'holding').length)} still hold today`, `${num(mine.filter((x) => x.holding === 'holding').length)} masih menahan hari ini`), '', ICONS.hourglass),
   ].join('');
+
+  // Journey: registration -> KYC -> purchase, counts and % of registered.
+  $('#beJourneyTitle').textContent = bL('Journey: registration to purchase', 'Journey: daftar sampai transaksi');
+  $('#beJourneyHint').textContent = bL(
+    'Customers registered with an event code, following the booth and sales filters. KYC: verified, failed (rejected) or not processed yet. Purchase: the best result of each customer\'s buys, whatever the Status filter says; "failed" = only expired or cancelled buys. Admin bonus units are ignored. The status table counts every transaction row (new and existing customers).',
+    'Nasabah yang daftar dengan kode event, mengikuti filter booth dan sales. KYC: verified, gagal (ditolak) atau belum diproses. Transaksi: hasil terbaik dari pembelian tiap nasabah, tidak peduli filter Status; "gagal" = hanya punya pembelian expired atau cancelled. Bonus unit dari admin diabaikan. Tabel status menghitung semua baris transaksi (nasabah baru dan existing).');
+  const jRow = (en, id, n) => ({ step: bL(en, id), n, pct: jy.reg ? (n / jy.reg) * 100 : 0 });
+  const jCols = (label) => [{ key: 'step', label }, { key: 'n', label: bL('Customers', 'Nasabah'), type: 'num', sum: true },
+    { key: 'pct', label: bL('% of registered', '% dari daftar'), type: 'pct', sum: true }];
+  genTable('#beJourneyAcq', [
+    jRow('KYC verified (SID)', 'KYC verified (SID)', jy.kyc.ok),
+    jRow('KYC failed / rejected', 'KYC gagal / ditolak', jy.kyc.fail),
+    jRow('KYC not processed yet', 'KYC belum diproses', jy.kyc.wait),
+  ], jCols(bL('Acquisition (KYC)', 'Akuisisi (KYC)')), '');
+  if (tc) {
+    genTable('#beJourneyTx', [
+      jRow('Bought, paid or settling', 'Beli, sudah bayar / diproses', jy.tx.paid),
+      jRow('Bought, waiting for payment', 'Beli, menunggu pembayaran', jy.tx.waiting),
+      jRow('Bought, failed (expired / cancelled)', 'Beli, gagal (expired / cancelled)', jy.tx.failed),
+      jRow('Not bought yet', 'Belum beli', jy.tx.none),
+    ], jCols(bL('Transactions (buy)', 'Transaksi (beli)')), '');
+    const grp = { 1: bL('Paid / settling', 'Sudah bayar / diproses'), 2: bL('Waiting for payment', 'Menunggu pembayaran'), 3: bL('Failed', 'Gagal') };
+    genTable('#beJourneyStatus', boothStatusRecap(boothTxFilter(BOOTH.tx.rows, cfg, { booth, person })).map((s) => ({ ...s, group: grp[s.group] })), [
+      { key: 'group', label: bL('Group', 'Kelompok') }, { key: 'status', label: 'Status' },
+      { key: 'n', label: bL('Transactions', 'Transaksi'), type: 'num', sum: true },
+      { key: 'pct', label: bL('% of transactions', '% transaksi'), type: 'pct', sum: true },
+      { key: 'users', label: bL('Customers', 'Nasabah'), type: 'num' },
+      { key: 'buy', label: bL('Bought', 'Beli'), type: 'idr', sum: true }, { key: 'sell', label: bL('Sold', 'Jual'), type: 'idr', sum: true },
+    ], bL('No transactions yet.', 'Belum ada transaksi.'));
+  } else {
+    $('#beJourneyTx').innerHTML = $('#beJourneyStatus').innerHTML = `<div class="loading">${t('common_loading')}</div>`;
+  }
 
   // Daily recap, one row per event day up to today.
   const days = [];

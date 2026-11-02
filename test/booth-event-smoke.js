@@ -234,6 +234,13 @@ assert.deepStrictEqual(txr.cnt, { rows: 8, users: 7, buyers: 7, newBuyers: 4, ne
   sell: { all: { n: 1, users: 1, rp: 1000000 }, new: { n: 1, users: 1, rp: 1000000 }, old: none } }, 'KPI counts come from the list rows');
 assert.deepStrictEqual(txr.cntNone, { rows: 0, users: 0, buyers: 0, newBuyers: 0, newSettled: 0, waiting: 0, newRows: 0, existingRows: 0,
   buy: { all: none, new: none, old: none }, sell: { all: none, new: none, old: none } });
+const jr = JSON.parse(run(`JSON.stringify([boothJourney([{ user_id: 'a', verified: true }, { user_id: 'b', verification_status: 'failed' }, { user_id: 'c', verification_status: 'unverified' }, { user_id: 'd', verified: true }, { user_id: 'e' }],
+  [{ user_id: 'a', type: 'buy', status: 'completed' }, { user_id: 'a', type: 'buy', status: 'cancelled' }, { user_id: 'b', type: 'buy', status: 'pending_payment' }, { user_id: 'c', type: 'buy', status: 'expired' },
+   { user_id: 'd', type: 'sell', status: 'completed' }, { user_id: 'x', type: 'buy', status: 'completed' }, { user_id: 'e', type: 'buy', status: 'completed', payment_method: 'manual_bonus' }]),
+  boothStatusRecap([{ user_id: 'a', type: 'buy', status: 'completed', amount: 100 }, { user_id: 'a', type: 'sell', status: 'completed', amount: 40 }, { user_id: 'b', type: 'buy', status: 'expired', amount: 7 },
+   { user_id: 'c', type: 'buy', status: 'pending_payment', amount: 5 }, { user_id: 'c', type: 'buy', status: 'completed', amount: 1, payment_method: 'manual_bonus' }]).map((s) => [s.status, s.n, s.users, s.buy, s.sell, s.group, s.pct])])`));
+assert.deepStrictEqual(jr[0], { reg: 5, kyc: { ok: 2, fail: 1, wait: 2 }, tx: { paid: 1, waiting: 1, failed: 1, none: 2 } }, 'journey: best buy per customer; sell-only, bonus-only and outsiders do not count as bought');
+assert.deepStrictEqual(jr[1], [['completed', 3, 2, 100, 40, 1, 60], ['pending_payment', 1, 1, 5, 0, 2, 20], ['expired', 1, 1, 7, 0, 3, 20]], 'status recap: paid first, bonus units add no Rp');
 assert.strictEqual(txr.skipDefault, 't1,t2,t4,t5,t6,t7,t8', 'KPI default status drops pending_payment (t3); expired and cancelled never reach the browser');
 assert.strictEqual(txr.skipAll, txr.all, 'status All keeps every row');
 assert.strictEqual(txr.skipOne, 't3', 'one status picked');
