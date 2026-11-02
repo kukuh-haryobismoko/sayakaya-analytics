@@ -28,6 +28,10 @@ const idNum = (n, digits = 0) => {
   if (v == null) return 'n/a';
   return new Intl.NumberFormat('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(v));
 };
+// Amount per row currency: IDR as on the statement, USD with 2 decimals.
+const ccyNum = (v, r) => (String(r?.currency ?? 'IDR').toUpperCase() === 'USD'
+  ? (val(v) == null ? 'n/a' : 'USD ' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(val(v))))
+  : idNum(v));
 // Accountant-style negatives for gain/loss cells: (214.800.256)
 const idParen = (n) => {
   const v = val(n);
@@ -129,7 +133,7 @@ function table(doc, columns, rows, {
   rows.forEach((r, i) => {
     const texts = columns.map((c) => {
       const raw = r[c.key];
-      return String(c.format ? c.format(raw) : (val(raw) ?? 'n/a'));
+      return String(c.formatRow ? c.formatRow(raw, r) : c.format ? c.format(raw) : (val(raw) ?? 'n/a'));
     });
     const h = measure(texts);
     if (doc.y + h > bottom) {
@@ -229,7 +233,7 @@ function estimateTableHeight(doc, columns, rows, fontSize, rowHeight) {
   let total = measure(columns.map((c) => c.label));
   doc.font('Helvetica').fontSize(fontSize);
   for (const r of rows) {
-    const texts = columns.map((c) => String(c.format ? c.format(r[c.key]) : (val(r[c.key]) ?? 'n/a')));
+    const texts = columns.map((c) => String(c.formatRow ? c.formatRow(r[c.key], r) : c.format ? c.format(r[c.key]) : (val(r[c.key]) ?? 'n/a')));
     total += measure(texts);
   }
   return total;
@@ -444,7 +448,7 @@ const TX_COLS = (width) => [
   { key: 'status', label: 'Status', width: width * 0.14 },
   { key: 'unit', label: 'Unit', width: width * 0.12, align: 'right', format: (v) => (val(v) == null ? 'n/a' : idNum(v, 4)) },
   { key: 'currency', label: 'Currency', width: width * 0.05 },
-  { key: 'amount', label: 'Amount', width: width * 0.14, align: 'right', format: idNum },
+  { key: 'amount', label: 'Amount', width: width * 0.14, align: 'right', formatRow: ccyNum },
 ];
 
 // Convert UTC timestamp (ISO string or Date) to WIB date string YYYY-MM-DD.
@@ -496,7 +500,7 @@ const USERS_TX_COLS = (width) => [
   { key: 'phone', label: 'Phone', width: width * 0.10 },
   { key: 'fund_name', label: 'Fund', width: width * 0.13 },
   { key: 'currency', label: 'Cur.', width: width * 0.05 },
-  { key: 'amount', label: 'Amount', width: width * 0.09, align: 'right', format: idNum },
+  { key: 'amount', label: 'Amount', width: width * 0.09, align: 'right', formatRow: ccyNum },
 ];
 
 function usersTransactionsReport(rows, options = {}) {

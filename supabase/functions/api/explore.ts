@@ -49,7 +49,7 @@ const DATASETS: Record<string, DatasetDef> = {
       { key: 'status', label: 'Status', type: 'tag' },
       { key: 'unit', label: 'Unit', type: 'num4' },
       { key: 'currency', label: 'Currency' },
-      { key: 'final_amount', label: 'Final amount', type: 'idr' },
+      { key: 'final_amount', label: 'Final amount', type: 'ccy' },
       { key: 'payment_method', label: 'Payment' },
       { key: 'realized_gain_loss', label: 'Gain/Loss', type: 'idr' },
     ],

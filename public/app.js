@@ -54,6 +54,11 @@ const idr = (n) => {
 };
 const idrFull = (n) => (n == null ? 'n/a' : 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n))));
 const idrExact = (n) => (n == null ? 'n/a' : 'Rp ' + new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(Number(n)));
+const ccyFmt = (v, row) => {
+  const ccy = (row && row.currency) ? String(row.currency).toUpperCase() : 'IDR';
+  if (ccy === 'USD') return 'USD ' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v || 0));
+  return 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(v || 0)));
+};
 const num = (n) => (n == null ? 'n/a' : new Intl.NumberFormat('en-US').format(Number(n)));
 const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) + '%' : 'n/a');
 
@@ -527,7 +532,7 @@ async function loadPortfolioUser() {
     renderSeriesTrendFinding('#pfGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#pfRecentTx', recentTx, [
       { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
-      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
+      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), fmt: ccyFmt },
     ], 'No transactions yet.');
   } catch (e) { $('#pfKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -700,7 +705,7 @@ async function loadPfxUser() {
     renderSeriesTrendFinding('#pfxGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#pfxRecentTx', recentTx, [
       { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
-      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
+      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), fmt: ccyFmt },
     ], 'No transactions yet.');
   } catch (e) { $('#pfxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -823,7 +828,7 @@ async function loadPtxUser() {
     renderSeriesTrendFinding('#ptxGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#ptxRecentTx', recentTx, [
       { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
-      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
+      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), fmt: ccyFmt },
     ], 'No transactions yet.');
   } catch (e) { $('#ptxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -1847,7 +1852,7 @@ function renderBehaviorUser({ profile: p, timeline }) {
     { key: 'event', label: t('bh_col_event') },
     { key: 'detail', label: t('bh_col_detail') },
     { key: 'currency', label: t('col_currency') },
-    { key: 'amount', label: t('bh_col_amount'), type: 'idr' },
+    { key: 'amount', label: t('bh_col_amount'), fmt: ccyFmt },
     { key: 'status', label: t('bh_col_tx_status') },
     { key: 'session_id', label: t('bh_col_session') },
   ], t('bh_timeline_empty'));
@@ -4567,10 +4572,17 @@ let growthLoaded = false;
 // Columns flagged `sum: true` get a Total row at the bottom. Only flag
 // columns that add up across rows: money and counts per fund/period, not
 // averages, rates, dates, or investor counts that overlap between rows.
+// Footer total for a currency-aware column: one line per currency, never mixed.
+function ccySum(rows, key) {
+  const by = {};
+  rows.forEach((r) => { const c = String(val(r.currency) || 'IDR').toUpperCase(); by[c] = (by[c] || 0) + (Number(val(r[key])) || 0); });
+  return '<td class="num">' + Object.entries(by).map(([c, s]) => ccyFmt(s, { currency: c })).join('<br>') + '</td>';
+}
+
 function genTable(sel, rows, cols, emptyMsg, sortState) {
   if (!rows.length) { $(sel).innerHTML = `<div class="empty">${emptyMsg}</div>`; return; }
   const numTypes = ['idr', 'idrx', 'num', 'pct', 'delta'];
-  const td = (c, v) => {
+  const td = (c, v, r) => {
     let out = v == null ? 'n/a' : safeCell(v);
     if (c.type === 'idr') out = idrFull(v);
     if (c.type === 'idrx') out = idrExact(v);
@@ -4581,7 +4593,7 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
     if (c.type === 'delta') out = v == null ? '' : (v > 0 ? '+' : '') + num(v);
     // c.fmt: draw the cell yourself (a signed net flow in red/green), last so
     // it wins; c.type still supplies the column class and the footer sum.
-    if (c.fmt) out = c.fmt(v);
+    if (c.fmt) out = c.fmt(v, r);
     const tone = c.type === 'delta' && v != null ? (v < 0 ? ' neg' : ' pos') : '';
     // c.text: keep the cell text in the XLSX export (phone 0812..., SID, timestamps).
     return `<td class="${numTypes.includes(c.type) ? 'num' : ''}${tone}"${c.text ? ' data-t="s"' : ''}>${out}</td>`;
@@ -4595,10 +4607,10 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
     const first = numTypes.includes(c.type) || c.type === 'date' ? 'desc' : 'asc';
     return sortTh(c.label, typeof c.sort === 'string' ? c.sort : c.key, sortState, cls, first);
   }).join('');
-  const body = rows.map((r) => '<tr>' + cols.map((c) => td(c, val(r[c.key]))).join('') + '</tr>').join('');
+  const body = rows.map((r) => '<tr>' + cols.map((c) => td(c, val(r[c.key]), r)).join('') + '</tr>').join('');
   const foot = cols.some((c) => c.sum)
     ? '<tfoot><tr>' + cols.map((c, i) => (c.sum
-      ? td(c, rows.reduce((a, r) => a + (Number(val(r[c.key])) || 0), 0))
+      ? (c.fmt === ccyFmt ? ccySum(rows, c.key) : td(c, rows.reduce((a, r) => a + (Number(val(r[c.key])) || 0), 0)))
       : `<td>${i === 0 ? 'Total' : ''}</td>`)).join('') + '</tr></tfoot>'
     : '';
   $(sel).innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>`;
@@ -5091,7 +5103,7 @@ function renderReferralProgram(rows, stats, invited, sel = { kpis: '#refProgKpis
     { key: 'invitee_ifua', label: t('col_invitee_ifua') }, { key: 'invitee_email', label: t('col_invitee_email') },
     { key: 'invitee_phone', label: t('col_invitee_phone') },
     { key: 'fund_name', label: t('col_fund') },
-    { key: 'currency', label: t('col_currency') }, { key: 'amount', label: t('col_amount'), type: 'idr' },
+    { key: 'currency', label: t('col_currency') }, { key: 'amount', label: t('col_amount'), fmt: ccyFmt },
     { key: 'tx_date', label: t('col_transaction_date'), type: 'date' }, { key: 'days_held', label: t('col_days_held'), type: 'num' },
     { key: 'baseline_unit', label: t('col_baseline_units'), type: 'num' }, { key: 'min_unit_in_window', label: t('col_min_units_seen'), type: 'num' },
     { key: 'status', label: 'Status' }, { key: 'reason', label: t('col_reason') },
@@ -5338,7 +5350,7 @@ async function loadRemTx() {
       { key: 'unit', label: 'Unit', type: 'num', sort: true },
       { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
       { key: 'currency', label: t('col_currency'), sort: true },
-      { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
+      { key: 'amount', label: t('col_amount'), fmt: ccyFmt, sort: true }, { key: 'final_amount', label: t('col_final_amount'), fmt: ccyFmt, sort: true },
       { key: 'realized_gain_loss', label: t('col_realized_g_l'), type: 'idr', sort: true },
       { key: 'referrer_code', label: t('col_referrer_code'), sort: true }, { key: 'sales_code', label: t('col_sales_code'), sort: true },
     ], 'No transactions match these filters.', remTx.sort);
@@ -5451,7 +5463,7 @@ async function loadUtx() {
       { key: 'unit', label: 'Unit', type: 'num', sort: true },
       { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
       { key: 'currency', label: t('col_currency'), sort: true },
-      { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
+      { key: 'amount', label: t('col_amount'), fmt: ccyFmt, sort: true }, { key: 'final_amount', label: t('col_final_amount'), fmt: ccyFmt, sort: true },
     ], 'No transactions match these filters.', utx.sort);
     const start = total ? utx.offset + 1 : 0;
     const end = Math.min(utx.offset + utx.limit, total);
@@ -6127,7 +6139,7 @@ const EVC_TX_COLS = [
   { key: 'fund_name', label: t('col_fund'), sort: true }, { key: 'fund_type', label: t('col_fund_type'), sort: true },
   { key: 'unit', label: 'Unit', type: 'num', sort: true },
   { key: 'currency', label: t('col_currency'), sort: true },
-  { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
+  { key: 'amount', label: t('col_amount'), fmt: ccyFmt, sort: true }, { key: 'final_amount', label: t('col_final_amount'), fmt: ccyFmt, sort: true },
   { key: 'referrer_code', label: t('col_referrer_code'), sort: true }, { key: 'sales_code', label: t('col_sales_code'), sort: true },
 ];
 
@@ -6238,11 +6250,12 @@ function tagClass(v) {
 
 const ex = { meta: [], current: null, offset: 0, limit: 50, total: 0, sort: null };
 
-function fmtCell(v, type) {
+function fmtCell(v, type, row) {
   v = val(v);
   if (v == null || v === '') return 'n/a';
   switch (type) {
     case 'idr': return idrFull(v);
+    case 'ccy': return ccyFmt(v, row);
     case 'num': return num(v);
     case 'num4': return Number(v).toFixed(4);
     case 'bool': return (v === true || v === 'true') ? 'Yes' : 'No';
@@ -6340,11 +6353,11 @@ async function loadExplore() {
 
 function renderExTable(d, rows) {
   if (!rows.length) { $('#exTable').innerHTML = `<div class="empty">${t('msg_no_rows_match_these_filters')}</div>`; return; }
-  const numTypes = ['idr', 'num', 'num4'];
+  const numTypes = ['idr', 'ccy', 'num', 'num4'];
   const head = d.columns.map((c) => sortTh(c.label, c.key, ex.sort, numTypes.includes(c.type) ? 'num' : '',
     numTypes.includes(c.type) || c.type === 'datetime' ? 'desc' : 'asc')).join('');
   const body = rows.map((r) => '<tr>' + d.columns.map((c) =>
-    `<td class="${numTypes.includes(c.type) ? 'num' : ''}">${fmtCell(r[c.key], c.type)}</td>`).join('') + '</tr>').join('');
+    `<td class="${numTypes.includes(c.type) ? 'num' : ''}">${fmtCell(r[c.key], c.type, r)}</td>`).join('') + '</tr>').join('');
   $('#exTable').innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
@@ -7957,7 +7970,7 @@ function renderPromoRecap() {
     { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') },
     { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' }, { key: 'fund', label: bL('Product', 'Produk') }, { key: 'manager', label: 'MI' },
     { key: 'currency', label: bL('Currency', 'Mata uang') },
-    { key: 'amount', label: bL('Amount', 'Nominal'), type: 'idr', sum: true }, { key: 'unit', label: 'Unit', type: 'num' },
+    { key: 'amount', label: bL('Amount', 'Nominal'), fmt: ccyFmt, sum: true }, { key: 'unit', label: 'Unit', type: 'num' },
     { key: 'status', label: bL('Transaction', 'Transaksi') }, { key: 'payment', label: bL('Payment', 'Pembayaran') },
     { key: 'bonus', label: bL('Bonus status', 'Status bonus') }, { key: 'holding', label: bL('Holding until', 'Holding sampai'), type: 'date' },
   ], bL('No promo buys in this window.', 'Tidak ada pembelian promo di rentang ini.'));
@@ -8381,7 +8394,7 @@ function renderBoothTx() {
     { key: 'registered', label: bL('Registered', 'Daftar'), text: true }, { key: 'promo', label: bL('Promo code', 'Kode promo') },
     { key: 'plan_id', label: 'investment_plan_id', text: true }, { key: 'type', label: bL('Type', 'Tipe') }, { key: 'status', label: 'Status' }, { key: 'payment', label: bL('Payment', 'Pembayaran') }, { key: 'fund', label: bL('Fund', 'Produk') },
     { key: 'currency', label: bL('Currency', 'Mata uang') },
-    { key: 'amount', label: bL('Amount (Rp)', 'Nominal (Rp)'), type: 'num' },
+    { key: 'amount', label: bL('Amount', 'Nominal'), fmt: ccyFmt },
     { key: 'hold_days', label: bL('Hold days', 'Hari holding'), type: 'num' }, { key: 'hold', label: bL('Holding', 'Status holding') },
   ], bL('No transaction matches.', 'Tidak ada transaksi yang cocok.'));
   renderBoothRecapNote();
