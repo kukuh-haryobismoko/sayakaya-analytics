@@ -218,14 +218,21 @@ const txr = JSON.parse(run(`(() => {
     pendingNew: hs('t7', '2026-11-20'), noSnap: hs('t8', '2026-12-20'),
     notBuy: hs('t4', '2026-12-10'), notDone: hs('t2', '2026-12-10'), pendingPay: hs('t3', '2026-12-10'),
     need: BOOTH_EVENT.txHoldDays,
+    skipDefault: ids(boothStatusPick('')), skipAll: ids(boothStatusPick('all')), skipOne: ids(boothStatusPick('pending_payment')),
+    bonusNet: boothTxCount([{ user_id: 'x', type: 'buy', status: 'completed', kind: 'new', amount: 5, payment_method: 'manual_bonus' }]).net,
     cnt: boothTxCount(boothTxFilter(__tx, BOOTH_EVENT, {})), cntPim: boothTxCount(boothTxFilter(__tx, BOOTH_EVENT, { booth: 'PIM' })), cntNone: boothTxCount([]),
   });
 })()`));
 assert.strictEqual(txr.all, 't1,t2,t3,t4,t5,t6,t7,t8', 'no filter keeps every row the server sent (expired and cancelled are dropped in SQL)');
 assert.strictEqual(txr.completed, 't1,t5,t6,t7,t8');
 // 8 rows, users u1..u7 (u1 has a buy and a sell), all 7 bought, 4 of them new (u1 u2 u5 u7) and 3 of those settled (u2 is completed_payment), t2/t3/t4 are not completed.
-assert.deepStrictEqual(txr.cnt, { rows: 8, users: 7, buyers: 7, newBuyers: 4, newSettled: 3, waiting: 3 }, 'KPI counts come from the list rows');
-assert.deepStrictEqual(txr.cntNone, { rows: 0, users: 0, buyers: 0, newBuyers: 0, newSettled: 0, waiting: 0 });
+// new = t1 t2 t4 t6 t8 (net 1.000.000 + 25.000 - 1.000.000 + 1.500.000 + 1.000.000 = 2.525.000); existing and other = t3 t5 t7 (5.000.000 + 2.500.000 + 1.000.000 = 8.500.000).
+assert.deepStrictEqual(txr.cnt, { rows: 8, users: 7, buyers: 7, newBuyers: 4, newSettled: 3, waiting: 3, newRows: 5, existingRows: 3, net: 11025000, newNet: 2525000, existingNet: 8500000 }, 'KPI counts come from the list rows');
+assert.deepStrictEqual(txr.cntNone, { rows: 0, users: 0, buyers: 0, newBuyers: 0, newSettled: 0, waiting: 0, newRows: 0, existingRows: 0, net: 0, newNet: 0, existingNet: 0 });
+assert.strictEqual(txr.skipDefault, 't1,t2,t4,t5,t6,t7,t8', 'KPI default status drops pending_payment (t3); expired and cancelled never reach the browser');
+assert.strictEqual(txr.skipAll, txr.all, 'status All keeps every row');
+assert.strictEqual(txr.skipOne, 't3', 'one status picked');
+assert.strictEqual(txr.bonusNet, 0, 'admin bonus units are not money in');
 assert.strictEqual(txr.cntPim.rows, txr.booth.split(',').length, 'the card follows the booth filter like the list');
 assert.strictEqual(txr.sells, 't4');
 assert.strictEqual(txr.min, 't1,t3,t4,t5,t6,t7,t8', 'min is inclusive');

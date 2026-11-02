@@ -8058,7 +8058,7 @@ function boothTxFilter(rows, cfg, f = {}) {
     const ro = roster.get(String(r.code || '').toUpperCase()) || null;
     return { ...r, amount: Number(r.amount) || 0, person: ro ? ro.person : null, booth: ro ? ro.booth : null, kind: r.via === 'code' ? 'new' : (r.registered_on || '9999') < cfg.start ? 'existing' : 'other' };
   }).filter((r) => (!f.booth || r.booth === f.booth) && (!f.person || r.person === f.person)
-    && (!f.kind || r.kind === f.kind) && (!f.status || r.status === f.status) && (!f.type || r.type === f.type)
+    && (!f.kind || r.kind === f.kind) && (!f.status || r.status === f.status) && !(f.skip || []).includes(r.status) && (!f.type || r.type === f.type)
     && (min == null || r.amount >= min) && (max == null || r.amount <= max));
 }
 // KPI numbers from the Transactions list rows (already filtered), so the cards and the list agree.
@@ -8067,8 +8067,15 @@ function boothTxCount(rows) {
   const buys = rows.filter((r) => r.type === 'buy');
   const newBuys = buys.filter((r) => r.kind === 'new');
   // newSettled = what the recap and the bonuses count (completed buys of new customers).
-  return { rows: rows.length, users: users(rows), buyers: users(buys), newBuyers: users(newBuys), newSettled: users(newBuys.filter((r) => r.status === 'completed')), waiting: rows.filter((r) => r.status !== 'completed').length };
+  // Money in minus out; admin bonus units (manual_bonus) are not money. 'existing' = every customer who is not new (existing + other).
+  const net = (list) => list.filter((r) => r.payment_method !== 'manual_bonus').reduce((a, r) => a + (r.type === 'buy' ? r.amount : -r.amount), 0);
+  const old = rows.filter((r) => r.kind !== 'new');
+  return { rows: rows.length, users: users(rows), buyers: users(buys), newBuyers: users(newBuys), newSettled: users(newBuys.filter((r) => r.status === 'completed')), waiting: rows.filter((r) => r.status !== 'completed').length,
+    newRows: rows.length - old.length, existingRows: old.length, net: net(rows), newNet: net(rows.filter((r) => r.kind === 'new')), existingNet: net(old) };
 }
+// KPI cards: default skips what is not paid yet (expired and cancelled never arrive from the server).
+const BOOTH_STATUS_SKIP = ['expired', 'cancelled', 'pending_payment'];
+const boothStatusPick = (v) => (v === 'all' ? {} : v ? { status: v } : { skip: BOOTH_STATUS_SKIP });
 // Holding check of one completed buy (server: hold_days, hold_broken_on; same rule as
 // the referral program). null for any other row. A buy with no snapshot yet is
 // "pending" for a week (the snapshot job runs about a day behind), after that
@@ -8444,15 +8451,19 @@ function renderBoothEvent() {
   renderBoothRecap(people);
 
   const held = mine.filter((x) => x.heldDays != null);
-  const tc = BOOTH.tx && BOOTH.tx.rows ? boothTxCount(boothTxFilter(BOOTH.tx.rows, cfg, { booth, person })) : null;
+  const stEl = $('#beStatus'), stKeep = stEl.value;
+  const stList = BOOTH.tx && BOOTH.tx.rows ? [...new Set(BOOTH.tx.rows.map((r) => r.status))].sort() : [];
+  stEl.innerHTML = `<option value="">${bL('Paid (not expired, cancelled, pending payment)', 'Sudah bayar (bukan expired, cancelled, pending payment)')}</option><option value="all">${bL('All (except expired, cancelled)', 'Semua (kecuali expired, cancelled)')}</option>` + stList.map((s) => `<option value="${bEsc(s)}">${bEsc(s)}</option>`).join('');
+  stEl.value = stKeep === 'all' || stList.includes(stKeep) ? stKeep : '';
+  const tc = BOOTH.tx && BOOTH.tx.rows ? boothTxCount(boothTxFilter(BOOTH.tx.rows, cfg, { booth, person, ...boothStatusPick(stEl.value) })) : null;
   const txv = (k) => (tc ? num(tc[k]) : '...');
   $('#beKpis').innerHTML = [
     kpi(bL('Registered', 'Daftar'), num(mine.length), bL('with an event code', 'dengan kode event'), 'accent', ICONS.userPlus),
     kpi(bL('KYC verified (new SID)', 'KYC verified (SID baru)'), num(mine.filter((x) => x.verified).length), '', '', ICONS.check),
-    kpi(bL('Made a purchase', 'Sudah transaksi'), txv('buyers'), tc ? bL(`${num(tc.newBuyers)} new (${num(tc.newSettled)} settled), ${num(tc.buyers - tc.newBuyers)} existing/other`, `${num(tc.newBuyers)} baru (${num(tc.newSettled)} settle), ${num(tc.buyers - tc.newBuyers)} existing/lainnya`) : '', '', ICONS.receipt),
-    kpi(bL('Transactions', 'Transaksi'), txv('rows'), tc ? bL(`${num(tc.users)} unique customers; ${num(tc.waiting)} not settled yet`, `${num(tc.users)} nasabah unik; ${num(tc.waiting)} belum settle`) : '', '', ICONS.receipt),
+    kpi(bL('Made a purchase', 'Sudah transaksi'), txv('buyers'), tc ? bL(`${num(tc.newBuyers)} new (${num(tc.newSettled)} settled), ${num(tc.buyers - tc.newBuyers)} existing`, `${num(tc.newBuyers)} baru (${num(tc.newSettled)} settle), ${num(tc.buyers - tc.newBuyers)} existing`) : '', '', ICONS.receipt),
+    kpi(bL('Transactions', 'Transaksi'), txv('rows'), tc ? bL(`${num(tc.newRows)} new users, ${num(tc.existingRows)} existing users; ${num(tc.users)} unique customers`, `${num(tc.newRows)} user baru, ${num(tc.existingRows)} user existing; ${num(tc.users)} nasabah unik`) : '', '', ICONS.receipt),
     kpi(bL('Funded', 'Funded'), num(mine.filter((x) => x.fundedOn).length), bL(`settled net purchases reached ${idr(cfg.sales.minFunded)}`, `dana bersih settle pernah mencapai ${idr(cfg.sales.minFunded)}`), '', ICONS.coin),
-    kpi(bL('Net money in', 'Dana bersih masuk'), idr(mine.reduce((a, x) => a + x.totalBuy - x.totalSell, 0)), bL('buys minus sells', 'beli dikurangi jual'), '', ICONS.trendUp),
+    kpi(bL('Net money in', 'Dana bersih masuk'), tc ? idr(tc.net) : '...', tc ? bL(`new ${idr(tc.newNet)}, existing ${idr(tc.existingNet)}`, `baru ${idr(tc.newNet)}, existing ${idr(tc.existingNet)}`) : '', '', ICONS.trendUp),
     kpi(bL('Avg days holding', 'Rata-rata lama menahan'), held.length ? `${num(Math.round(held.reduce((a, x) => a + x.heldDays, 0) / held.length))} ${bL('days', 'hari')}` : 'n/a',
       bL(`${num(mine.filter((x) => x.holding === 'holding').length)} still hold today`, `${num(mine.filter((x) => x.holding === 'holding').length)} masih menahan hari ini`), '', ICONS.hourglass),
   ].join('');
@@ -8622,7 +8633,7 @@ function renderBoothRules(cfg, period, scale) {
       ${li(`Welcome bonus (new customers): first purchase is a ${bEsc(C.samManager)} fund for ${idr(C.welcome.minFirstBuy)}+; ${idrFull(C.welcome.bonus)} in SAM units after ${C.welcome.holdingDays} days, lapses if a SAM fund is sold before that; plus ${bEsc(C.welcome.extra)}.`, `Welcome bonus (nasabah baru): pembelian pertama produk ${bEsc(C.samManager)} ${idr(C.welcome.minFirstBuy)}+; ${idrFull(C.welcome.bonus)} unit SAM setelah ${C.welcome.holdingDays} hari, gugur kalau menjual produk SAM sebelum itu; plus ${bEsc(C.welcome.extra)}.`)}
       ${li(`Nabung rutin: a monthly plan started during the event with ${idr(C.nabungRutin.minMonthly)}+ going to SAM funds, paid ${C.nabungRutin.minMonths} months in a row: ${idrFull(C.nabungRutin.bonus)} in SAM units.`, `Nabung rutin: rencana bulanan yang dibuat selama event dengan ${idr(C.nabungRutin.minMonthly)}+ ke produk SAM, terbayar ${C.nabungRutin.minMonths} bulan berturut-turut: ${idrFull(C.nabungRutin.bonus)} unit SAM.`)}
       ${li(`Top up (customers registered before the event): SAM purchases of ${idr(C.topUp.minAmount)}+ each with a sales code${C.promoCodes.length ? ` or ${C.promoCodes.map(bEsc).join(', ')}` : ''} as promo code; ${C.topUp.cashbackPct}% cashback, at most ${idrFull(C.topUp.cashbackMax)} per customer, after ${C.topUp.holdingDays} days without selling a SAM fund; plus ${bEsc(C.topUp.extra)}.`, `Top up (nasabah yang daftar sebelum event): pembelian SAM ${idr(C.topUp.minAmount)}+ per transaksi dengan kode sales${C.promoCodes.length ? ` atau ${C.promoCodes.map(bEsc).join(', ')}` : ''} sebagai kode promo; cashback ${C.topUp.cashbackPct}%, maks. ${idrFull(C.topUp.cashbackMax)} per nasabah, setelah ${C.topUp.holdingDays} hari tanpa menjual produk SAM; plus ${bEsc(C.topUp.extra)}.`)}
-      ${li('How it is counted: Made a purchase and Transactions count every row of the Transactions list (any status except expired and cancelled). Recap, incentives, Funded and the customer bonuses count only completed (settled) buys and sells of the customers they apply to, so they can be lower until the payments settle. "new (settled)" on the Made a purchase card is the number the recap shows as first purchase.', 'Cara hitung: Sudah transaksi dan Transaksi menghitung semua baris daftar Transaksi (status apa pun kecuali expired dan cancelled). Rekap, insentif, Funded, dan bonus nasabah hanya menghitung beli dan jual completed (sudah settle) dari nasabah yang berlaku, jadi bisa lebih kecil sampai pembayaran settle. "baru (settle)" di kartu Sudah transaksi sama dengan angka transaksi pertama di rekap.')}
+      ${li('How it is counted: The KPI cards Made a purchase, Transactions and Net money in count new and existing customers (existing includes buys with the SYKYMALL promo code) from the Transactions list, and follow the Status filter at the top: by default every status except expired, cancelled and pending payment (paid or being settled), or pick one status, or All. Net money in leaves out admin bonus units. Recap, incentives, Funded and the customer bonuses count only completed (settled) buys and sells of the customers they apply to, so they can be lower until the payments settle. "new (settled)" on the Made a purchase card is the number the recap shows as first purchase.', 'Cara hitung: kartu KPI Sudah transaksi, Transaksi, dan Dana bersih masuk menghitung nasabah baru dan existing (existing termasuk pembelian dengan kode promo SYKYMALL) dari daftar Transaksi, dan mengikuti filter Status di atas: default semua status kecuali expired, cancelled, dan pending payment (sudah bayar atau sedang settle), atau pilih satu status, atau Semua. Dana bersih masuk tidak menghitung bonus unit dari admin. Rekap, insentif, Funded, dan bonus nasabah hanya menghitung beli dan jual completed (sudah settle) dari nasabah yang berlaku, jadi bisa lebih kecil sampai pembayaran settle. "baru (settle)" di kartu Sudah transaksi sama dengan angka transaksi pertama di rekap.')}
       ${li('Social media follow and app store rating (small SAM merchandise) and Sucorwave sign-ups happen outside SayaKaya, so they are not in this data; the Sucorwave table counts the SayaKaya steps of each journey.', 'Follow media sosial dan rating app store (merchandise SAM kecil) serta pendaftaran Sucorwave terjadi di luar SayaKaya, jadi tidak ada di data ini; tabel Sucorwave menghitung langkah SayaKaya dari tiap journey.')}
     </ul>`;
   genTable('#beRoster', cfg.roster.map((r) => ({
@@ -9979,7 +9990,7 @@ function wire() {
   ssBatchPicker = setupRecipientPicker('ssBatch');
   $('#ssBatchStatementMonth').value = prevMonthWib();
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
-  ['bePeriod', 'beBooth', 'bePerson'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothEvent));
+  ['bePeriod', 'beBooth', 'bePerson', 'beStatus'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothEvent));
   ['beTxKind', 'beTxStatus', 'beTxType'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothTx));
   ['beTxMin', 'beTxMax'].forEach((id) => $(`#${id}`).addEventListener('input', renderBoothTx));
   $('#beReload').addEventListener('click', loadBoothEvent);
