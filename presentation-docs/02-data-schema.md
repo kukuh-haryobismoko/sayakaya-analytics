@@ -23,6 +23,7 @@ warehouse directly, read-only.
 | `status` | STRING | `completed`, `expired`, `cancelled`, `verified_by_operational`, `verified`, `completed_payment`, `pending_payment` |
 | `unit` | FLOAT | |
 | `amount`, `final_amount`, `value_per_unit`, `realized_gain_loss` | NUMERIC | |
+| `currency` | STRING | `IDR` or `USD`; sits before `amount` in every transaction table. USD rows (11 so far) come from USD funds and carry `fx_rate` |
 | `payment_method`, `payment_gateway` | STRING | |
 | `created_at`, `completed_at`, `paid_at` | TIMESTAMP | |
 

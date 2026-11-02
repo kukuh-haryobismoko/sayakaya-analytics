@@ -37,7 +37,7 @@ function range(from?: string, to?: string) {
 // reaches the SQL); NULLs go last either way, then `tie` keeps pages from
 // overlapping. Anything else falls back to the list's default order.
 // Text columns sort case-insensitively, so "Afif" doesn't land after "AGUS".
-const TEXT_SORT = new Set(['transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone', 'fund_name', 'fund_type',
+const TEXT_SORT = new Set(['transaction_number', 'currency', 'type', 'status', 'sid', 'name', 'email', 'phone', 'fund_name', 'fund_type',
   'referrer_code', 'sales_code', 'investor_name', 'fund_code', 'reference_no', 'verification_status', 'portfolio_status']);
 export function pagedOrder(sort: string | undefined, dir: string | undefined, allowed: string[], fallback: string, tie: string): string {
   if (!sort || !allowed.includes(sort)) return fallback;
@@ -248,7 +248,7 @@ export const verificationBreakdown = (userFilter: UserFilterRule[] = []): Query 
 
 export const txColumns = [
   'id', 'transaction_number', 'user_id', 'fund_id', 'type', 'status',
-  'unit', 'amount', 'final_amount', 'payment_method', 'payment_gateway',
+  'unit', 'currency', 'amount', 'final_amount', 'payment_method', 'payment_gateway',
   'value_per_unit', 'realized_gain_loss', 'created_at', 'completed_at',
 ];
 
@@ -692,7 +692,7 @@ export const userContactBatch = (userIds: string[]): Query => ({
 // eligibility report's "did they buy" check — so an expired/cancelled/
 // pending_payment attempt never shows up on an investor's official statement.
 export const userTransactions = (userId: string, from: string, to: string): Query => ({
-  sql: `SELECT t.created_at, t.type, t.status, f.name AS fund, t.unit, t.amount, t.final_amount
+  sql: `SELECT t.created_at, t.type, t.status, f.name AS fund, t.unit, t.currency, t.amount, t.final_amount
     FROM ${TX} t
     LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
     WHERE t.user_id = @userId AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
@@ -739,7 +739,7 @@ export const userHoldings = (userId: string): Query => ({
 // statements instead of 30, and ~133 MB scanned per chunk instead of per
 // investor. Same SQL as the single-investor queries, plus user_id.
 export const userTransactionsBatch = (userIds: string[], from: string, to: string): Query => ({
-  sql: `SELECT t.user_id, t.created_at, t.type, t.status, f.name AS fund, t.unit, t.amount, t.final_amount
+  sql: `SELECT t.user_id, t.created_at, t.type, t.status, f.name AS fund, t.unit, t.currency, t.amount, t.final_amount
     FROM ${TX} t
     LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
     WHERE t.user_id IN UNNEST(@userIds) AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
@@ -1159,7 +1159,7 @@ export const userAumHistory = (sid: string): Query => ({
 // activity" line on their Portfolio (PWC) lookup, a live fact rather than a
 // static claim.
 export const userRecentTransactions = (userId: string, limit = 8): Query => ({
-  sql: `SELECT t.type, t.final_amount, t.completed_at, f.name AS fund
+  sql: `SELECT t.type, t.currency, t.final_amount, t.completed_at, f.name AS fund
     FROM ${TX} t
     LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
     WHERE t.user_id = @userId AND t.status = 'completed'
@@ -2522,7 +2522,7 @@ export const behaviorUserTimeline = (userId: string, from?: string, to?: string)
     sql: `WITH app AS (
         SELECT TIMESTAMP_MICROS(event_timestamp) AS ts, 'app' AS source, event_name AS event,
           COALESCE(${ga4Param('product_name')}, ${ga4Param('message_name')}, ${ga4Param('firebase_screen')}) AS detail,
-          CAST(NULL AS INT64) AS amount, CAST(NULL AS STRING) AS status,
+          CAST(NULL AS STRING) AS currency, CAST(NULL AS INT64) AS amount, CAST(NULL AS STRING) AS status,
           ${ga4Param('ga_session_id', 'int')} AS session_id, platform
         FROM ${GA4_EVENTS}
         WHERE _TABLE_SUFFIX BETWEEN @fromSuffix AND @toSuffix AND user_id = @userId
@@ -2530,12 +2530,12 @@ export const behaviorUserTimeline = (userId: string, from?: string, to?: string)
       ),
       tx AS (
         SELECT t.created_at AS ts, 'transaction' AS source, t.type AS event, f.name AS detail,
-          t.final_amount AS amount, t.status, CAST(NULL AS INT64) AS session_id, CAST(NULL AS STRING) AS platform
+          t.currency, t.final_amount AS amount, t.status, CAST(NULL AS INT64) AS session_id, CAST(NULL AS STRING) AS platform
         FROM ${TX} t
         LEFT JOIN ${FUNDS} f ON f.id = t.fund_id
         WHERE t.user_id = @userId AND DATE(t.created_at, 'Asia/Jakarta') BETWEEN @from AND @to
       )
-      SELECT FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', ts, 'Asia/Jakarta') AS time_wib, source, event, detail, amount, status, session_id, platform
+      SELECT FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', ts, 'Asia/Jakarta') AS time_wib, source, event, detail, currency, amount, status, session_id, platform
       FROM (SELECT * FROM app UNION ALL SELECT * FROM tx)
       ORDER BY ts DESC
       LIMIT 1000`,
@@ -3823,7 +3823,7 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string, in
   return {
   sql: `WITH first_tx AS (
       SELECT user_id,
-        ARRAY_AGG(STRUCT(id AS tx_id, fund_id, amount, created_at) ORDER BY created_at ASC, id ASC LIMIT 1)[OFFSET(0)] AS first_buy
+        ARRAY_AGG(STRUCT(id AS tx_id, fund_id, currency, amount, created_at) ORDER BY created_at ASC, id ASC LIMIT 1)[OFFSET(0)] AS first_buy
       FROM ${TX}
       WHERE type = 'buy' AND status NOT IN ('expired', 'cancelled')
       GROUP BY user_id
@@ -3836,6 +3836,7 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string, in
         ft.first_buy.tx_id AS tx_id,
         ft.first_buy.fund_id AS fund_id,
         f.name AS fund_name,
+        ft.first_buy.currency AS currency,
         ft.first_buy.amount AS amount,
         DATE(ft.first_buy.created_at) AS tx_date
       FROM first_tx ft
@@ -3848,7 +3849,7 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string, in
     ${RESOLVED_INVITER_CTE},
     pairs AS (
       SELECT
-        q.tx_id, q.fund_id, q.fund_name, q.amount, q.tx_date,
+        q.tx_id, q.fund_id, q.fund_name, q.currency, q.amount, q.tx_date,
         inviter.sid_code AS inviter_sid, inviter.ifua_code AS inviter_ifua,
         inviter.email AS inviter_email, inviter.verification_status AS inviter_verification,
         inviter_up.name AS inviter_name, inviter_up.phone_number AS inviter_phone,
@@ -3885,7 +3886,7 @@ export const referralProgramDetail = (periodFrom?: string, periodTo?: string, in
     SELECT
       p.inviter_sid, p.inviter_ifua, p.inviter_email, p.inviter_phone, p.inviter_name, p.inviter_verification,
       p.invitee_sid, p.invitee_ifua, p.invitee_email, p.invitee_phone, p.invitee_name, p.invitee_verification,
-      p.fund_name, p.amount, p.tx_date,
+      p.fund_name, p.currency, p.amount, p.tx_date,
       DATE_DIFF(CURRENT_DATE(), p.tx_date, DAY) AS days_held,
       h.baseline_unit, h.min_unit_in_window
     FROM pairs p
@@ -4710,7 +4711,7 @@ export interface RemisierTransactionsArgs {
   sort?: string; dir?: string;
 }
 const REMISIER_TX_SORT = ['created_at', 'transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone',
-  'fund_name', 'fund_type', 'unit', 'value_per_unit', 'amount', 'final_amount', 'realized_gain_loss', 'referrer_code', 'sales_code'];
+  'fund_name', 'fund_type', 'unit', 'value_per_unit', 'currency', 'amount', 'final_amount', 'realized_gain_loss', 'referrer_code', 'sales_code'];
 
 // Code list -> uppercase LIKE patterns, shared by Remisier transactions and
 // Event code tracking. A code without `*` keeps the partial match those tabs
@@ -4749,7 +4750,7 @@ export function remisierTransactions(
   return {
     sql: `SELECT
         t.id, t.transaction_number, t.type, t.status,
-        t.unit, t.amount, t.final_amount, t.value_per_unit, t.realized_gain_loss,
+        t.unit, t.currency, t.amount, t.final_amount, t.value_per_unit, t.realized_gain_loss,
         t.payment_method, t.payment_gateway, t.created_at, t.completed_at,
         u.sid_code AS sid, u.email, up.name, up.phone_number AS phone,
         u.referrer_code, u.sales_code,
@@ -4780,7 +4781,7 @@ export interface UsersTransactionsArgs {
 }
 
 const USERS_TX_SORT = ['created_at', 'transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone',
-  'fund_name', 'promo_code', 'unit', 'value_per_unit', 'amount', 'final_amount'];
+  'fund_name', 'promo_code', 'unit', 'value_per_unit', 'currency', 'amount', 'final_amount'];
 // The investor, fund and promo predicates the users-transactions list and its
 // summary panel share: partial SID/email/name, one fund id, or comma-separated
 // wildcard fund names and promo codes (codePatterns: no * = contains, * pins
@@ -4818,7 +4819,7 @@ export function usersTransactions(
   return {
     sql: `SELECT
         t.id, t.transaction_number, t.type, t.status, t.created_at,
-        t.unit, t.amount, t.final_amount, t.value_per_unit, t.promo_code,
+        t.unit, t.currency, t.amount, t.final_amount, t.value_per_unit, t.promo_code,
         u.sid_code AS sid, u.email, up.name, up.phone_number AS phone,
         f.name AS fund_name
       FROM ${TX} t
@@ -5063,7 +5064,7 @@ export const promoRecapData = (from: string, to: string, codes: string[]) => {
           ${PROMO_CAMPAIGN_COLS},
           t.user_id, up.name, u.email, up.phone_number AS phone, u.sid_code AS sid, u.ifua_code AS ifua,
           f.name AS fund, COALESCE(im.common_name, im.name) AS manager, t.type, t.status, t.payment_method,
-          CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount, CAST(t.unit AS FLOAT64) AS unit,
+          t.currency, CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount, CAST(t.unit AS FLOAT64) AS unit,
           n.bonus
         FROM tx t
         JOIN ${USERS} u ON u.id = t.user_id
@@ -5276,7 +5277,7 @@ export const boothEventTransactions = (opts: { codes: string[]; promoCodes?: str
     sql: `WITH ${boothPeopleCte(true)},
       ev_tx AS (
         SELECT t.id AS tx_id, t.user_id, p.code, p.via, t.type, t.status, t.payment_method, t.fund_id, UPPER(t.promo_code) AS promo, t.investment_plan_id AS plan_id,
-          CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount,
+          t.currency, CAST(COALESCE(NULLIF(t.final_amount, 0), t.amount) AS FLOAT64) AS amount,
           t.created_at, DATE(COALESCE(t.completed_at, t.created_at), 'Asia/Jakarta') AS done_day
         FROM ${TX} t
         JOIN people p ON p.user_id = t.user_id
@@ -5319,7 +5320,7 @@ export const boothEventTransactions = (opts: { codes: string[]; promoCodes?: str
         LEFT JOIN snaps s ON s.sid_code = bs.sid_code AND s.fund_id = bs.fund_id AND s.snap_date = day
         GROUP BY bs.tx_id
       )
-      SELECT e.tx_id, e.user_id, e.code, e.via, e.promo, e.plan_id, e.type, e.status, e.payment_method, e.amount, f.name AS fund,
+      SELECT e.tx_id, e.user_id, e.code, e.via, e.promo, e.plan_id, e.type, e.status, e.payment_method, e.currency, e.amount, f.name AS fund,
         FORMAT_DATE('%F', DATE(DATETIME_ADD(u.created_at, INTERVAL 7 HOUR))) AS registered_on,
         FORMAT_TIMESTAMP('%F %H:%M', e.created_at, 'Asia/Jakarta') AS created_wib,
         FORMAT_DATE('%F', e.done_day) AS done_day,

@@ -527,7 +527,7 @@ async function loadPortfolioUser() {
     renderSeriesTrendFinding('#pfGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#pfRecentTx', recentTx, [
       { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
-      { key: 'fund', label: t('col_fund') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
+      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
     ], 'No transactions yet.');
   } catch (e) { $('#pfKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -700,7 +700,7 @@ async function loadPfxUser() {
     renderSeriesTrendFinding('#pfxGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#pfxRecentTx', recentTx, [
       { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
-      { key: 'fund', label: t('col_fund') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
+      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
     ], 'No transactions yet.');
   } catch (e) { $('#pfxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -823,7 +823,7 @@ async function loadPtxUser() {
     renderSeriesTrendFinding('#ptxGrowthFinding', history, 'amount', 'Portfolio value');
     genTable('#ptxRecentTx', recentTx, [
       { key: 'completed_at', label: t('col_date'), type: 'date' }, { key: 'type', label: t('col_type') },
-      { key: 'fund', label: t('col_fund') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
+      { key: 'fund', label: t('col_fund') }, { key: 'currency', label: t('col_currency') }, { key: 'final_amount', label: t('col_amount'), type: 'idr' },
     ], 'No transactions yet.');
   } catch (e) { $('#ptxKpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; }
 }
@@ -1837,7 +1837,7 @@ function renderBehaviorUser({ profile: p, timeline }) {
     kpi(t('bh_user_activity'), `${num(val(p.active_days) || 0)} ${t('bh_user_days')}`, `${num(val(p.sessions) || 0)} ${t('bh_user_sessions')} · ${t('bh_user_last_seen')} ${v('last_seen_wib') || 'n/a'}`, '', ICONS.activity),
     kpi(t('bh_user_device'), v('platform') || 'n/a', [v('device'), v('app_version') && `v${v('app_version')}`].filter(Boolean).join(' · ') || t('bh_user_no_app'), '', ICONS.monitor),
   ].join('');
-  const rows = escRows(timeline, ['event', 'detail', 'status', 'platform']).map((r) => ({
+  const rows = escRows(timeline, ['event', 'detail', 'currency', 'status', 'platform']).map((r) => ({
     ...r,
     source: r.source === 'transaction' ? `<span class="tag buy">${t('bh_src_transaction')}</span>` : `<span class="tag other">${t('bh_src_app')}</span>`,
   }));
@@ -1846,6 +1846,7 @@ function renderBehaviorUser({ profile: p, timeline }) {
     { key: 'source', label: t('bh_col_source') },
     { key: 'event', label: t('bh_col_event') },
     { key: 'detail', label: t('bh_col_detail') },
+    { key: 'currency', label: t('col_currency') },
     { key: 'amount', label: t('bh_col_amount'), type: 'idr' },
     { key: 'status', label: t('bh_col_tx_status') },
     { key: 'session_id', label: t('bh_col_session') },
@@ -5089,7 +5090,8 @@ function renderReferralProgram(rows, stats, invited, sel = { kpis: '#refProgKpis
     { key: 'invitee_sid', label: t('col_invitee_sid') }, { key: 'invitee_name', label: t('col_invitee_name') },
     { key: 'invitee_ifua', label: t('col_invitee_ifua') }, { key: 'invitee_email', label: t('col_invitee_email') },
     { key: 'invitee_phone', label: t('col_invitee_phone') },
-    { key: 'fund_name', label: t('col_fund') }, { key: 'amount', label: t('col_amount'), type: 'idr' },
+    { key: 'fund_name', label: t('col_fund') },
+    { key: 'currency', label: t('col_currency') }, { key: 'amount', label: t('col_amount'), type: 'idr' },
     { key: 'tx_date', label: t('col_transaction_date'), type: 'date' }, { key: 'days_held', label: t('col_days_held'), type: 'num' },
     { key: 'baseline_unit', label: t('col_baseline_units'), type: 'num' }, { key: 'min_unit_in_window', label: t('col_min_units_seen'), type: 'num' },
     { key: 'status', label: 'Status' }, { key: 'reason', label: t('col_reason') },
@@ -5335,6 +5337,7 @@ async function loadRemTx() {
       { key: 'fund_name', label: t('col_fund'), sort: true }, { key: 'fund_type', label: t('col_fund_type'), sort: true },
       { key: 'unit', label: 'Unit', type: 'num', sort: true },
       { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
+      { key: 'currency', label: t('col_currency'), sort: true },
       { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
       { key: 'realized_gain_loss', label: t('col_realized_g_l'), type: 'idr', sort: true },
       { key: 'referrer_code', label: t('col_referrer_code'), sort: true }, { key: 'sales_code', label: t('col_sales_code'), sort: true },
@@ -5447,6 +5450,7 @@ async function loadUtx() {
       { key: 'fund_name', label: t('col_fund'), sort: true }, { key: 'promo_code', label: 'Promo', sort: true },
       { key: 'unit', label: 'Unit', type: 'num', sort: true },
       { key: 'value_per_unit', label: 'NAV', type: 'num', sort: true },
+      { key: 'currency', label: t('col_currency'), sort: true },
       { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
     ], 'No transactions match these filters.', utx.sort);
     const start = total ? utx.offset + 1 : 0;
@@ -6122,6 +6126,7 @@ const EVC_TX_COLS = [
   { key: 'sid', label: 'SID', sort: true }, { key: 'name', label: t('col_name'), sort: true }, { key: 'email', label: 'Email', sort: true }, { key: 'phone', label: t('col_phone'), sort: true },
   { key: 'fund_name', label: t('col_fund'), sort: true }, { key: 'fund_type', label: t('col_fund_type'), sort: true },
   { key: 'unit', label: 'Unit', type: 'num', sort: true },
+  { key: 'currency', label: t('col_currency'), sort: true },
   { key: 'amount', label: t('col_amount'), type: 'idr', sort: true }, { key: 'final_amount', label: t('col_final_amount'), type: 'idr', sort: true },
   { key: 'referrer_code', label: t('col_referrer_code'), sort: true }, { key: 'sales_code', label: t('col_sales_code'), sort: true },
 ];
@@ -7945,12 +7950,13 @@ function renderPromoRecap() {
   genTable('#prTransactions', transactions.map((r) => ({
     day: r.day, promo: bEsc(r.promo), campaign: bEsc(r.campaign || ''), name: bEsc(r.name || 'n/a'), email: bEsc(r.email), phone: bEsc(r.phone || ''),
     sid: bEsc(r.sid || ''), ifua: bEsc(r.ifua || ''), fund: bEsc(r.fund || ''), manager: bEsc(r.manager || ''),
-    amount: r.amount, unit: r.unit == null ? null : Math.round(Number(r.unit) * 10000) / 10000, status: bEsc(r.status), payment: bEsc(r.payment_method || ''),
+    currency: bEsc(r.currency || ''), amount: r.amount, unit: r.unit == null ? null : Math.round(Number(r.unit) * 10000) / 10000, status: bEsc(r.status), payment: bEsc(r.payment_method || ''),
     bonus: r.status !== 'completed' ? '' : prStatus(r.bonus ? r.bonus.status : 'none'), holding: r.bonus ? r.bonus.holding_until : null,
   })), [
     { key: 'day', label: bL('Day (WIB)', 'Tanggal (WIB)'), type: 'date' }, { key: 'promo', label: 'Promo' }, { key: 'campaign', label: t('col_campaign') },
     { key: 'name', label: bL('Customer', 'Nasabah') }, { key: 'email', label: 'Email' }, { key: 'phone', label: bL('Phone', 'HP') },
     { key: 'sid', label: 'SID' }, { key: 'ifua', label: 'IFUA' }, { key: 'fund', label: bL('Product', 'Produk') }, { key: 'manager', label: 'MI' },
+    { key: 'currency', label: bL('Currency', 'Mata uang') },
     { key: 'amount', label: bL('Amount', 'Nominal'), type: 'idr', sum: true }, { key: 'unit', label: 'Unit', type: 'num' },
     { key: 'status', label: bL('Transaction', 'Transaksi') }, { key: 'payment', label: bL('Payment', 'Pembayaran') },
     { key: 'bonus', label: bL('Bonus status', 'Status bonus') }, { key: 'holding', label: bL('Holding until', 'Holding sampai'), type: 'date' },
@@ -8336,7 +8342,7 @@ function renderBoothTx() {
     when: r.created_wib, kind: { new: bL('New', 'Baru'), existing: 'Existing', other: bL('Other', 'Lainnya') }[r.kind], registered: r.registered_on || '',
     promo: bEsc(r.promo || ''), plan_id: bEsc(r.plan_id || ''), name: bEsc(r.name || 'n/a'), email: bEsc(r.email), phone: bEsc(r.phone || ''), sid: bEsc(r.sid || ''), ifua: bEsc(r.ifua || ''),
     booth: bEsc(r.booth || ''), person: bEsc(bWho(cfg, r.person)), referrer: bEsc(r.referrer_code || ''), sales: bEsc(r.sales_code || ''),
-    type: bEsc(r.type), status: bEsc(r.status), payment: bEsc(r.payment_method || ''), fund: bEsc(r.fund || ''), amount: r.amount,
+    type: bEsc(r.type), status: bEsc(r.status), payment: bEsc(r.payment_method || ''), fund: bEsc(r.fund || ''), currency: bEsc(r.currency || ''), amount: r.amount,
     hold_days: r.type === 'buy' && r.status === 'completed' && r.hold_days != null ? Number(r.hold_days) : null, hold: bEsc(holdText(r)),
   })), [
     { key: 'when', label: bL('Date (WIB)', 'Tanggal (WIB)'), text: true }, { key: 'kind', label: bL('Customer type', 'Tipe nasabah') },
@@ -8345,6 +8351,7 @@ function renderBoothTx() {
     { key: 'booth', label: 'Booth' }, { key: 'person', label: 'Sales' }, { key: 'referrer', label: bL('Referrer code', 'Kode referrer') }, { key: 'sales', label: bL('Sales code', 'Kode sales') },
     { key: 'registered', label: bL('Registered', 'Daftar'), text: true }, { key: 'promo', label: bL('Promo code', 'Kode promo') },
     { key: 'plan_id', label: 'investment_plan_id', text: true }, { key: 'type', label: bL('Type', 'Tipe') }, { key: 'status', label: 'Status' }, { key: 'payment', label: bL('Payment', 'Pembayaran') }, { key: 'fund', label: bL('Fund', 'Produk') },
+    { key: 'currency', label: bL('Currency', 'Mata uang') },
     { key: 'amount', label: bL('Amount (Rp)', 'Nominal (Rp)'), type: 'num' },
     { key: 'hold_days', label: bL('Hold days', 'Hari holding'), type: 'num' }, { key: 'hold', label: bL('Holding', 'Status holding') },
   ], bL('No transaction matches.', 'Tidak ada transaksi yang cocok.'));

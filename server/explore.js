@@ -26,7 +26,7 @@ const DATASETS = {
     select: `
       t.transaction_number, t.created_at, t.user_id, up.name AS investor,
       u.email, up.phone_number AS phone, u.sid_code AS sid, u.ifua_code AS ifua,
-      t.fund_id, t.type, t.status, t.unit, t.final_amount, t.payment_method,
+      t.fund_id, t.type, t.status, t.unit, t.currency, t.final_amount, t.payment_method,
       t.realized_gain_loss`,
     columns: [
       { key: 'transaction_number', label: 'Tx #' },
@@ -41,6 +41,7 @@ const DATASETS = {
       { key: 'type', label: 'Type', type: 'tag' },
       { key: 'status', label: 'Status', type: 'tag' },
       { key: 'unit', label: 'Unit', type: 'num4' },
+      { key: 'currency', label: 'Currency' },
       { key: 'final_amount', label: 'Final amount', type: 'idr' },
       { key: 'payment_method', label: 'Payment' },
       { key: 'realized_gain_loss', label: 'Gain/Loss', type: 'idr' },

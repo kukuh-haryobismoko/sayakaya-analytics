@@ -492,10 +492,11 @@ function wibDate(v: unknown): string {
 
 export const TX_COLS = (width: number): Column[] => [
   { key: 'created_at', label: 'Date', width: width * 0.14, format: (v) => wibDate(val(v)) },
-  { key: 'fund', label: 'Fund', width: width * 0.30 },
+  { key: 'fund', label: 'Fund', width: width * 0.25 },
   { key: 'type', label: 'Type', width: width * 0.16 },
   { key: 'status', label: 'Status', width: width * 0.14 },
   { key: 'unit', label: 'Unit', width: width * 0.12, align: 'right', format: (v) => (val(v) == null ? 'n/a' : idNum(v, 4)) },
+  { key: 'currency', label: 'Currency', width: width * 0.05 },
   { key: 'amount', label: 'Amount', width: width * 0.14, align: 'right', format: idNum },
 ];
 
@@ -537,10 +538,11 @@ export const USERS_TX_COLS = (width: number): Column[] => [
   { key: 'type', label: 'Type', width: width * 0.08 },
   { key: 'status', label: 'Status', width: width * 0.10 },
   { key: 'sid', label: 'SID', width: width * 0.10 },
-  { key: 'name', label: 'Name', width: width * 0.15 },
-  { key: 'email', label: 'Email', width: width * 0.17 },
+  { key: 'name', label: 'Name', width: width * 0.13 },
+  { key: 'email', label: 'Email', width: width * 0.14 },
   { key: 'phone', label: 'Phone', width: width * 0.10 },
   { key: 'fund_name', label: 'Fund', width: width * 0.13 },
+  { key: 'currency', label: 'Cur.', width: width * 0.05 },
   { key: 'amount', label: 'Amount', width: width * 0.09, align: 'right', format: idNum },
 ];
 

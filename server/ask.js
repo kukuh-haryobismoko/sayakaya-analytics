@@ -75,7 +75,7 @@ transactions (one row per order)
   id, transaction_number, user_id, fund_id, product_id
   type     STRING  one of: buy, sell, SWITCH_IN, SWITCH_OUT, reinvestment
   status   STRING  one of: completed, expired, cancelled, verified_by_operational, verified, completed_payment, pending_payment
-  unit FLOAT, amount NUMERIC, final_amount NUMERIC, value_per_unit NUMERIC, realized_gain_loss NUMERIC
+  unit FLOAT, currency STRING (IDR or USD), amount NUMERIC, final_amount NUMERIC, value_per_unit NUMERIC, realized_gain_loss NUMERIC
   payment_method STRING, payment_gateway STRING
   created_at TIMESTAMP, completed_at TIMESTAMP, paid_at TIMESTAMP
 
