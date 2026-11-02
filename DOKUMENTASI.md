@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `9a069c3 (2026-11-02)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `ea7c9ee (2026-11-02)`.
 
 ## Cara membaca dokumen ini
 
@@ -1364,7 +1364,9 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Made a purchase**: Nasabah unik (baru dan existing, termasuk pembelian dengan kode promo SYKYMALL) yang punya pembelian di daftar Transaksi, mengikuti filter booth, sales, dan Status di atas halaman. Default Status: semua kecuali expired, cancelled, dan pending payment. Keterangan di bawah angka: berapa nasabah baru (dan berapa di antaranya sudah settle, angka yang sama dengan transaksi pertama di rekap) dan berapa existing.
     - **Transactions / Transaksi**: Jumlah baris di daftar Transaksi (beli dan jual) menurut filter Status di atas halaman, dengan pembagian baris user baru dan user existing serta jumlah nasabah unik.
     - **Funded**: Nasabah baru yang dana bersihnya (beli dikurangi jual, hanya yang completed) pernah mencapai minimum funded sales (Rp 1 jt). Rekap, insentif, dan bonus nasabah juga hanya menghitung transaksi completed, jadi bisa lebih kecil dari kartu Transaksi sampai pembayaran settle.
-    - **Net money in**: Total beli dikurangi jual dari daftar Transaksi (nasabah baru dan existing) menurut filter Status; bonus unit dari admin tidak dihitung. Keterangan: bagian nasabah baru dan bagian existing.
+    - **Bought / Membeli**: Total rupiah pembelian di daftar Transaksi (nasabah baru dan existing) menurut filter Status; bonus unit dari admin tidak dihitung. Keterangan: jumlah transaksi beli, nasabah unik, lalu bagian nasabah baru dan existing (Rp dan jumlah transaksi).
+    - **Sold / Menjual**: Total rupiah penjualan dengan aturan yang sama seperti Bought.
+    - **Net money in**: Bought dikurangi Sold, menurut filter Status. Keterangan: bagian nasabah baru dan bagian existing.
     - **Avg days holding**: Rata-rata hari dari beli pertama sampai hari ini, atau sampai jual terakhir bagi yang sudah jual semua.
   - *Recap, per, booth* (Rekap, per, booth): Satu baris per booth untuk rentang tanggal sendiri (bawaan: seluruh event), plus baris semua booth. Mengikuti filter booth dan sales di halaman; tanggalnya sendiri menggantikan filter periode. Daftar = daftar di rentang; KYC = dari yang daftar di rentang, berapa yang sudah verified (tidak mungkin lebih besar dari Daftar), dengan persentasenya. Transaksi pertama = beli completed pertama di rentang; Capai minimum = dana bersih pertama kali mencapai minimum funded di rentang; Beli dan Jual = transaksi completed di rentang. Pembelian yang belum settle tidak masuk kolom nominal, jumlah dan nominalnya disebut di bawah tabel. Kalau tanggal akhir = hari terakhir event, verifikasi dan pembelian sesudah event ikut dihitung supaya totalnya sama dengan kartu KPI.
   - *Recap, per, booth, per, day* (Rekap, per, booth, per, hari): Satu blok per hari (terbaru dulu) berisi semua booth dan baris gabungan, ditambah blok Total kalau tanggal awal dan akhir berbeda. Tanggalnya terpisah dari tabel lain (bawaan hari ini) dan mengikuti filter booth dan sales. Aturan hitungnya sama dengan rekap di atas.
