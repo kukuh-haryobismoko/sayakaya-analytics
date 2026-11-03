@@ -5314,6 +5314,9 @@ function remTxParams() {
     status: $('#remTxStatus').value,
     from: $('#remTxFrom').value,
     to: $('#remTxTo').value,
+    amountMin: $('#remTxAmountMin').value,
+    amountMax: $('#remTxAmountMax').value,
+    currency: $('#remTxCurrency').value,
     ...sortParams(remTx.sort),
   };
 }
@@ -5336,6 +5339,7 @@ async function loadRemTx() {
   if (p.type) qs.set('type', p.type);
   if (p.status) qs.set('status', p.status);
   qs.set('from', p.from); qs.set('to', p.to);
+  for (const k of ['amountMin', 'amountMax', 'currency']) if (p[k]) qs.set(k, p[k]);
   if (p.sort) { qs.set('sort', p.sort); qs.set('dir', p.dir); }
   qs.set('limit', remTx.limit); qs.set('offset', remTx.offset);
   try {
@@ -5373,6 +5377,8 @@ function sitxParams() {
     type: $('#sitxType').value,
     from: $('#sitxFrom').value,
     to: $('#sitxTo').value,
+    amountMin: $('#sitxAmountMin').value,
+    amountMax: $('#sitxAmountMax').value,
     ...sortParams(sitx.sort),
   };
 }
@@ -5386,6 +5392,7 @@ async function loadSitx() {
   if (p.type) qs.set('type', p.type);
   if (p.from) qs.set('from', p.from);
   if (p.to) qs.set('to', p.to);
+  for (const k of ['amountMin', 'amountMax']) if (p[k]) qs.set(k, p[k]);
   if (p.sort) { qs.set('sort', p.sort); qs.set('dir', p.dir); }
   qs.set('limit', sitx.limit); qs.set('offset', sitx.offset);
   const sitxFetch = api(`/api/sinvest-transactions?${qs}`);
@@ -5434,6 +5441,9 @@ function utxParams() {
     fundId: $('#utxFund').value,
     from: $('#utxFrom').value,
     to: $('#utxTo').value,
+    amountMin: $('#utxAmountMin').value,
+    amountMax: $('#utxAmountMax').value,
+    currency: $('#utxCurrency').value,
     ...sortParams(utx.sort),
   };
 }
@@ -5448,6 +5458,7 @@ async function loadUtx() {
   if (p.fundId) qs.set('fundId', p.fundId);
   if (p.from) qs.set('from', p.from);
   if (p.to) qs.set('to', p.to);
+  for (const k of ['amountMin', 'amountMax', 'currency']) if (p[k]) qs.set(k, p[k]);
   if (p.sort) { qs.set('sort', p.sort); qs.set('dir', p.dir); }
   qs.set('limit', utx.limit); qs.set('offset', utx.offset);
   try {
@@ -5504,7 +5515,7 @@ async function loadUtxSummary() {
     return;
   }
   const qs = new URLSearchParams();
-  for (const k of ['q', 'fundName', 'promo', 'fundId', 'from', 'to']) if (p[k]) qs.set(k, p[k]);
+  for (const k of ['q', 'fundName', 'promo', 'fundId', 'from', 'to', 'amountMin', 'amountMax', 'currency']) if (p[k]) qs.set(k, p[k]);
   qs.set('granularity', utxSum.granularity);
   $('#utxSumKpis').innerHTML = '';
   $('#utxSumTable').innerHTML = '<div class="loading">Loading…</div>';
@@ -6120,6 +6131,9 @@ function evcTxParams() {
     status: $('#evcTxStatus').value,
     from: $('#evcTxFrom').value,
     to: $('#evcTxTo').value,
+    amountMin: $('#evcTxAmountMin').value,
+    amountMax: $('#evcTxAmountMax').value,
+    currency: $('#evcTxCurrency').value,
     ...sortParams(evcTx.sort),
   };
 }
@@ -6127,7 +6141,7 @@ function evcTxQs(limit, offset) {
   const p = evcTxParams();
   const qs = new URLSearchParams({ field: p.field });
   p.codes.forEach((c) => qs.append('codes', c));
-  ['type', 'status', 'from', 'to', 'sort', 'dir'].forEach((k) => { if (p[k]) qs.set(k, p[k]); });
+  ['type', 'status', 'from', 'to', 'sort', 'dir', 'amountMin', 'amountMax', 'currency'].forEach((k) => { if (p[k]) qs.set(k, p[k]); });
   qs.set('limit', limit); qs.set('offset', offset);
   return qs;
 }

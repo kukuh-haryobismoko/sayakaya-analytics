@@ -1139,6 +1139,9 @@ The exact number of people shows below once you pick a group, and again before y
           <select id="utxFund" style="max-width:180px"><option value="" data-i18n="ov_all_funds">All funds</option></select>
           <label><span data-i18n="range_from">From</span> <input type="date" id="utxFrom" /></label>
           <label><span data-i18n="range_to">To</span> <input type="date" id="utxTo" /></label>
+          <input type="number" id="utxAmountMin" min="0" placeholder="Min amount" aria-label="Min amount" style="max-width:110px" />
+          <input type="number" id="utxAmountMax" min="0" placeholder="Max amount" aria-label="Max amount" style="max-width:110px" />
+          <select id="utxCurrency" aria-label="Currency"><option value="">All currencies</option><option value="IDR">IDR</option><option value="USD">USD</option></select>
           <button id="utxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
         <span class="hint" data-i18n="utx_hint">Search by SID code, email, or name, by fund name, or by promo code: fill at least one. Fund name and promo code match anywhere in the text; use * to pin the position (sucor* = starts with Sucor, *fund = ends with Fund) and commas for several terms (THR*, SYKYPRIO). Type, status, fund, and the date range (on transaction date) narrow the result.</span>
@@ -2024,6 +2027,8 @@ The exact number of people shows below once you pick a group, and again before y
           </select>
           <label><span data-i18n="range_from">From</span> <input type="date" id="sitxFrom" /></label>
           <label><span data-i18n="range_to">To</span> <input type="date" id="sitxTo" /></label>
+          <input type="number" id="sitxAmountMin" min="0" placeholder="Min amount" aria-label="Min amount" style="max-width:110px" />
+          <input type="number" id="sitxAmountMax" min="0" placeholder="Max amount" aria-label="Max amount" style="max-width:110px" />
           <button id="sitxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
         <span class="hint" data-i18n="sitx_hint">Raw KSEI/SInvest custodian feed (sinvest.trx_history), filtered by Transaction_Date. The source table stores every column as a string, including Transaction_Date/Input_Date (YYYYMMDD), both are reformatted to YYYY-MM-DD here.</span>
@@ -2520,6 +2525,9 @@ The exact number of people shows below once you pick a group, and again before y
           </select>
           <label><span data-i18n="range_from">From</span> <input type="date" id="evcTxFrom" /></label>
           <label><span data-i18n="range_to">To</span> <input type="date" id="evcTxTo" /></label>
+          <input type="number" id="evcTxAmountMin" min="0" placeholder="Min amount" aria-label="Min amount" style="max-width:110px" />
+          <input type="number" id="evcTxAmountMax" min="0" placeholder="Max amount" aria-label="Max amount" style="max-width:110px" />
+          <select id="evcTxCurrency" aria-label="Currency"><option value="">All currencies</option><option value="IDR">IDR</option><option value="USD">USD</option></select>
           <button id="evcTxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
         <span class="hint" data-i18n="evc_tx_hint">Uses the same field and code(s) above with its own date range, on transaction date rather than registration date.</span>
@@ -2688,6 +2696,9 @@ The exact number of people shows below once you pick a group, and again before y
           <select id="remTxStatus"><option value="" data-i18n="common_all_statuses">All statuses</option></select>
           <label><span data-i18n="range_from">From</span> <input type="date" id="remTxFrom" /></label>
           <label><span data-i18n="range_to">To</span> <input type="date" id="remTxTo" /></label>
+          <input type="number" id="remTxAmountMin" min="0" placeholder="Min amount" aria-label="Min amount" style="max-width:110px" />
+          <input type="number" id="remTxAmountMax" min="0" placeholder="Max amount" aria-label="Max amount" style="max-width:110px" />
+          <select id="remTxCurrency" aria-label="Currency"><option value="">All currencies</option><option value="IDR">IDR</option><option value="USD">USD</option></select>
           <button id="remTxRun" class="btn-primary" data-i18n="common_run">Run</button>
         </div>
         <span class="hint" data-i18n="remtx_filters_hint">Filtered by transaction date. Each code is a case-insensitive partial match (e.g. CE matches CELIA/CENIA), fill one field for a single filter, or both to match either, and either field accepts multiple comma-separated codes.</span>

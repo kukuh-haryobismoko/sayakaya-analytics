@@ -640,6 +640,7 @@ on('GET', '/api/sinvest-transactions', requireTab('sinvest-tx', async (_req, _pa
     type: qp(url, 'type'), sid: qp(url, 'sid'), search: qp(url, 'search'),
     limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
     sort: qp(url, 'sort'), dir: qp(url, 'dir'),
+    amountMin: qp(url, 'amountMin'), amountMax: qp(url, 'amountMax'),
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -658,6 +659,7 @@ on('GET', '/api/users-transactions', requireTab('users-tx', async (_req, _params
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 50, offset: qp(url, 'offset') || 0,
     sort: qp(url, 'sort'), dir: qp(url, 'dir'),
+    amountMin: qp(url, 'amountMin'), amountMax: qp(url, 'amountMax'), currency: qp(url, 'currency'),
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -673,6 +675,7 @@ on('GET', '/api/users-transactions/summary', requireTab('users-tx', async (_req,
   const q = Q.usersTransactionsSummary({
     q: qp(url, 'q'), fundId: qp(url, 'fundId'), fundName: qp(url, 'fundName'), promo: qp(url, 'promo'),
     from: qp(url, 'from'), to: qp(url, 'to'), granularity: qp(url, 'granularity'),
+    amountMin: qp(url, 'amountMin'), amountMax: qp(url, 'amountMax'), currency: qp(url, 'currency'),
   });
   return json({ rows: await runQuery(q.sql, q.params) });
 }));
@@ -818,6 +821,7 @@ on('GET', '/api/event-code/transactions', requireTab('event-code', async (_req, 
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 100, offset: qp(url, 'offset') || 0,
     sort: qp(url, 'sort'), dir: qp(url, 'dir'),
+    amountMin: qp(url, 'amountMin'), amountMax: qp(url, 'amountMax'), currency: qp(url, 'currency'),
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -1358,6 +1362,7 @@ on('GET', '/api/remisier/transactions', requireTab('remisier-tx', async (_req, _
     from: qp(url, 'from'), to: qp(url, 'to'),
     limit: qp(url, 'limit') || 100, offset: qp(url, 'offset') || 0,
     sort: qp(url, 'sort'), dir: qp(url, 'dir'),
+    amountMin: qp(url, 'amountMin'), amountMax: qp(url, 'amountMax'), currency: qp(url, 'currency'),
   });
   const [rows, countRows] = await Promise.all([
     runQuery(q.sql, q.params),
@@ -1852,16 +1857,16 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const referrerCodes = (body.referrerCodes as string[]) || [];
     const salesCodes = (body.salesCodes as string[]) || [];
     if (!referrerCodes.length && !salesCodes.length) return json({ error: 'At least one referrer_code or sales_code is required.' }, 400);
-    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string, amountMin: body.amountMin as string, amountMax: body.amountMax as string, currency: body.currency as string });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'sinvest_transactions') {
-    const q = Q.sinvestTransactions({ from: body.from as string, to: body.to as string, type: body.type as string, sid: body.sid as string, search: body.search as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
+    const q = Q.sinvestTransactions({ from: body.from as string, to: body.to as string, type: body.type as string, sid: body.sid as string, search: body.search as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string, amountMin: body.amountMin as string, amountMax: body.amountMax as string });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'users_transactions') {
     const searchQ = body.q as string;
     const fundName = body.fundName as string;
     const promo = body.promo as string;
-    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, fundName, promo, from: body.from as string, to: body.to as string, limit: limit || (format === 'pdf' ? PDF_MAX_ROWS + 1 : 100000), offset: 0, sort: body.sort as string, dir: body.dir as string });
+    const q = Q.usersTransactions({ q: searchQ, type: body.type as string, status: body.status as string, fundId: body.fundId as string, fundName, promo, from: body.from as string, to: body.to as string, limit: limit || (format === 'pdf' ? PDF_MAX_ROWS + 1 : 100000), offset: 0, sort: body.sort as string, dir: body.dir as string, amountMin: body.amountMin as string, amountMax: body.amountMax as string, currency: body.currency as string });
     rows = await runQuery(q.sql, q.params);
     if (format === 'pdf') {
       if (rows.length > PDF_MAX_ROWS) return json({ error: `Too many rows for a PDF (over ${PDF_MAX_ROWS}). Narrow the filters or date range, or use CSV/Excel.` }, 400);
@@ -1881,7 +1886,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const field = body.field as string;
     const referrerCodes = field === 'referrer_code' ? codes : [];
     const salesCodes = field === 'referrer_code' ? [] : codes;
-    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string });
+    const q = Q.remisierTransactions({ referrerCodes, salesCodes, type: body.type as string, status: body.status as string, from: body.from as string, to: body.to as string, limit: limit || 100000, offset: 0, sort: body.sort as string, dir: body.dir as string, amountMin: body.amountMin as string, amountMax: body.amountMax as string, currency: body.currency as string });
     rows = await runQuery(q.sql, q.params);
   } else if (source === 'hnwi_total') {
     if (!body.date) return json({ error: 'date is required.' }, 400);

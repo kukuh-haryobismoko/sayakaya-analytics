@@ -4081,10 +4081,24 @@ const sinvestTxColumns = `
 
 const SINVEST_TX_SORT = ['transaction_date', 'type', 'sid', 'investor_name', 'fund_code', 'fund_name', 'unit',
   'nav_per_unit', 'gross_amount', 'fee', 'net_amount', 'input_date', 'reference_no'];
-function sinvestTransactions({ from, to, type, sid, search, limit = 50, offset = 0, sort, dir }) {
+function sinvestTransactions({ from, to, type, sid, search, limit = 50, offset = 0, sort, dir, amountMin, amountMax }) {
   const r = range(from, to);
   const params = { fromYmd: r.from.replace(/-/g, ''), toYmd: r.to.replace(/-/g, ''), limit: parseInt(limit, 10), offset: parseInt(offset, 10) };
   let where = 'Transaction_Date BETWEEN @fromYmd AND @toYmd';
+  if (amountMin != null && amountMin !== '') {
+    const n = Number(amountMin);
+    if (!Number.isNaN(n)) {
+      where += ' AND SAFE_CAST(Gross_Transaction_Amount AS NUMERIC) >= @amountMin';
+      params.amountMin = n;
+    }
+  }
+  if (amountMax != null && amountMax !== '') {
+    const n = Number(amountMax);
+    if (!Number.isNaN(n)) {
+      where += ' AND SAFE_CAST(Gross_Transaction_Amount AS NUMERIC) <= @amountMax';
+      params.amountMax = n;
+    }
+  }
   if (type) { where += ` AND ${RECON_TYPE_CASE} = @type`; params.type = type; }
   if (sid) { where += ' AND SID = @sid'; params.sid = sid; }
   if (search) {
@@ -5263,13 +5277,37 @@ const codePatterns = (codes) => (Array.isArray(codes) ? codes : [codes])
     return p.includes('*') ? p.replace(/\*/g, '%') : `%${p}%`;
   });
 
+// Shared amount/currency filter for transaction queries
+function addAmountCurrencyFilter(params, { amountMin, amountMax, currency } = {}) {
+  const where = [];
+  if (amountMin != null && amountMin !== '') {
+    const n = Number(amountMin);
+    if (!Number.isNaN(n)) {
+      where.push('t.amount >= @amountMin');
+      params.amountMin = n;
+    }
+  }
+  if (amountMax != null && amountMax !== '') {
+    const n = Number(amountMax);
+    if (!Number.isNaN(n)) {
+      where.push('t.amount <= @amountMax');
+      params.amountMax = n;
+    }
+  }
+  if (currency && currency !== 'all') {
+    where.push('UPPER(t.currency) = @currency');
+    params.currency = currency.toUpperCase();
+  }
+  return where.join(' AND ');
+}
+
 // Remisier transactions: per-transaction detail for one or more
 // referrer_code/sales_code values, with the buyer's contact info and fund
 // name attached — a due-diligence/audit list next to the revenue rollups
 // above, filtered by transaction date rather than snapshot date.
 const REMISIER_TX_SORT = ['created_at', 'transaction_number', 'type', 'status', 'sid', 'name', 'email', 'phone',
   'fund_name', 'fund_type', 'unit', 'value_per_unit', 'currency', 'amount', 'final_amount', 'realized_gain_loss', 'referrer_code', 'sales_code'];
-function remisierTransactions({ referrerCodes = [], salesCodes = [], type, status, from, to, limit = 100, offset = 0, sort, dir }) {
+function remisierTransactions({ referrerCodes = [], salesCodes = [], type, status, from, to, limit = 100, offset = 0, sort, dir, amountMin, amountMax, currency }) {
   const params = {
     ...range(from, to),
     limit: parseInt(limit, 10),
@@ -5280,6 +5318,8 @@ function remisierTransactions({ referrerCodes = [], salesCodes = [], type, statu
   if (salesCodes.length) { codeConds.push('EXISTS (SELECT 1 FROM UNNEST(@salesCodes) sc WHERE UPPER(u.sales_code) LIKE sc)'); params.salesCodes = codePatterns(salesCodes); }
   const codeWhere = codeConds.length ? `(${codeConds.join(' OR ')})` : 'FALSE';
   let where = `${codeWhere} AND DATE(t.created_at) BETWEEN @from AND @to`;
+  const acWhere = addAmountCurrencyFilter(params, { amountMin, amountMax, currency });
+  if (acWhere) where += ' AND ' + acWhere;
   if (type) { where += ' AND t.type = @type'; params.type = type; }
   if (status) { where += ' AND t.status = @status'; params.status = status; }
   return {
@@ -5316,7 +5356,7 @@ const USERS_TX_SORT = ['created_at', 'transaction_number', 'type', 'status', 'si
 // wildcard fund names and promo codes (codePatterns: no * = contains, * pins
 // the position, e.g. "sucor*" = starts with Sucor). Writes its params into the
 // caller's object and returns the AND-ed clauses ('' when nothing is set).
-function usersTxFilterSql(params, { q, fundId, fundName, promo }) {
+function usersTxFilterSql(params, { q, fundId, fundName, promo, amountMin, amountMax, currency }) {
   let where = '';
   const term = String(q || '').trim();
   if (term) {
@@ -5328,9 +5368,11 @@ function usersTxFilterSql(params, { q, fundId, fundName, promo }) {
   if (fundPats.length) { where += ' AND EXISTS (SELECT 1 FROM UNNEST(@fundPats) fp WHERE UPPER(f.name) LIKE fp)'; params.fundPats = fundPats; }
   const promoPats = codePatterns(String(promo || '').split(','));
   if (promoPats.length) { where += ' AND EXISTS (SELECT 1 FROM UNNEST(@promoPats) pp WHERE UPPER(t.promo_code) LIKE pp)'; params.promoPats = promoPats; }
+  const acWhere = addAmountCurrencyFilter(params, { amountMin, amountMax, currency });
+  if (acWhere) where += ' AND ' + acWhere;
   return where;
 }
-function usersTransactions({ q, type, status, fundId, fundName, promo, from, to, limit = 100, offset = 0, sort, dir }) {
+function usersTransactions({ q, type, status, fundId, fundName, promo, from, to, limit = 100, offset = 0, sort, dir, amountMin, amountMax, currency }) {
   const params = {
     ...range(from, to),
     limit: parseInt(limit, 10),
@@ -5376,11 +5418,11 @@ function usersTransactions({ q, type, status, fundId, fundName, promo, from, to,
 // cancelled rows therefore never count.
 const UTX_SUMMARY_STATUSES = `'verified_by_operational', 'verified', 'completed', 'completed_payment'`;
 const UTX_SUMMARY_PART = { day: 'DAY', week: 'WEEK(MONDAY)', month: 'MONTH' };
-const usersTransactionsSummary = ({ q, fundId, fundName, promo, from, to, granularity = 'week' }) => {
+const usersTransactionsSummary = ({ q, fundId, fundName, promo, from, to, granularity = 'week', amountMin, amountMax, currency }) => {
   const params = range(from, to);
   const part = UTX_SUMMARY_PART[granularity] || UTX_SUMMARY_PART.week;
   const fmt = part === 'MONTH' ? '%Y-%m' : '%Y-%m-%d';
-  const filter = usersTxFilterSql(params, { q, fundId, fundName, promo });
+  const filter = usersTxFilterSql(params, { q, fundId, fundName, promo, amountMin, amountMax, currency });
   // COUNT(DISTINCT transaction_number), not COUNT(*), so a duplicated or split
   // row cannot inflate the order counts; no paid row has a null number today.
   return {
