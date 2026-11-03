@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `e87bb1b (2026-11-03)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `57dcdfd (2026-11-03)`.
 
 ## Cara membaca dokumen ini
 
@@ -393,7 +393,8 @@ Salinan database produksi aplikasi Sayakaya di BigQuery: akun dan profil penggun
 | `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `bonus_portfolios` | Unit bonus dari kampanye promo, dengan status on_going, redeemed, atau succeeded. | Campaign revenue, Data explorer, Engagement analysis, Forecast & churn, Growth, Investor journey, Overview, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Product funnel, Redemption analysis, Send e-statement & portfolio, Subscription analysis |
 | `campaigns` | Kampanye promo: kode, kuota, bonus, periode. | Campaign revenue, Data explorer, Growth |
-| `funds` | Daftar reksa dana: nama, jenis, manajer investasi, NAV dan AUM terbaru, fee. | AUM history, Booth event, Campaign revenue, Data explorer, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI bonus, Investor journey, Overview, Performance, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Product funnel, Redemption analysis, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Revenue (GS), Revenue (PWC), Revenue trend, Send e-statement & portfolio, Subscription analysis, User lifetime, Users transactions |
+| `funds` | Daftar reksa dana: nama, jenis, manajer investasi, NAV dan AUM terbaru, fee. | AUM history, Booth event, Campaign revenue, Data explorer, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI, HNWI bonus, Investor journey, Overview, Performance, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Product funnel, Redemption analysis, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Revenue (GS), Revenue (PWC), Revenue trend, Send e-statement & portfolio, Subscription analysis, User lifetime, Users transactions |
+| `fx_rates` |  | AUM history, Booth event, Campaign revenue, Dormant win-back, Engagement analysis, Event code tracking, Growth, HNWI, HNWI bonus, Investor journey, MIS Report, Onboarding analysis, Overview, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Product funnel, Reconciliation, Redemption analysis, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Revenue (GS), Revenue (PWC), Revenue trend, Send e-statement & portfolio, Subscription analysis, Top investors, User lifetime, Users transactions |
 | `geo` | Provinsi dan kota untuk peta sebaran investor. | Overview |
 | `goal_snapshots` | Snapshot harian nilai per goal (sumber "GS"). | Portfolio Explorer (GS), Remisier sharing (GS), Revenue (GS) |
 | `goals` | Tujuan/portofolio tabungan yang dibuat investor di aplikasi. | Portfolio Explorer (GS), Remisier sharing (GS), Revenue (GS) |
@@ -527,7 +528,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `overview`
   - Endpoint: `GET /api/overview`, `GET /api/trends`, `GET /api/breakdown/:dimension`, `GET /api/funds/top/latest-date`, `GET /api/funds/top`, `GET /api/users/growth`, `GET /api/users/verification`, `GET /api/users/by-province`, `GET /api/users/top-cities`, `GET /api/users/top-cities-aum`
   - Fungsi query (`server/queries.js`): `breakdownBy`, `largestFundsAum`, `largestFundsLatestDate`, `overviewFunds`, `overviewTx`, `overviewUsers`, `platformAumAsOf`, `topCitiesByAum`, `topCitiesByInvestors`, `trends`, `userGrowth`, `usersByProvince`, `verificationBreakdown`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.geo`, `main.investment_managers`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.geo`, `main.investment_managers`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-aum"></a>
 #### AUM history
@@ -552,7 +553,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `aum`
   - Endpoint: `GET /api/aum-history`, `GET /api/aum-history/drill`
   - Fungsi query (`server/queries.js`): `aumHistory`, `aumHistoryDrill`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.investment_managers`, `main.transactions`, `mi_fee_logs.mi_fee`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.transactions`, `mi_fee_logs.mi_fee`
 
 <a id="tab-revenue-trend"></a>
 #### Revenue trend
@@ -575,7 +576,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `revenue-trend`
   - Endpoint: `GET /api/revenue-trend`, `GET /api/revenue-trend/drill`
   - Fungsi query (`server/queries.js`): `revenueTrend`, `revenueTrendDrill`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.investment_managers`, `main.management_fee_logs`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.management_fee_logs`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-performance"></a>
 #### Performance
@@ -622,7 +623,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `growth`
   - Endpoint: `GET /api/campaigns/performance`, `GET /api/switching/top-pairs`, `GET /api/funds/by-manager`, `GET /api/users/aum-by-risk`, `GET /api/users/aum-by-income`, `GET /api/referrals/top`
   - Fungsi query (`server/queries.js`): `aumByIncome`, `aumByManager`, `aumByRisk`, `campaignPerformance`, `switchingTopPairs`, `topReferrers`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.campaigns`, `main.funds`, `main.investment_managers`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.users`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.campaigns`, `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.users`
 
 <a id="tab-predict"></a>
 #### Forecast & churn
@@ -693,7 +694,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `portfolio`
   - Endpoint: `GET /api/portfolio`
   - Fungsi query (`server/queries.js`): `userAumHistory`, `userHoldings`, `userHoldingsAsOf`, `userHoldingsLatestDate`, `userPerformance`, `userPortfolioSplit`, `userRecentTransactions`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.snapshots`, `main.transactions`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.snapshots`, `main.transactions`, `mi_fee_logs.portfolio_with_code`
   - Tabel Supabase: `dashboard_audit_log`
 
 <a id="tab-portfolio-explorer"></a>
@@ -720,7 +721,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `portfolio-explorer`
   - Endpoint: `GET /api/portfolio-explorer`
   - Fungsi query (`server/queries.js`): `goalAumHistory`, `goalAumPerformance`, `goalLatestSnapshotDate`, `goalUserHoldings`, `goalUserHoldingsByGoal`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.goal_snapshots`, `main.goals`, `main.snapshots`, `main.users`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.goal_snapshots`, `main.goals`, `main.snapshots`, `main.users`, `mi_fee_logs.portfolio_with_code`
   - Tabel Supabase: `dashboard_audit_log`
 
 <a id="tab-portfolio-fix"></a>
@@ -749,7 +750,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `portfolio-fix`
   - Endpoint: `GET /api/portfolio-fix`
   - Fungsi query (`server/queries.js`): `userAumHistoryFix`, `userHoldings`, `userHoldingsAsOfFix`, `userHoldingsLatestDateFix`, `userPerformanceFix`, `userPortfolioSplit`, `userRecentTransactions`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.snapshots`, `main.transactions`, `mi_fee_logs.portfolio_fix`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.snapshots`, `main.transactions`, `mi_fee_logs.portfolio_fix`
   - Tabel Supabase: `dashboard_audit_log`
 
 <a id="tab-portfolio-tx"></a>
@@ -779,7 +780,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `portfolio-tx`
   - Endpoint: `GET /api/portfolio-tx`
   - Fungsi query (`server/queries.js`): `userAumHistoryFromTx`, `userHoldingsFromTx`, `userHoldingsFromTxAsOf`, `userPerformanceFix`, `userPortfolioSplit`, `userRecentTransactions`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.snapshots`, `main.transactions`, `mi_fee_logs.portfolio_fix`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.snapshots`, `main.transactions`, `mi_fee_logs.portfolio_fix`
   - Tabel Supabase: `dashboard_audit_log`
 
 <a id="tab-portfolio-sinvest"></a>
@@ -809,7 +810,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `portfolio-sinvest`
   - Endpoint: `GET /api/portfolio-sinvest`
   - Fungsi query (`server/queries.js`): `sinvestHoldings`, `sinvestHoldingsAsOf`, `sinvestTransactions`, `userAumHistoryFix`, `userPerformanceFix`, `userPortfolioSplit`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.snapshots`, `mi_fee_logs.portfolio_fix`, `sinvest.trx_history`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.snapshots`, `mi_fee_logs.portfolio_fix`, `sinvest.trx_history`
   - Tabel Supabase: `dashboard_audit_log`
 
 <a id="tab-hnwi"></a>
@@ -830,7 +831,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `hnwi`
   - Endpoint: `GET /api/hnwi/latest-date`, `GET /api/hnwi/total`, `GET /api/hnwi/by-fund`
   - Fungsi query (`server/queries.js`): `hnwiByFund`, `hnwiLatestDate`, `hnwiTotal`
-  - Tabel BigQuery yang disentuh: `main.user_profiles`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.user_profiles`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-top-investors"></a>
 #### Top investors
@@ -851,7 +852,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `top-investors`
   - Endpoint: `GET /api/top-investors`
   - Fungsi query (`server/queries.js`): `topInvestors`
-  - Tabel BigQuery yang disentuh: `main.transactions`, `main.user_profiles`, `main.users`
+  - Tabel BigQuery yang disentuh: `main.fx_rates`, `main.transactions`, `main.user_profiles`, `main.users`
 
 <a id="tab-user-lifetime"></a>
 #### User lifetime
@@ -877,7 +878,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `user-lifetime`
   - Endpoint: `GET /api/user-lifetime`, `GET /api/user-lifetime/summary`, `GET /api/user-lifetime/detail`
   - Fungsi query (`server/queries.js`): `userLifetimeDetail`, `userLifetimeSummary`, `userLifetimeUsers`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.investment_managers`, `main.management_fee_logs`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.management_fee_logs`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-dormant"></a>
 #### Dormant win-back
@@ -904,7 +905,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `dormant`
   - Endpoint: `GET /api/dormant/conversion-summary`, `GET /api/dormant/repeat-buyers`, `GET /api/dormant/time-to-convert`
   - Fungsi query (`server/queries.js`): `dormantConversionSummary`, `dormantRepeatBuyers`, `dormantTimeToConvert`
-  - Tabel BigQuery yang disentuh: `main.transactions`
+  - Tabel BigQuery yang disentuh: `main.fx_rates`, `main.transactions`
 
 ### Operations & Transactions (Operasional & Transaksi)
 
@@ -937,7 +938,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `users-tx`
   - Endpoint: `GET /api/users-transactions`, `GET /api/users-transactions/summary`
   - Fungsi query (`server/queries.js`): `usersTransactions`, `usersTransactionsSummary`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.transactions`, `main.user_profiles`, `main.users`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.transactions`, `main.user_profiles`, `main.users`
 
 <a id="tab-sinvest-tx"></a>
 #### SInvest transactions
@@ -976,7 +977,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `remisier-tx`
   - Endpoint: `GET /api/transactions/filters`, `GET /api/transactions`, `GET /api/remisier/transactions`
   - Fungsi query (`server/queries.js`): `remisierTransactions`, `transactions`, `txFilterValues`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.transactions`, `main.user_profiles`, `main.users`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.transactions`, `main.user_profiles`, `main.users`
 
 <a id="tab-reconciliation"></a>
 #### Reconciliation
@@ -996,7 +997,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `reconciliation`
   - Endpoint: `GET /api/reconciliation`
   - Fungsi query (`server/queries.js`): `reconciliationDaily`
-  - Tabel BigQuery yang disentuh: `main.transactions`, `sinvest.trx_history`
+  - Tabel BigQuery yang disentuh: `main.fx_rates`, `main.transactions`, `sinvest.trx_history`
 
 <a id="tab-send-statement"></a>
 #### Send e-statement & portfolio
@@ -1021,7 +1022,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `send-statement`
   - Endpoint: `GET /api/statement/preview`, `POST /api/statement/email`, `POST /api/statement/email-batch`, `GET /api/statement/log`
   - Fungsi query (`server/queries.js`): `userContact`, `userHoldings`, `userHoldingsAsOfFix`, `userTransactions`, `usersByIdentifiers`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.snapshots`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_fix`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.snapshots`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_fix`
   - Tabel Supabase: `dashboard_audit_log`, `dashboard_send_exclusions`
 
 <a id="tab-send-fund-performance"></a>
@@ -1104,7 +1105,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `revenue`
   - Endpoint: `GET /api/revenue`, `GET /api/revenue/summary`
   - Fungsi query (`server/queries.js`): `revenueDetail`, `revenueMonthlySummary`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.investment_managers`, `main.management_fee_logs`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.management_fee_logs`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-revenue2"></a>
 #### Revenue (GS)
@@ -1128,7 +1129,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `revenue2`
   - Endpoint: `GET /api/revenue-v2`, `GET /api/revenue-v2/summary`
   - Fungsi query (`server/queries.js`): `revenueV2Detail`, `revenueV2MonthlySummary`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.goal_snapshots`, `main.goals`, `main.investment_managers`, `main.management_fee_logs`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.goal_snapshots`, `main.goals`, `main.investment_managers`, `main.management_fee_logs`
 
 <a id="tab-campaign-revenue"></a>
 #### Campaign revenue
@@ -1154,7 +1155,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `campaign-revenue`
   - Endpoint: `GET /api/campaign-revenue`, `GET /api/campaign-revenue/campaigns`, `GET /api/campaign-revenue/summary`
   - Fungsi query (`server/queries.js`): `campaignRevenueByCampaign`, `campaignRevenueDetail`, `campaignRevenueSummary`
-  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.campaigns`, `main.funds`, `main.investment_managers`, `main.management_fee_logs`, `main.snapshots`, `main.transactions`
+  - Tabel BigQuery yang disentuh: `main.bonus_portfolios`, `main.campaigns`, `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.management_fee_logs`, `main.snapshots`, `main.transactions`
 
 <a id="tab-remisier"></a>
 #### Remisier sharing (GS)
@@ -1177,7 +1178,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `remisier`
   - Endpoint: `GET /api/remisier/revenue`, `GET /api/remisier/revenue/summary`
   - Fungsi query (`server/queries.js`): `remisierRevenueDetail`, `remisierRevenueSummary`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.goal_snapshots`, `main.goals`, `main.management_fee_logs`, `main.user_profiles`, `main.users`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.goal_snapshots`, `main.goals`, `main.management_fee_logs`, `main.user_profiles`, `main.users`
 
 <a id="tab-remisier-pwc"></a>
 #### Remisier sharing (PWC)
@@ -1200,7 +1201,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `remisier-pwc`
   - Endpoint: `GET /api/remisier/revenue-pwc`, `GET /api/remisier/revenue-pwc/summary`
   - Fungsi query (`server/queries.js`): `remisierRevenuePwcDetail`, `remisierRevenuePwcSummary`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.management_fee_logs`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.management_fee_logs`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_with_code`
 
 ### Marketing (Pemasaran)
 
@@ -1252,7 +1253,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `referral-program`
   - Endpoint: `GET /api/referral-program/detail`, `GET /api/referral-program/inviter-stats`, `GET /api/referral-program/invited`
   - Fungsi query (`server/queries.js`): `referralInvitedUsers`, `referralInviterStats`, `referralProgramDetail`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.investment_managers`, `main.transactions`, `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.portfolio_fix`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.transactions`, `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.portfolio_fix`
 
 <a id="tab-referral-program-alt"></a>
 #### Referral program (KYC based)
@@ -1280,7 +1281,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `referral-program-alt`
   - Endpoint: `GET /api/referral-program-alt/detail`, `GET /api/referral-program-alt/inviter-stats`, `GET /api/referral-program-alt/invited`
   - Fungsi query (`server/queries.js`): `referralInvitedUsers`, `referralInviterStatsAlt`, `referralProgramDetail`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.investment_managers`, `main.transactions`, `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.portfolio_fix`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.transactions`, `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.portfolio_fix`
 
 <a id="tab-kalcer"></a>
 #### Referral activity
@@ -1303,7 +1304,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `kalcer`
   - Endpoint: `GET /api/kalcer/latest-date`, `GET /api/kalcer/summary`, `GET /api/kalcer/detail`
   - Fungsi query (`server/queries.js`): `kalcerAmbassadorSummary`, `kalcerLatestDate`, `kalcerReferralDetail`
-  - Tabel BigQuery yang disentuh: `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.INFORMATION_SCHEMA`, `mi_fee_logs.portfolio_with_code`
 
 <a id="tab-event-code"></a>
 #### Event code tracking
@@ -1348,7 +1349,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `event-code`
   - Endpoint: `GET /api/event-code/users`, `GET /api/event-code/funnel`, `GET /api/event-code/cohort`, `GET /api/event-code/recap`, `GET /api/event-code/portfolio`, `GET /api/event-code/transactions`
   - Fungsi query (`server/queries.js`): `eventCodeCohort`, `eventCodeFunnel`, `eventCodePortfolio`, `eventCodeRecap`, `eventCodeUsers`, `remisierTransactions`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_fix`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_fix`
 
 <a id="tab-booth-event"></a>
 #### Booth event
@@ -1387,7 +1388,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `booth-event`
   - Endpoint: `GET /api/booth-event/data`, `GET /api/booth-event/transactions`
   - Fungsi query (`server/queries.js`): `boothEventData`, `boothEventTransactions`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_fix`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.portfolio_fix`
 
 <a id="tab-promo-recap"></a>
 #### Promo recap
@@ -1439,7 +1440,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `hnwi-bonus`
   - Endpoint: `GET /api/hnwi-bonus/data`
   - Fungsi query (`server/queries.js`): `hnwiBonusCandidates`, `hnwiBonusTransactions`
-  - Tabel BigQuery yang disentuh: `main.funds`, `main.investment_managers`, `main.transactions`
+  - Tabel BigQuery yang disentuh: `main.funds`, `main.fx_rates`, `main.investment_managers`, `main.transactions`
 
 <a id="tab-push"></a>
 #### Push delivery
@@ -1523,7 +1524,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `product-funnel`
   - Endpoint: `GET /api/analysis/coverage`, `GET /api/product-funnel/steps`, `GET /api/product-funnel/timing`, `GET /api/product-funnel/stops`, `GET /api/product-funnel/installs`, `GET /api/product-funnel/uninstalls`
   - Fungsi query (`server/queries.js`): `analysisCoverage`, `productFunnelInstalls`, `productFunnelSteps`, `productFunnelStops`, `productFunnelTiming`, `productFunnelUninstalls`
-  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.users`
+  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.users`
 
 <a id="tab-mis-report"></a>
 #### MIS Report
@@ -1535,7 +1536,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `mis-report`
   - Endpoint: `GET /api/analysis/coverage`, `POST /api/mis/download`, `GET /api/mis/daily`, `GET /api/mis/weekly`, `GET /api/mis/monthly`, `GET /api/mis/sales`
   - Fungsi query (`server/queries.js`): `analysisCoverage`, `misDailyReport`, `misDownloadUpsert`, `misMonthlySummary`, `misSalesDaily`, `misWeeklyReport`
-  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.switching_transactions`, `main.transactions`, `main.users`, `mi_fee_logs.portfolios`, `mis.download_manual`
+  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.fx_rates`, `main.switching_transactions`, `main.transactions`, `main.users`, `mi_fee_logs.portfolios`, `mis.download_manual`
 
 <a id="tab-onboarding-analysis"></a>
 #### Onboarding analysis
@@ -1552,7 +1553,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `onboarding-analysis`
   - Endpoint: `GET /api/analysis/coverage`, `GET /api/onboarding/funnel`, `GET /api/onboarding/outcome`
   - Fungsi query (`server/queries.js`): `analysisCoverage`, `onboardingFunnel`, `onboardingOutcome`
-  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.user_status_logs`, `main.users`
+  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.fx_rates`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.user_status_logs`, `main.users`
 
 <a id="tab-subscription-analysis"></a>
 #### Subscription analysis
@@ -1584,7 +1585,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `subscription-analysis`
   - Endpoint: `GET /api/analysis/coverage`, `GET /api/subscription/funnel`, `GET /api/subscription/entry`, `GET /api/subscription/dropoff`, `GET /api/subscription/payment`, `GET /api/subscription/intent`, `GET /api/subscription/drivers`, `GET /api/subscription/hours`, `GET /api/subscription/chips`, `GET /api/subscription/profile`
   - Fungsi query (`server/queries.js`): `analysisCoverage`, `behaviorIntentNoBuy`, `subscriptionChips`, `subscriptionDrivers`, `subscriptionDropoff`, `subscriptionEntry`, `subscriptionFunnel`, `subscriptionHours`, `subscriptionPayment`, `subscriptionProfile`
-  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.users`
+  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.users`
 
 <a id="tab-engagement-analysis"></a>
 #### Engagement analysis
@@ -1608,7 +1609,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `engagement-analysis`
   - Endpoint: `GET /api/analysis/coverage`, `GET /api/engagement/daily`, `GET /api/engagement/segments`, `GET /api/engagement/push`, `GET /api/engagement/products`, `GET /api/engagement/features`, `GET /api/engagement/search`, `GET /api/engagement/discovery`, `GET /api/engagement/activity`
   - Fungsi query (`server/queries.js`): `analysisCoverage`, `behaviorDaily`, `behaviorProductInterest`, `behaviorPushImpact`, `behaviorSegments`, `engagementActivity`, `engagementDiscovery`, `engagementFeatures`, `engagementSearch`
-  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.users`
+  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.users`
 
 <a id="tab-redemption-analysis"></a>
 #### Redemption analysis
@@ -1627,7 +1628,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `redemption-analysis`
   - Endpoint: `GET /api/analysis/coverage`, `GET /api/redemption/funnel`, `GET /api/redemption/switching`, `GET /api/redemption/profile`, `GET /api/redemption/signals`
   - Fungsi query (`server/queries.js`): `analysisCoverage`, `redemptionFunnel`, `redemptionProfile`, `redemptionSignals`, `switchingFunnel`
-  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.users`
+  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.switching_transactions`, `main.transactions`, `main.users`
 
 <a id="tab-user-behavior"></a>
 #### Investor journey
@@ -1644,7 +1645,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Id tab untuk hak akses: `user-behavior`
   - Endpoint: `GET /api/behavior/user`
   - Fungsi query (`server/queries.js`): `behaviorUserProfile`, `behaviorUserTimeline`
-  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`
+  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.bonus_portfolios`, `main.funds`, `main.fx_rates`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`
   - Tabel Supabase: `dashboard_audit_log`
 
 ### Tools
@@ -1808,14 +1809,14 @@ Endpoint yang tidak terikat pada satu tab: login dan akun, admin, ekspor, jadwal
 | `GET /api/remisier/users` | `remisierUsers` | `main.user_profiles`, `main.users` |
 | `POST /api/ml/retrain` | - | `main.bonus_portfolios`, `main.funds`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `mi_fee_logs.mi_fee`, `ml.aum_forecast`, `ml.churn_features`, `ml.churn_model`, `ml.tx_forecast`, `dashboard_audit_log` |
 | `POST /api/ai/portfolio-narrative` | - | `dashboard_audit_log` |
-| `POST /api/export` | `largestFundsAum`, `normalizeUserFilter`, `transactions`, `aumHistory`, `revenueTrend`, `revenueTrendDrill`, `aumHistoryDrill`, `topInvestors`, `productPerformance`, `productPerformanceDetail`, `userHoldingsAsOf`, `userHoldings`, `userContact`, `userHoldingsAsOfFix`, `userHoldingsFromTxAsOf`, `userHoldingsFromTx`, `sinvestHoldingsAsOf`, `sinvestHoldings`, `goalLatestSnapshotDate`, `goalUserHoldings`, `campaignPerformance`, `switchingTopPairs`, `topReferrers`, `reconciliationDaily`, `revenueDetail`, `revenueV2Detail`, `revenueMonthlySummary`, `revenueV2MonthlySummary`, `userLifetimeUsers`, `userLifetimeSummary`, `userLifetimeDetail`, `campaignRevenueDetail`, `campaignRevenueByCampaign`, `campaignRevenueSummary`, `remisierRevenueDetail`, `remisierRevenueSummary`, `remisierRevenuePwcDetail`, `remisierRevenuePwcSummary`, `remisierTransactions`, `sinvestTransactions`, `usersTransactions`, `hnwiTotal`, `hnwiByFund`, `dormantConversionSummary`, `dormantRepeatBuyers`, `dormantTimeToConvert`, `kalcerAmbassadorSummary`, `kalcerReferralDetail`, `pushByCampaign`, `pushByPlatform`, `marketingFunnelByChannel`, `appCrashIssues`, `appPerfTraces`, `referralProgramDetail`, `referralInvitedUsers` | `adjust_analytics.events`, `firebase_crashlytics.com_sayakaya_android_ANDROID`, `firebase_crashlytics.com_sayakaya_ios_IOS`, `firebase_messaging.data`, `firebase_performance.com_sayakaya_android_ANDROID`, `firebase_performance.com_sayakaya_ios_IOS`, `main.bonus_portfolios`, `main.campaigns`, `main.funds`, `main.goal_snapshots`, `main.goals`, `main.investment_managers`, `main.management_fee_logs`, `main.portfolios`, `main.snapshots`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.mi_fee`, `mi_fee_logs.portfolio_fix`, `mi_fee_logs.portfolio_with_code`, `mi_fee_logs.portfolios`, `ml.aum_forecast`, `ml.churn_features`, `ml.churn_model`, `ml.tx_forecast`, `sinvest.trx_history`, `dashboard_audit_log` |
+| `POST /api/export` | `largestFundsAum`, `normalizeUserFilter`, `transactions`, `aumHistory`, `revenueTrend`, `revenueTrendDrill`, `aumHistoryDrill`, `topInvestors`, `productPerformance`, `productPerformanceDetail`, `userHoldingsAsOf`, `userHoldings`, `userContact`, `userHoldingsAsOfFix`, `userHoldingsFromTxAsOf`, `userHoldingsFromTx`, `sinvestHoldingsAsOf`, `sinvestHoldings`, `goalLatestSnapshotDate`, `goalUserHoldings`, `campaignPerformance`, `switchingTopPairs`, `topReferrers`, `reconciliationDaily`, `revenueDetail`, `revenueV2Detail`, `revenueMonthlySummary`, `revenueV2MonthlySummary`, `userLifetimeUsers`, `userLifetimeSummary`, `userLifetimeDetail`, `campaignRevenueDetail`, `campaignRevenueByCampaign`, `campaignRevenueSummary`, `remisierRevenueDetail`, `remisierRevenueSummary`, `remisierRevenuePwcDetail`, `remisierRevenuePwcSummary`, `remisierTransactions`, `sinvestTransactions`, `usersTransactions`, `hnwiTotal`, `hnwiByFund`, `dormantConversionSummary`, `dormantRepeatBuyers`, `dormantTimeToConvert`, `kalcerAmbassadorSummary`, `kalcerReferralDetail`, `pushByCampaign`, `pushByPlatform`, `marketingFunnelByChannel`, `appCrashIssues`, `appPerfTraces`, `referralProgramDetail`, `referralInvitedUsers` | `adjust_analytics.events`, `firebase_crashlytics.com_sayakaya_android_ANDROID`, `firebase_crashlytics.com_sayakaya_ios_IOS`, `firebase_messaging.data`, `firebase_performance.com_sayakaya_android_ANDROID`, `firebase_performance.com_sayakaya_ios_IOS`, `main.bonus_portfolios`, `main.campaigns`, `main.funds`, `main.fx_rates`, `main.goal_snapshots`, `main.goals`, `main.investment_managers`, `main.management_fee_logs`, `main.portfolios`, `main.snapshots`, `main.switching_transactions`, `main.transactions`, `main.user_profiles`, `main.user_referrals`, `main.users`, `mi_fee_logs.mi_fee`, `mi_fee_logs.portfolio_fix`, `mi_fee_logs.portfolio_with_code`, `mi_fee_logs.portfolios`, `ml.aum_forecast`, `ml.churn_features`, `ml.churn_model`, `ml.tx_forecast`, `sinvest.trx_history`, `dashboard_audit_log` |
 | `POST /api/export/batch` | - | `dashboard_audit_log` |
 | `POST /api/portfolio/bulk-summary` | - | - |
 | `POST /api/schedules/preview` | - | - |
 | `POST /api/schedules/otp/request` | - | `dashboard_schedule_otps` |
 | `POST /api/schedules/otp/confirm` | - | `dashboard_audit_log`, `dashboard_schedule_otps`, `dashboard_scheduled_jobs` |
 | `GET /api/schedules` | - | `dashboard_schedule_progress`, `dashboard_scheduled_jobs` |
-| `GET /api/schedules/:id/detail` | `scheduleRecipientRecap` | `main.bonus_portfolios`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `dashboard_schedule_queue`, `dashboard_scheduled_jobs` |
+| `GET /api/schedules/:id/detail` | `scheduleRecipientRecap` | `main.bonus_portfolios`, `main.fx_rates`, `main.portfolios`, `main.transactions`, `main.user_profiles`, `main.users`, `dashboard_schedule_queue`, `dashboard_scheduled_jobs` |
 | `PATCH /api/schedules/:id` | - | `dashboard_audit_log`, `dashboard_scheduled_jobs` |
 | `GET /api/send-exclusions` | - | `dashboard_send_exclusions` |
 | `POST /api/send-exclusions` | - | `dashboard_audit_log`, `dashboard_send_exclusions` |
