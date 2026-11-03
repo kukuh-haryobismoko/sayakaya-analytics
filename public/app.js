@@ -54,9 +54,8 @@ const idr = (n) => {
 };
 const idrFull = (n) => (n == null ? 'n/a' : 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(n))));
 const idrExact = (n) => (n == null ? 'n/a' : 'Rp ' + new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(Number(n)));
-const ccyFmt = (v, row) => {
-  const ccy = (row && row.currency) ? String(row.currency).toUpperCase() : 'IDR';
-  if (ccy === 'USD') return 'USD ' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v || 0));
+// ponytail: amounts arrive already in IDR (TX converts USD funds), so the row currency no longer picks the symbol.
+const ccyFmt = (v) => {
   return 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.round(Number(v || 0)));
 };
 const num = (n) => (n == null ? 'n/a' : new Intl.NumberFormat('en-US').format(Number(n)));
@@ -4574,9 +4573,7 @@ let growthLoaded = false;
 // averages, rates, dates, or investor counts that overlap between rows.
 // Footer total for a currency-aware column: one line per currency, never mixed.
 function ccySum(rows, key) {
-  const by = {};
-  rows.forEach((r) => { const c = String(val(r.currency) || 'IDR').toUpperCase(); by[c] = (by[c] || 0) + (Number(val(r[key])) || 0); });
-  return '<td class="num">' + Object.entries(by).map(([c, s]) => ccyFmt(s, { currency: c })).join('<br>') + '</td>';
+  return '<td class="num">' + ccyFmt(rows.reduce((s, r) => s + (Number(val(r[key])) || 0), 0)) + '</td>';
 }
 
 function genTable(sel, rows, cols, emptyMsg, sortState) {
@@ -10909,10 +10906,17 @@ function setConnStatus(live) {
 // builds dynamically in JS rather than via a static data-i18n attribute.
 window.onLanguageChange = () => { setConnStatus(lastConnLive); renderAskThread(); updateOverviewUserFilterBtn(); repaintActiveTab(); showDataNote(document.querySelector('.view.active')?.id); };
 
+// Latest USD/IDR (main.fx_rates, forward-filled over weekends) shown next to the connection pill.
+function setFx(fx) {
+  const el = $('#fxRate'); if (!el) return;
+  el.hidden = !fx;
+  if (fx) el.textContent = 'USD/IDR ' + new Intl.NumberFormat('id-ID').format(Number(fx.rate)) + ' · ' + (fx.rate_date?.value ?? fx.rate_date);
+}
+
 async function pollHealth() {
   try {
     const h = await api('/api/health');
-    setConnStatus(!!h.bigquery);
+    setConnStatus(!!h.bigquery); setFx(h.fx);
   } catch { setConnStatus(false); }
 }
 
@@ -10958,7 +10962,7 @@ async function init() {
   // drives the connection pill and the Ask box, so it must never hold the
   // login check below.
   api('/api/health').then((h) => {
-    setConnStatus(!!h.bigquery);
+    setConnStatus(!!h.bigquery); setFx(h.fx);
     setInterval(pollHealth, 30000);
     const askOn = !!h.askEnabled;
     $('#askDisabled').classList.toggle('hidden', askOn);

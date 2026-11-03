@@ -282,16 +282,16 @@ async function bodyOf(req: Request): Promise<Record<string, unknown>> {
 // can show a live/down connection indicator instead of just "the API server
 // itself responded".
 on('GET', '/api/health', async () => {
-  let bigquery = true;
+  let bigquery = true, fx: Record<string, unknown> | null = null;
   try {
-    await Promise.race([
-      runQuery('SELECT 1'),
+    [fx = null] = await Promise.race([
+      runQuery('SELECT rate, rate_date FROM `sayakaya.main.fx_rates` ORDER BY rate_date DESC LIMIT 1'),
       new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
     ]);
   } catch {
     bigquery = false;
   }
-  return json({ ok: true, project: PROJECT_ID, bigquery, askEnabled: askEnabled() });
+  return json({ ok: true, project: PROJECT_ID, bigquery, fx, askEnabled: askEnabled() });
 });
 
 // Auth: login/logout/me

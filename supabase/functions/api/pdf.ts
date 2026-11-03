@@ -40,10 +40,8 @@ export const idNum = (n: unknown, digits = 0): string => {
   if (v == null) return 'n/a';
   return new Intl.NumberFormat('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(v));
 };
-// Amount per row currency: IDR as on the statement, USD with 2 decimals.
-export const ccyNum = (v: unknown, r: { currency?: unknown } | undefined): string => (String(r?.currency ?? 'IDR').toUpperCase() === 'USD'
-  ? (val(v) == null ? 'n/a' : 'USD ' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(val(v))))
-  : idNum(v));
+// Amounts arrive in IDR (TX converts USD funds), so no per-row currency formatting.
+export const ccyNum = (v: unknown): string => idNum(v);
 // Accountant-style negatives for gain/loss cells: (214.800.256)
 export const idParen = (n: unknown): string => {
   const v = val(n);

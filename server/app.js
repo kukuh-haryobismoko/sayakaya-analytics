@@ -419,16 +419,16 @@ function createApp({ serveStatic = true } = {}) {
   // can show a live/down connection indicator instead of just "the API server
   // itself responded".
   app.get('/api/health', async (_req, res) => {
-    let bigquery = true;
+    let bigquery = true, fx = null;
     try {
-      await Promise.race([
-        runQuery('SELECT 1'),
+      [fx] = await Promise.race([
+        runQuery('SELECT rate, rate_date FROM `sayakaya.main.fx_rates` ORDER BY rate_date DESC LIMIT 1'),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
       ]);
     } catch {
       bigquery = false;
     }
-    res.json({ ok: true, project: PROJECT_ID, bigquery, askEnabled: askEnabled() });
+    res.json({ ok: true, project: PROJECT_ID, bigquery, fx, askEnabled: askEnabled() });
   });
 
   // Overview (KPIs)

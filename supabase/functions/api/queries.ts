@@ -17,7 +17,22 @@ export interface Query {
   countSql?: string;
 }
 
-const TX = '`sayakaya.main.transactions`';
+// FX (USD fund -> IDR). ponytail: forward-filled daily rate from main.fx_rates (rate_date <= day, covers weekends/holidays),
+// built inline, no extra table. Upgrade: materialize if scan cost matters.
+// Fund-level NAV stays in USD; only transaction/portfolio/snapshot amounts and revenue are converted.
+const FXD = `(SELECT d, LAST_VALUE(r.rate IGNORE NULLS) OVER (ORDER BY d) AS rate
+  FROM UNNEST(GENERATE_DATE_ARRAY('2021-01-01', CURRENT_DATE('Asia/Jakarta'))) d
+  LEFT JOIN \`sayakaya.main.fx_rates\` r ON r.rate_date = d)`;
+// Revenue uses ONE rate for the whole period: the rate on the period end date (@to, capped at today).
+const FX_END = "(SELECT rate FROM `sayakaya.main.fx_rates` WHERE rate_date <= LEAST(CAST(@to AS DATE), CURRENT_DATE('Asia/Jakarta')) ORDER BY rate_date DESC LIMIT 1)";
+// SUM of a per-row amount where only USD funds get the period-end rate (scalar subquery must sit outside the aggregate).
+const ccySum = (x: string) => `(SUM(IF(f.currency = 'USD', ${x}, 0)) * ${FX_END} + SUM(IF(f.currency = 'USD', 0, ${x})))`;
+const FX_NOW = "(SELECT rate FROM `sayakaya.main.fx_rates` ORDER BY rate_date DESC LIMIT 1)";
+const TX_RAW = '`sayakaya.main.transactions`';
+// Transaction amounts in IDR: the app's own fx_rate when set, else the rate on the transaction date. `currency` stays the fund's currency.
+const TX = `(SELECT * EXCEPT (fx_k) REPLACE (amount * fx_k AS amount, final_amount * fx_k AS final_amount, transfer_fee * fx_k AS transfer_fee, amount_fee * fx_k AS amount_fee, payment_fee * fx_k AS payment_fee, user_fee * fx_k AS user_fee, app_covered_fee * fx_k AS app_covered_fee, stamp_duty_amount * fx_k AS stamp_duty_amount, realized_gain_loss * fx_k AS realized_gain_loss)
+  FROM (SELECT t.*, IF(t.currency = 'USD', COALESCE(t.fx_rate, fx.rate), 1) AS fx_k
+        FROM ${TX_RAW} t LEFT JOIN ${FXD} fx ON fx.d = DATE(t.created_at, 'Asia/Jakarta')))`;
 const USERS = '`sayakaya.main.users`';
 const FUNDS = '`sayakaya.main.funds`';
 const PORT = '`sayakaya.main.portfolios`';
@@ -304,7 +319,7 @@ export const aumHistory = (from?: string, to?: string, granularity = 'month'): Q
   return {
     sql: `WITH daily AS (
         SELECT DATE(m.created_at) AS d,
-          SUM(m.AUM) AS aum, SUM(m.aperd_share_per_day) AS revenue,
+          ${ccySum('m.AUM')} AS aum, ${ccySum('m.aperd_share_per_day')} AS revenue,
           COUNT(DISTINCT m.fund_id) AS funds
         FROM ${MIFEE} m
         JOIN ${FUNDS} f ON f.id = m.fund_id
@@ -951,7 +966,9 @@ export const userPortfolioSplit = (userId: string): Query => ({
 // (goal, fund) pair's earliest ever snapshot nav as the buy price (there's
 // no real cost-basis column, same idea as portfolios.initial_price).
 const GOALS = '`sayakaya.main.goals`';
-const GOAL_SNAPSHOTS = '`sayakaya.main.goal_snapshots`';
+const GS_RAW = '`sayakaya.main.goal_snapshots`';
+const GOAL_SNAPSHOTS = `(SELECT * EXCEPT (fx_k) REPLACE (IF(currency = 'USD', COALESCE(amount_idr, amount * fx_k), amount) AS amount)
+  FROM (SELECT s.*, fx.rate AS fx_k FROM ${GS_RAW} s LEFT JOIN ${FXD} fx ON fx.d = s.date))`;
 
 // Portfolio Explorer AUM history: SUM(unit * nav) per day over the investor's
 // goal_snapshots, the latest row per (goal, fund, date) so a re-written
@@ -1136,7 +1153,11 @@ export const goalUserHoldingsByGoal = (userId: string, asOfDate: string): Query 
 // AUM performance for one user (by SID code), summed across their funds per
 // day from portfolio_with_code (one row per sid_code+fund per day; `amount`
 // is that holding's value on that day).
-const PORT_WITH_CODE = '`sayakaya.mi_fee_logs.portfolio_with_code`';
+const PORT_WITH_CODE_RAW = '`sayakaya.mi_fee_logs.portfolio_with_code`';
+const PORT_WITH_CODE = `(SELECT * EXCEPT (fx_k) REPLACE (amount * fx_k AS amount, buy_amount * fx_k AS buy_amount)
+  FROM (SELECT p.*, IF(f.currency = 'USD', fx.rate, 1) AS fx_k FROM ${PORT_WITH_CODE_RAW} p
+        LEFT JOIN ${FUNDS} f ON f.id = p.id
+        LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY)))`;
 
 // Partitioned by DATE(created_at). Filters shift the parameter, not the
 // column (DATE(created_at) = @date + 1 day), so BigQuery reads one partition
@@ -1251,7 +1272,11 @@ export const userHoldingsAsOf = (sid: string, date: string): Query => ({
 // by unit instead of taking a plain AVG(price) across lots. Kept as a
 // separate table/section rather than replacing PWC in place, so the two can
 // be compared until portfolio_with_code's own pipeline is fixed.
-const PORT_FIX = '`sayakaya.mi_fee_logs.portfolio_fix`';
+const PORT_FIX_RAW = '`sayakaya.mi_fee_logs.portfolio_fix`';
+const PORT_FIX = `(SELECT * EXCEPT (fx_k) REPLACE (amount * fx_k AS amount, buy_amount * fx_k AS buy_amount)
+  FROM (SELECT p.*, IF(f.currency = 'USD', fx.rate, 1) AS fx_k FROM ${PORT_FIX_RAW} p
+        LEFT JOIN ${FUNDS} f ON f.id = p.id
+        LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY)))`;
 
 export const userAumHistoryFix = (sid: string): Query => ({
   sql: `SELECT FORMAT_DATE('%Y-%m-%d', DATE(created_at)) AS bucket, SUM(amount) AS amount
@@ -2185,7 +2210,7 @@ const ga4Range = (r: { from: string; to: string }) => ({ ...r, fromSuffix: Strin
 // ACTIVE funds only. INACTIVE funds stay in old accounts (Avrist Liquid Fund,
 // a sign-up promo leftover worth a median Rp 23k, in 215k accounts) and made
 // nearly every app user look like a holder.
-const HOLDINGS_NOW_SQL = `SELECT h.user_id, h.fund_id, h.unit * f.latest_nav_value AS amount
+const HOLDINGS_NOW_SQL = `SELECT h.user_id, h.fund_id, h.unit * f.latest_nav_value * IF(f.currency = 'USD', ${FX_NOW}, 1) AS amount
         FROM (
           SELECT user_id, fund_id, unit FROM ${PORT} WHERE deleted_at IS NULL AND unit > 0
           UNION ALL
@@ -4310,11 +4335,11 @@ function revenueCTEs(from?: string, to?: string, granularity = 'month', fund = '
           f.sinvest_code,
           f.name AS fund_name,
           COALESCE(im.common_name, im.name) AS mi_name,
-          SUM(pwc.amount) AS aum,
+          SUM(pwc.amount) * IF(ANY_VALUE(f.currency) = 'USD', ${FX_END}, 1) AS aum,
           ANY_VALUE(lmf.management_fee) AS management_fee,
           ANY_VALUE(lmf.aperd_share) AS aperd_share,
           ANY_VALUE(lmf.mi_share) AS mi_share
-        FROM ${PORT_WITH_CODE} pwc
+        FROM ${PORT_WITH_CODE_RAW} pwc
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
         LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
@@ -4460,11 +4485,11 @@ function remisierRevenueCTEs(field: string, code: string, from?: string, to?: st
       daily AS (
         SELECT gs.date, gs.fund_id, f.sinvest_code, f.name AS fund_name,
           mu.user_id, mu.sid, mu.name, mu.email,
-          SUM(gs.amount) AS aum,
+          SUM(gs.amount) * IF(ANY_VALUE(f.currency) = 'USD', ${FX_END}, 1) AS aum,
           ANY_VALUE(lmf.management_fee) AS management_fee,
           ANY_VALUE(lmf.aperd_share) AS aperd_share,
           ANY_VALUE(lmf.mi_share) AS mi_share
-        FROM ${GOAL_SNAPSHOTS} gs
+        FROM ${GS_RAW} gs
         JOIN ${GOALS} g ON g.id = gs.goal_id AND g.deleted_at IS NULL
         JOIN matched_users mu ON mu.user_id = g.user_id
         LEFT JOIN ${FUNDS} f ON f.id = gs.fund_id
@@ -4601,11 +4626,11 @@ function remisierRevenuePwcCTEs(field: string, code: string, from?: string, to?:
           f.sinvest_code,
           f.name AS fund_name,
           mu.sid, mu.name, mu.email,
-          pwc.amount AS aum,
+          pwc.amount * IF(f.currency = 'USD', ${FX_END}, 1) AS aum,
           lmf.management_fee,
           lmf.aperd_share,
           lmf.mi_share
-        FROM ${PORT_WITH_CODE} pwc
+        FROM ${PORT_WITH_CODE_RAW} pwc
         JOIN matched_users mu ON mu.sid = pwc.sid_code
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
@@ -5729,12 +5754,12 @@ function revenueV2CTEs(from?: string, to?: string, granularity = 'month', fund =
       ),
       daily AS (
         SELECT gs.date, gs.fund_id, f.sinvest_code, f.name AS fund_name,
-          SUM(gs.amount) AS aum,
+          SUM(gs.amount) * IF(ANY_VALUE(f.currency) = 'USD', ${FX_END}, 1) AS aum,
           ANY_VALUE(lmf.management_fee) AS management_fee,
           ANY_VALUE(lmf.aperd_share) AS aperd_share,
           ANY_VALUE(lmf.mi_share) AS mi_share,
           ANY_VALUE(COALESCE(im.common_name, im.name)) AS mi_name
-        FROM ${GOAL_SNAPSHOTS} gs
+        FROM ${GS_RAW} gs
         JOIN ${GOALS} g ON g.id = gs.goal_id AND g.deleted_at IS NULL
         LEFT JOIN ${FUNDS} f ON f.id = gs.fund_id
         LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
@@ -5866,11 +5891,11 @@ function userLifetimeCTEs(from?: string, to?: string, fund = '', mi = '', sid = 
           f.name AS fund_name,
           f.sinvest_code,
           COALESCE(im.common_name, im.name) AS mi_name,
-          pwc.amount AS aum,
+          pwc.amount * IF(f.currency = 'USD', ${FX_END}, 1) AS aum,
           lmf.management_fee,
           lmf.aperd_share,
           lmf.mi_share
-        FROM ${PORT_WITH_CODE} pwc
+        FROM ${PORT_WITH_CODE_RAW} pwc
         LEFT JOIN ${FUNDS} f ON pwc.id = f.id
         LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
         LEFT JOIN latest_mgmt_fee lmf ON f.id = lmf.management_fee_id
@@ -6169,8 +6194,8 @@ function campaignRevenueCTEs(from?: string, to?: string, promo = '') {
           h.unit_a, h.unit_b,
           f.name AS fund_name,
           COALESCE(im.common_name, im.name) AS mi_name,
-          h.unit_a * COALESCE(nd.nav, f.latest_nav_value) AS aum_a,
-          h.unit_b * COALESCE(nd.nav, f.latest_nav_value) AS aum_b,
+          h.unit_a * COALESCE(nd.nav, f.latest_nav_value) * IF(f.currency = 'USD', ${FX_END}, 1) AS aum_a,
+          h.unit_b * COALESCE(nd.nav, f.latest_nav_value) * IF(f.currency = 'USD', ${FX_END}, 1) AS aum_b,
           lmf.management_fee, lmf.aperd_share, lmf.mi_share,
           DATE_DIFF(DATE_ADD(DATE_TRUNC(h.d, YEAR), INTERVAL 1 YEAR), DATE_TRUNC(h.d, YEAR), DAY) AS year_days
         FROM held h
