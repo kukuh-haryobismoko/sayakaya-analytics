@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `72d8150 (2026-11-04)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `3eed929 (2026-11-04)`.
 
 ## Cara membaca dokumen ini
 
@@ -33,7 +33,7 @@ Yang bisa dilakukan, secara garis besar:
 - **Marketing dan produk**: atribusi iklan, program referral, push notification, kesehatan aplikasi, dan perilaku pengguna di aplikasi yang dicocokkan dengan database (siapa membeli, di mana orang berhenti, fitur apa yang dipakai).
 - **Alat bantu**: bertanya dalam bahasa biasa (Ask), menjelajah tabel mentah, dan menulis query SQL sendiri (read-only).
 
-Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 53 tab dalam 8 grup.
+Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 54 tab dalam 8 grup.
 
 ## 2. Istilah penting
 
@@ -136,6 +136,7 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 | [App health](#tab-app-health) | Crash dan trace paling lambat, Android dan iOS digabung. |
 | [Product funnel](#tab-product-funnel) | Setiap ponsel yang mulai mendaftar: berapa yang membuat akun, lolos KYC, dan membayar pembelian pertama, di mana mereka berhenti, siapa yang paling banyak sampai, tren per minggu, berapa lama tiap langkah, install baru sebelum mendaftar, download per hari per platform, dan uninstall Android. |
 | [MIS Report](#tab-mis-report) | (belum ada ringkasan) |
+| [MIS Channel & AUM](#tab-mis-channel) | (belum ada ringkasan) |
 | [Onboarding analysis](#tab-onboarding-analysis) | Rincian KYC: layar KYC yang dicapai di aplikasi, hasil review KYC, profil risiko, waktu mengisi KYC, jam review, dan bagian KYC yang dikembalikan. Jalur sebelum dan sesudah KYC ada di Product funnel. |
 | [Subscription analysis](#tab-subscription-analysis) | Analisis alur beli (subscription) di aplikasi: funnel dari form beli sampai dibayar, dari layar mana orang membuka form beli, di mana mereka keluar dari alur beli, order per metode pembayaran (dibayar, kedaluwarsa, dibatalkan), daftar tindak lanjut orang yang mulai beli tapi tidak bayar, layar dan aksi yang dilakukan pembeli sebelum membeli, jam dan hari beli, serta tombol nominal cepat. Mencakup setiap pembelian, pertama atau ulang. |
 | [Engagement analysis](#tab-engagement-analysis) | Pengguna aplikasi per hari, pemakaian dan pembelian menurut status investor, fitur aplikasi yang dipakai dibandingkan dengan kepemilikan dan transaksi, investor menurut besar portofolio dan hari aktif di aplikasi (termasuk uang yang dipegang investor yang tidak membuka aplikasi), kata kunci pencarian sampai fund yang dibeli, dan pilihan urutan, rekomendasi ahli, serta level risiko, dampak kampanye push, dan halaman fund dilihat lalu dibeli. |
@@ -345,7 +346,7 @@ Ekspor Google Analytics 4 (Firebase) dari aplikasi mobile Android dan iOS: setia
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
 | `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
-| `events_*` | Semua event aplikasi; dibaca per rentang tanggal lewat _TABLE_SUFFIX. | Engagement analysis, Investor journey, MIS Report, Onboarding analysis, Product funnel, Redemption analysis, Subscription analysis |
+| `events_*` | Semua event aplikasi; dibaca per rentang tanggal lewat _TABLE_SUFFIX. | Engagement analysis, Investor journey, MIS Channel & AUM, MIS Report, Onboarding analysis, Product funnel, Redemption analysis, Subscription analysis |
 
 #### `firebase_crashlytics`
 
@@ -393,8 +394,8 @@ Salinan database produksi aplikasi Sayakaya di BigQuery: akun dan profil penggun
 | `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
 | `bonus_portfolios` | Unit bonus dari kampanye promo, dengan status on_going, redeemed, atau succeeded. | Campaign revenue, Data explorer, Engagement analysis, Forecast & churn, Growth, Investor journey, Overview, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Product funnel, Redemption analysis, Send e-statement & portfolio, Subscription analysis |
 | `campaigns` | Kampanye promo: kode, kuota, bonus, periode. | Campaign revenue, Data explorer, Growth |
-| `funds` | Daftar reksa dana: nama, jenis, manajer investasi, NAV dan AUM terbaru, fee. | AUM history, Booth event, Campaign revenue, Data explorer, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI, HNWI bonus, Investor journey, Overview, Performance, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Product funnel, Redemption analysis, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Revenue (GS), Revenue (PWC), Revenue trend, Send e-statement & portfolio, Subscription analysis, User lifetime, Users transactions |
-| `fx_rates` |  | AUM history, Booth event, Campaign revenue, Dormant win-back, Engagement analysis, Event code tracking, Growth, HNWI, HNWI bonus, Investor journey, MIS Report, Onboarding analysis, Overview, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Product funnel, Reconciliation, Redemption analysis, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Revenue (GS), Revenue (PWC), Revenue trend, Send e-statement & portfolio, Subscription analysis, Top investors, User lifetime, Users transactions |
+| `funds` | Daftar reksa dana: nama, jenis, manajer investasi, NAV dan AUM terbaru, fee. | AUM history, Booth event, Campaign revenue, Data explorer, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI, HNWI bonus, Investor journey, MIS Channel & AUM, Overview, Performance, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Product funnel, Redemption analysis, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Revenue (GS), Revenue (PWC), Revenue trend, Send e-statement & portfolio, Subscription analysis, User lifetime, Users transactions |
+| `fx_rates` |  | AUM history, Booth event, Campaign revenue, Dormant win-back, Engagement analysis, Event code tracking, Growth, HNWI, HNWI bonus, Investor journey, MIS Channel & AUM, MIS Report, Onboarding analysis, Overview, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Product funnel, Reconciliation, Redemption analysis, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Revenue (GS), Revenue (PWC), Revenue trend, Send e-statement & portfolio, Subscription analysis, Top investors, User lifetime, Users transactions |
 | `geo` | Provinsi dan kota untuk peta sebaran investor. | Overview |
 | `goal_snapshots` | Snapshot harian nilai per goal (sumber "GS"). | Portfolio Explorer (GS), Remisier sharing (GS), Revenue (GS) |
 | `goals` | Tujuan/portofolio tabungan yang dibuat investor di aplikasi. | Portfolio Explorer (GS), Remisier sharing (GS), Revenue (GS) |
@@ -404,12 +405,12 @@ Salinan database produksi aplikasi Sayakaya di BigQuery: akun dan profil penggun
 | `management_fee_logs` | Rate fee manajemen per fund dan perubahannya, termasuk bagian AperD dan MI. | Campaign revenue, Remisier sharing (GS), Remisier sharing (PWC), Revenue (GS), Revenue (PWC), Revenue trend, User lifetime |
 | `portfolios` | Kepemilikan unit per investor per fund saat ini, beserta harga beli awal. | Data explorer, Engagement analysis, Forecast & churn, Growth, Investor journey, Overview, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Product funnel, Redemption analysis, Send e-statement & portfolio, Subscription analysis |
 | `snapshots` | Riwayat harian NAV (dan AUM) per fund. | Campaign revenue, Performance, Portfolio (PWC), Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (GS), Portfolio Explorer (Main), Send e-statement & portfolio |
-| `switching_transactions` | Transaksi switching antar fund: fund asal dan tujuan, nominal, status. | Data explorer, Engagement analysis, Growth, MIS Report, Onboarding analysis, Product funnel, Redemption analysis, Subscription analysis |
-| `transactions` | Semua transaksi: buy, sell, SWITCH_IN/OUT, reinvestment; status, nominal (amount, final_amount), metode pembayaran, waktu dibuat dan dibayar. | AUM history, Booth event, Campaign revenue, Data explorer, Dormant win-back, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI bonus, Investor journey, MIS Report, Onboarding analysis, Overview, Portfolio (PWC), Portfolio (TX), Portfolio Explorer (Main), Product funnel, Reconciliation, Redemption analysis, Referral program, Referral program (KYC based), Remisier transactions, Send e-statement & portfolio, Subscription analysis, Top investors, User lifetime, Users transactions |
+| `switching_transactions` | Transaksi switching antar fund: fund asal dan tujuan, nominal, status. | Data explorer, Engagement analysis, Growth, MIS Channel & AUM, MIS Report, Onboarding analysis, Product funnel, Redemption analysis, Subscription analysis |
+| `transactions` | Semua transaksi: buy, sell, SWITCH_IN/OUT, reinvestment; status, nominal (amount, final_amount), metode pembayaran, waktu dibuat dan dibayar. | AUM history, Booth event, Campaign revenue, Data explorer, Dormant win-back, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI bonus, Investor journey, MIS Channel & AUM, MIS Report, Onboarding analysis, Overview, Portfolio (PWC), Portfolio (TX), Portfolio Explorer (Main), Product funnel, Reconciliation, Redemption analysis, Referral program, Referral program (KYC based), Remisier transactions, Send e-statement & portfolio, Subscription analysis, Top investors, User lifetime, Users transactions |
 | `user_profiles` | Profil KYC: nama, nomor HP, tanggal lahir, gender, pekerjaan, tujuan investasi, level risiko. Kolom identitas sensitif disaring oleh dashboard. | Booth event, Data explorer, Event code tracking, Forecast & churn, Growth, HNWI, Investor journey, Onboarding analysis, Overview, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Send e-statement & portfolio, Subscription analysis, Top investors, User lifetime, Users transactions |
 | `user_referrals` | Hubungan referral: siapa mengajak siapa dan kapan. | Referral activity, Referral program, Referral program (KYC based) |
 | `user_status_logs` | Riwayat perubahan status KYC (pending ke verified atau failed) beserta waktunya, sejak 21 Juli 2026. | Onboarding analysis |
-| `users` | Akun pengguna: email, SID, status KYC (verification_status, verified_at), kode referral dan sales, tanggal daftar, akun institusi. | Booth event, Data explorer, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI, Investor journey, MIS Report, Onboarding analysis, Overview, Portfolio Explorer (GS), Product funnel, Redemption analysis, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Send e-statement & portfolio, Subscription analysis, Top investors, User lifetime, Users transactions |
+| `users` | Akun pengguna: email, SID, status KYC (verification_status, verified_at), kode referral dan sales, tanggal daftar, akun institusi. | Booth event, Data explorer, Engagement analysis, Event code tracking, Forecast & churn, Growth, HNWI, Investor journey, MIS Channel & AUM, MIS Report, Onboarding analysis, Overview, Portfolio Explorer (GS), Product funnel, Redemption analysis, Referral activity, Referral program, Referral program (KYC based), Remisier sharing (GS), Remisier sharing (PWC), Remisier transactions, Send e-statement & portfolio, Subscription analysis, Top investors, User lifetime, Users transactions |
 
 #### `mi_fee_logs`
 
@@ -419,7 +420,7 @@ Hasil pipeline perhitungan fee: fee harian per manajer investasi dan snapshot po
 |---|---|---|
 | `INFORMATION_SCHEMA` |  | HNWI, Overview, Referral activity |
 | `__TABLES__` |  | alat bantu (Ask, Data explorer, ML) |
-| `mi_fee` | Fee harian per fund dan AUM harian platform. | AUM history, Forecast & churn |
+| `mi_fee` | Fee harian per fund dan AUM harian platform. | AUM history, Forecast & churn, MIS Channel & AUM |
 | `portfolio_fix` | Versi portfolio_with_code dengan harga beli rata-rata yang sudah dikoreksi. | Booth event, Event code tracking, Portfolio (SInvest), Portfolio (TX), Portfolio Explorer (Main), Referral program, Referral program (KYC based), Send e-statement & portfolio |
 | `portfolio_with_code` | Snapshot portofolio harian per investor (sumber "PWC"), mulai 14 Januari 2026. | HNWI, Overview, Portfolio (PWC), Portfolio Explorer (GS), Referral activity, Remisier sharing (PWC), Revenue (PWC), Revenue trend, User lifetime |
 | `portfolios` |  | Forecast & churn, MIS Report |
@@ -1538,6 +1539,18 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - Fungsi query (`server/queries.js`): `analysisCoverage`, `misDailyReport`, `misDownloadUpsert`, `misMonthlySummary`, `misSalesDaily`, `misWeeklyReport`
   - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.fx_rates`, `main.switching_transactions`, `main.transactions`, `main.users`, `mi_fee_logs.portfolios`, `mis.download_manual`
 
+<a id="tab-mis-channel"></a>
+#### MIS Channel & AUM
+
+- **Untuk apa**: _(belum ada ringkasan di docs/content.js)_
+- **Data yang dibaca**: _(belum diisi)_
+- **Cara hitung**: _(belum diisi)_
+- **Detail teknis** (otomatis dari kode):
+  - Id tab untuk hak akses: `mis-channel`
+  - Endpoint: `GET /api/analysis/coverage`, `GET /api/mch/funnel`, `GET /api/mch/aum`
+  - Fungsi query (`server/queries.js`): `analysisCoverage`, `misChannelAum`, `misChannelFunnel`
+  - Tabel BigQuery yang disentuh: `analytics_266759216.events_*`, `main.funds`, `main.fx_rates`, `main.switching_transactions`, `main.transactions`, `main.users`, `mi_fee_logs.mi_fee`
+
 <a id="tab-onboarding-analysis"></a>
 #### Onboarding analysis
 
@@ -1833,6 +1846,8 @@ Bagian berikut belum lengkap saat dokumen ini dibuat:
 
 - Tab "MIS Report" (mis-report) belum punya entri di docs/content.js TABS.
 - Tab "MIS Report" (mis-report) tidak punya entri di tab Documentation.
+- Tab "MIS Channel & AUM" (mis-channel) belum punya entri di docs/content.js TABS.
+- Tab "MIS Channel & AUM" (mis-channel) tidak punya entri di tab Documentation.
 - Dataset BigQuery "github" belum punya deskripsi di docs/content.js DATASETS.
 - Dataset BigQuery "mis" belum punya deskripsi di docs/content.js DATASETS.
 - Tab "Booth event": panel "Journey: registration to purchase" di TAB_DETAILS tidak ditemukan di halaman.
