@@ -6756,7 +6756,7 @@ const misChannelFunnel = (from, to) => {
         WHERE DATE(u.created_at) BETWEEN DATE(@from) AND DATE(@to)
       ),
       t AS (
-        SELECT user_id, LOGICAL_OR(status IN (${SUB_PAID_STATUSES})) AS paid
+        SELECT user_id, LOGICAL_OR(status NOT IN ('cancelled', 'expired', 'pending_payment')) AS paid
         FROM ${TX_RAW} WHERE type = 'buy' GROUP BY user_id
       ),
       agg AS (
