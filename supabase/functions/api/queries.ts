@@ -20,9 +20,9 @@ export interface Query {
 // FX (USD fund -> IDR). ponytail: forward-filled daily rate from main.fx_rates (rate_date <= day, covers weekends/holidays),
 // built inline, no extra table. Upgrade: materialize if scan cost matters.
 // Fund-level NAV stays in USD; only transaction/portfolio/snapshot amounts and revenue are converted.
-const FXD = `(SELECT d, LAST_VALUE(r.rate IGNORE NULLS) OVER (ORDER BY d) AS rate
-  FROM UNNEST(GENERATE_DATE_ARRAY('2021-01-01', CURRENT_DATE('Asia/Jakarta'))) d
-  LEFT JOIN \`sayakaya.main.fx_rates\` r ON r.rate_date = d)`;
+// Last known rate per day via a range join (LAST_VALUE window breaks correlated EXISTS/IN over TX).
+const FXD = `(SELECT d, r.rate FROM (SELECT rate, rate_date, IFNULL(LEAD(rate_date) OVER (ORDER BY rate_date), DATE '2100-01-01') AS nxt FROM \`sayakaya.main.fx_rates\`) r
+  JOIN UNNEST(GENERATE_DATE_ARRAY('2021-01-01', CURRENT_DATE('Asia/Jakarta'))) d ON d >= r.rate_date AND d < r.nxt)`;
 // Revenue uses ONE rate for the whole period: the rate on the period end date (@to, capped at today).
 const FX_END = "(SELECT rate FROM `sayakaya.main.fx_rates` WHERE rate_date <= LEAST(CAST(@to AS DATE), CURRENT_DATE('Asia/Jakarta')) ORDER BY rate_date DESC LIMIT 1)";
 // SUM of a per-row amount where only USD funds get the period-end rate (scalar subquery must sit outside the aggregate).
