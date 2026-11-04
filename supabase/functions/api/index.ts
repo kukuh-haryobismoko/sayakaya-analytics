@@ -1129,6 +1129,7 @@ const ANALYSIS_ROUTES: [string, string, Record<string, (from?: string, to?: stri
   ['mis-report', 'mis', {
     daily: Q.misDailyReport, weekly: Q.misWeeklyReport, monthly: Q.misMonthlySummary, sales: Q.misSalesDaily,
   }],
+  ['mis-channel', 'mch', { funnel: Q.misChannelFunnel, aum: Q.misChannelAum }],
 ];
 for (const [tab, prefix, builders] of ANALYSIS_ROUTES) {
   for (const [key, build] of Object.entries(builders)) {

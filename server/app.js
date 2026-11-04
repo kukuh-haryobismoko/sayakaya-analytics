@@ -1010,6 +1010,7 @@ function createApp({ serveStatic = true } = {}) {
     ['mis-report', 'mis', {
       daily: Q.misDailyReport, weekly: Q.misWeeklyReport, monthly: Q.misMonthlySummary, sales: Q.misSalesDaily,
     }],
+    ['mis-channel', 'mch', { funnel: Q.misChannelFunnel, aum: Q.misChannelAum }],
   ];
   ANALYSIS_ROUTES.forEach(([tab, prefix, builders]) => Object.entries(builders).forEach(([key, build]) => (
     app.get(`/api/${prefix}/${key}`, requireTab(tab), handler(async (req, res) => {

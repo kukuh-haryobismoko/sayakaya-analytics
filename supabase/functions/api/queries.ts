@@ -6804,3 +6804,80 @@ const KAT_RE = new RegExp(kAt('PLACEHOLDER').replace(/[.*+?^${}()|[\]\\]/g, '\\$
 export const fxOff = (q: Query, convertIdr?: boolean): Query => (convertIdr === false ? { ...q, sql: q.sql.split(kNow).join('1').replace(KAT_RE, '1')
   .split(PORT_WITH_CODE).join(PORT_WITH_CODE_RAW).split(PORT_FIX).join(PORT_FIX_RAW)
   .split(GOAL_SNAPSHOTS).join(GS_RAW).split(TX).join(TX_RAW) } : q);
+
+// MIS channel tab: sign-up journey per channel (cohort = registration month) and AUM split IDR / USD.
+// Add a channel = add a WHEN line (order matters, first match wins). Downloads: GA4 device -> user_id -> users; devices never logged in = no_account.
+// shortcut: employee / default-referral code lists are hardcoded, move to a table when they change often.
+const MCH_EMPLOYEE = "('SRIKAYA', 'YEARENDSUCOR')";
+const MCH_DEFAULT_REF = "('RAIZKAYA', 'RAIZ')";
+const MCH_CHANNEL = `CASE
+  WHEN UPPER(u.sales_code) IN ${MCH_EMPLOYEE} OR UPPER(u.referrer_code) IN ${MCH_EMPLOYEE} THEN 'karyawan'
+  WHEN u.sales_code IS NOT NULL THEN 'sales_booth'
+  WHEN u.referrer_code IS NOT NULL AND UPPER(u.referrer_code) NOT IN ${MCH_DEFAULT_REF} THEN 'referral'
+  ELSE 'organic' END`;
+
+export const misChannelFunnel = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH u AS (
+        SELECT u.id, DATE_TRUNC(DATE(u.created_at), MONTH) AS month, ${MCH_CHANNEL} AS channel,
+          u.verification_status AS vs
+        FROM ${USERS} u
+        WHERE DATE(u.created_at) BETWEEN DATE(@from) AND DATE(@to)
+      ),
+      t AS (
+        SELECT user_id, LOGICAL_OR(status IN (${SUB_PAID_STATUSES})) AS paid
+        FROM ${TX_RAW} WHERE type = 'buy' GROUP BY user_id
+      ),
+      agg AS (
+        SELECT u.month, IFNULL(u.channel, 'TOTAL') AS channel, COUNT(*) AS registered,
+          COUNTIF(u.vs != 'unverified') AS kyc_submitted, COUNTIF(u.vs = 'verified') AS verified,
+          COUNTIF(t.user_id IS NOT NULL) AS first_order, COUNTIF(t.paid) AS paid
+        FROM u LEFT JOIN t ON t.user_id = u.id
+        GROUP BY ROLLUP(u.month, u.channel)
+        HAVING u.month IS NOT NULL
+      ),
+      dev AS (
+        SELECT user_pseudo_id, MIN(IF(event_name = 'first_open', PARSE_DATE('%Y%m%d', event_date), NULL)) AS fo, MAX(user_id) AS uid
+        FROM ${MIS_GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE(@from)) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
+        GROUP BY user_pseudo_id
+      ),
+      dl AS (
+        SELECT DATE_TRUNC(d.fo, MONTH) AS month, IF(u.id IS NULL, 'no_account', ${MCH_CHANNEL}) AS channel, COUNT(*) AS downloads
+        FROM dev d LEFT JOIN ${USERS} u ON u.id = d.uid
+        WHERE d.fo BETWEEN DATE(@from) AND DATE(@to)
+        GROUP BY ROLLUP(month, channel)
+        HAVING month IS NOT NULL
+      ),
+      dl2 AS (SELECT month, IFNULL(channel, 'TOTAL') AS channel, downloads FROM dl)
+      SELECT FORMAT_DATE('%Y-%m', month) AS month, channel,
+        dl.downloads, a.registered, a.kyc_submitted, a.verified, a.first_order, a.paid
+      FROM agg a FULL JOIN dl2 dl USING (month, channel)
+      ORDER BY month, channel = 'TOTAL', channel`,
+    params: r,
+  };
+};
+
+export const misChannelAum = (from?: string, to?: string): Query => {
+  const r = range(from, to);
+  return {
+    sql: `WITH daily AS (
+        SELECT DATE(m.created_at) AS d, SUM(IF(f.currency = 'USD', 0, m.AUM)) AS idr, SUM(IF(f.currency = 'USD', m.AUM, 0)) AS usd
+        FROM ${MIFEE} m JOIN ${FUNDS} f ON f.id = m.fund_id
+        WHERE DATE(m.created_at) BETWEEN DATE(@from) AND DATE(@to) AND f.listing_status IN ('ACTIVE', 'UPDATE')
+        GROUP BY d
+      ),
+      fx AS (
+        SELECT FORMAT_DATE('%Y-%m', rate_date) AS month, ARRAY_AGG(rate ORDER BY rate_date DESC LIMIT 1)[OFFSET(0)] AS rate
+        FROM \`sayakaya.main.fx_rates\` GROUP BY month
+      )
+      SELECT FORMAT_DATE('%Y-%m', d) AS month,
+        ROUND(AVG(idr)) AS aum_idr_avg, ROUND(ARRAY_AGG(idr ORDER BY d DESC LIMIT 1)[OFFSET(0)]) AS aum_idr_eom,
+        ROUND(AVG(usd), 2) AS aum_usd_avg, ROUND(ARRAY_AGG(usd ORDER BY d DESC LIMIT 1)[OFFSET(0)], 2) AS aum_usd_eom,
+        ANY_VALUE(fx.rate) AS usd_idr_eom
+      FROM daily LEFT JOIN fx ON fx.month = FORMAT_DATE('%Y-%m', d)
+      GROUP BY month ORDER BY month`,
+    params: r,
+  };
+};

@@ -3422,7 +3422,15 @@ async function exportMisPdf(build = buildMisPdf, suffix = '') {
   doc.save(`MIS - ${Number(to.slice(8, 10))} ${mon}${suffix}.pdf`);
 }
 // MIS PDF END
-const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB, MIS_TAB];
+const MCH_TAB = { id: 'mis-channel', prefix: 'mch', cache: {}, loaded: false, coverage: false, charts: [] };
+const mchCols = (defs) => defs.map(([key, label, type = 'num']) => ({ key, label, type }));
+MCH_TAB.sections = [
+  ['mch/funnel', '#mchFunnel', () => genTable('#mchFunnel', MCH_TAB.cache.funnel, mchCols([['month', 'Month', 'text'], ['channel', 'Channel', 'text'], ['downloads', 'Downloads'], ['registered', 'Registered'],
+    ['kyc_submitted', 'KYC submitted'], ['verified', 'Verified'], ['first_order', '1st order'], ['paid', 'Paid']]), t('an_empty'))],
+  ['mch/aum', '#mchAum', () => genTable('#mchAum', MCH_TAB.cache.aum, mchCols([['month', 'Month', 'text'], ['aum_idr_avg', 'AUM IDR avg', 'idr'], ['aum_idr_eom', 'AUM IDR EOM', 'idr'],
+    ['aum_usd_avg', 'AUM USD avg'], ['aum_usd_eom', 'AUM USD EOM'], ['usd_idr_eom', 'USD/IDR EOM']]), t('an_empty'))],
+];
+const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB, MIS_TAB, MCH_TAB];
 function loadSubscription() { return loadAnalysis(SA_TAB); }
 function loadOnboarding() { return loadAnalysis(OB_TAB); }
 function loadRedemption() { return loadAnalysis(RD_TAB); }
@@ -9568,6 +9576,7 @@ const DATA_SOURCES = {
   'app-health': 'firebase_crashlytics:com_sayakaya_android_ANDROID,com_sayakaya_ios_IOS|firebase_performance:com_sayakaya_android_ANDROID,com_sayakaya_ios_IOS',
   'user-behavior': 'analytics_266759216:events_*|main:bonus_portfolios,funds,portfolios,transactions,user_profiles,users',
   'mis-report': 'analytics_266759216:events_*|main:transactions,users|mi_fee_logs:portfolios',
+  'mis-channel': 'analytics_266759216:events_*|main:transactions,users,funds,fx_rates|mi_fee_logs:mi_fee',
   'performance': 'main:funds,snapshots',
   'growth': 'main:bonus_portfolios,campaigns,funds,investment_managers,portfolios,switching_transactions,transactions,user_profiles,user_referrals,users|mi_fee_logs:portfolio_fix',
   'reconciliation': 'main:transactions|sinvest:trx_history',
