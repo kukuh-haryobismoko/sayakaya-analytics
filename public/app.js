@@ -10027,7 +10027,7 @@ function wire() {
   // filename/body carry the currently viewed date (if any) so an export
   // matches whatever's on screen, not always the live holdings.
   const pfFilename = () => `portfolio_${pfSelected.sid}${pfSelected.date ? '_' + pfSelected.date : ''}`;
-  const pfExportBody = () => ({ userId: pfSelected.userId, sid: pfSelected.sid, ...(pfSelected.date ? { date: pfSelected.date } : {}) });
+  const pfExportBody = () => ({ userId: pfSelected.userId, sid: pfSelected.sid, convertIdr: $('#pfConvertIdr').checked, ...(pfSelected.date ? { date: pfSelected.date } : {}) });
   $('#pfCsv').addEventListener('click', () => pfSelected && download(
     { source: 'portfolio_full', format: 'csv', filename: pfFilename(), ...pfExportBody() },
     `${pfFilename()}.csv`));

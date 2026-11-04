@@ -1491,7 +1491,7 @@ function createApp({ serveStatic = true } = {}) {
       const h = date ? Q.userHoldingsAsOf(sid, date) : Q.userHoldings(userId);
       const pq = Q.productPerformanceDetail();
       const [holdings, detail] = await Promise.all([
-        runQuery(h.sql, h.params),
+        runQuery(Q.fxOff(h, req.body.convertIdr).sql, h.params),
         runQuery(pq.sql, pq.params),
       ]);
       if (format === 'pdf') {
@@ -1519,7 +1519,7 @@ function createApp({ serveStatic = true } = {}) {
       const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
       const pq = Q.productPerformanceDetail();
       const [holdingsRaw, detail] = await Promise.all([
-        runQuery(h.sql, h.params),
+        runQuery(Q.fxOff(h, req.body.convertIdr).sql, h.params),
         runQuery(pq.sql, pq.params),
       ]);
       // Client-side checklist for excluding dust/unwanted holdings (e.g. a
@@ -1552,7 +1552,7 @@ function createApp({ serveStatic = true } = {}) {
       const h = date ? Q.userHoldingsFromTxAsOf(userId, date) : Q.userHoldingsFromTx(userId);
       const pq = Q.productPerformanceDetail();
       const [holdingsRaw, detail] = await Promise.all([
-        runQuery(h.sql, h.params),
+        runQuery(Q.fxOff(h, req.body.convertIdr).sql, h.params),
         runQuery(pq.sql, pq.params),
       ]);
       const holdings = Array.isArray(excludeFunds) && excludeFunds.length
@@ -1583,7 +1583,7 @@ function createApp({ serveStatic = true } = {}) {
       const h = date ? Q.sinvestHoldingsAsOf(sid, date) : Q.sinvestHoldings(sid);
       const pq = Q.productPerformanceDetail();
       const [holdingsRawSi, detail] = await Promise.all([
-        runQuery(h.sql, h.params),
+        runQuery(Q.fxOff(h, req.body.convertIdr).sql, h.params),
         runQuery(pq.sql, pq.params),
       ]);
       const holdingsSi = Array.isArray(excludeFunds) && excludeFunds.length
@@ -1623,7 +1623,7 @@ function createApp({ serveStatic = true } = {}) {
       const h = Q.goalUserHoldings(userId, asOfDate);
       const pq = Q.productPerformanceDetail();
       const [holdings, detail] = await Promise.all([
-        runQuery(h.sql, h.params),
+        runQuery(Q.fxOff(h, req.body.convertIdr).sql, h.params),
         runQuery(pq.sql, pq.params),
       ]);
       if (format === 'pdf') {

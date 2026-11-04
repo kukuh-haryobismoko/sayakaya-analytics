@@ -1589,7 +1589,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const h = date ? Q.userHoldingsAsOf(sid, date) : Q.userHoldings(userId);
     const pq = Q.productPerformanceDetail();
     const [holdings, detail] = await Promise.all([
-      runQuery(h.sql, h.params),
+      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     if (format === 'pdf') {
@@ -1627,7 +1627,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
     const pq = Q.productPerformanceDetail();
     const [holdingsRaw, detail] = await Promise.all([
-      runQuery(h.sql, h.params),
+      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     // Client-side checklist for excluding dust/unwanted holdings (e.g. a
@@ -1668,7 +1668,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const h = dateTx ? Q.userHoldingsFromTxAsOf(userId, dateTx) : Q.userHoldingsFromTx(userId);
     const pq = Q.productPerformanceDetail();
     const [holdingsRawTx, detail] = await Promise.all([
-      runQuery(h.sql, h.params),
+      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     const holdings = Array.isArray(excludeFundsTx) && excludeFundsTx.length
@@ -1707,7 +1707,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const h = dateSi ? Q.sinvestHoldingsAsOf(sid, dateSi) : Q.sinvestHoldings(sid);
     const pq = Q.productPerformanceDetail();
     const [holdingsRawSi, detail] = await Promise.all([
-      runQuery(h.sql, h.params),
+      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     const holdingsSi = Array.isArray(excludeFundsSi) && excludeFundsSi.length
@@ -1753,7 +1753,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const h = Q.goalUserHoldings(userId, asOfDate);
     const pq = Q.productPerformanceDetail();
     const [holdings, detail] = await Promise.all([
-      runQuery(h.sql, h.params),
+      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     if (format === 'pdf') {
