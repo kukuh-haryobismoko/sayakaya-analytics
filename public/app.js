@@ -197,7 +197,7 @@ function downloadBlob(blob, filename) {
 // Every <tr> in document order (thead + tbody + tfoot), so a Total row in
 // tfoot comes out the same as any other row.
 function tableToAoa(table) {
-  return [...table.querySelectorAll('tr')].map((tr) => [...tr.children].map((c) => c.textContent.trim()));
+  return [...table.querySelectorAll('tr')].map((tr) => [...tr.children].map((c) => c.dataset.v ?? c.textContent.trim()));
 }
 function aoaToCsv(aoa) {
   // Cells that start like a formula get a leading ' so Excel shows them as text;
@@ -3435,7 +3435,8 @@ function mchStack(id, rows, key) {
   paint(id, { type: 'bar', options: MCH_OPTS(true), data: { labels: months, datasets: chans.map((c, i) => ({
     label: c, stack: 's', backgroundColor: pie()[i % 8], data: months.map((m) => Number(rs.find((r) => r.month === m && r.channel === c)?.[key]) || 0) })) } });
 }
-const mchCols = (defs) => defs.map(([key, label, type = 'num']) => ({ key, label, type }));
+// raw: display keeps Rp / thousands dots; copy, CSV and XLSX read the plain number (data-v).
+const mchCols = (defs) => defs.map(([key, label, type = 'num']) => ({ key, label, type, raw: type !== 'text' }));
 MCH_TAB.sections = [
   ['mch/funnel', '#mchFunnel', () => { mchStack('mchRegChart', mchRows(MCH_TAB.cache.funnel), 'registered'); mchStack('mchPaidChart', mchRows(MCH_TAB.cache.funnel), 'paid'); genTable('#mchFunnel', mchRows(MCH_TAB.cache.funnel), mchCols([['month', 'Month', 'text'], ['channel', 'Channel', 'text'], ['downloads', 'Downloads'], ['registered', 'Registered'],
     ['kyc_submitted', 'KYC submitted'], ['verified', 'Verified'], ['first_order', '1st order'], ['paid', 'Paid']]), t('an_empty')); }],
@@ -4618,7 +4619,7 @@ function genTable(sel, rows, cols, emptyMsg, sortState) {
     if (c.fmt) out = c.fmt(v, r);
     const tone = c.type === 'delta' && v != null ? (v < 0 ? ' neg' : ' pos') : '';
     // c.text: keep the cell text in the XLSX export (phone 0812..., SID, timestamps).
-    return `<td class="${numTypes.includes(c.type) ? 'num' : ''}${tone}"${c.text ? ' data-t="s"' : ''}>${out}</td>`;
+    return `<td class="${numTypes.includes(c.type) ? 'num' : ''}${tone}"${c.text ? ' data-t="s"' : ''}${c.raw && v != null && v !== '' ? ` data-t="n" data-v="${Number(v)}"` : ''}>${out}</td>`;
   };
   // c.sort (true, or the server column name) makes the header a server sort
   // control, see TABLE SORT; the arrow is drawn by CSS from aria-sort so it
@@ -10973,6 +10974,8 @@ async function init() {
   const er90 = daysAgoRange(90); $('#erFrom').value = er90.from; $('#erTo').value = er90.to;
   const bh30 = daysAgoRange(30); $('#bhFrom').value = bh30.from; $('#bhTo').value = bh30.to;
   ANALYSIS_TABS.forEach((tab) => { $(`#${tab.prefix}From`).value = bh30.from; $(`#${tab.prefix}To`).value = bh30.to; });
+  // Channel report is monthly: open on year to date.
+  $('#mchFrom').value = `${bh30.to.slice(0, 4)}-01-01`;
   // MIS opens on month to date up to yesterday (today's GA4 is incomplete); on the 1st that is the whole previous month.
   const misTo = new Date(Date.now() - 864e5).toLocaleDateString('en-CA'); $('#misFrom').value = `${misTo.slice(0, 8)}01`; $('#misTo').value = misTo;
   // Product funnel follows sign-ups for weeks, so it opens on 90 days.
