@@ -365,7 +365,7 @@
               <button class="btn-ghost" id="pfPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="pfPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
               <button class="btn-ghost" id="pfGsheet" data-i18n="common_gsheet">Google Sheet</button>
-              <label><input type="checkbox" id="pfConvertIdr" /> <span data-i18n="common_convert_idr">Convert USD to rupiah</span></label>
+              <label><span data-i18n="common_export_ccy">Export currency</span> <select id="pfCcy"><option value="IDR">IDR (Rp)</option><option value="USD">USD</option></select></label>
             </div>
           </div>
           <span class="hint" id="pfUserSub"></span>
@@ -1319,6 +1319,7 @@ The exact number of people shows below once you pick a group, and again before y
               <button class="btn-ghost" id="pfxPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="pfxPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
               <button class="btn-ghost" id="pfxGsheet" data-i18n="common_gsheet">Google Sheet</button>
+              <label><span data-i18n="common_export_ccy">Export currency</span> <select id="pfxCcy"><option value="IDR">IDR (Rp)</option><option value="USD">USD</option></select></label>
             </div>
           </div>
           <span class="hint" id="pfxUserSub"></span>
@@ -1414,6 +1415,7 @@ The exact number of people shows below once you pick a group, and again before y
               <button class="btn-ghost" id="ptxPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="ptxPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
               <button class="btn-ghost" id="ptxGsheet" data-i18n="common_gsheet">Google Sheet</button>
+              <label><span data-i18n="common_export_ccy">Export currency</span> <select id="ptxCcy"><option value="IDR">IDR (Rp)</option><option value="USD">USD</option></select></label>
             </div>
           </div>
           <span class="hint" id="ptxUserSub"></span>
@@ -1509,6 +1511,7 @@ The exact number of people shows below once you pick a group, and again before y
               <button class="btn-ghost" id="psiPdfOnly" data-i18n="common_pdf_portfolio_only">PDF (portfolio only)</button>
               <button class="btn-ghost" id="psiPdf" data-i18n="common_pdf_with_performance">PDF (with performance)</button>
               <button class="btn-ghost" id="psiGsheet" data-i18n="common_gsheet">Google Sheet</button>
+              <label><span data-i18n="common_export_ccy">Export currency</span> <select id="psiCcy"><option value="IDR">IDR (Rp)</option><option value="USD">USD</option></select></label>
             </div>
           </div>
           <span class="hint" id="psiUserSub"></span>
@@ -3636,7 +3639,7 @@ The exact number of people shows below once you pick a group, and again before y
         <div class="chart-wrap"><canvas id="mchRegChart" aria-label="Registered per month by channel"></canvas></div>
         <h3 style="margin-top:14px">Paid per bulan per channel (user yang sudah bayar subscription)</h3>
         <div class="chart-wrap"><canvas id="mchPaidChart" aria-label="Paid per month by channel"></canvas></div>
-        <h3>User journey by channel (cohort = registration month)</h3>
+        <h3>User journey by channel (baris = metrik, kolom = bulan; Registered dst = cohort bulan daftar, Downloads = bulan first_open)</h3>
         <div id="mchFunnel" class="table-wrap"></div>
         <h3 style="margin-top:14px">AUM per bulan (fund ACTIVE dan UPDATE saja; fund USD dalam USD; rate = fx_rates terakhir bulan itu)</h3>
         <h3 style="margin-top:14px">AUM akhir bulan: IDR (sumbu kiri) dan USD (sumbu kanan)</h3>

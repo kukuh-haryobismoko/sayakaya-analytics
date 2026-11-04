@@ -3435,11 +3435,37 @@ function mchStack(id, rows, key) {
   paint(id, { type: 'bar', options: MCH_OPTS(true), data: { labels: months, datasets: chans.map((c, i) => ({
     label: c, stack: 's', backgroundColor: pie()[i % 8], data: months.map((m) => Number(rs.find((r) => r.month === m && r.channel === c)?.[key]) || 0) })) } });
 }
+// Sheet layout: one block per channel, rows = metrics, columns = months. Cells carry the plain number in data-v for copy / CSV / XLSX.
+const MCH_METRICS = [
+  ['Total Downloads', 'downloads'], ['  - Android', 'android'], ['  - iOS', 'ios'], ['Registered', 'registered'], ['KYC', 'kyc_submitted'],
+  ['Verified', 'verified'], ['1st Transaction', 'first_order'], ['Paid', 'paid'],
+  ['% Download to Registered', 'downloads', 'registered'], ['% Registered to KYC', 'registered', 'kyc_submitted'], ['% KYC to Verified', 'kyc_submitted', 'verified'],
+  ['% Verified to 1st Transaction', 'verified', 'first_order'], ['% 1st Transaction to Paid', 'first_order', 'paid'],
+  ['% Download to 1st Transaction', 'downloads', 'first_order'], ['% KYC to 1st Transaction', 'kyc_submitted', 'first_order'],
+  ['Uninstalls', 'uninstalls'], ['Lifetime between download to uninstall (months)', 'lifetime_months'],
+];
+function mchPivot(rows) {
+  if (!rows.length) { $('#mchFunnel').innerHTML = `<div class="empty">${t('an_empty')}</div>`; return; }
+  const months = [...new Set(rows.map((r) => r.month))].sort();
+  const chans = ['TOTAL', 'organic', 'sales_booth', 'karyawan', 'referral', 'no_account'].filter((c) => rows.some((r) => r.channel === c));
+  const mlabel = (m) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+  const cell = (v, pct) => (v == null || !Number.isFinite(v) ? '<td class="num"></td>' : `<td class="num" data-t="n" data-v="${pct ? +(v * 100).toFixed(1) : v}">${pct ? (v * 100).toFixed(1) + '%' : num(v)}</td>`);
+  const body = chans.map((c) => MCH_METRICS.map(([label, k, k2]) => {
+    const tds = months.map((m) => {
+      const r = rows.find((x) => x.month === m && x.channel === c);
+      const g = (key) => (r && r[key] != null ? Number(r[key]) : null);
+      if (!k2) return cell(g(k), false);
+      const d = g(k), n = g(k2);
+      return cell(d && n != null ? n / d : null, true);
+    }).join('');
+    return `<tr><td>${c}</td><td${k2 ? ' class="muted"' : ''}>${label.replace(/^ +/, (sp) => '\u00a0'.repeat(sp.length * 2))}</td>${tds}</tr>`;
+  }).join('')).join('');
+  $('#mchFunnel').innerHTML = `<table><thead><tr><th>Channel</th><th>Metric</th>${months.map((m) => `<th class="num">${mlabel(m)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+}
 // raw: display keeps Rp / thousands dots; copy, CSV and XLSX read the plain number (data-v).
 const mchCols = (defs) => defs.map(([key, label, type = 'num']) => ({ key, label, type, raw: type !== 'text' }));
 MCH_TAB.sections = [
-  ['mch/funnel', '#mchFunnel', () => { mchStack('mchRegChart', mchRows(MCH_TAB.cache.funnel), 'registered'); mchStack('mchPaidChart', mchRows(MCH_TAB.cache.funnel), 'paid'); genTable('#mchFunnel', mchRows(MCH_TAB.cache.funnel), mchCols([['month', 'Month', 'text'], ['channel', 'Channel', 'text'], ['downloads', 'Downloads'], ['registered', 'Registered'],
-    ['kyc_submitted', 'KYC submitted'], ['verified', 'Verified'], ['first_order', '1st order'], ['paid', 'Paid']]), t('an_empty')); }],
+  ['mch/funnel', '#mchFunnel', () => { mchStack('mchRegChart', mchRows(MCH_TAB.cache.funnel), 'registered'); mchStack('mchPaidChart', mchRows(MCH_TAB.cache.funnel), 'paid'); mchPivot(mchRows(MCH_TAB.cache.funnel)); }],
   ['mch/aum', '#mchAum', () => {
     const a = MCH_TAB.cache.aum || [], line = (label, key, color, yAxisID) => ({ label, yAxisID, borderColor: color, backgroundColor: color, tension: 0.25, data: a.map((r) => Number(r[key]) || 0) });
     paint('mchAumChart', { type: 'line', data: { labels: a.map((r) => r.month), datasets: [line('AUM IDR EOM', 'aum_idr_eom', C.indigo, 'y'), line('AUM USD EOM', 'aum_usd_eom', C.chartAmber, 'y1')] },
@@ -10065,7 +10091,7 @@ function wire() {
   // filename/body carry the currently viewed date (if any) so an export
   // matches whatever's on screen, not always the live holdings.
   const pfFilename = () => `portfolio_${pfSelected.sid}${pfSelected.date ? '_' + pfSelected.date : ''}`;
-  const pfExportBody = () => ({ userId: pfSelected.userId, sid: pfSelected.sid, convertIdr: $('#pfConvertIdr').checked, ...(pfSelected.date ? { date: pfSelected.date } : {}) });
+  const pfExportBody = () => ({ userId: pfSelected.userId, sid: pfSelected.sid, convertIdr: $('#pfCcy').value !== 'USD', ...(pfSelected.date ? { date: pfSelected.date } : {}) });
   $('#pfCsv').addEventListener('click', () => pfSelected && download(
     { source: 'portfolio_full', format: 'csv', filename: pfFilename(), ...pfExportBody() },
     `${pfFilename()}.csv`));
@@ -10186,6 +10212,7 @@ function wire() {
   const pfxFilename = () => `portfolio_fix_${pfxSelected.sid}${pfxSelected.date ? '_' + pfxSelected.date : ''}`;
   const pfxExportBody = () => ({
     userId: pfxSelected.userId, sid: pfxSelected.sid,
+    convertIdr: $('#pfxCcy').value !== 'USD',
     ...(pfxSelected.date ? { date: pfxSelected.date } : {}),
     ...(pfxSelected.excludedFunds && pfxSelected.excludedFunds.size ? { excludeFunds: [...pfxSelected.excludedFunds] } : {}),
   });
@@ -10221,6 +10248,7 @@ function wire() {
   const ptxFilename = () => `portfolio_tx_${ptxSelected.sid}${ptxSelected.date ? '_' + ptxSelected.date : ''}`;
   const ptxExportBody = () => ({
     userId: ptxSelected.userId, sid: ptxSelected.sid,
+    convertIdr: $('#ptxCcy').value !== 'USD',
     ...(ptxSelected.date ? { date: ptxSelected.date } : {}),
     ...(ptxSelected.excludedFunds && ptxSelected.excludedFunds.size ? { excludeFunds: [...ptxSelected.excludedFunds] } : {}),
   });
@@ -10256,6 +10284,7 @@ function wire() {
   const psiFilename = () => `portfolio_sinvest_${psiSelected.sid}${psiSelected.date ? '_' + psiSelected.date : ''}`;
   const psiExportBody = () => ({
     userId: psiSelected.userId, sid: psiSelected.sid,
+    convertIdr: $('#psiCcy').value !== 'USD',
     ...(psiSelected.date ? { date: psiSelected.date } : {}),
     ...(psiSelected.excludedFunds && psiSelected.excludedFunds.size ? { excludeFunds: [...psiSelected.excludedFunds] } : {}),
   });

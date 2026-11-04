@@ -1600,7 +1600,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
       // Buffer (Node) satisfies BodyInit (a Uint8Array) at runtime, but the
       // two libraries' type declarations don't agree — wrap to satisfy both.
       return new Response(new Uint8Array(buf), {
@@ -1643,7 +1643,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
@@ -1682,7 +1682,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
@@ -1721,7 +1721,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username });
+      const buf = await portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
@@ -1764,7 +1764,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',

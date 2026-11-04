@@ -1501,7 +1501,7 @@ function createApp({ serveStatic = true } = {}) {
         const c = Q.userContact(userId);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
+        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username, mode: req.body.convertIdr === false ? 'USD' : 'IDR' });
         return sendPdf(res, buf, filename, username);
       }
       if (format === 'gsheet') {
@@ -1534,7 +1534,7 @@ function createApp({ serveStatic = true } = {}) {
         const c = Q.userContact(userId);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
+        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username, mode: req.body.convertIdr === false ? 'USD' : 'IDR' });
         return sendPdf(res, buf, filename, username);
       }
       if (format === 'gsheet') {
@@ -1565,7 +1565,7 @@ function createApp({ serveStatic = true } = {}) {
         const c = Q.userContact(userId);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
+        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username, mode: req.body.convertIdr === false ? 'USD' : 'IDR' });
         return sendPdf(res, buf, filename, username);
       }
       if (format === 'gsheet') {
@@ -1596,7 +1596,7 @@ function createApp({ serveStatic = true } = {}) {
         const c = Q.userContact(userId);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-        const buf = await PDF.portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username });
+        const buf = await PDF.portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username, mode: req.body.convertIdr === false ? 'USD' : 'IDR' });
         return sendPdf(res, buf, filename, username);
       }
       if (format === 'gsheet') {
@@ -1633,7 +1633,7 @@ function createApp({ serveStatic = true } = {}) {
         const c = Q.userContact(userId);
         const [contact] = await runQuery(c.sql, c.params, { redact: false });
         const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username });
+        const buf = await PDF.portfolioReport({ contact, holdings }, perf, { columns, username, mode: req.body.convertIdr === false ? 'USD' : 'IDR' });
         return sendPdf(res, buf, filename, username);
       }
       if (format === 'gsheet') {

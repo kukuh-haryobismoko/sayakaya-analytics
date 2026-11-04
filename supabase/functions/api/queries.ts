@@ -30,7 +30,10 @@ const ccySum = (x: string, fx = FX_END) => `(SUM(IF(f.currency = 'USD', ${x}, 0)
 const FX_NOW = "(SELECT rate FROM `sayakaya.main.fx_rates` ORDER BY rate_date DESC LIMIT 1)";
 // Per-row IDR multiplier for unit*NAV values: FX_NOW for live holdings, rate on @param date for as-of ones.
 const kNow = `IF(f.currency = 'USD', ${FX_NOW}, 1)`;
+// Rate column for export summaries; 1.0 keeps fxOff from neutralising it.
+const kNowFx = `IF(f.currency = 'USD', ${FX_NOW}, 1.0)`;
 const kAt = (p: string) => `IF(f.currency = 'USD', (SELECT rate FROM \`sayakaya.main.fx_rates\` WHERE rate_date <= CAST(@${p} AS DATE) ORDER BY rate_date DESC LIMIT 1), 1)`;
+const kAtFx = (p: string) => `IF(f.currency = 'USD', (SELECT rate FROM \`sayakaya.main.fx_rates\` WHERE rate_date <= CAST(@${p} AS DATE) ORDER BY rate_date DESC LIMIT 1), 1.0)`;
 const TX_RAW = '`sayakaya.main.transactions`';
 // Transaction amounts in IDR: the app's own fx_rate when set, else the rate on the transaction date. `currency` stays the fund's currency.
 const TX = `(SELECT * EXCEPT (fx_k) REPLACE (amount * fx_k AS amount, final_amount * fx_k AS final_amount, transfer_fee * fx_k AS transfer_fee, amount_fee * fx_k AS amount_fee, payment_fee * fx_k AS payment_fee, user_fee * fx_k AS user_fee, app_covered_fee * fx_k AS app_covered_fee, stamp_duty_amount * fx_k AS stamp_duty_amount, realized_gain_loss * fx_k AS realized_gain_loss)
@@ -742,6 +745,7 @@ export const userHoldings = (userId: string): Query => ({
     FROM (
       SELECT f.name AS fund, f.type AS fund_type, h.unit, h.avg_buy_price,
         f.latest_nav_value AS nav, f.latest_nav_date AS nav_date,
+        f.currency AS ccy, ${kNowFx} AS fx,
         ROUND(h.unit * h.avg_buy_price * ${kNow}) AS fund_value,
         ROUND(h.unit * f.latest_nav_value * ${kNow}) AS value,
         h.opened_at
@@ -783,6 +787,7 @@ export const userHoldingsBatch = (userIds: string[]): Query => ({
     FROM (
       SELECT h.user_id, f.name AS fund, f.type AS fund_type, h.unit, h.avg_buy_price,
         f.latest_nav_value AS nav, f.latest_nav_date AS nav_date,
+        f.currency AS ccy, ${kNowFx} AS fx,
         ROUND(h.unit * h.avg_buy_price * ${kNow}) AS fund_value,
         ROUND(h.unit * f.latest_nav_value * ${kNow}) AS value,
         h.opened_at
@@ -861,6 +866,7 @@ export const userHoldingsFromTx = (userId: string): Query => ({
     FROM (
       SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
         f.latest_nav_value AS nav, f.latest_nav_date AS nav_date,
+        f.currency AS ccy, ${kNowFx} AS fx,
         ROUND(m.unit * m.avg_buy_price * ${kNow}) AS fund_value,
         ROUND(m.unit * f.latest_nav_value * ${kNow}) AS value,
         m.opened_at
@@ -936,6 +942,7 @@ export const userHoldingsFromTxAsOf = (userId: string, date: string): Query => (
     FROM (
       SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
         COALESCE(cn.nav, f.latest_nav_value) AS nav, @date AS nav_date,
+        f.currency AS ccy, ${kAtFx('date')} AS fx,
         ROUND(m.unit * m.avg_buy_price * ${kAt('date')}) AS fund_value,
         ROUND(m.unit * COALESCE(cn.nav, f.latest_nav_value) * ${kAt('date')}) AS value,
         m.opened_at
@@ -1088,6 +1095,7 @@ export const goalUserHoldings = (userId: string, asOfDate: string): Query => ({
       SELECT f.name AS fund, f.type AS fund_type, h.unit,
         COALESCE(pb.avg_buy_price, h.fallback_avg_buy_price) AS avg_buy_price,
         COALESCE(cn.nav, h.fallback_nav) AS nav, h.nav_date, h.opened_at,
+        f.currency AS ccy, ${kAtFx('asOfDate')} AS fx,
         ROUND(h.unit * COALESCE(pb.avg_buy_price, h.fallback_avg_buy_price) * ${kAt('asOfDate')}) AS fund_value,
         ROUND(h.unit * COALESCE(cn.nav, h.fallback_nav) * ${kAt('asOfDate')}) AS value
       FROM holdings h
@@ -1140,6 +1148,7 @@ export const goalUserHoldingsByGoal = (userId: string, asOfDate: string): Query 
     SELECT g.name AS goal, f.name AS fund, f.type AS fund_type,
       l.unit, COALESCE(pb.avg_buy_price, l.buy_nav) AS avg_buy_price,
       COALESCE(cn.nav, l.nav) AS nav, l.nav_date,
+      f.currency AS ccy, ${kAtFx('asOfDate')} AS fx,
       ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kAt('asOfDate')}) AS fund_value,
       ROUND(l.unit * COALESCE(cn.nav, l.nav) * ${kAt('asOfDate')}) AS value,
       ROUND(l.unit * COALESCE(cn.nav, l.nav) * ${kAt('asOfDate')}) - ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kAt('asOfDate')}) AS gain_loss,
@@ -1259,6 +1268,7 @@ export const userHoldingsAsOf = (sid: string, date: string): Query => ({
     )
     SELECT p.fund, p.fund_type, p.unit, p.avg_buy_price,
       COALESCE(cn.nav, p.latest_nav_value) AS nav, p.nav_date,
+      f.currency AS ccy, ${kAtFx('date')} AS fx,
       ROUND(p.buy_amount) AS fund_value,
       ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) AS value,
       ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) - ROUND(p.buy_amount) AS gain_loss,
@@ -1384,6 +1394,7 @@ export const userHoldingsAsOfFix = (sid: string, date: string): Query => ({
     )
     SELECT p.fund, p.fund_type, p.unit, p.avg_buy_price,
       COALESCE(cn.nav, p.latest_nav_value) AS nav, p.nav_date,
+      f.currency AS ccy, ${kAtFx('date')} AS fx,
       ROUND(p.buy_amount) AS fund_value,
       ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) AS value,
       ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) - ROUND(p.buy_amount) AS gain_loss,
@@ -4241,6 +4252,7 @@ export const sinvestHoldings = (sid: string): Query => ({
     FROM (
       SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
         f.latest_nav_value AS nav, f.latest_nav_date AS nav_date,
+        f.currency AS ccy, ${kNowFx} AS fx,
         ROUND(m.unit * m.avg_buy_price * ${kNow}) AS fund_value,
         ROUND(m.unit * f.latest_nav_value * ${kNow}) AS value,
         m.opened_at
@@ -4299,6 +4311,7 @@ export const sinvestHoldingsAsOf = (sid: string, date: string): Query => {
     FROM (
       SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
         COALESCE(cn.nav, f.latest_nav_value) AS nav, @date AS nav_date,
+        f.currency AS ccy, ${kAtFx('date')} AS fx,
         ROUND(m.unit * m.avg_buy_price * ${kAt('date')}) AS fund_value,
         ROUND(m.unit * COALESCE(cn.nav, f.latest_nav_value) * ${kAt('date')}) AS value,
         m.opened_at
@@ -6838,22 +6851,53 @@ export const misChannelFunnel = (from?: string, to?: string): Query => {
         HAVING u.month IS NOT NULL
       ),
       dev AS (
-        SELECT user_pseudo_id, MIN(IF(event_name = 'first_open', PARSE_DATE('%Y%m%d', event_date), NULL)) AS fo, MAX(user_id) AS uid
+        SELECT user_pseudo_id,
+          MIN(IF(event_name = 'first_open', PARSE_DATE('%Y%m%d', event_date), NULL)) AS fo,
+          MAX(user_id) AS uid,
+          ARRAY_AGG(STRUCT(platform, event_date) ORDER BY PARSE_DATE('%Y%m%d', event_date) LIMIT 1)[OFFSET(0)] AS first_dim
         FROM ${MIS_GA4_EVENTS}
         WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE(@from)) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
         GROUP BY user_pseudo_id
       ),
       dl AS (
-        SELECT DATE_TRUNC(d.fo, MONTH) AS month, IF(u.id IS NULL, 'no_account', ${MCH_CHANNEL}) AS channel, COUNT(*) AS downloads
+        SELECT DATE_TRUNC(d.fo, MONTH) AS month,
+          IF(u.id IS NULL, 'no_account', ${MCH_CHANNEL}) AS channel,
+          SUM(IF(d.first_dim.platform = 'IOS', 1, 0)) AS ios,
+          SUM(IF(d.first_dim.platform = 'ANDROID', 1, 0)) AS android,
+          COUNT(*) AS downloads
         FROM dev d LEFT JOIN ${USERS} u ON u.id = d.uid
         WHERE d.fo BETWEEN DATE(@from) AND DATE(@to)
         GROUP BY ROLLUP(month, channel)
         HAVING month IS NOT NULL
       ),
-      dl2 AS (SELECT month, IFNULL(channel, 'TOTAL') AS channel, downloads FROM dl)
-      SELECT FORMAT_DATE('%Y-%m', month) AS month, channel,
-        dl.downloads, a.registered, a.kyc_submitted, a.verified, a.first_order, a.paid
-      FROM agg a FULL JOIN dl2 dl USING (month, channel)
+      dl2 AS (SELECT month, IFNULL(channel, 'TOTAL') AS channel, ios, android, downloads FROM dl),
+      rm AS (
+        SELECT user_pseudo_id, MIN(PARSE_DATE('%Y%m%d', event_date)) AS rm_date, MAX(user_id) AS uid,
+          MIN(user_first_touch_timestamp) AS ft
+        FROM ${MIS_GA4_EVENTS}
+        WHERE _TABLE_SUFFIX BETWEEN FORMAT_DATE('%Y%m%d', DATE(@from)) AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
+          AND event_name = 'app_remove'
+        GROUP BY user_pseudo_id
+      ),
+      uninst AS (
+        SELECT DATE_TRUNC(r.rm_date, MONTH) AS month,
+          IF(u.id IS NULL, 'no_account', ${MCH_CHANNEL}) AS channel,
+          COUNT(*) AS uninstalls,
+          ROUND(AVG(DATE_DIFF(r.rm_date, DATE(TIMESTAMP_MICROS(r.ft)), DAY)) / 30, 2) AS lifetime_months
+        FROM rm r LEFT JOIN ${USERS} u ON u.id = r.uid
+        WHERE r.rm_date BETWEEN DATE(@from) AND DATE(@to)
+        GROUP BY ROLLUP(month, channel)
+        HAVING month IS NOT NULL
+      ),
+      uninst2 AS (SELECT month, IFNULL(channel, 'TOTAL') AS channel, uninstalls, lifetime_months FROM uninst)
+      SELECT FORMAT_DATE('%Y-%m', COALESCE(a.month, d.month, u.month)) AS month,
+        COALESCE(a.channel, d.channel, u.channel) AS channel,
+        d.downloads, d.ios, d.android,
+        a.registered, a.kyc_submitted, a.verified, a.first_order, a.paid,
+        u.uninstalls, u.lifetime_months
+      FROM agg a
+      FULL JOIN dl2 d USING (month, channel)
+      FULL JOIN uninst2 u USING (month, channel)
       ORDER BY month, channel = 'TOTAL', channel`,
     params: r,
   };

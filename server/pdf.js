@@ -348,6 +348,31 @@ function printLetterhead(doc, { left, width, contact, title, dateLabel, dateValu
 // contact: { name, sid, ifua, address, ... }
 // holdings: rows from queries.userHoldings()
 // options.columns: optional list of HOLDINGS_COLS keys to keep (plus 'fund', always kept)
+// Per-currency summary under the holdings table (only when a USD fund is held). mode 'USD': rows are in each fund's own
+// currency; 'IDR': rows already converted at the portfolio-date rate (fx), so USD = value / fx.
+// ponytail: one rate per report (all USD rows share the as-of date); add per-row rates if that stops holding.
+function portfolioSummaryLines(holdings, mode) {
+  if (!holdings.some((h) => h.ccy === 'USD')) return [];
+  const nat = (h, k) => { const v = Number(val(h[k])) || 0; const fx = Number(val(h.fx)) || 1; return h.ccy === 'USD' ? (mode === 'USD' ? v : v / fx) : v; };
+  const fxOf = (h) => (h.ccy === 'USD' ? Number(val(h.fx)) || 1 : 1);
+  const lines = [];
+  let totIdr = 0;
+  for (const c of ['USD', 'IDR']) {
+    const rows = holdings.filter((h) => (h.ccy === 'USD' ? 'USD' : 'IDR') === c);
+    if (!rows.length) continue;
+    const fv = rows.reduce((s, h) => s + nat(h, 'fund_value'), 0);
+    const mv = rows.reduce((s, h) => s + nat(h, 'value'), 0);
+    const rate = fxOf(rows[0]);
+    const d = c === 'USD' ? 2 : 0;
+    const p = c === 'USD' ? 'USD ' : 'Rp ';
+    totIdr += mv * rate;
+    lines.push(`${c === 'USD' ? 'Dana USD' : 'Dana Rupiah'}: Fund Value ${p}${idNum(fv, d)} | Market Value ${p}${idNum(mv, d)} | Gain/Loss ${p}${idNum(mv - fv, d)}`
+      + (c === 'USD' ? ` | setara Rp ${idNum(mv * rate)} (kurs 1 USD = Rp ${idNum(rate, 2)} pada tanggal portofolio)` : ''));
+  }
+  lines.push(`Total Market Value (Rp): ${idNum(totIdr)}`);
+  return lines;
+}
+
 function drawPortfolioHoldingsPage(doc, { contact, holdings }, options = {}) {
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
@@ -366,7 +391,8 @@ function drawPortfolioHoldingsPage(doc, { contact, holdings }, options = {}) {
   // Anchored at the first non-identity column still visible, so it holds up
   // when hidden columns shift what's left in the table.
   const anchorCol = cols.find((c) => c.key !== 'fund' && c.key !== 'fund_type');
-  if (holdings.length > 1 && anchorCol) {
+  const mixed = options.mode === 'USD' && holdings.some((h) => h.ccy === 'USD') && holdings.some((h) => h.ccy !== 'USD');
+  if (holdings.length > 1 && anchorCol && !mixed) {
     const sum = (k) => holdings.reduce((s, h) => s + (Number(val(h[k])) || 0), 0);
     const totalFund = sum('fund_value');
     const totalMarket = sum('value');
@@ -394,6 +420,14 @@ function drawPortfolioHoldingsPage(doc, { contact, holdings }, options = {}) {
     doc.strokeColor(INK).moveTo(totX, doc.y).lineTo(left + width, doc.y).stroke();
     doc.y += 12;
     doc.x = left;
+  }
+
+  const sum = portfolioSummaryLines(holdings, options.mode);
+  if (sum.length) {
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(INK).text('Ringkasan', left, doc.y, { width });
+    doc.font('Helvetica').fontSize(7.5);
+    sum.forEach((l) => doc.text(l, left, doc.y + 1, { width }));
+    doc.moveDown(0.8);
   }
 
   doc.font('Helvetica').fontSize(7).fillColor(MUTED)
