@@ -546,9 +546,10 @@ on('GET', '/api/overview', requireTab('overview', async (_req, _params, url) => 
   if (!aumDate) return json({ error: 'aumDate is required.' }, 400);
   const fundIds = parseFundIds(url);
   const uf = parseUserFilter(url);
+  const listing = (qp(url, 'listing') || '').split(',');
   const [users, aum, tx, funds] = await Promise.all([
     runQuery(Q.overviewUsers(uf).sql, Q.overviewUsers(uf).params),
-    runQuery(Q.platformAumAsOf(aumDate, fundIds, uf).sql, Q.platformAumAsOf(aumDate, fundIds, uf).params),
+    runQuery(Q.platformAumAsOf(aumDate, fundIds, uf, listing).sql, Q.platformAumAsOf(aumDate, fundIds, uf, listing).params),
     runQuery(Q.overviewTx(from, to, fundIds, uf).sql, Q.overviewTx(from, to, fundIds, uf).params),
     runQuery(Q.overviewFunds(fundIds).sql, Q.overviewFunds(fundIds).params),
   ]);

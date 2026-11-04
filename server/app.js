@@ -440,11 +440,12 @@ function createApp({ serveStatic = true } = {}) {
   app.get('/api/overview', requireTab('overview'), handler(async (req, res) => {
     const { from, to, aumDate } = req.query;
     if (!aumDate) return res.status(400).json({ error: 'aumDate is required.' });
+    const listing = String(req.query.listing || '').split(',');
     const fundIds = parseFundIds(req.query.fundIds);
     const uf = Q.normalizeUserFilter(req.query.userFilter);
     const [users, aum, tx, funds] = await Promise.all([
       runQuery(Q.overviewUsers(uf).sql, Q.overviewUsers(uf).params),
-      runQuery(Q.platformAumAsOf(aumDate, fundIds, uf).sql, Q.platformAumAsOf(aumDate, fundIds, uf).params),
+      runQuery(Q.platformAumAsOf(aumDate, fundIds, uf, listing).sql, Q.platformAumAsOf(aumDate, fundIds, uf, listing).params),
       runQuery(Q.overviewTx(from, to, fundIds, uf).sql, Q.overviewTx(from, to, fundIds, uf).params),
       runQuery(Q.overviewFunds(fundIds).sql, Q.overviewFunds(fundIds).params),
     ]);

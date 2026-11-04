@@ -3573,7 +3573,7 @@ async function loadOverview() {
   // table wait for the latest-date lookup; the charts used to queue behind
   // both of them even though they never needed the AUM date.
   const overviewFetch = defaultToLatestDate('#ovAumDate').then(() =>
-    api(`/api/overview?aumDate=${$('#ovAumDate').value}${scopeQs ? '&' + scopeQs : ''}&from=${r.from}&to=${r.to}`));
+    api(`/api/overview?aumDate=${$('#ovAumDate').value}&listing=${$('#ovListing').value}${scopeQs ? '&' + scopeQs : ''}&from=${r.from}&to=${r.to}`));
   gateTabLoad((v) => { overviewLoaded = v; }, [overviewFetch]);
   overviewFetch.then(renderKpis, (e) => { $('#kpis').innerHTML = `<div class="empty error" role="alert">${escapeHtml(e.message)}</div>`; });
 

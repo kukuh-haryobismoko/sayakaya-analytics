@@ -1300,7 +1300,7 @@ export const userAumHistoryFromTx = (userId: string): Query => ({
   sql: `WITH tx AS (
       SELECT fund_id, DATE(created_at) AS d,
         CAST(unit AS NUMERIC) * IF(type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in'), 1, -1) AS du
-      FROM ${TX}
+      FROM ${TX_RAW}
       WHERE user_id = @userId AND status IN ('completed', 'verified', 'verified_by_operational', 'completed_payment')
         AND type IN ('buy', 'SWITCH_IN', 'reinvestment', 'transfer_in',
                      'sell', 'SWITCH_OUT', 'transfer_out', 'liquidation', 'unit_adjustment')
@@ -2597,7 +2597,8 @@ const SUB_FLOW_NAMES = `${SUB_FORM_SCREENS}, ${SUB_LATER_SCREENS}, 'Subscription
         'top_up_portfolio_click', 'top_up_portfolio_detail_click', 'top_up_portfolio_detail_options_click', 'top_up_product_click',
         'top_up_other_product_click', 'buy_repeat_portfolio_click', 'buy_repeat_click'`;
 const SUB_PAID_STATUSES = `'completed', 'completed_payment', 'verified'`;
-const SUB_PAID_SQL = `SELECT user_id, created_at, paid_at, amount, final_amount FROM ${TX}
+// ponytail: raw table + FX_NOW fallback (TX's windowed FX join breaks the correlated EXISTS on this CTE); USD rows use the app's fx_rate, else latest rate.
+const SUB_PAID_SQL = `SELECT user_id, created_at, paid_at, amount * IF(currency = 'USD', COALESCE(fx_rate, ${FX_NOW}), 1) AS amount, final_amount * IF(currency = 'USD', COALESCE(fx_rate, ${FX_NOW}), 1) AS final_amount FROM ${TX_RAW}
         WHERE type = 'buy' AND status IN (${SUB_PAID_STATUSES}) AND IFNULL(payment_method, '') != 'manual_bonus'`;
 // The main-database side of a GA4 window: the period's last day plus one,
 // for orders paid shortly after midnight.
@@ -3599,7 +3600,7 @@ export const largestFundsAum = (groupBy = 'fund', date?: string, excludeFunds: s
       )
       SELECT label,
         ROUND(SUM(amount)) AS aum,
-        ROUND(SAFE_DIVIDE(100 * SUM(amount), (SELECT SUM(amount) FROM joined)), 2) AS pct_of_total,
+        ROUND(SAFE_DIVIDE(100 * SUM(amount), SUM(SUM(amount)) OVER ()), 2) AS pct_of_total,
         COUNT(DISTINCT sid_code) AS investors,
         FALSE AS is_total
       FROM joined
@@ -3624,9 +3625,10 @@ export const largestFundsAum = (groupBy = 'fund', date?: string, excludeFunds: s
 // position once it's inactive (its NAV/AUM just stays frozen at whatever it
 // was on its last day), so it shouldn't keep counting toward "current"
 // platform AUM after that point.
-export const platformAumAsOf = (date?: string, fundIds: string[] = [], userFilter: UserFilterRule[] = []): Query => {
+export const platformAumAsOf = (date?: string, fundIds: string[] = [], userFilter: UserFilterRule[] = [], listing: string[] = []): Query => {
   const ids = normalizeFundIds(fundIds);
-  const params: Record<string, unknown> = { date };
+  const statuses = listing.map((s) => String(s).trim().toUpperCase()).filter((s) => /^[A-Z_]+$/.test(s));
+  const params: Record<string, unknown> = { date, listing: statuses.length ? statuses : ['ACTIVE', 'UPDATE'] };
   const fundFilter = fundIdsClause(params, 'p.id', ids) + userFilterClause(params, 'p.sid_code', userFilter, 'sid_code');
   return {
     sql: `SELECT
@@ -3634,7 +3636,7 @@ export const platformAumAsOf = (date?: string, fundIds: string[] = [], userFilte
         COUNT(DISTINCT p.sid_code) AS investing_users
       FROM ${PORT_WITH_CODE} p
       JOIN ${FUNDS} f ON f.id = p.id
-      WHERE DATE(p.created_at) = DATE_ADD(CAST(@date AS DATE), INTERVAL 1 DAY) AND p.total_unit > 0 AND f.listing_status = 'ACTIVE'${fundFilter}`,
+      WHERE DATE(p.created_at) = DATE_ADD(CAST(@date AS DATE), INTERVAL 1 DAY) AND p.total_unit > 0 AND f.listing_status IN UNNEST(@listing)${fundFilter}`,
     params,
   };
 };
