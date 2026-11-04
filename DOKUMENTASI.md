@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `3eed929 (2026-11-04)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `6e66caa (2026-11-04)`.
 
 ## Cara membaca dokumen ini
 
@@ -457,7 +457,7 @@ Feed transaksi dari S-INVEST (KSEI), sistem kustodian. Sumber independen untuk m
 
 ### 5.2 Tabel, view, dan fungsi Supabase
 
-Dibuat oleh migrasi di `supabase/migrations/` (17 file).
+Dibuat oleh migrasi di `supabase/migrations/` (18 file).
 
 | Nama | Isi |
 |---|---|
