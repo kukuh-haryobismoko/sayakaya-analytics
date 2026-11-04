@@ -182,6 +182,15 @@ function previousMonthYYYYMM(from = new Date()) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+// Current month ('YYYY-MM') and last day of the previous month ('YYYY-MM-DD') in WIB.
+function wibMonthYYYYMM(from = new Date()) {
+  return new Date(from.getTime() + 7 * 60 * 60000).toISOString().slice(0, 7);
+}
+function wibPrevMonthEnd(from = new Date()) {
+  const j = new Date(from.getTime() + 7 * 60 * 60000);
+  return new Date(Date.UTC(j.getUTCFullYear(), j.getUTCMonth(), 0)).toISOString().slice(0, 10);
+}
+
 // What a statement email carries, in words, for the Email recap log.
 function statementDocsLabel({ sendPortfolio, portfolioDate, sendStatement, statementMonth }) {
   return [
@@ -236,4 +245,6 @@ module.exports = {
   buildStatementAttachments,
   aggregateBulkHoldings,
   previousMonthYYYYMM,
+  wibMonthYYYYMM,
+  wibPrevMonthEnd,
 };

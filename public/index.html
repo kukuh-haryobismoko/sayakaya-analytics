@@ -644,6 +644,23 @@ The exact number of people shows below once you pick a group, and again before y
             </div>
           </div>
 
+          <div class="field-card-row" id="ssSchedBasisRow" style="margin-top:16px">
+            <div class="field-card">
+              <label class="field-card-top" for="ssSchedPortfolioBasis">Portfolio as of</label>
+              <select id="ssSchedPortfolioBasis" class="field-card-input">
+                <option value="live">Send date (live holdings)</option>
+                <option value="prev_month_end">End of last month</option>
+              </select>
+            </div>
+            <div class="field-card">
+              <label class="field-card-top" for="ssSchedStatementPeriod">E-statement period</label>
+              <select id="ssSchedStatementPeriod" class="field-card-input">
+                <option value="prev_month">Last month</option>
+                <option value="current_month">Month of the send</option>
+              </select>
+            </div>
+          </div>
+
           <div class="field-card-row" id="ssSchedWhenRow" style="margin-top:16px">
             <div class="field-card">
               <label class="field-card-top" data-i18n="sched_frequency">Frequency</label>
@@ -652,7 +669,12 @@ The exact number of people shows below once you pick a group, and again before y
                 <option value="weekly" data-i18n="sched_freq_weekly">Weekly</option>
                 <option value="monthly_last_day" data-i18n="sched_freq_monthly_last">End of month</option>
                 <option value="monthly_day" data-i18n="sched_freq_monthly_day">A specific date each month</option>
+                <option value="on_date">One time, on a date</option>
               </select>
+            </div>
+            <div class="field-card hidden" id="ssSchedRunDateField">
+              <label class="field-card-top" for="ssSchedRunDate">Send date</label>
+              <input type="date" id="ssSchedRunDate" class="field-card-input" />
             </div>
             <div class="field-card hidden" id="ssSchedWeekdayField">
               <label class="field-card-top" data-i18n="sched_day_of_week">Day of week</label>
@@ -3601,10 +3623,20 @@ The exact number of people shows below once you pick a group, and again before y
             <button id="mchApply" class="btn-primary" data-i18n="apply">Apply</button>
           </div>
         </div>
-        <div id="mchKpis"></div>
+        <label>Channel <select id="mchChannel"><option value="all">All</option><option value="organic">organic</option><option value="sales_booth">sales_booth</option><option value="karyawan">karyawan</option><option value="referral">referral</option><option value="no_account">no_account</option></select></label>
+        <ul class="muted" style="margin:8px 0">
+          <li><b>organic</b>: daftar sendiri, tanpa sales_code dan tanpa kode referral.</li>
+          <li><b>sales_booth</b>: daftar dengan sales_code (booth/event, remisier).</li>
+          <li><b>karyawan</b>: pakai kode karyawan Sucor Group (SRIKAYA, YEARENDSUCOR).</li>
+          <li><b>referral</b>: pakai referrer_code selain kode default RAIZKAYA/RAIZ.</li>
+          <li><b>no_account</b>: sudah install app tapi belum login; hanya punya angka Downloads.</li>
+        </ul>
+        <div class="chart-wrap"><canvas id="mchRegChart" aria-label="Registered per month by channel"></canvas></div>
+        <div class="chart-wrap" style="margin-top:14px"><canvas id="mchPaidChart" aria-label="Paid per month by channel"></canvas></div>
         <h3>User journey by channel (cohort = registration month)</h3>
         <div id="mchFunnel" class="table-wrap"></div>
         <h3 style="margin-top:14px">AUM (IDR funds in IDR, USD funds in USD; rate = last fx_rates of month)</h3>
+        <div class="chart-wrap"><canvas id="mchAumChart" aria-label="AUM end of month, IDR and USD"></canvas></div>
         <div id="mchAum" class="table-wrap"></div>
       </div>
     </section>

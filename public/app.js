@@ -3422,13 +3422,30 @@ async function exportMisPdf(build = buildMisPdf, suffix = '') {
   doc.save(`MIS - ${Number(to.slice(8, 10))} ${mon}${suffix}.pdf`);
 }
 // MIS PDF END
-const MCH_TAB = { id: 'mis-channel', prefix: 'mch', cache: {}, loaded: false, coverage: false, charts: [] };
+const MCH_TAB = { id: 'mis-channel', prefix: 'mch', cache: {}, loaded: false, coverage: false, charts: ['mchRegChart', 'mchPaidChart', 'mchAumChart'] };
+// Channel filter (select#mchChannel): 'all' keeps every row incl. TOTAL; otherwise only that channel.
+const mchRows = (rows) => { const c = $('#mchChannel')?.value || 'all'; return (rows || []).filter((r) => c === 'all' || r.channel === c); };
+document.addEventListener('change', (e) => { if (e.target.id === 'mchChannel') MCH_TAB.sections[0][2](); });
+const MCH_OPTS = (stacked) => ({ maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+  scales: { x: { stacked, grid: { display: false } }, y: { stacked, beginAtZero: true, grid: { color: C.grid } } }, plugins: { legend: { position: 'bottom' } } });
+// stacked monthly bars, one dataset per channel (TOTAL row excluded)
+function mchStack(id, rows, key) {
+  const rs = (rows || []).filter((r) => r.channel !== 'TOTAL' && r.channel !== 'no_account');
+  const months = [...new Set(rs.map((r) => r.month))].sort(), chans = [...new Set(rs.map((r) => r.channel))].sort();
+  paint(id, { type: 'bar', options: MCH_OPTS(true), data: { labels: months, datasets: chans.map((c, i) => ({
+    label: c, stack: 's', backgroundColor: pie()[i % 8], data: months.map((m) => Number(rs.find((r) => r.month === m && r.channel === c)?.[key]) || 0) })) } });
+}
 const mchCols = (defs) => defs.map(([key, label, type = 'num']) => ({ key, label, type }));
 MCH_TAB.sections = [
-  ['mch/funnel', '#mchFunnel', () => genTable('#mchFunnel', MCH_TAB.cache.funnel, mchCols([['month', 'Month', 'text'], ['channel', 'Channel', 'text'], ['downloads', 'Downloads'], ['registered', 'Registered'],
-    ['kyc_submitted', 'KYC submitted'], ['verified', 'Verified'], ['first_order', '1st order'], ['paid', 'Paid']]), t('an_empty'))],
-  ['mch/aum', '#mchAum', () => genTable('#mchAum', MCH_TAB.cache.aum, mchCols([['month', 'Month', 'text'], ['aum_idr_avg', 'AUM IDR avg', 'idr'], ['aum_idr_eom', 'AUM IDR EOM', 'idr'],
-    ['aum_usd_avg', 'AUM USD avg'], ['aum_usd_eom', 'AUM USD EOM'], ['usd_idr_eom', 'USD/IDR EOM']]), t('an_empty'))],
+  ['mch/funnel', '#mchFunnel', () => { mchStack('mchRegChart', mchRows(MCH_TAB.cache.funnel), 'registered'); mchStack('mchPaidChart', mchRows(MCH_TAB.cache.funnel), 'paid'); genTable('#mchFunnel', mchRows(MCH_TAB.cache.funnel), mchCols([['month', 'Month', 'text'], ['channel', 'Channel', 'text'], ['downloads', 'Downloads'], ['registered', 'Registered'],
+    ['kyc_submitted', 'KYC submitted'], ['verified', 'Verified'], ['first_order', '1st order'], ['paid', 'Paid']]), t('an_empty')); }],
+  ['mch/aum', '#mchAum', () => {
+    const a = MCH_TAB.cache.aum || [], line = (label, key, color, yAxisID) => ({ label, yAxisID, borderColor: color, backgroundColor: color, tension: 0.25, data: a.map((r) => Number(r[key]) || 0) });
+    paint('mchAumChart', { type: 'line', data: { labels: a.map((r) => r.month), datasets: [line('AUM IDR EOM', 'aum_idr_eom', C.indigo, 'y'), line('AUM USD EOM', 'aum_usd_eom', C.chartAmber, 'y1')] },
+      options: { ...MCH_OPTS(false), scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: C.grid } }, y1: { position: 'right', beginAtZero: true, grid: { display: false } } } } });
+    genTable('#mchAum', MCH_TAB.cache.aum, mchCols([['month', 'Month', 'text'], ['aum_idr_avg', 'AUM IDR avg', 'idr'], ['aum_idr_eom', 'AUM IDR EOM', 'idr'],
+    ['aum_usd_avg', 'AUM USD avg'], ['aum_usd_eom', 'AUM USD EOM'], ['usd_idr_eom', 'USD/IDR EOM']]), t('an_empty'));
+  }],
 ];
 const ANALYSIS_TABS = [SA_TAB, OB_TAB, RD_TAB, EG_TAB, PFN_TAB, MIS_TAB, MCH_TAB];
 function loadSubscription() { return loadAnalysis(SA_TAB); }
@@ -7182,6 +7199,7 @@ function schedProgressSummary(p) {
 }
 function schedFrequencySummary(row) {
   if (row.frequency === 'once') return 'Once, right away';
+  if (row.frequency === 'on_date') return `Once, ${row.run_date} @ ${row.run_time}`;
   if (row.frequency === 'daily') return `Daily @ ${row.run_time}`;
   if (row.frequency === 'weekly') return `Weekly (${SCHED_WEEKDAYS[row.day_of_week] || '?'}) @ ${row.run_time}`;
   if (row.frequency === 'monthly_last_day') return `End of month @ ${row.run_time}`;
@@ -7295,8 +7313,10 @@ function schedResetModal(kind) {
   schedEl(prefix, 'DayOfMonth').value = '1';
   schedEl(prefix, 'RunTime').value = '08:00';
   schedEl(prefix, 'Endless').checked = true;
+  if (kind === 'statement') { schedEl(prefix, 'PortfolioBasis').value = 'live'; schedEl(prefix, 'StatementPeriod').value = 'prev_month'; schedEl(prefix, 'RunDate').value = ''; }
   schedEl(prefix, 'EndDate').value = '';
   schedEl(prefix, 'EndDate').min = new Date().toISOString().slice(0, 10);
+  if (kind === 'statement') schedEl(prefix, 'RunDate').min = new Date().toISOString().slice(0, 10);
   schedEl(prefix, 'ConfirmEmail').value = '';
   if (kind === 'statement') {
     schedEl(prefix, 'SendPortfolio').checked = true;
@@ -7379,7 +7399,7 @@ const exclNote = (n) => (n ? ` ${num(n)} on the exclusion list ${n === 1 ? 'is' 
 let schedOnce = null; // { kind, extras } while a modal is in send-now mode
 function schedSetOnceMode(kind, on) {
   const { prefix } = schedCfg(kind);
-  ['WhenRow', 'EndRow', kind === 'statement' ? 'DocsRow' : 'ScopeField'].forEach((n) => schedEl(prefix, n).classList.toggle('hidden', on));
+  ['WhenRow', 'EndRow', kind === 'statement' ? 'DocsRow' : 'ScopeField', ...(kind === 'statement' ? ['BasisRow'] : [])].forEach((n) => schedEl(prefix, n).classList.toggle('hidden', on));
   if (on && kind === 'fund_performance') ['FundScopeTypes', 'FundScopeFunds'].forEach((n) => schedEl(prefix, n).classList.add('hidden'));
   schedEl(prefix, 'OnceNote').classList.toggle('hidden', !on);
   schedEl(prefix, 'Title').textContent = t(on ? 'sched_once_title' : 'sched_modal_title');
@@ -7398,8 +7418,8 @@ function schedDocsSummary(kind, x) {
   if (kind !== 'statement') return `fund performance report (${fundScopeSummary(x.fundFilter)}, NAV ${x.navAsOf ? `as of ${x.navAsOf}` : 'of the latest date'})`;
   const month = x.statementMonth
     ? new Date(x.statementMonth + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
-    : 'the month before each send';
-  return [x.sendPortfolio && (x.portfolioDate ? `portfolio as of ${x.portfolioDate}` : 'live portfolio'), x.sendStatement && `e-statement for ${month}`].filter(Boolean).join(' + ');
+    : x.statementPeriod === 'current_month' ? 'the month of the send' : 'the month before each send';
+  return [x.sendPortfolio && (x.portfolioDate ? `portfolio as of ${x.portfolioDate}` : x.portfolioBasis === 'prev_month_end' ? 'portfolio as of the end of last month' : 'live portfolio'), x.sendStatement && `e-statement for ${month}`].filter(Boolean).join(' + ');
 }
 const sendingLine = (kind, x) => `Sending: ${schedDocsSummary(kind, x)}${stmtMonthStillOpen(x) ? `\n${STMT_OPEN_NOTE}` : ''}`;
 // Confirmation box in every send dialog, one fact per line: who (count + group), when, what.
@@ -7413,6 +7433,7 @@ const groupLabel = (select) => select.selectedOptions[0].textContent.replace(/\s
 const plural = (n, word) => `${num(n)} ${word}${n === 1 ? '' : 's'}`;
 function schedWhen(prefix, x) {
   if (x.frequency === 'once') return 'right away';
+  if (x.frequency === 'on_date') return `${x.runDate} at ${x.runTime} WIB, one time`;
   const day = { daily: 'every day', weekly: `every week on ${schedEl(prefix, 'DayOfWeek').selectedOptions[0].textContent}`,
     monthly_last_day: 'on the last day of each month', monthly_day: `on day ${x.dayOfMonth} of each month` }[x.frequency];
   return `${day} at ${x.runTime} WIB`;
@@ -7476,6 +7497,10 @@ function schedUpdateFieldVisibility(kind) {
   schedEl(prefix, 'WeekdayField').classList.toggle('hidden', freq !== 'weekly');
   schedEl(prefix, 'DayOfMonthField').classList.toggle('hidden', freq !== 'monthly_day');
   schedEl(prefix, 'EndDateField').classList.toggle('hidden', schedEl(prefix, 'Endless').checked);
+  if (kind === 'statement') {
+    schedEl(prefix, 'RunDateField').classList.toggle('hidden', freq !== 'on_date');
+    if (!schedOnce) schedEl(prefix, 'EndRow').classList.toggle('hidden', freq === 'on_date'); // one-time sends have no end date
+  }
 }
 
 // Emails (and, for e-statement sends, SIDs) found anywhere in pasted text or
@@ -7575,6 +7600,7 @@ async function schedSendOtp(kind) {
       frequency,
       dayOfWeek: frequency === 'weekly' ? Number(schedEl(prefix, 'DayOfWeek').value) : undefined,
       dayOfMonth: frequency === 'monthly_day' ? Number(schedEl(prefix, 'DayOfMonth').value) : undefined,
+      runDate: frequency === 'on_date' ? schedEl(prefix, 'RunDate').value : undefined,
       runTime: schedEl(prefix, 'RunTime').value || '08:00',
       endDate: schedEl(prefix, 'Endless').checked ? null : (schedEl(prefix, 'EndDate').value || null),
       subject: schedEl(prefix, 'Subject').value,
@@ -7584,6 +7610,8 @@ async function schedSendOtp(kind) {
     if (kind === 'statement') {
       payload.sendPortfolio = schedEl(prefix, 'SendPortfolio').checked;
       payload.sendStatement = schedEl(prefix, 'SendStatement').checked;
+      payload.portfolioBasis = schedEl(prefix, 'PortfolioBasis').value;
+      payload.statementPeriod = schedEl(prefix, 'StatementPeriod').value;
     } else {
       payload.fundFilter = fpeSchedScope.read();
     }

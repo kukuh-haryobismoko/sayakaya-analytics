@@ -12,7 +12,7 @@ import * as Q from './queries.ts';
 import { val } from './pdf.ts';
 import * as Mail from './mail.ts';
 import { logEvent } from './auth.ts';
-import { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatementAttachments, previousMonthYYYYMM, statementMonthRange, type FundFilter } from './report-helpers.ts';
+import { buildFundPerformancePdf, fundScopeLabel, statementDocsLabel, buildStatementAttachments, previousMonthYYYYMM, wibMonthYYYYMM, wibPrevMonthEnd, statementMonthRange, type FundFilter } from './report-helpers.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -20,7 +20,7 @@ const MAX_OTP_ATTEMPTS = 5;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const JAKARTA_OFFSET_MIN = 7 * 60;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const VALID_FREQUENCIES = new Set(['daily', 'weekly', 'monthly_last_day', 'monthly_day', 'once']);
+const VALID_FREQUENCIES = new Set(['daily', 'weekly', 'monthly_last_day', 'monthly_day', 'once', 'on_date']);
 const RUN_TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 // Message safe to show the user (the API's generic 500 line hides everything else).
 const userError = (m: string) => Object.assign(new Error(m), { expose: true });
@@ -33,7 +33,7 @@ const POOLS_OFF = new Set(['all_aum', 'all_registered']);
 function validateSchedule(p: any): void {
   if (POOLS_OFF.has(p.recipientType)) throw userError('This recipient group is turned off for now. Pick verified investors holding an active fund instead.');
   const freq = String(p.frequency || '').trim();
-  if (!VALID_FREQUENCIES.has(freq)) throw userError('Invalid frequency. Must be one of: daily, weekly, monthly_last_day, monthly_day, once.');
+  if (!VALID_FREQUENCIES.has(freq)) throw userError('Invalid frequency. Must be one of: daily, weekly, monthly_last_day, monthly_day, once, on_date.');
   if (freq === 'weekly') {
     const dow = Number(p.dayOfWeek);
     if (!Number.isInteger(dow) || dow < 0 || dow > 6) throw userError('dayOfWeek must be an integer 0..6 (Sun..Sat) for weekly schedules.');
@@ -42,6 +42,9 @@ function validateSchedule(p: any): void {
     const dom = Number(p.dayOfMonth);
     if (!Number.isInteger(dom) || dom < 1 || dom > 31) throw userError('dayOfMonth must be an integer 1..31 for monthly_day schedules.');
   }
+  if (freq === 'on_date' && !/^\d{4}-\d{2}-\d{2}$/.test(String(p.runDate || ''))) throw userError('runDate must be YYYY-MM-DD for on_date sends.');
+  if (p.portfolioBasis && !['live', 'prev_month_end'].includes(p.portfolioBasis)) throw userError('Invalid portfolioBasis.');
+  if (p.statementPeriod && !['prev_month', 'current_month'].includes(p.statementPeriod)) throw userError('Invalid statementPeriod.');
   if (p.runTime && !RUN_TIME_RE.test(String(p.runTime).trim())) {
     throw userError('runTime must be HH:MM (24h, WIB), e.g. "08:00".');
   }
@@ -71,11 +74,14 @@ export interface ScheduledJob {
   fund_filter: FundFilter | null;
   subject: string | null;
   body: string | null;
-  frequency: 'daily' | 'weekly' | 'monthly_last_day' | 'monthly_day' | 'once';
+  frequency: 'daily' | 'weekly' | 'monthly_last_day' | 'monthly_day' | 'once' | 'on_date';
   day_of_week: number | null;
   day_of_month: number | null;
   run_time: string;
   end_date: string | null;
+  portfolio_basis: 'live' | 'prev_month_end';
+  statement_period: 'prev_month' | 'current_month';
+  run_date: string | null;
   statement_month: string | null; // 'once' sends from Batch send; null = previous month
   nav_as_of: string | null;       // 'once' fund performance sends; null = latest NAV
   status: 'active' | 'paused' | 'ended';
@@ -108,7 +114,7 @@ function sha256Hex(v: string): string { return crypto.createHash('sha256').updat
 function genOtpCode(): string { return String(crypto.randomInt(0, 1000000)).padStart(6, '0'); }
 
 // Next-run computation (Asia/Jakarta wall-clock, UTC+7 fixed, no DST)
-interface NextRunSpec { frequency: string; day_of_week?: number | null; day_of_month?: number | null; run_time?: string | null }
+interface NextRunSpec { frequency: string; run_date?: string | null; day_of_week?: number | null; day_of_month?: number | null; run_time?: string | null }
 
 function parseRunTime(runTime?: string | null) {
   const [h, m] = String(runTime || '08:00').split(':').map(Number);
@@ -123,6 +129,11 @@ export function computeNextRun(job: NextRunSpec, from: Date = new Date()): Date 
   const atTime = (y: number, mo: number, d: number) => new Date(Date.UTC(y, mo, d, h, m, 0, 0));
 
   if (job.frequency === 'once') return from; // a group send from Batch send: due now
+
+  if (job.frequency === 'on_date') {
+    const [y, mo, d] = String(job.run_date).split('-').map(Number);
+    return toUtc(atTime(y, mo - 1, d));
+  }
 
   if (job.frequency === 'daily') {
     let next = atTime(fromJkt.getUTCFullYear(), fromJkt.getUTCMonth(), fromJkt.getUTCDate());
@@ -321,7 +332,7 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
   }
 
   const p = otp.payload;
-  const seed: NextRunSpec = { frequency: p.frequency, day_of_week: p.dayOfWeek, day_of_month: p.dayOfMonth, run_time: p.runTime };
+  const seed: NextRunSpec = { frequency: p.frequency, day_of_week: p.dayOfWeek, day_of_month: p.dayOfMonth, run_time: p.runTime, run_date: p.runDate };
   const nextRun = computeNextRun(seed, new Date());
   // If the first computed occurrence already falls after end_date, the
   // schedule would never send anything — create it already ended instead of
@@ -340,6 +351,9 @@ export async function confirmOtp(otpId: string, code: string): Promise<Scheduled
       fund_filter: p.fundFilter || null, // kind = 'fund_performance'; null = all funds
       statement_month: p.statementMonth || null,
       nav_as_of: p.navAsOf || null,
+      portfolio_basis: p.portfolioBasis || 'live',
+      statement_period: p.statementPeriod || 'prev_month',
+      run_date: p.runDate || null,
       subject: p.subject || null,
       body: p.body || null,
       frequency: p.frequency,
@@ -493,7 +507,10 @@ async function drainChunk(): Promise<{ sent: number; failed: number }> {
       // Recurring sends cover the month before the queue rows were created, so a
       // pause/resume or a slow drain across midnight keeps the run's month.
       const queuedAt = rows[0]?.created_at ? new Date(rows[0].created_at as string) : new Date();
-      const statementMonth = job.statement_month || previousMonthYYYYMM(queuedAt);
+      const statementMonth = job.statement_month
+        || (job.statement_period === 'current_month' ? wibMonthYYYYMM(queuedAt) : previousMonthYYYYMM(queuedAt));
+      // 'prev_month_end': holdings at last month's end, one query per investor (attachments fetch it); 'live': one batch query.
+      const portfolioDate = job.portfolio_basis === 'prev_month_end' ? wibPrevMonthEnd(queuedAt) : undefined;
       const { from, to } = statementMonthRange(statementMonth);
       const ids = rows.map((r) => r.recipient_user_id as string);
       const c = Q.userContactBatch(ids);
@@ -501,7 +518,7 @@ async function drainChunk(): Promise<{ sent: number; failed: number }> {
       const t = Q.userTransactionsBatch(ids, from, to);
       const [contacts, holdings, transactions] = await Promise.all([
         runQuery(c.sql, c.params, { redact: false }),
-        job.send_portfolio ? runQuery(h.sql, h.params) : [],
+        job.send_portfolio && !portfolioDate ? runQuery(h.sql, h.params) : [],
         job.send_statement ? runQuery(t.sql, t.params) : [],
       ]);
       const byUser = (list: Record<string, unknown>[]) => {
@@ -516,7 +533,7 @@ async function drainChunk(): Promise<{ sent: number; failed: number }> {
       const contactOf = new Map(contacts.map((r) => [r.user_id as string, r]));
       const holdingsOf = byUser(holdings);
       const txOf = byUser(transactions);
-      const docs = statementDocsLabel({ sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth });
+      const docs = statementDocsLabel({ sendPortfolio: job.send_portfolio, portfolioDate, sendStatement: job.send_statement, statementMonth });
       const sentDesc = [job.send_portfolio && 'portfolio', job.send_statement && 'tx-statement'].filter(Boolean).join('+');
       // {{month}} in the subject/body becomes e.g. "September 2026"
       const [y, m] = statementMonth.split('-').map(Number);
@@ -531,7 +548,7 @@ async function drainChunk(): Promise<{ sent: number; failed: number }> {
         const attachments = await buildStatementAttachments({
           userId, sid: row.recipient_sid, contact,
           sendPortfolio: job.send_portfolio, sendStatement: job.send_statement, statementMonth,
-          holdings: holdingsOf.get(userId) || [], transactions: txOf.get(userId) || [],
+          holdings: portfolioDate ? undefined : holdingsOf.get(userId) || [], portfolioDate, transactions: txOf.get(userId) || [],
           username: sentBy,
         });
         const name = val(contact.name as string | undefined) || row.recipient_sid;
@@ -601,7 +618,7 @@ export async function runDueJobs(jobId?: string): Promise<{ jobsClaimed: number;
     // if the *next* occurrence would fall after end_date, this is the last
     // run: end the job now instead of advancing next_run_at into the future,
     // so the table doesn't show a "Next run" for a schedule that's done.
-    const isLastRun = job.frequency === 'once' || (job.end_date && jktDateStr(nextRun) > job.end_date);
+    const isLastRun = job.frequency === 'once' || job.frequency === 'on_date' || (job.end_date && jktDateStr(nextRun) > job.end_date);
     // Resolve recipients first: if that fails the job stays due and nothing changed.
     let recipients;
     try {

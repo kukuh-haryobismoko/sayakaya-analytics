@@ -10,6 +10,7 @@ const Sched = require('../server/schedules');
     { dayOfMonth: -5 }, { dayOfMonth: 0 }, { dayOfMonth: 32 }, { dayOfMonth: 1.5 },
     { frequency: 'hourly' }, { runTime: '25:00' }, { runTime: '8am' },
     { frequency: 'weekly', dayOfWeek: 9 },
+    { frequency: 'on_date' }, { frequency: 'on_date', runDate: '5 Nov' }, { portfolioBasis: 'x' }, { statementPeriod: 'x' },
     { recipientType: 'all_registered' }, { recipientType: 'all_aum' }, // groups turned off for now
   ]) {
     await assert.rejects(Sched.requestOtp({ ...base, ...bad }), /./, `rejects ${JSON.stringify(bad)}`);
@@ -23,5 +24,7 @@ const Sched = require('../server/schedules');
   }
   // 1st of month 08:00 WIB = 01:00Z
   assert.strictEqual(Sched.computeNextRun({ frequency: 'monthly_day', day_of_month: 1, run_time: '08:00' }, from).toISOString(), '2026-11-01T01:00:00.000Z');
+  // on_date: 5 Nov 2026 09:00 WIB = 02:00Z, whatever 'from' is
+  assert.strictEqual(Sched.computeNextRun({ frequency: 'on_date', run_date: '2026-11-05', run_time: '09:00' }, from).toISOString(), '2026-11-05T02:00:00.000Z');
   console.log('sched-validate ok');
 })().catch((e) => { console.error(e); process.exit(1); });
