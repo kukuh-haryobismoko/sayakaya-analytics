@@ -10,7 +10,7 @@ import * as Insights from './insights.ts';
 import * as EX from './explore.ts';
 import * as ML from './ml.ts';
 import * as MLTrain from './ml-train.ts';
-import { portfolioReport, portfolioReportBatch, fundPerformanceReport, usersTransactionsReport, val } from './pdf.ts';
+import { convertHoldings, type Fx, portfolioReport, portfolioReportBatch, fundPerformanceReport, usersTransactionsReport, val } from './pdf.ts';
 import { portfolioReport as sheetPortfolioReport } from './sheets.ts';
 import * as A from './auth.ts';
 import * as Mail from './mail.ts';
@@ -96,12 +96,20 @@ function splitRowsBySheet(rows: Record<string, unknown>[], keyField: string) {
 }
 
 // Friendly column names for the "Portfolio" sheet in the combined export.
-function portfolioSheetRows(holdings: Record<string, unknown>[]) {
-  return holdings.map((h) => ({
+// USD/IDR for the portfolio exports: rate on `date` (default latest), forward-filled.
+async function fxInfo(date?: string): Promise<Fx | null> {
+  const d = date || new Date().toLocaleDateString('sv', { timeZone: 'Asia/Jakarta' });
+  const [r] = await runQuery('SELECT rate, rate_date FROM `sayakaya.main.fx_rates` WHERE rate_date <= CAST(@d AS DATE) ORDER BY rate_date DESC LIMIT 1', { d });
+  return r ? { rate: Number(r.rate), date: String(val(r.rate_date)) } : null;
+}
+
+function portfolioSheetRows(rows: Record<string, unknown>[], mode?: string, fx?: Fx | null) {
+  return convertHoldings(rows, mode, fx?.rate).map((h) => ({
     Fund: h.fund, Type: h.fund_type,
     'Unit Balance': h.unit, 'Average NAV': h.avg_buy_price, 'Close NAV': h.nav,
     'Fund Value': h.fund_value, 'Market Value': h.value,
     'Unrealized Gain/Loss': h.gain_loss, '%': h.gain_pct, Opened: h.opened_at,
+    Currency: h.displayCcy,
   }));
 }
 
@@ -1589,9 +1597,11 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     if (!userId || !sid) return json({ error: 'userId and sid are required.' }, 400);
     const date = body.date as string | undefined;
     const h = date ? Q.userHoldingsAsOf(sid, date) : Q.userHoldings(userId);
+    const ccy = (body.ccy as string | undefined) || 'IDR';
+    const fx = await fxInfo(body.date as string | undefined);
     const pq = Q.productPerformanceDetail();
     const [holdings, detail] = await Promise.all([
-      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
+      runQuery(h.sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     if (format === 'pdf') {
@@ -1600,7 +1610,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: ccy, fx });
       // Buffer (Node) satisfies BodyInit (a Uint8Array) at runtime, but the
       // two libraries' type declarations don't agree — wrap to satisfy both.
       return new Response(new Uint8Array(buf), {
@@ -1614,9 +1624,9 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const columns = body.columns as string[] | undefined;
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
-      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username }));
+      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username, mode: ccy, fx }));
     }
-    const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+    const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings, ccy, fx) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);
     rows = sheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'portfolio_fix_full') {
@@ -1627,9 +1637,11 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const date = body.date as string | undefined;
     const excludeFunds = body.excludeFunds as string[] | undefined;
     const h = date ? Q.userHoldingsAsOfFix(sid, date) : Q.userHoldings(userId);
+    const ccy = (body.ccy as string | undefined) || 'IDR';
+    const fx = await fxInfo(body.date as string | undefined);
     const pq = Q.productPerformanceDetail();
     const [holdingsRaw, detail] = await Promise.all([
-      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
+      runQuery(h.sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     // Client-side checklist for excluding dust/unwanted holdings (e.g. a
@@ -1643,7 +1655,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: ccy, fx });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
@@ -1655,9 +1667,9 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const columns = body.columns as string[] | undefined;
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
-      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username }));
+      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username, mode: ccy, fx }));
     }
-    const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+    const fixSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings, ccy, fx) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(fixSheets, filename, username);
     rows = fixSheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'portfolio_tx_full') {
@@ -1668,9 +1680,11 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const dateTx = body.date as string | undefined;
     const excludeFundsTx = body.excludeFunds as string[] | undefined;
     const h = dateTx ? Q.userHoldingsFromTxAsOf(userId, dateTx) : Q.userHoldingsFromTx(userId);
+    const ccy = (body.ccy as string | undefined) || 'IDR';
+    const fx = await fxInfo(body.date as string | undefined);
     const pq = Q.productPerformanceDetail();
     const [holdingsRawTx, detail] = await Promise.all([
-      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
+      runQuery(h.sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     const holdings = Array.isArray(excludeFundsTx) && excludeFundsTx.length
@@ -1682,7 +1696,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: ccy, fx });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
@@ -1694,9 +1708,9 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const columns = body.columns as string[] | undefined;
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
-      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username }));
+      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username, mode: ccy, fx }));
     }
-    const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+    const txSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings, ccy, fx) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(txSheets, filename, username);
     rows = txSheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'portfolio_sinvest_full') {
@@ -1707,9 +1721,11 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     const dateSi = body.date as string | undefined;
     const excludeFundsSi = body.excludeFunds as string[] | undefined;
     const h = dateSi ? Q.sinvestHoldingsAsOf(sid, dateSi) : Q.sinvestHoldings(sid);
+    const ccy = (body.ccy as string | undefined) || 'IDR';
+    const fx = await fxInfo(body.date as string | undefined);
     const pq = Q.productPerformanceDetail();
     const [holdingsRawSi, detail] = await Promise.all([
-      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
+      runQuery(h.sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     const holdingsSi = Array.isArray(excludeFundsSi) && excludeFundsSi.length
@@ -1721,7 +1737,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
+      const buf = await portfolioReport({ contact, holdings: holdingsSi }, perf, { columns, username, mode: ccy, fx });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
@@ -1733,9 +1749,9 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const columns = body.columns as string[] | undefined;
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
-      return json(await sheetPortfolioReport({ contact, holdings: holdingsSi }, { columns, username }));
+      return json(await sheetPortfolioReport({ contact, holdings: holdingsSi }, { columns, username, mode: ccy, fx }));
     }
-    const siSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdingsSi) }, ...pivotPerformanceByType(detail)];
+    const siSheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdingsSi, ccy, fx) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(siSheets, filename, username);
     rows = siSheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'portfolio_explorer_full') {
@@ -1753,9 +1769,11 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
     }
     if (!asOfDate) return json({ error: 'No goal_snapshots found for this user.' }, 400);
     const h = Q.goalUserHoldings(userId, asOfDate);
+    const ccy = (body.ccy as string | undefined) || 'IDR';
+    const fx = await fxInfo(body.date as string | undefined);
     const pq = Q.productPerformanceDetail();
     const [holdings, detail] = await Promise.all([
-      runQuery(Q.fxOff(h, body.convertIdr as boolean | undefined).sql, h.params),
+      runQuery(h.sql, h.params),
       runQuery(pq.sql, pq.params),
     ]);
     if (format === 'pdf') {
@@ -1764,7 +1782,7 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
       const perf = includePerformance ? pivotPerformanceByType(detail) : [];
-      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: body.convertIdr === false ? 'USD' : 'IDR' });
+      const buf = await portfolioReport({ contact, holdings }, perf, { columns, username, mode: ccy, fx });
       return new Response(new Uint8Array(buf), {
         headers: {
           'content-type': 'application/pdf',
@@ -1776,9 +1794,9 @@ on('POST', '/api/export', async (req, _params, _url, user) => {
       const columns = body.columns as string[] | undefined;
       const c = Q.userContact(userId);
       const [contact] = await runQuery(c.sql, c.params, { redact: false });
-      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username }));
+      return json(await sheetPortfolioReport({ contact, holdings }, { columns, username, mode: ccy, fx }));
     }
-    const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings) }, ...pivotPerformanceByType(detail)];
+    const sheets = [{ name: 'Portfolio', rows: portfolioSheetRows(holdings, ccy, fx) }, ...pivotPerformanceByType(detail)];
     if (format === 'xlsx') return xlsxMultiResponse(sheets, filename, username);
     rows = sheets[0].rows; // CSV has no sheets, holdings only
   } else if (source === 'explore') {
@@ -2017,14 +2035,15 @@ on('POST', '/api/export/batch', async (req, _params, _url, user) => {
   const username = user!.username;
   await A.logEvent(user!.id, username, 'export', `${source} batch (${format}) x${users.length} as "${filename}"`);
 
-  const entries = await fetchBatchEntries(source, users);
+  const ccy = (body.ccy as string | undefined) || 'IDR';
+  const [entries, fx] = await Promise.all([fetchBatchEntries(source, users), fxInfo(body.date as string | undefined)]);
   if (!entries.length) return json({ error: 'No exportable data found for the selected investors.' }, 400);
 
   // Portfolio-only, no fund-performance pages — same call as bulk export
   // makes for a single investor (see /api/export's portfolio_full etc.): a
   // list of investors' holdings, not a full fund-performance report.
   if (format === 'pdf') {
-    const buf = await portfolioReportBatch(entries, [], { columns, username });
+    const buf = await portfolioReportBatch(entries, [], { columns, username, mode: ccy, fx });
     return new Response(new Uint8Array(buf), {
       headers: {
         'content-type': 'application/pdf',
@@ -2038,11 +2057,11 @@ on('POST', '/api/export/batch', async (req, _params, _url, user) => {
       let name = String(e.contact.sid || e.contact.name || `Investor ${i + 1}`).slice(0, 31);
       if (seen.has(name)) name = `${name.slice(0, 27)}(${i + 1})`;
       seen.add(name);
-      return { name, rows: portfolioSheetRows(e.holdings) };
+      return { name, rows: portfolioSheetRows(e.holdings, ccy, fx) };
     });
     return xlsxMultiResponse(sheets, filename, username);
   }
-  const rows = entries.flatMap((e) => portfolioSheetRows(e.holdings).map((row) => ({ SID: e.contact.sid, Name: e.contact.name, ...row })));
+  const rows = entries.flatMap((e) => portfolioSheetRows(e.holdings, ccy, fx).map((row) => ({ SID: e.contact.sid, Name: e.contact.name, ...row })));
   return csvResponse(rows, filename, username);
 });
 

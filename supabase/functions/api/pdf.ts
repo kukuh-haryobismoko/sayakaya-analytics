@@ -205,15 +205,19 @@ function table(doc: any, columns: Column[], rows: Record<string, unknown>[], {
 // Statement columns, mirroring the official "CUSTOMER PORTFOLIO" layout:
 // fund value = avg buy NAV x units; market value = close NAV x units;
 // unrealized gain/loss = market - fund value; % = gain/loss over fund value.
+// Amounts are already converted to the display currency (convertHoldings); USD shows 2 decimals.
+const moneyD = (r: any) => (r?.displayCcy === 'USD' ? 2 : 0);
+const money = (v: unknown, r: any) => idNum(v, moneyD(r));
+const moneyParen = (v: unknown, r: any) => { const n = val(v) as number | null; return n == null ? 'n/a' : n < 0 ? `(${idNum(-n, moneyD(r))})` : idNum(n, moneyD(r)); };
 export const HOLDINGS_COLS = (width: number): Column[] => [
   { key: 'fund', label: 'Fund Name', width: width * 0.15 },
   { key: 'fund_type', label: 'Fund Type', width: width * 0.09, format: fundTypeLabel },
   { key: 'unit', label: 'Unit Balance', width: width * 0.11, align: 'right', format: (v) => idNum(v, 4) },
   { key: 'avg_buy_price', label: 'Average NAV', width: width * 0.10, align: 'right', format: (v) => idNum(v, 4) },
   { key: 'nav', label: 'Close NAV', width: width * 0.10, align: 'right', format: (v) => idNum(v, 4) },
-  { key: 'fund_value', label: 'Fund Value', width: width * 0.13, align: 'right', format: idNum },
-  { key: 'value', label: 'Market Value', width: width * 0.13, align: 'right', format: idNum },
-  { key: 'gain_loss', label: 'Unrealized Gain/Loss', width: width * 0.12, align: 'right', format: idParen },
+  { key: 'fund_value', label: 'Fund Value', width: width * 0.13, align: 'right', formatRow: money },
+  { key: 'value', label: 'Market Value', width: width * 0.13, align: 'right', formatRow: money },
+  { key: 'gain_loss', label: 'Unrealized Gain/Loss', width: width * 0.12, align: 'right', formatRow: moneyParen },
   { key: 'gain_pct', label: '%', width: width * 0.07, align: 'right', format: (v) => (val(v) == null ? 'n/a' : idNum(v, 2) + '%') },
 ];
 
@@ -382,11 +386,12 @@ export async function fundPerformanceReport(sheets: PerfSheet[], options: { user
 // Per-currency summary under the holdings table (only when a USD fund is held). mode 'USD': rows are in each fund's own
 // currency; 'IDR': rows already converted at the portfolio-date rate (fx), so USD = value / fx.
 // ponytail: one rate per report (all USD rows share the as-of date); add per-row rates if that stops holding.
-function portfolioSummaryLines(holdings: Record<string, unknown>[], mode: string | undefined) {
-  if (!holdings.some((h) => h.ccy === 'USD')) return [];
-  const nat = (h: Record<string, unknown>, k: string) => { const v = Number(val(h[k])) || 0; const fx = Number(val(h.fx)) || 1; return h.ccy === 'USD' ? (mode === 'USD' ? v : v / fx) : v; };
+function portfolioSummaryLines(holdings: Record<string, unknown>[], fx: Fx | null | undefined, mode: string | undefined) {
+  const hasUsd = holdings.some((h) => h.ccy === 'USD');
+  if (!hasUsd && mode !== 'USD') return [];
+  const nat = (h: Record<string, unknown>, k: string) => { const v = Number(val(h[k])) || 0; return h.ccy === 'USD' ? v / (Number(val(h.fx)) || 1) : v; };
   const fxOf = (h: Record<string, unknown>) => (h.ccy === 'USD' ? Number(val(h.fx)) || 1 : 1);
-  const lines: string[] = [];
+  const lines: string[] = fx?.rate ? [`Kurs USD/IDR: 1 USD = Rp ${idNum(fx.rate, 2)}${fx.date ? ` (per ${fx.date})` : ''}`] : [];
   let totIdr = 0;
   for (const c of ['USD', 'IDR']) {
     const rows = holdings.filter((h) => (h.ccy === 'USD' ? 'USD' : 'IDR') === c);
@@ -400,11 +405,23 @@ function portfolioSummaryLines(holdings: Record<string, unknown>[], mode: string
     lines.push(`${c === 'USD' ? 'Dana USD' : 'Dana Rupiah'}: Fund Value ${p}${idNum(fv, d)} | Market Value ${p}${idNum(mv, d)} | Gain/Loss ${p}${idNum(mv - fv, d)}`
       + (c === 'USD' ? ` | setara Rp ${idNum(mv * rate)} (kurs 1 USD = Rp ${idNum(rate, 2)} pada tanggal portofolio)` : ''));
   }
-  lines.push(`Total Market Value (Rp): ${idNum(totIdr)}`);
+  if (hasUsd) lines.push(`Total Market Value (Rp): ${idNum(totIdr)}`);
   return lines;
 }
 
-function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] }, options: { columns?: string[]; mode?: string } = {}): void {
+export interface Fx { rate: number; date?: string }
+/** Rows arrive IDR-converted. mode 'USD': all in USD (IDR funds at `rate`); 'NATIVE': USD funds back in USD; else unchanged. Adds displayCcy. */
+export function convertHoldings(rows: Record<string, unknown>[], mode: string | undefined, rate?: number): Record<string, unknown>[] {
+  if (mode !== 'USD' && mode !== 'NATIVE') return rows.map((r) => ({ ...r, displayCcy: 'IDR' }));
+  const f = (r: Record<string, unknown>) => (r.ccy === 'USD' ? Number(val(r.fx)) || 1 : mode === 'USD' ? Number(rate) || 1 : 1);
+  return rows.map((r) => {
+    const x = f(r), conv = (k: string) => (x === 1 ? r[k] : (Number(val(r[k])) || 0) / x);
+    return { ...r, displayCcy: mode === 'USD' || r.ccy === 'USD' ? 'USD' : 'IDR', fund_value: conv('fund_value'), value: conv('value'), gain_loss: conv('gain_loss') };
+  });
+}
+
+function drawPortfolioHoldingsPage(doc: any, { contact, holdings: rawHoldings }: { contact?: Contact; holdings: Record<string, unknown>[] }, options: { columns?: string[]; mode?: string; fx?: Fx | null } = {}): void {
+  const holdings = convertHoldings(rawHoldings, options.mode, options.fx?.rate);
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
@@ -422,7 +439,7 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: 
   // Anchored at the first non-identity column still visible, so it holds up
   // when hidden columns shift what's left in the table.
   const anchorCol = cols.find((c) => c.key !== 'fund' && c.key !== 'fund_type');
-  const mixed = options.mode === 'USD' && holdings.some((h) => h.ccy === 'USD') && holdings.some((h) => h.ccy !== 'USD');
+  const mixed = options.mode === 'NATIVE' && holdings.some((h) => h.ccy === 'USD') && holdings.some((h) => h.ccy !== 'USD');
   if (holdings.length > 1 && anchorCol && !mixed) {
     const sum = (k: string) => holdings.reduce((s, h) => s + (Number(val(h[k])) || 0), 0);
     const totalFund = sum('fund_value');
@@ -443,9 +460,10 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: 
       doc.text(text, colX[key] + 4, rowY + 4, { width: c.width - 8, align: 'right' });
     };
     if (!sumKeys.includes(anchorCol.key)) cell(anchorCol.key, 'Total');
-    cell('fund_value', idNum(totalFund));
-    cell('value', idNum(totalMarket));
-    cell('gain_loss', idNum(totalGain));
+    const td = moneyD(holdings[0]);
+    cell('fund_value', idNum(totalFund, td));
+    cell('value', idNum(totalMarket, td));
+    cell('gain_loss', idNum(totalGain, td));
     cell('gain_pct', totalPct == null ? 'n/a' : idNum(totalPct, 2) + '%');
     doc.y = rowY + 15;
     doc.strokeColor(INK).moveTo(totX, doc.y).lineTo(left + width, doc.y).stroke();
@@ -453,7 +471,7 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: 
     doc.x = left;
   }
 
-  const sum = portfolioSummaryLines(holdings, options.mode);
+  const sum = portfolioSummaryLines(rawHoldings, options.fx, options.mode);
   if (sum.length) {
     doc.font('Helvetica-Bold').fontSize(8).fillColor(INK).text('Ringkasan', left, doc.y, { width });
     doc.font('Helvetica').fontSize(7.5);
@@ -469,7 +487,7 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings }: { contact?: 
 export async function portfolioReport(
   { contact, holdings }: { contact?: Contact; holdings: Record<string, unknown>[] },
   performanceSheets: PerfSheet[],
-  options: { columns?: string[]; username?: string | null; password?: string; mode?: string } = {},
+  options: { columns?: string[]; username?: string | null; password?: string; mode?: string; fx?: Fx | null } = {},
 ): Promise<Buffer> {
   // pdfkit's bundled .d.ts doesn't fully describe PDFDocument's fluent
   // instance API (font/text/moveDown etc. all really exist at runtime) —
@@ -499,7 +517,7 @@ export async function portfolioReport(
 export async function portfolioReportBatch(
   entries: { contact?: Contact; holdings: Record<string, unknown>[] }[],
   performanceSheets: PerfSheet[],
-  options: { columns?: string[]; username?: string | null } = {},
+  options: { columns?: string[]; username?: string | null; mode?: string; fx?: Fx | null } = {},
 ): Promise<Buffer> {
   // deno-lint-ignore no-explicit-any
   const doc: any = await newDoc({ size: 'A4', margin: 40 });

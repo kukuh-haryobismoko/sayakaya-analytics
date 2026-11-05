@@ -61,6 +61,23 @@ const ccyFmt = (v) => {
 const num = (n) => (n == null ? 'n/a' : new Intl.NumberFormat('en-US').format(Number(n)));
 const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) + '%' : 'n/a');
 
+/** Format a number with the correct symbol for its currency. Uses displayCcy from convertHoldings. */
+function fmtCcy(n, ccy) {
+  const v = Number(n || 0);
+  if (ccy === 'USD') return '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+  return 'Rp ' + new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(v));
+}
+
+/** Build a simple rate lookup from the fxRate header element (if present) or a provided rate. */
+function getUsdIdrRate() {
+  const el = $('#fxRate');
+  if (el && el.textContent) {
+    const m = el.textContent.match(/(\d[\d.,]*)/);
+    if (m) return Number(m[1].replace(/\./g, '')); // id-ID: '.' is the thousands separator
+  }
+  return null;
+}
+
 function toast(msg) {
   const t = $('#toast');
   t.textContent = msg; t.classList.add('show');
@@ -498,6 +515,11 @@ async function selectPortfolioUser(userId, sid, name, email) {
   $('#pfUserName').textContent = name || sid;
   $('#pfUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
   $('#pfDate').value = '';
+  // One-time listener for currency selector
+  if (!pfSelected.ccyListener) {
+    $('#pfCcy').addEventListener('change', () => loadPortfolioUser());
+    pfSelected.ccyListener = true;
+  }
   await loadPortfolioUser();
 }
 
@@ -573,11 +595,35 @@ function renderPfKpis(holdings, split) { $('#pfKpis').innerHTML = pfKpisHtml(hol
 // Portfolio (Fix) so dust holdings can be excluded from CSV/XLSX/PDF without
 // hiding them from the on-screen table); opts.excluded is the Set of fund
 // names currently unchecked.
-function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = {}) {
-  const gl = (v) => {
+// opts.ccyMode and opts.usdRate let the table render in IDR / USD / NATIVE.
+// When ccyMode is provided, rows are assumed to come from the server (already
+// IDR-converted with ccy and fx), and are converted via convertHoldings logic.
+function holdingsTableHtml(rows, { selectable = false, excluded = new Set(), ccyMode = 'IDR', usdRate = null } = {}) {
+  // Apply currency conversion if a mode is requested
+  let displayRows = rows;
+  if (ccyMode !== 'IDR') {
+    displayRows = rows.map(r => {
+      const fx = r.ccy === 'USD' ? (Number(val(r.fx)) || 1) : (ccyMode === 'USD' ? (Number(usdRate) || 1) : 1);
+      const ccy = ccyMode === 'NATIVE' ? (r.ccy === 'USD' ? 'USD' : 'IDR') : 'USD';
+      const fv = Number(val(r.fund_value)) || 0;
+      const mv = Number(val(r.value)) || 0;
+      const gl = Number(val(r.gain_loss)) || 0;
+      return {
+        ...r,
+        displayCcy: ccy,
+        fund_value: ccyMode === 'NATIVE' && r.ccy === 'USD' ? fv / fx : (ccyMode === 'USD' ? fv / fx : fv),
+        value: ccyMode === 'NATIVE' && r.ccy === 'USD' ? mv / fx : (ccyMode === 'USD' ? mv / fx : mv),
+        gain_loss: ccyMode === 'NATIVE' && r.ccy === 'USD' ? gl / fx : (ccyMode === 'USD' ? gl / fx : gl),
+      };
+    });
+  } else {
+    displayRows = rows.map(r => ({ ...r, displayCcy: r.ccy === 'USD' ? 'USD' : 'IDR' }));
+  }
+
+  const gl = (v, ccy) => {
     if (v == null) return '<td class="num">n/a</td>';
     const n = Number(v);
-    return `<td class="num"><span style="color:${n >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}">${idrFull(n)}</span></td>`;
+    return `<td class="num"><span style="color:${n >= 0 ? 'var(--pos-text)' : 'var(--neg-text)'}">${fmtCcy(n, ccy)}</span></td>`;
   };
   const glPct = (v) => {
     if (v == null) return '<td class="num">n/a</td>';
@@ -586,14 +632,15 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = 
   };
   // G/L % in the Total row only covers funds with a known average buy price.
   const tot = { fund: 0, market: 0, gain: 0 };
-  const body = rows.map((h) => {
-    // Derived client-side so the table works regardless of API version:
-    // fund value = units x avg buy NAV; gain = market - fund value.
+  const body = displayRows.map((h) => {
+    // Use server's fund_value and gain_loss when present (already in IDR),
+    // otherwise derive from unit * avg_buy_price.
     const avg = h.avg_buy_price == null ? null : Number(val(h.avg_buy_price));
     const market = Number(val(h.value));
-    const fundValue = avg == null ? null : Math.round(Number(val(h.unit)) * avg);
-    const gain = fundValue == null ? null : market - fundValue;
+    const fundValue = h.fund_value != null ? Number(val(h.fund_value)) : (avg == null ? null : Math.round(Number(val(h.unit)) * avg));
+    const gain = h.gain_loss != null ? Number(val(h.gain_loss)) : (fundValue == null ? null : market - fundValue);
     const pct = fundValue ? (gain / fundValue) * 100 : null;
+    const ccy = h.displayCcy || 'IDR';
     tot.market += market;
     if (fundValue != null) { tot.fund += fundValue; tot.gain += gain; }
     const fund = val(h.fund);
@@ -607,28 +654,32 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set() } = 
       <td class="num">${Number(val(h.unit)).toFixed(4)}</td>
       <td class="num">${avg == null ? 'n/a' : num(avg)}</td>
       <td class="num">${num(val(h.nav))}</td>
-      <td class="num">${fundValue == null ? 'n/a' : idrFull(fundValue)}</td>
-      <td class="num">${idrFull(market)}</td>
-      ${gl(gain)}
+      <td class="num">${fundValue == null ? 'n/a' : fmtCcy(fundValue, ccy)}</td>
+      <td class="num">${fmtCcy(market, ccy)}</td>
+      ${gl(gain, ccy)}
       ${glPct(pct)}
     </tr>`;
   }).join('');
   const chkTh = selectable ? '<th>Export</th>' : '';
-  const foot = rows.length ? `<tfoot><tr>
+  // Total row only makes sense in a single currency; skip in mixed NATIVE.
+  const mixed = ccyMode === 'NATIVE' && rows.some((h) => h.ccy === 'USD') && rows.some((h) => h.ccy !== 'USD');
+  const foot = rows.length && !mixed ? `<tfoot><tr>
       ${selectable ? '<td></td>' : ''}<td>Total</td><td></td><td></td><td></td><td></td>
-      <td class="num">${idrFull(tot.fund)}</td>
-      <td class="num">${idrFull(tot.market)}</td>
-      ${gl(tot.gain)}
+      <td class="num">${fmtCcy(tot.fund, displayRows[0]?.displayCcy || 'IDR')}</td>
+      <td class="num">${fmtCcy(tot.market, displayRows[0]?.displayCcy || 'IDR')}</td>
+      ${gl(tot.gain, displayRows[0]?.displayCcy || 'IDR')}
       ${glPct(tot.fund ? (tot.gain / tot.fund) * 100 : null)}
     </tr></tfoot>` : '';
   return `<table><thead><tr>
-      ${chkTh}<th>Fund</th><th>Type</th><th class="num">Unit Balance</th><th class="num">Average NAV</th><th class="num">Close NAV</th><th class="num">Fund Value</th><th class="num">Market Value</th><th class="num">Unrealized G/L</th><th class="num">%</th>
+      ${chkTh}<th>Fund</th><th>Type</th><th class="num">Unit Balance</th><th class="num">Average NAV</th><th class="num">Close NAV</th><th class="num">Fund Value</th><th class="num">Market Value</th><th class="num">Unrealized G/L</th><th cl
     </tr></thead><tbody>${body}</tbody>${foot}</table>`;
 }
 
 function renderPfHoldings(rows) {
   if (!rows.length) { $('#pfHoldings').innerHTML = `<div class="empty">${t('msg_no_active_holdings')}</div>`; return; }
-  $('#pfHoldings').innerHTML = holdingsTableHtml(rows);
+  const ccyMode = $('#pfCcy').value;
+  const usdRate = ccyMode === 'USD' ? getUsdIdrRate() : null;
+  $('#pfHoldings').innerHTML = holdingsTableHtml(rows, { ccyMode, usdRate });
 }
 
 function renderPfPerformance(rows) {
@@ -674,6 +725,11 @@ async function selectPfxUser(userId, sid, name, email) {
   $('#pfxUserName').textContent = name || sid;
   $('#pfxUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
   $('#pfxDate').value = '';
+  // One-time listener for currency selector
+  if (!pfxSelected.ccyListener) {
+    $('#pfxCcy').addEventListener('change', () => loadPfxUser());
+    pfxSelected.ccyListener = true;
+  }
   await loadPfxUser();
 }
 
@@ -744,7 +800,9 @@ function renderPfxHoldings(rows) {
   if (!pfxSelected.excludedFunds) {
     pfxSelected.excludedFunds = new Set(rows.filter((h) => Number(val(h.unit)) <= 1).map((h) => val(h.fund)));
   }
-  $('#pfxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: pfxSelected.excludedFunds });
+  const ccyMode = $('#pfxCcy').value;
+  const usdRate = ccyMode === 'USD' ? getUsdIdrRate() : null;
+  $('#pfxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: pfxSelected.excludedFunds, ccyMode, usdRate });
   $$('#pfxHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
     if (chk.checked) pfxSelected.excludedFunds.delete(chk.dataset.fund);
     else pfxSelected.excludedFunds.add(chk.dataset.fund);
@@ -797,6 +855,11 @@ async function selectPtxUser(userId, sid, name, email) {
   $('#ptxUserName').textContent = name || sid;
   $('#ptxUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
   $('#ptxDate').value = '';
+  // One-time listener for currency selector
+  if (!ptxSelected.ccyListener) {
+    $('#ptxCcy').addEventListener('change', () => loadPtxUser());
+    ptxSelected.ccyListener = true;
+  }
   await loadPtxUser();
 }
 
@@ -869,7 +932,9 @@ function renderPtxHoldings(rows) {
   if (!ptxSelected.excludedFunds) {
     ptxSelected.excludedFunds = new Set(rows.filter((h) => Number(val(h.unit)) <= 1).map((h) => val(h.fund)));
   }
-  $('#ptxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: ptxSelected.excludedFunds });
+  const ccyMode = $('#ptxCcy').value;
+  const usdRate = ccyMode === 'USD' ? getUsdIdrRate() : null;
+  $('#ptxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: ptxSelected.excludedFunds, ccyMode, usdRate });
   $$('#ptxHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
     if (chk.checked) ptxSelected.excludedFunds.delete(chk.dataset.fund);
     else ptxSelected.excludedFunds.add(chk.dataset.fund);
@@ -920,6 +985,11 @@ async function selectPsiUser(userId, sid, name, email) {
   $('#psiUserName').textContent = name || sid;
   $('#psiUserSub').textContent = `SID ${sid}${email ? ' · ' + email : ''}`;
   $('#psiDate').value = '';
+  // One-time listener for currency selector
+  if (!psiSelected.ccyListener) {
+    $('#psiCcy').addEventListener('change', () => loadPsiUser());
+    psiSelected.ccyListener = true;
+  }
   await loadPsiUser();
 }
 
@@ -988,7 +1058,9 @@ function renderPsiHoldings(rows) {
   if (!psiSelected.excludedFunds) {
     psiSelected.excludedFunds = new Set(rows.filter((h) => Number(val(h.unit)) <= 1).map((h) => val(h.fund)));
   }
-  $('#psiHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: psiSelected.excludedFunds });
+  const ccyMode = $('#psiCcy').value;
+  const usdRate = ccyMode === 'USD' ? getUsdIdrRate() : null;
+  $('#psiHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: psiSelected.excludedFunds, ccyMode, usdRate });
   $$('#psiHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
     if (chk.checked) psiSelected.excludedFunds.delete(chk.dataset.fund);
     else psiSelected.excludedFunds.add(chk.dataset.fund);
@@ -6682,7 +6754,7 @@ function setupBulkExport({ prefix: p, source }) {
     const date = $(`#${p}BulkDate`).value;
     const filename = batchFilename(format);
     const body = {
-      source, format, filename,
+      source, format, filename, ccy: $(`#${p}Ccy`)?.value || 'IDR', ...(date ? { date } : {}),
       users: picked().map((u) => ({ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) })),
       ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}),
     };
@@ -6705,7 +6777,7 @@ function setupBulkExport({ prefix: p, source }) {
     const results = await mapLimit(picked(), 5, (u) => {
       const filename = `${source.replace('_full', '')}_${u.sid || u.userId}${date ? '_' + date : ''}`;
       const body = {
-        source, format, filename,
+        source, format, filename, ccy: $(`#${p}Ccy`)?.value || 'IDR', ...(date ? { date } : {}),
         users: [{ userId: u.userId, sid: u.sid, ...(date ? { date } : {}) }],
         ...(format === 'pdf' ? { columns: selectedPdfColumns() } : {}),
       };
@@ -10091,7 +10163,7 @@ function wire() {
   // filename/body carry the currently viewed date (if any) so an export
   // matches whatever's on screen, not always the live holdings.
   const pfFilename = () => `portfolio_${pfSelected.sid}${pfSelected.date ? '_' + pfSelected.date : ''}`;
-  const pfExportBody = () => ({ userId: pfSelected.userId, sid: pfSelected.sid, convertIdr: $('#pfCcy').value !== 'USD', ...(pfSelected.date ? { date: pfSelected.date } : {}) });
+  const pfExportBody = () => ({ userId: pfSelected.userId, sid: pfSelected.sid, ccy: $('#pfCcy').value, ...(pfSelected.date ? { date: pfSelected.date } : {}) });
   $('#pfCsv').addEventListener('click', () => pfSelected && download(
     { source: 'portfolio_full', format: 'csv', filename: pfFilename(), ...pfExportBody() },
     `${pfFilename()}.csv`));
@@ -10212,7 +10284,7 @@ function wire() {
   const pfxFilename = () => `portfolio_fix_${pfxSelected.sid}${pfxSelected.date ? '_' + pfxSelected.date : ''}`;
   const pfxExportBody = () => ({
     userId: pfxSelected.userId, sid: pfxSelected.sid,
-    convertIdr: $('#pfxCcy').value !== 'USD',
+    ccy: $('#pfxCcy').value,
     ...(pfxSelected.date ? { date: pfxSelected.date } : {}),
     ...(pfxSelected.excludedFunds && pfxSelected.excludedFunds.size ? { excludeFunds: [...pfxSelected.excludedFunds] } : {}),
   });
@@ -10248,7 +10320,7 @@ function wire() {
   const ptxFilename = () => `portfolio_tx_${ptxSelected.sid}${ptxSelected.date ? '_' + ptxSelected.date : ''}`;
   const ptxExportBody = () => ({
     userId: ptxSelected.userId, sid: ptxSelected.sid,
-    convertIdr: $('#ptxCcy').value !== 'USD',
+    ccy: $('#ptxCcy').value,
     ...(ptxSelected.date ? { date: ptxSelected.date } : {}),
     ...(ptxSelected.excludedFunds && ptxSelected.excludedFunds.size ? { excludeFunds: [...ptxSelected.excludedFunds] } : {}),
   });
@@ -10284,7 +10356,7 @@ function wire() {
   const psiFilename = () => `portfolio_sinvest_${psiSelected.sid}${psiSelected.date ? '_' + psiSelected.date : ''}`;
   const psiExportBody = () => ({
     userId: psiSelected.userId, sid: psiSelected.sid,
-    convertIdr: $('#psiCcy').value !== 'USD',
+    ccy: $('#psiCcy').value,
     ...(psiSelected.date ? { date: psiSelected.date } : {}),
     ...(psiSelected.excludedFunds && psiSelected.excludedFunds.size ? { excludeFunds: [...psiSelected.excludedFunds] } : {}),
   });

@@ -151,15 +151,19 @@ function table(doc, columns, rows, {
 // Statement columns, mirroring the official "CUSTOMER PORTFOLIO" layout:
 // fund value = avg buy NAV x units; market value = close NAV x units;
 // unrealized gain/loss = market - fund value; % = gain/loss over fund value.
+// Amounts are already converted to the display currency (convertHoldings); USD shows 2 decimals.
+const moneyD = (r) => (r?.displayCcy === 'USD' ? 2 : 0);
+const money = (v, r) => idNum(v, moneyD(r));
+const moneyParen = (v, r) => { const n = val(v); return n == null ? 'n/a' : n < 0 ? `(${idNum(-n, moneyD(r))})` : idNum(n, moneyD(r)); };
 const HOLDINGS_COLS = (width) => [
   { key: 'fund', label: 'Fund Name', width: width * 0.15 },
   { key: 'fund_type', label: 'Fund Type', width: width * 0.09, format: fundTypeLabel },
   { key: 'unit', label: 'Unit Balance', width: width * 0.11, align: 'right', format: (v) => idNum(v, 4) },
   { key: 'avg_buy_price', label: 'Average NAV', width: width * 0.10, align: 'right', format: (v) => idNum(v, 4) },
   { key: 'nav', label: 'Close NAV', width: width * 0.10, align: 'right', format: (v) => idNum(v, 4) },
-  { key: 'fund_value', label: 'Fund Value', width: width * 0.13, align: 'right', format: idNum },
-  { key: 'value', label: 'Market Value', width: width * 0.13, align: 'right', format: idNum },
-  { key: 'gain_loss', label: 'Unrealized Gain/Loss', width: width * 0.12, align: 'right', format: idParen },
+  { key: 'fund_value', label: 'Fund Value', width: width * 0.13, align: 'right', formatRow: money },
+  { key: 'value', label: 'Market Value', width: width * 0.13, align: 'right', formatRow: money },
+  { key: 'gain_loss', label: 'Unrealized Gain/Loss', width: width * 0.12, align: 'right', formatRow: moneyParen },
   { key: 'gain_pct', label: '%', width: width * 0.07, align: 'right', format: (v) => (val(v) == null ? 'n/a' : idNum(v, 2) + '%') },
 ];
 
@@ -351,11 +355,12 @@ function printLetterhead(doc, { left, width, contact, title, dateLabel, dateValu
 // Per-currency summary under the holdings table (only when a USD fund is held). mode 'USD': rows are in each fund's own
 // currency; 'IDR': rows already converted at the portfolio-date rate (fx), so USD = value / fx.
 // ponytail: one rate per report (all USD rows share the as-of date); add per-row rates if that stops holding.
-function portfolioSummaryLines(holdings, mode) {
-  if (!holdings.some((h) => h.ccy === 'USD')) return [];
-  const nat = (h, k) => { const v = Number(val(h[k])) || 0; const fx = Number(val(h.fx)) || 1; return h.ccy === 'USD' ? (mode === 'USD' ? v : v / fx) : v; };
+function portfolioSummaryLines(holdings, fx, mode) {
+  const hasUsd = holdings.some((h) => h.ccy === 'USD');
+  if (!hasUsd && mode !== 'USD') return [];
+  const nat = (h, k) => { const v = Number(val(h[k])) || 0; return h.ccy === 'USD' ? v / (Number(val(h.fx)) || 1) : v; };
   const fxOf = (h) => (h.ccy === 'USD' ? Number(val(h.fx)) || 1 : 1);
-  const lines = [];
+  const lines = fx?.rate ? [`Kurs USD/IDR: 1 USD = Rp ${idNum(fx.rate, 2)}${fx.date ? ` (per ${fx.date})` : ''}`] : [];
   let totIdr = 0;
   for (const c of ['USD', 'IDR']) {
     const rows = holdings.filter((h) => (h.ccy === 'USD' ? 'USD' : 'IDR') === c);
@@ -369,11 +374,43 @@ function portfolioSummaryLines(holdings, mode) {
     lines.push(`${c === 'USD' ? 'Dana USD' : 'Dana Rupiah'}: Fund Value ${p}${idNum(fv, d)} | Market Value ${p}${idNum(mv, d)} | Gain/Loss ${p}${idNum(mv - fv, d)}`
       + (c === 'USD' ? ` | setara Rp ${idNum(mv * rate)} (kurs 1 USD = Rp ${idNum(rate, 2)} pada tanggal portofolio)` : ''));
   }
-  lines.push(`Total Market Value (Rp): ${idNum(totIdr)}`);
+  if (hasUsd) lines.push(`Total Market Value (Rp): ${idNum(totIdr)}`);
   return lines;
 }
 
-function drawPortfolioHoldingsPage(doc, { contact, holdings }, options = {}) {
+/** Convert holdings rows from IDR (server default) to display currency mode.
+ *  @param {Array} rows - holdings as returned by queries (already IDR-converted, with ccy, fx)
+ *  @param {string} mode - 'IDR' | 'USD' | 'NATIVE'
+ *  @param {number} rate - USD/IDR rate for converting IDR funds in USD mode; ignored in IDR/NATIVE
+ *  @returns {Array} new rows with converted numeric fields + added `displayCcy` for formatting
+ */
+function convertHoldings(rows, mode, rate) {
+  if (mode !== 'USD' && mode !== 'NATIVE') return rows.map(r => ({ ...r, displayCcy: 'IDR' }));
+  if (mode === 'NATIVE') {
+    return rows.map(r => ({
+      ...r,
+      displayCcy: r.ccy === 'USD' ? 'USD' : 'IDR',
+      fund_value: r.ccy === 'USD' ? (Number(val(r.fund_value)) || 0) / (Number(val(r.fx)) || 1) : r.fund_value,
+      value: r.ccy === 'USD' ? (Number(val(r.value)) || 0) / (Number(val(r.fx)) || 1) : r.value,
+      gain_loss: r.ccy === 'USD' ? (Number(val(r.gain_loss)) || 0) / (Number(val(r.fx)) || 1) : r.gain_loss,
+    }));
+  }
+  // mode === 'USD' — convert all to USD using provided rate (or row fx for USD funds, rate for IDR funds)
+  const usdRate = Number(rate) || 1;
+  return rows.map(r => {
+    const fx = r.ccy === 'USD' ? (Number(val(r.fx)) || 1) : usdRate;
+    return {
+      ...r,
+      displayCcy: 'USD',
+      fund_value: (Number(val(r.fund_value)) || 0) / fx,
+      value: (Number(val(r.value)) || 0) / fx,
+      gain_loss: (Number(val(r.gain_loss)) || 0) / fx,
+    };
+  });
+}
+
+function drawPortfolioHoldingsPage(doc, { contact, holdings: rawHoldings }, options = {}) {
+  const holdings = convertHoldings(rawHoldings, options.mode, options.fx?.rate);
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
@@ -391,7 +428,7 @@ function drawPortfolioHoldingsPage(doc, { contact, holdings }, options = {}) {
   // Anchored at the first non-identity column still visible, so it holds up
   // when hidden columns shift what's left in the table.
   const anchorCol = cols.find((c) => c.key !== 'fund' && c.key !== 'fund_type');
-  const mixed = options.mode === 'USD' && holdings.some((h) => h.ccy === 'USD') && holdings.some((h) => h.ccy !== 'USD');
+  const mixed = options.mode === 'NATIVE' && holdings.some((h) => h.ccy === 'USD') && holdings.some((h) => h.ccy !== 'USD');
   if (holdings.length > 1 && anchorCol && !mixed) {
     const sum = (k) => holdings.reduce((s, h) => s + (Number(val(h[k])) || 0), 0);
     const totalFund = sum('fund_value');
@@ -412,9 +449,10 @@ function drawPortfolioHoldingsPage(doc, { contact, holdings }, options = {}) {
       doc.text(text, colX[key] + 4, rowY + 4, { width: c.width - 8, align: 'right' });
     };
     if (!sumKeys.includes(anchorCol.key)) cell(anchorCol.key, 'Total');
-    cell('fund_value', idNum(totalFund));
-    cell('value', idNum(totalMarket));
-    cell('gain_loss', idNum(totalGain));
+    const td = moneyD(holdings[0]);
+    cell('fund_value', idNum(totalFund, td));
+    cell('value', idNum(totalMarket, td));
+    cell('gain_loss', idNum(totalGain, td));
     cell('gain_pct', totalPct == null ? 'n/a' : idNum(totalPct, 2) + '%');
     doc.y = rowY + 15;
     doc.strokeColor(INK).moveTo(totX, doc.y).lineTo(left + width, doc.y).stroke();
@@ -422,7 +460,7 @@ function drawPortfolioHoldingsPage(doc, { contact, holdings }, options = {}) {
     doc.x = left;
   }
 
-  const sum = portfolioSummaryLines(holdings, options.mode);
+  const sum = portfolioSummaryLines(rawHoldings, options.fx, options.mode);
   if (sum.length) {
     doc.font('Helvetica-Bold').fontSize(8).fillColor(INK).text('Ringkasan', left, doc.y, { width });
     doc.font('Helvetica').fontSize(7.5);
@@ -549,6 +587,7 @@ function usersTransactionsReport(rows, options = {}) {
 }
 
 module.exports = {
+  convertHoldings,
   portfolioReport,
   portfolioReportBatch,
   transactionStatement,

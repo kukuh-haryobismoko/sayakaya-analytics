@@ -10,7 +10,7 @@
 // directly via fetch. If you change this, change server/sheets.js too.
 
 import {
-  val, idNum, statementDate, HOLDINGS_COLS, filterCols, DISCLAIMER, OJK_LINE,
+  val, idNum, statementDate, HOLDINGS_COLS, filterCols, DISCLAIMER, OJK_LINE, convertHoldings, type Fx,
 } from './pdf.ts';
 
 interface ServiceAccount {
@@ -104,7 +104,8 @@ function holdingsGrid(holdings: Record<string, unknown>[], columns?: string[]) {
   const header = cols.map((c) => c.label);
   const rows = holdings.map((h) => cols.map((c) => {
     const raw = h[c.key];
-    return String(c.format ? c.format(raw) : (val(raw) ?? 'n/a'));
+    // deno-lint-ignore no-explicit-any
+    return String(c.formatRow ? c.formatRow(raw, h as any) : c.format ? c.format(raw) : (val(raw) ?? 'n/a'));
   }));
   return { cols, header, rows };
 }
@@ -155,9 +156,10 @@ function boldShaded(sheetId: number, rowIndex: number, colCount: number) {
 
 export async function portfolioReport(
   { contact, holdings }: { contact: Record<string, unknown> | undefined; holdings: Record<string, unknown>[] },
-  options: { columns?: string[]; username?: string | null } = {},
+  options: { columns?: string[]; username?: string | null; mode?: string; fx?: Fx | null } = {},
 ): Promise<{ url: string }> {
-  const { columns, username } = options;
+  const { columns, username, fx } = options;
+  holdings = convertHoldings(holdings, options.mode, fx?.rate);
   const spreadsheetId = Deno.env.get('GSHEET_TRACKER_ID');
   if (!spreadsheetId) {
     throw new Error('GSHEET_TRACKER_ID is not set, share a Google Sheet with the service account as Editor and set its ID in the environment.');
@@ -178,6 +180,7 @@ export async function portfolioReport(
   const portfolioRows: (string | undefined)[][] = [
     ['CUSTOMER PORTFOLIO', '', '', 'Close NAV', statementDate(holdings)],
     [`Exported by ${username || 'dashboard'} · ${new Date().toISOString()}`],
+    ...(fx?.rate ? [['USD/IDR', String(fx.rate), fx.date || '']] : []),
     [],
     ['NAME', String(val(contact?.name) || 'n/a')],
     ['SID', String(val(contact?.sid) || 'n/a')],

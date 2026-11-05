@@ -25,7 +25,7 @@
 
 const { JWT } = require('google-auth-library');
 const {
-  val, idNum, statementDate, HOLDINGS_COLS, filterCols, DISCLAIMER, OJK_LINE,
+  val, idNum, statementDate, HOLDINGS_COLS, filterCols, DISCLAIMER, OJK_LINE, convertHoldings,
 } = require('./pdf');
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
@@ -68,7 +68,7 @@ function holdingsGrid(holdings, columns) {
   const header = cols.map((c) => c.label);
   const rows = holdings.map((h) => cols.map((c) => {
     const raw = h[c.key];
-    return String(c.format ? c.format(raw) : (val(raw) ?? 'n/a'));
+    return String(c.formatRow ? c.formatRow(raw, h) : c.format ? c.format(raw) : (val(raw) ?? 'n/a'));
   }));
   return { cols, header, rows };
 }
@@ -121,7 +121,8 @@ function boldShaded(sheetId, rowIndex, colCount) {
 
 // contact/holdings: same shapes as PDF.portfolioReport. options: { columns, username }
 async function portfolioReport({ contact, holdings }, options = {}) {
-  const { columns, username } = options;
+  const { columns, username, fx } = options;
+  holdings = convertHoldings(holdings, options.mode, fx?.rate);
   const spreadsheetId = process.env.GSHEET_TRACKER_ID;
   if (!spreadsheetId) {
     throw new Error('GSHEET_TRACKER_ID is not set, share a Google Sheet with the service account as Editor and set its ID in the environment.');
@@ -142,6 +143,7 @@ async function portfolioReport({ contact, holdings }, options = {}) {
   const portfolioRows = [
     ['CUSTOMER PORTFOLIO', '', '', 'Close NAV', statementDate(holdings)],
     [`Exported by ${username || 'dashboard'} · ${new Date().toISOString()}`],
+    ...(fx?.rate ? [['USD/IDR', fx.rate, fx.date || '']] : []),
     [],
     ['NAME', String(val(contact?.name) || 'n/a')],
     ['SID', String(val(contact?.sid) || 'n/a')],
