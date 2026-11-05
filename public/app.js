@@ -68,6 +68,14 @@ function fmtCcy(n, ccy) {
   return 'Rp ' + new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(v));
 }
 
+/** KPI amount: USD mode divides by the as-of rate (taken from the USD rows); IDR and per-fund native show Rp (a native total would mix currencies). */
+function kpiAmt(idr, holdings, sel) {
+  const mode = sel ? $(sel)?.value : 'IDR';
+  const u = holdings.find((h) => h.ccy === 'USD');
+  const rate = (u && Number(val(u.fx))) || getUsdIdrRate();
+  return mode === 'USD' && rate ? fmtCcy(idr / rate, 'USD') : idrFull(idr);
+}
+
 /** Build a simple rate lookup from the fxRate header element (if present) or a provided rate. */
 function getUsdIdrRate() {
   const el = $('#fxRate');
@@ -577,17 +585,17 @@ function renderPfAumChart(rows) {
   });
 }
 
-function pfKpisHtml(holdings, split) {
+function pfKpisHtml(holdings, split, sel) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   // split is null in "as of date" mode — portfolios/bonus_portfolios only
   // have a live split, not a historical one, so there's nothing real to show.
   return [
-    kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_total_aum'), kpiAmt(totalAum, holdings, sel), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_regular_portfolio'), split ? kpiAmt(Number(val(split.regular_value)) || 0, holdings, sel) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? kpiAmt(Number(val(split.bonus_value)) || 0, holdings, sel) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
-function renderPfKpis(holdings, split) { $('#pfKpis').innerHTML = pfKpisHtml(holdings, split); }
+function renderPfKpis(holdings, split) { $('#pfKpis').innerHTML = pfKpisHtml(holdings, split, '#pfCcy'); }
 
 // Shared by the Portfolio tab and Portfolio Explorer — both feed rows of the
 // same shape (fund, fund_type, unit, avg_buy_price, nav, value, ...).
@@ -598,12 +606,16 @@ function renderPfKpis(holdings, split) { $('#pfKpis').innerHTML = pfKpisHtml(hol
 // opts.ccyMode and opts.usdRate let the table render in IDR / USD / NATIVE.
 // When ccyMode is provided, rows are assumed to come from the server (already
 // IDR-converted with ccy and fx), and are converted via convertHoldings logic.
-function holdingsTableHtml(rows, { selectable = false, excluded = new Set(), ccyMode = 'IDR', usdRate = null } = {}) {
+function holdingsTableHtml(rows, { selectable = false, excluded = new Set(), ccyMode = 'IDR', usdRate = null, asOf = '' } = {}) {
+  // A USD fund row carries the rate for its as-of date; header rate (latest) is the fallback.
+  const usdRow = rows.find((r) => r.ccy === 'USD');
+  const rate = (usdRow && Number(val(usdRow.fx))) || Number(usdRate) || null;
+  const rateNote = rate ? `<div class="hint" style="margin:4px 0">USD/IDR ${new Intl.NumberFormat('id-ID').format(rate)} · ${asOf ? 'per ' + escapeHtml(asOf) : 'latest'}</div>` : '';
   // Apply currency conversion if a mode is requested
   let displayRows = rows;
   if (ccyMode !== 'IDR') {
     displayRows = rows.map(r => {
-      const fx = r.ccy === 'USD' ? (Number(val(r.fx)) || 1) : (ccyMode === 'USD' ? (Number(usdRate) || 1) : 1);
+      const fx = r.ccy === 'USD' ? (Number(val(r.fx)) || 1) : (ccyMode === 'USD' ? (rate || 1) : 1);
       const ccy = ccyMode === 'NATIVE' ? (r.ccy === 'USD' ? 'USD' : 'IDR') : 'USD';
       const fv = Number(val(r.fund_value)) || 0;
       const mv = Number(val(r.value)) || 0;
@@ -617,7 +629,7 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set(), ccy
       };
     });
   } else {
-    displayRows = rows.map(r => ({ ...r, displayCcy: r.ccy === 'USD' ? 'USD' : 'IDR' }));
+    displayRows = rows.map(r => ({ ...r, displayCcy: 'IDR' })); // server rows are already Rp
   }
 
   const gl = (v, ccy) => {
@@ -670,7 +682,7 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set(), ccy
       ${gl(tot.gain, displayRows[0]?.displayCcy || 'IDR')}
       ${glPct(tot.fund ? (tot.gain / tot.fund) * 100 : null)}
     </tr></tfoot>` : '';
-  return `<table><thead><tr>
+  return rateNote + `<table><thead><tr>
       ${chkTh}<th>Fund</th><th>Type</th><th class="num">Unit Balance</th><th class="num">Average NAV</th><th class="num">Close NAV</th><th class="num">Fund Value</th><th class="num">Market Value</th><th class="num">Unrealized G/L</th><th cl
     </tr></thead><tbody>${body}</tbody>${foot}</table>`;
 }
@@ -679,7 +691,7 @@ function renderPfHoldings(rows) {
   if (!rows.length) { $('#pfHoldings').innerHTML = `<div class="empty">${t('msg_no_active_holdings')}</div>`; return; }
   const ccyMode = $('#pfCcy').value;
   const usdRate = ccyMode === 'USD' ? getUsdIdrRate() : null;
-  $('#pfHoldings').innerHTML = holdingsTableHtml(rows, { ccyMode, usdRate });
+  $('#pfHoldings').innerHTML = holdingsTableHtml(rows, { ccyMode, usdRate, asOf: pfSelected.date });
 }
 
 function renderPfPerformance(rows) {
@@ -787,9 +799,9 @@ function renderPfxAumChart(rows, canvasId = 'pfxAumChart') {
 function renderPfxKpis(holdings, split) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   $('#pfxKpis').innerHTML = [
-    kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_total_aum'), kpiAmt(totalAum, holdings, '#pfxCcy'), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_regular_portfolio'), split ? kpiAmt(Number(val(split.regular_value)) || 0, holdings, '#pfxCcy') : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? kpiAmt(Number(val(split.bonus_value)) || 0, holdings, '#pfxCcy') : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -802,7 +814,7 @@ function renderPfxHoldings(rows) {
   }
   const ccyMode = $('#pfxCcy').value;
   const usdRate = ccyMode === 'USD' ? getUsdIdrRate() : null;
-  $('#pfxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: pfxSelected.excludedFunds, ccyMode, usdRate });
+  $('#pfxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: pfxSelected.excludedFunds, ccyMode, usdRate, asOf: pfxSelected.date });
   $$('#pfxHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
     if (chk.checked) pfxSelected.excludedFunds.delete(chk.dataset.fund);
     else pfxSelected.excludedFunds.add(chk.dataset.fund);
@@ -919,9 +931,9 @@ function renderPtxKpis(holdings, split) {
   // split (and bonus units generally) is only available live — bonus_portfolios
   // has no history, so an as-of-date view can't show a real bonus figure.
   $('#ptxKpis').innerHTML = [
-    kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_total_aum'), kpiAmt(totalAum, holdings, '#ptxCcy'), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_regular_portfolio'), split ? kpiAmt(Number(val(split.regular_value)) || 0, holdings, '#ptxCcy') : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? kpiAmt(Number(val(split.bonus_value)) || 0, holdings, '#ptxCcy') : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -934,7 +946,7 @@ function renderPtxHoldings(rows) {
   }
   const ccyMode = $('#ptxCcy').value;
   const usdRate = ccyMode === 'USD' ? getUsdIdrRate() : null;
-  $('#ptxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: ptxSelected.excludedFunds, ccyMode, usdRate });
+  $('#ptxHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: ptxSelected.excludedFunds, ccyMode, usdRate, asOf: ptxSelected.date });
   $$('#ptxHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
     if (chk.checked) ptxSelected.excludedFunds.delete(chk.dataset.fund);
     else ptxSelected.excludedFunds.add(chk.dataset.fund);
@@ -1047,9 +1059,9 @@ function renderPsiAumChart(rows) {
 function renderPsiKpis(holdings, split) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   $('#psiKpis').innerHTML = [
-    kpi(t('kpi_total_aum'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
-    kpi(t('kpi_regular_portfolio'), split ? idrFull(Number(val(split.regular_value)) || 0) : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
-    kpi(t('kpi_bonus_portfolio'), split ? idrFull(Number(val(split.bonus_value)) || 0) : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_total_aum'), kpiAmt(totalAum, holdings, '#psiCcy'), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_regular_portfolio'), split ? kpiAmt(Number(val(split.regular_value)) || 0, holdings, '#psiCcy') : 'n/a', split ? 'portfolios' : t('kpi_not_available_past_date')),
+    kpi(t('kpi_bonus_portfolio'), split ? kpiAmt(Number(val(split.bonus_value)) || 0, holdings, '#psiCcy') : 'n/a', split ? 'bonus_portfolios (on_going)' : t('kpi_not_available_past_date')),
   ].join('');
 }
 
@@ -1060,7 +1072,7 @@ function renderPsiHoldings(rows) {
   }
   const ccyMode = $('#psiCcy').value;
   const usdRate = ccyMode === 'USD' ? getUsdIdrRate() : null;
-  $('#psiHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: psiSelected.excludedFunds, ccyMode, usdRate });
+  $('#psiHoldings').innerHTML = holdingsTableHtml(rows, { selectable: true, excluded: psiSelected.excludedFunds, ccyMode, usdRate, asOf: psiSelected.date });
   $$('#psiHoldings .hld-export-chk').forEach((chk) => chk.addEventListener('change', () => {
     if (chk.checked) psiSelected.excludedFunds.delete(chk.dataset.fund);
     else psiSelected.excludedFunds.add(chk.dataset.fund);
@@ -1291,14 +1303,15 @@ function renderPeKpis(holdings, byGoal) {
   const totalAum = holdings.reduce((s, h) => s + (Number(val(h.value)) || 0), 0);
   const goalCount = new Set(byGoal.map((r) => val(r.goal))).size;
   $('#peKpis').innerHTML = [
-    kpi(t('kpi_total_aum_as_of'), idrFull(totalAum), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
+    kpi(t('kpi_total_aum_as_of'), kpiAmt(totalAum, holdings, '#peCcy'), t('kpi_holding_count').replace('{n}', holdings.length).replace('{s}', holdings.length === 1 ? '' : 's'), 'accent'),
     kpi(t('kpi_goals'), num(goalCount), 'goal_snapshots (main.goals)'),
   ].join('');
 }
 
 function renderPeHoldings(rows) {
   if (!rows.length) { $('#peHoldings').innerHTML = `<div class="empty">${t('msg_no_holdings_for_this_date')}</div>`; return; }
-  $('#peHoldings').innerHTML = holdingsTableHtml(rows);
+  const ccyMode = $('#peCcy').value;
+  $('#peHoldings').innerHTML = holdingsTableHtml(rows, { ccyMode, usdRate: ccyMode === 'USD' ? getUsdIdrRate() : null, asOf: peSelected?.date });
 }
 
 // Preview-only breakdown: one mini table per goal, headed by the goal's name.
@@ -10392,11 +10405,12 @@ function wire() {
   // Explicit "Go" rather than firing on every `change` — a native date input
   // fires `change` per field segment in some browsers, mid-edit.
   $('#peDateApply').addEventListener('click', loadExplorerPortfolio);
+  $('#peCcy').addEventListener('change', loadExplorerPortfolio);
   $('#peCsv').addEventListener('click', () => peSelected && download(
-    { source: 'portfolio_explorer_full', format: 'csv', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date },
+    { source: 'portfolio_explorer_full', format: 'csv', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, ccy: $('#peCcy').value },
     `portfolio_explorer_${peSelected.sid}_${peSelected.date}.csv`));
   $('#peXlsx').addEventListener('click', () => peSelected && download(
-    { source: 'portfolio_explorer_full', format: 'xlsx', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date },
+    { source: 'portfolio_explorer_full', format: 'xlsx', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, ccy: $('#peCcy').value },
     `portfolio_explorer_${peSelected.sid}_${peSelected.date}.xlsx`));
   renderPdfColumnPicker('pePdfCols');
   $('#pePdfCols').addEventListener('change', () => savePdfColumnPrefs('pePdfCols'));
@@ -10408,13 +10422,13 @@ function wire() {
     if (!e.target.closest('#pePdfColsDropdown')) $('#pePdfColsPanel').classList.remove('open');
   });
   $('#pePdf').addEventListener('click', () => peSelected && download(
-    { source: 'portfolio_explorer_full', format: 'pdf', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, columns: selectedPdfColumns() },
+    { source: 'portfolio_explorer_full', format: 'pdf', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, ccy: $('#peCcy').value, columns: selectedPdfColumns() },
     `portfolio_explorer_${peSelected.sid}_${peSelected.date}.pdf`));
   $('#pePdfOnly').addEventListener('click', () => peSelected && download(
-    { source: 'portfolio_explorer_full', format: 'pdf', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, includePerformance: false, columns: selectedPdfColumns() },
+    { source: 'portfolio_explorer_full', format: 'pdf', filename: `portfolio_explorer_${peSelected.sid}_${peSelected.date}`, userId: peSelected.userId, date: peSelected.date, ccy: $('#peCcy').value, includePerformance: false, columns: selectedPdfColumns() },
     `portfolio_explorer_${peSelected.sid}_${peSelected.date}.pdf`));
   $('#peGsheet').addEventListener('click', () => peSelected && pushToSheet(
-    { source: 'portfolio_explorer_full', userId: peSelected.userId, date: peSelected.date, columns: selectedPdfColumns() }));
+    { source: 'portfolio_explorer_full', userId: peSelected.userId, date: peSelected.date, ccy: $('#peCcy').value, columns: selectedPdfColumns() }));
 
   // HNWI
   $('#hnwiApply').addEventListener('click', loadHnwi);
