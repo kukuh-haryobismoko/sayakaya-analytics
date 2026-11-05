@@ -6737,19 +6737,19 @@ const fxOff = (q, convertIdr) => (convertIdr === false ? { ...q, sql: q.sql.spli
 
 // MIS channel tab: sign-up journey per channel (cohort = registration month) and AUM split IDR / USD.
 // Add a channel = add a WHEN line (order matters, first match wins). Downloads: GA4 device -> user_id -> users; devices never logged in = no_account.
-// shortcut: employee / default-referral code lists are hardcoded, move to a table when they change often.
-const MCH_EMPLOYEE = "('SRIKAYA', 'YEARENDSUCOR')";
-const MCH_DEFAULT_REF = "('RAIZKAYA', 'RAIZ')";
+// shortcut: booth codes copied from roster in public/booth-event-config.js, update here when the roster changes.
+const MCH_BOOTH = "('TLPIM', 'SPIM1', 'SPIM2', 'SPIM3', 'SPIM4', 'SPIM5', 'SPIM6', 'TLGC', 'SGC1', 'SGC2', 'SGC3', 'SGC4', 'SGC5', 'SGC6', 'TLCP', 'SCP1', 'SCP2', 'SCP3', 'SCP4', 'SCP5', 'SCP6', 'SCP7', 'FT1PIM', 'FT1GC', 'FT1CP', 'FT2PIM', 'FT2GC', 'FT2CP')";
+// karyawan = user whose buy used a SRIKAYA promo code (CTE emp in misChannelFunnel); booth = one of the roster codes in sales_code or referrer_code; rest organic (friend referral included).
 const MCH_CHANNEL = `CASE
-  WHEN UPPER(u.sales_code) IN ${MCH_EMPLOYEE} OR UPPER(u.referrer_code) IN ${MCH_EMPLOYEE} THEN 'karyawan'
-  WHEN u.sales_code IS NOT NULL THEN 'sales_booth'
-  WHEN u.referrer_code IS NOT NULL AND UPPER(u.referrer_code) NOT IN ${MCH_DEFAULT_REF} THEN 'referral'
+  WHEN u.id IN (SELECT user_id FROM emp) THEN 'karyawan'
+  WHEN UPPER(u.sales_code) IN ${MCH_BOOTH} OR UPPER(u.referrer_code) IN ${MCH_BOOTH} THEN 'sales_booth'
   ELSE 'organic' END`;
 
 const misChannelFunnel = (from, to) => {
   const r = range(from, to);
   return {
-    sql: `WITH u AS (
+    sql: `WITH emp AS (SELECT DISTINCT user_id FROM ${TX_RAW} WHERE UPPER(promo_code) LIKE '%SRIKAYA%'),
+      u AS (
         SELECT u.id, DATE_TRUNC(DATE(u.created_at), MONTH) AS month, ${MCH_CHANNEL} AS channel,
           u.verification_status AS vs
         FROM ${USERS} u

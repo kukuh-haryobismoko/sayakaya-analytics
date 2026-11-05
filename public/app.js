@@ -3447,7 +3447,7 @@ const MCH_METRICS = [
 function mchPivot(rows) {
   if (!rows.length) { $('#mchFunnel').innerHTML = `<div class="empty">${t('an_empty')}</div>`; return; }
   const months = [...new Set(rows.map((r) => r.month))].sort();
-  const chans = ['TOTAL', 'organic', 'sales_booth', 'karyawan', 'referral', 'no_account'].filter((c) => rows.some((r) => r.channel === c));
+  const chans = ['TOTAL', 'organic', 'sales_booth', 'karyawan', 'no_account'].filter((c) => rows.some((r) => r.channel === c));
   const mlabel = (m) => new Date(`${m}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' });
   const cell = (v, pct) => (v == null || !Number.isFinite(v) ? '<td class="num"></td>' : `<td class="num" data-t="n" data-v="${pct ? +(v * 100).toFixed(1) : v}">${pct ? (v * 100).toFixed(1) + '%' : num(v)}</td>`);
   const body = chans.map((c) => MCH_METRICS.map(([label, k, k2]) => {
