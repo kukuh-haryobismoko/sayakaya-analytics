@@ -8499,7 +8499,9 @@ async function loadBoothEvent() {
     $('#beFrom').min = $('#beTo').min = cfg.start; $('#beFrom').max = $('#beTo').max = cfg.end;
     $('#beFrom').value = current.from; $('#beTo').value = current.to;
     $('#beBooth').innerHTML = `<option value="">${bL('All booths', 'Semua booth')}</option>` + Object.entries(cfg.booths).map(([k, v]) => `<option value="${k}">${bEsc(v)}</option>`).join('');
+    const gKeep = $('#beGroup').value;
     $('#beGroup').innerHTML = [['day', bL('Day', 'Hari')], ['week', bL('Week (7 days)', 'Minggu (7 hari)')], ['week4', bL('4 weeks (28 days)', '4 minggu (28 hari)')], ['month', bL('Month', 'Bulan')]].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    if (gKeep) $('#beGroup').value = gKeep;
     $('#bePerson').innerHTML = `<option value="">${bL('Everyone', 'Semua')}</option>` + [...new Set(cfg.roster.map((r) => r.person))].map((n) => `<option value="${bEsc(n)}">${bEsc(bWho(cfg, n))}</option>`).join('');
   }
   BOOTH.loading = true;
