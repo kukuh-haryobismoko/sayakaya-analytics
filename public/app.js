@@ -8151,7 +8151,7 @@ const bTier = (tiers, reached) => tiers.reduce((amt, tr) => (reached(tr) ? tr.am
 function boothCompute({ customers, transactions }, cfg, today) {
   const roster = new Map(cfg.roster.map((r) => [r.code.toUpperCase(), r]));
   const last = cfg.periods[cfg.periods.length - 1];
-  // A verification after the event lands in the last period.
+  // SID counts on the registration date (created_at), not the KYC date; a registration after the event lands in the last period.
   const periodOf = (day) => cfg.periods.find((pd) => day >= pd.from && day <= pd.to) || (day > last.to ? last : null);
   const txBy = new Map();
   for (const t of transactions) {
@@ -8177,7 +8177,7 @@ function boothCompute({ customers, transactions }, cfg, today) {
       ...c, aumNow, txs, buys, sells, isNew,
       person: r ? r.person : null, booth: r ? r.booth : null, role: r ? r.role : null,
       verified: c.verification_status === 'verified' && !!c.verified_on,
-      sidPeriod: isNew && c.verification_status === 'verified' && c.verified_on ? periodOf(c.verified_on) : null,
+      sidPeriod: isNew && c.verification_status === 'verified' && c.registered_on ? periodOf(c.registered_on) : null,
       firstBuy, fundedOn,
       totalBuy: sum(buys, () => true), totalSell: sum(sells, () => true),
       // Money in minus money out, up to and including `day`.
@@ -8306,7 +8306,7 @@ function boothHoldState(r, cfg, today) {
 const boothSidTarget = (cfg, booth, period) => ((cfg.salesSlots || {})[booth] ?? cfg.roster.filter((r) => r.role === 'sales' && r.booth === booth).length) * cfg.teamLead.dailySidTarget * period.workDays;
 // Date range of the page filter as an incentive period: working days add up per calendar month
 // (fullMonthWorkDays x days in range / days in that month, event days only), M1 = the month after
-// `to`, and SID = verified in the range (a verification after the event ends counts when `to` reaches the end).
+// `to`, and SID = registered in the range (created_at) and KYC verified.
 // Same numbers as a config period when the range is exactly that period.
 function boothRange(cfg, from, to) {
   const perMonth = {};
@@ -8317,7 +8317,28 @@ function boothRange(cfg, from, to) {
   const ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1;
   const m1 = { from: `${ny}-${pad(nm)}-01`, to: `${ny}-${pad(nm)}-${pad(new Date(Date.UTC(ny, nm, 0)).getUTCDate())}` };
   return { id: 'range', label: `${from} - ${to}`, from, to, workDays, m1,
-    pick: (x) => !!x.sidPeriod && x.verified_on >= from && (x.verified_on <= to || to >= cfg.end) };
+    pick: (x) => !!x.sidPeriod && x.registered_on >= from && x.registered_on <= to };
+}
+// Recap windows inside [from, to], newest first: 'day', 'week' (7 days from `from`), 'week4' (28 days from `from`) or 'month' (calendar months, first and last clipped).
+function boothWindows(from, to, group) {
+  const out = [], n = { day: 1, week: 7, week4: 28 }[group] || 0;
+  for (let a = from; a <= to;) {
+    const b = n ? bAddDays(a, n - 1) : `${a.slice(0, 8)}${String(new Date(Date.UTC(+a.slice(0, 4), +a.slice(5, 7), 0)).getUTCDate()).padStart(2, '0')}`;
+    out.push([a, b < to ? b : to]);
+    a = bAddDays(b, 1);
+  }
+  return out.reverse();
+}
+// Top funds by number of buys and by amount (admin bonus units excluded); rows come from boothTxFilter.
+function boothTopFunds(rows, n = 3) {
+  const by = new Map();
+  for (const r of rows) {
+    if (r.type !== 'buy' || r.payment_method === 'manual_bonus' || !r.fund) continue;
+    const f = by.get(r.fund) || { fund: r.fund, n: 0, rp: 0 };
+    f.n++; f.rp += r.amount; by.set(r.fund, f);
+  }
+  const all = [...by.values()];
+  return { byN: [...all].sort((a, b) => b.n - a.n || b.rp - a.rp).slice(0, n), byRp: all.sort((a, b) => b.rp - a.rp || b.n - a.n).slice(0, n) };
 }
 // Incentives for one period: sales and flying team per person, team leads per booth.
 function boothIncentives(people, cfg, period, today) {
@@ -8478,6 +8499,7 @@ async function loadBoothEvent() {
     $('#beFrom').min = $('#beTo').min = cfg.start; $('#beFrom').max = $('#beTo').max = cfg.end;
     $('#beFrom').value = current.from; $('#beTo').value = current.to;
     $('#beBooth').innerHTML = `<option value="">${bL('All booths', 'Semua booth')}</option>` + Object.entries(cfg.booths).map(([k, v]) => `<option value="${k}">${bEsc(v)}</option>`).join('');
+    $('#beGroup').innerHTML = [['day', bL('Day', 'Hari')], ['week', bL('Week (7 days)', 'Minggu (7 hari)')], ['week4', bL('4 weeks (28 days)', '4 minggu (28 hari)')], ['month', bL('Month', 'Bulan')]].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
     $('#bePerson').innerHTML = `<option value="">${bL('Everyone', 'Semua')}</option>` + [...new Set(cfg.roster.map((r) => r.person))].map((n) => `<option value="${bEsc(n)}">${bEsc(bWho(cfg, n))}</option>`).join('');
   }
   BOOTH.loading = true;
@@ -8602,35 +8624,43 @@ function renderBoothRecap(people) {
   const today = bWibToday();
   const lastDay = today < cfg.end ? today : cfg.end;
   const label = (r) => (r.booth ? bEsc(r.name) : `<strong>${bL('All booths', 'Semua booth')}</strong>`);
-  const line = (r, extra) => ({
-    ...extra, booth: label(r), registered: r.registered, kyc: r.kyc,
-    kycPct: r.registered ? (r.kyc / r.registered) * 100 : null,
-    firstBuy: r.firstBuy, funded: r.funded, buy: r.buy, sell: r.sell, net: r.buy - r.sell,
-  });
-  const cols = (withDay) => [
-    ...(withDay ? [{ key: 'day', label: bL('Day (WIB)', 'Tanggal (WIB)') }] : []),
+  // SID target of a window: seats x daily target x working days of the window (prorated per calendar month). Blank when a sales filter is on (the target is per booth).
+  const target = (r, rg, rows) => (view.person ? null : r.booth ? boothSidTarget(cfg, r.booth, rg) : rows.reduce((a, x) => a + (x.booth ? boothSidTarget(cfg, x.booth, rg) : 0), 0));
+  const block = (a, b, extra) => {
+    const rg = boothRange(cfg, a, b), rows = boothRecap(ppl, rcfg, a, b);
+    return rows.map((r) => {
+      const tg = target(r, rg, rows);
+      return { ...extra(r), booth: label(r), registered: r.registered, kyc: r.kyc, target: tg == null ? null : Math.round(tg * 10) / 10,
+        kycOfTarget: tg ? (r.kyc / tg) * 100 : null, kycPct: r.registered ? (r.kyc / r.registered) * 100 : null,
+        firstBuy: r.firstBuy, funded: r.funded, buy: r.buy, sell: r.sell, net: r.buy - r.sell };
+    });
+  };
+  const cols = (withPeriod) => [
+    ...(withPeriod ? [{ key: 'day', label: bL('Period (WIB)', 'Periode (WIB)') }] : []),
     { key: 'booth', label: 'Booth' },
     { key: 'registered', label: bL('Registered', 'Daftar'), type: 'num' },
-    { key: 'kyc', label: bL('KYC verified', 'KYC verified'), type: 'num' },
-    ...(withDay ? [] : [{ key: 'kycPct', label: bL('% KYC of registered', '% KYC dari daftar'), type: 'pct' }]),
+    { key: 'kyc', label: bL('SID (KYC verified)', 'SID (KYC verified)'), type: 'num' },
+    { key: 'target', label: bL('SID target (prorated)', 'Target SID (prorata)'), type: 'num' },
+    { key: 'kycOfTarget', label: bL('% of target', '% dari target'), type: 'pct' },
+    { key: 'kycPct', label: bL('% KYC of registered', '% KYC dari daftar'), type: 'pct' },
     { key: 'firstBuy', label: bL('First purchase', 'Transaksi pertama'), type: 'num' },
     { key: 'funded', label: bL(`Reached ${idr(cfg.sales.minFunded)}`, `Capai ${idr(cfg.sales.minFunded)}`), type: 'num' },
     { key: 'buy', label: bL('Bought', 'Beli'), type: 'idr' },
     { key: 'sell', label: bL('Sold', 'Jual'), type: 'idr' },
-    ...(withDay ? [] : [{ key: 'net', label: bL('Net money in', 'Dana bersih masuk'), type: 'idr' }]),
+    { key: 'net', label: bL('Net money in', 'Dana bersih masuk'), type: 'idr' },
   ];
 
-  genTable('#beRecapAll', boothRecap(ppl, rcfg, view.from, view.to >= cfg.end ? BOOTH_RECAP_OPEN : view.to).map((r) => line(r, {})),
+  genTable('#beRecapAll', block(view.from, view.to >= cfg.end ? BOOTH_RECAP_OPEN : view.to, () => ({})),
     cols(false), bL('No data.', 'Tidak ada data.'));
 
   const dFrom = view.from < cfg.start ? cfg.start : view.from;
   const upto = view.to < lastDay ? view.to : lastDay;
   const rows = [];
-  if (dFrom <= upto && dFrom !== upto) {
-    boothRecap(ppl, rcfg, dFrom, upto).forEach((r) => rows.push(line(r, { day: `<strong>${bL('Total', 'Total')} ${dFrom} s.d. ${upto}</strong>` })));
-  }
-  for (let d = upto; d >= dFrom; d = bAddDays(d, -1)) {
-    boothRecap(ppl, rcfg, d, d).forEach((r) => rows.push(line(r, { day: d })));
+  if (dFrom <= upto) {
+    const wins = boothWindows(dFrom, upto, $('#beGroup').value || 'day');
+    const name = (a, b) => (a === b ? a : `${a} s.d. ${b}`);
+    if (wins.length > 1) rows.push(...block(dFrom, upto, () => ({ day: `<strong>Total ${name(dFrom, upto)}</strong>` })));
+    wins.forEach(([a, b]) => rows.push(...block(a, b, () => ({ day: name(a, b) }))));
   }
   genTable('#beRecapDay', rows, cols(true), bL('No event day in these dates yet.', 'Belum ada hari event di tanggal ini.'));
   renderBoothRecapNote();
@@ -8684,7 +8714,11 @@ function renderBoothEvent() {
   const stList = BOOTH.tx && BOOTH.tx.rows ? [...new Set(BOOTH.tx.rows.map((r) => r.status))].sort() : [];
   stEl.innerHTML = `<option value="">${bL('Paid (not expired, cancelled, pending payment)', 'Sudah bayar (bukan expired, cancelled, pending payment)')}</option><option value="all">${bL('All statuses', 'Semua status')}</option>` + stList.map((s) => `<option value="${bEsc(s)}">${bEsc(s)}</option>`).join('');
   stEl.value = stKeep === 'all' || stList.includes(stKeep) ? stKeep : '';
-  const tc = BOOTH.tx && BOOTH.tx.rows ? boothTxCount(boothTxFilter(BOOTH.tx.rows, cfg, { ...view, ...boothStatusPick(stEl.value) })) : null;
+  const txRows = BOOTH.tx && BOOTH.tx.rows ? boothTxFilter(BOOTH.tx.rows, cfg, { ...view, ...boothStatusPick(stEl.value) }) : null;
+  const tc = txRows ? boothTxCount(txRows) : null;
+  const top = txRows ? boothTopFunds(txRows) : null;
+  const topKpi = (label, list, byAmt) => kpi(label, top ? (list[0] ? bEsc(list[0].fund) : 'n/a') : '...',
+    top && list[0] ? `${num(list[0].n)} ${bL('buys', 'transaksi beli')}, ${idr(list[0].rp)}${list.length > 1 ? `<br>${bL('Next', 'Lalu')}: ${list.slice(1).map((f) => `${bEsc(f.fund)} (${byAmt ? idr(f.rp) : num(f.n)})`).join(', ')}` : ''}` : '', '', ICONS.coin);
   const txv = (k) => (tc ? num(tc[k]) : '...');
   const jy = boothJourney(mine, tc ? BOOTH.tx.rows : []);
   const jPct = (n, d) => (d ? `${((n / d) * 100).toFixed(1)}%` : 'n/a');
@@ -8698,6 +8732,8 @@ function renderBoothEvent() {
     kpi(bL('Bought', 'Beli'), tc ? idr(tc.buy.all.rp) : '...', flow(tc && tc.buy, 'buys', 'beli'), '', ICONS.trendUp),
     kpi(bL('Sold', 'Jual'), tc ? idr(tc.sell.all.rp) : '...', flow(tc && tc.sell, 'sells', 'jual'), '', ICONS.trendUp),
     kpi(bL('Net money in', 'Dana bersih masuk'), tc ? idr(tc.buy.all.rp - tc.sell.all.rp) : '...', tc ? bL(`bought minus sold; new ${idr(tc.buy.new.rp - tc.sell.new.rp)}, existing ${idr(tc.buy.old.rp - tc.sell.old.rp)}`, `beli dikurangi jual; baru ${idr(tc.buy.new.rp - tc.sell.new.rp)}, existing ${idr(tc.buy.old.rp - tc.sell.old.rp)}`) : '', '', ICONS.trendUp),
+    topKpi(bL('Top fund by number of buys', 'Fund terbanyak dibeli (jumlah)'), top ? top.byN : [], false),
+    topKpi(bL('Top fund by amount', 'Fund terbesar dibeli (nominal)'), top ? top.byRp : [], true),
     kpi(bL('Avg days holding', 'Rata-rata lama menahan'), held.length ? `${num(Math.round(held.reduce((a, x) => a + x.heldDays, 0) / held.length))} ${bL('days', 'hari')}` : 'n/a',
       bL(`${num(mine.filter((x) => x.holding === 'holding').length)} still hold today`, `${num(mine.filter((x) => x.holding === 'holding').length)} masih menahan hari ini`), '', ICONS.hourglass),
   ].join('');
@@ -8877,7 +8913,7 @@ function renderBoothRules(cfg, period, scale) {
       `${bEsc(pd.label)}: ${pd.from} to ${pd.to}, ${pd.workDays.toFixed(1)} working days, sales target ${(S.dailySidTarget * pd.workDays).toFixed(1)} SID, booth target ${Object.keys(cfg.booths).map((k) => `${k} ${boothSidTarget(cfg, k, pd).toFixed(1)}`).join(', ')} SID; M1 ${pd.m1.from} to ${pd.m1.to}.`,
       `${bEsc(pd.label)}: ${pd.from} s.d. ${pd.to}, ${pd.workDays.toFixed(1)} hari kerja, target sales ${(S.dailySidTarget * pd.workDays).toFixed(1)} SID, target booth ${Object.keys(cfg.booths).map((k) => `${k} ${boothSidTarget(cfg, k, pd).toFixed(1)}`).join(', ')} SID; M1 ${pd.m1.from} s.d. ${pd.m1.to}.`)).join('')}</ul>
     <h3>${bL('Definitions', 'Definisi')}</h3><ul>
-      ${li('New SID: registered with an event code during the event (referral or sales code, exact match) and KYC verified. Counted in the period of the verification date; a verification after the event counts in the last period.', 'SID baru: daftar dengan kode event selama event (kode referral atau sales, sama persis) dan KYC verified. Dihitung di periode tanggal verifikasi; verifikasi sesudah event masuk periode terakhir.')}
+      ${li('New SID: registered with an event code during the event (referral or sales code, exact match) and KYC verified. Counted in the period of the registration date (created_at), not the KYC date.', 'SID baru: daftar dengan kode event selama event (kode referral atau sales, sama persis) dan KYC verified. Dihitung di periode tanggal daftar (created_at), bukan tanggal KYC.')}
       ${li('Transactions: completed buys and sells only; bonus units given by admin (manual_bonus) do not count. Net money in = buys minus sells from registration to the end of the period.', 'Transaksi: hanya beli dan jual berstatus completed; bonus unit dari admin (manual_bonus) tidak dihitung. Dana bersih = beli dikurangi jual dari daftar sampai akhir periode.')}
       ${li(`Working days are each sales person's shift days, ${cfg.fullMonthWorkDays} in a full month, weekends included; which dates are shifts does not change the count. A month that is not full is scaled by calendar days.`, `Hari kerja = hari shift tiap sales, ${cfg.fullMonthWorkDays} di bulan penuh, termasuk akhir pekan; tanggal mana yang jadi shift tidak memengaruhi hitungan. Bulan yang tidak penuh diprorate per hari kalender.`)}
       ${li('Flying team: one person, three codes (one per mall). Their SID add up for their own incentive and count in the team target of the mall the code belongs to. A team lead\'s own code counts for the team.', 'Flying team: satu orang, tiga kode (satu per mall). SID ketiganya dijumlah untuk insentif sendiri dan masuk target tim mall pemilik kode. Kode team lead sendiri dihitung ke tim.')}
@@ -10258,7 +10294,7 @@ function wire() {
   ssBatchPicker = setupRecipientPicker('ssBatch');
   $('#ssBatchStatementMonth').value = prevMonthWib();
   $('#ssBatchComposeBtn').addEventListener('click', openSsBatchCompose);
-  ['beFrom', 'beTo', 'beBooth', 'bePerson', 'beStatus'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothEvent));
+  ['beFrom', 'beTo', 'beBooth', 'bePerson', 'beStatus', 'beGroup'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothEvent));
   ['beTxKind', 'beTxStatus', 'beTxType'].forEach((id) => $(`#${id}`).addEventListener('change', renderBoothTx));
   ['beTxMin', 'beTxMax'].forEach((id) => $(`#${id}`).addEventListener('input', renderBoothTx));
   $('#beReload').addEventListener('click', loadBoothEvent);

@@ -317,7 +317,7 @@ const rg = JSON.parse(run(`(() => {
     wdNov: wd('2026-11-01', '2026-11-30').workDays, wdOct: wd('2026-10-19', '2026-10-31').workDays, wdSpan: wd('2026-10-19', '2026-11-30').workDays,
     wdWeek: wd('2026-11-02', '2026-11-08').workDays, wdWide: wd('2026-01-01', '2030-01-01').workDays, wdBefore: wd('2026-09-01', '2026-09-30').workDays,
     m1: [wd('2026-12-05', '2026-12-20').m1, wd('2026-11-01', '2026-11-30').m1],
-    lateIn: wd('2027-01-01', '2027-01-10').pick(people.find((x) => x.user_id === '${late}')), lateOut: wd('2026-12-01', '2027-01-09').pick(people.find((x) => x.user_id === '${late}')),
+    lateIn: wd('2027-01-01', '2027-01-10').pick(people.find((x) => x.user_id === '${late}')), lateOut: wd('2026-12-01', '2027-01-08').pick(people.find((x) => x.user_id === '${late}')),
     edge: [wd('2026-12-01', '2026-12-31'), wd('2027-01-01', '2027-01-10')].map((r) => people.filter(r.pick).length),
     txAll: f({}), txFrom: f({ from: '2026-11-06' }), txTo: f({ to: '2026-11-06' }), txBoth: f({ from: '2026-11-06', to: '2026-11-06' }), txBooth: f({ booth: 'PIM', from: '2026-11-05', to: '2026-11-07' }),
   });
@@ -330,7 +330,14 @@ assert.ok(Math.abs(rg.wdWeek - 21 * 7 / 30) < 1e-9, 'one November week = 7/30 of
 assert.ok(Math.abs(rg.wdWide - (21 * 13 / 31 + 21 + 21 + 21 * 10 / 31)) < 1e-9, 'days outside the event add nothing');
 assert.strictEqual(rg.wdBefore, 0);
 assert.deepStrictEqual(rg.m1, [{ from: '2027-01-01', to: '2027-01-31' }, { from: '2026-12-01', to: '2026-12-31' }]);
-assert.deepStrictEqual([rg.lateIn, rg.lateOut], [true, false], 'a verification after the event only counts when the range reaches the event end');
+assert.deepStrictEqual([rg.lateIn, rg.lateOut], [true, false], 'SID counts on the registration day (created_at), not the later KYC day');
+const wn = JSON.parse(run(`JSON.stringify({ w: boothWindows('2026-10-19', '2026-11-10', 'week'), w4: boothWindows('2026-10-19', '2026-11-10', 'week4'), m: boothWindows('2026-10-19', '2026-12-05', 'month'), d: boothWindows('2026-11-01', '2026-11-02', 'day'),
+  top: boothTopFunds([{ type: 'buy', fund: 'A', amount: 1 }, { type: 'buy', fund: 'A', amount: 1 }, { type: 'buy', fund: 'B', amount: 9 }, { type: 'buy', fund: 'B', amount: 0, payment_method: 'manual_bonus' }, { type: 'sell', fund: 'B', amount: 99 }, { type: 'buy', fund: '', amount: 5 }]) })`));
+assert.deepStrictEqual(wn.w, [['2026-11-09', '2026-11-10'], ['2026-11-02', '2026-11-08'], ['2026-10-26', '2026-11-01'], ['2026-10-19', '2026-10-25']], 'weeks start at the From date, newest first, last one clipped');
+assert.deepStrictEqual(wn.w4, [['2026-10-19', '2026-11-10']], '4 weeks = one 28-day window, clipped');
+assert.deepStrictEqual(wn.m, [['2026-12-01', '2026-12-05'], ['2026-11-01', '2026-11-30'], ['2026-10-19', '2026-10-31']], 'calendar months clipped to the range');
+assert.deepStrictEqual(wn.d, [['2026-11-02', '2026-11-02'], ['2026-11-01', '2026-11-01']]);
+assert.deepStrictEqual([wn.top.byN.map((f) => f.fund), wn.top.byRp.map((f) => f.fund), wn.top.byN[0].n], [['A', 'B'], ['B', 'A'], 2], 'top funds: buys only, no bonus units, no blank fund');
 assert.strictEqual(rg.txAll, 'abc'); assert.strictEqual(rg.txFrom, 'bc'); assert.strictEqual(rg.txTo, 'ab'); assert.strictEqual(rg.txBoth, 'b'); assert.strictEqual(rg.txBooth, 'ac');
 
 console.log('booth-event smoke test passed');

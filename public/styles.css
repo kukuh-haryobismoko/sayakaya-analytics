@@ -901,3 +901,10 @@ td.neg { color: var(--neg-text); }
 .ask-data > summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 0 8px; }
 .ask-data > summary:hover { color: var(--ink); }
 .sql-msg:empty { display: none; }
+
+.be-fold > summary { cursor: pointer; list-style: none; }
+.be-fold > summary::-webkit-details-marker { display: none; }
+.be-fold > summary h2 { display: inline; }
+.be-fold > summary::before { content: '\25B8'; margin-right: 8px; color: var(--muted); }
+.be-fold[open] > summary::before { content: '\25BE'; }
+.be-fold[open] > summary { margin-bottom: 8px; }
