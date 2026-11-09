@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `bd97983 (2026-11-05)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `4549521 (2026-11-09)`.
 
 ## Cara membaca dokumen ini
 
@@ -537,9 +537,9 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Untuk apa**: Pergerakan total AUM dan revenue platform dari waktu ke waktu.
 - **Penjelasan sederhana**: Bagaimana, total, dana, kelolaan, (AUM), dan, pendapatan, platform, berubah, dari, waktu, ke, waktu, hanya, menghitung, produk, yang, masih, berstatus, aktif., Saldo, sebuah, produk, berhenti, dihitung, begitu, produk, itu, dilikuidasi, atau, dihapus, dari, pencatatan., Perubahan, tiap, periode, dipecah, menjadi, arus, bersih, (dana, yang, disetor, investor, dikurangi, yang, ditarik), dan, efek, pasar, (pergerakan, harga, dan, lainnya), sehingga, terlihat, apakah, AUM, naik, karena, investor, menyetor, dana, atau, karena, harga, naik., Klik, periode, mana, pun, untuk, melihat, produk, yang, menggerakkannya.
 - **Data yang dibaca**: mi_fee_logs.mi_fee, main.funds, main.transactions
-- **Cara hitung**: AUM per periode = nilai hari terakhir periode (bukan jumlah). Revenue = jumlah aperd_share_per_day. Net flow = buy dikurangi sell. Market effect = perubahan AUM dikurangi net flow. Tanggal transaksi digeser +1 hari karena baris mi_fee hari D sudah memuat transaksi D-1. Hanya fund ACTIVE.
+- **Cara hitung**: AUM per periode = nilai hari terakhir periode (bukan jumlah). Revenue = jumlah aperd_share_per_day. Net flow = buy dikurangi sell. Market effect = perubahan AUM dikurangi net flow. Tanggal transaksi digeser +1 hari karena baris mi_fee hari D sudah memuat transaksi D-1. Fund ACTIVE dan UPDATE; INACTIVE dikeluarkan.
 - **Isi tab**:
-  - *AUM, &, revenue, history* (Riwayat, AUM, &, pendapatan): Garis AUM platform per hari atau bulan dan batang revenue AperD per periode, dari mi_fee_logs.mi_fee (hanya fund ACTIVE).
+  - *AUM, &, revenue, history* (Riwayat, AUM, &, pendapatan): Garis AUM platform per hari atau bulan dan batang revenue AperD per periode, dari mi_fee_logs.mi_fee (fund ACTIVE dan UPDATE, tanpa INACTIVE).
   - *What, moved, AUM* (Penyebab, perubahan, AUM): Memecah perubahan AUM tiap periode menjadi arus bersih (beli dikurangi jual) dan efek pasar (sisanya). Klik batang untuk rincian per fund.
   - *Detail*: Angka per periode di balik grafik, dengan baris total di bawah.
     - **AUM**: AUM platform pada hari terakhir periode itu (bukan jumlah harian).
