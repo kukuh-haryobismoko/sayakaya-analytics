@@ -300,4 +300,37 @@ const oneBooth = JSON.parse(run(`(() => {
 })()`));
 assert.deepStrictEqual(oneBooth, ['PIM'], 'one booth: that row only, no all-booths row');
 
+// Page date filter: a range behaves like the config period it equals (working days, SID, tiers),
+// adds working days per calendar month across months, and filters transaction rows by WIB day.
+const rg = JSON.parse(run(`(() => {
+  const today = '2026-12-10';
+  const { people } = boothCompute(__data, BOOTH_EVENT, today);
+  const P = (id) => BOOTH_EVENT.periods.find((p) => p.id === id);
+  const inc = (pd) => { const r = boothIncentives(people, BOOTH_EVENT, pd, today); return { s: r.sales.map((x) => [x.person, x.sid, x.funded, x.total, x.aum]), l: r.leads.map((x) => [x.booth, x.sid, x.total, x.target]), scale: r.scale }; };
+  const wd = (a, b) => boothRange(BOOTH_EVENT, a, b);
+  const tx = [{ user_id: 'a', code: 'SPIM1', via: 'code', created_wib: '2026-11-05 10:00', amount: 1, type: 'buy', status: 'completed' },
+    { user_id: 'b', code: 'SGC1', via: 'code', created_wib: '2026-11-06 23:59', amount: 1, type: 'buy', status: 'completed' },
+    { user_id: 'c', code: 'SPIM1', via: 'code', created_wib: '2026-11-07 00:00', amount: 1, type: 'buy', status: 'completed' }];
+  const f = (o) => boothTxFilter(tx, BOOTH_EVENT, o).map((r) => r.user_id).join('');
+  return JSON.stringify({
+    nov: [inc(wd('2026-11-01', '2026-11-30')), inc(P('2026-11'))], oct: [inc(wd('2026-10-19', '2026-10-31')), inc(P('2026-10'))],
+    wdNov: wd('2026-11-01', '2026-11-30').workDays, wdOct: wd('2026-10-19', '2026-10-31').workDays, wdSpan: wd('2026-10-19', '2026-11-30').workDays,
+    wdWeek: wd('2026-11-02', '2026-11-08').workDays, wdWide: wd('2026-01-01', '2030-01-01').workDays, wdBefore: wd('2026-09-01', '2026-09-30').workDays,
+    m1: [wd('2026-12-05', '2026-12-20').m1, wd('2026-11-01', '2026-11-30').m1],
+    lateIn: wd('2027-01-01', '2027-01-10').pick(people.find((x) => x.user_id === '${late}')), lateOut: wd('2026-12-01', '2027-01-09').pick(people.find((x) => x.user_id === '${late}')),
+    edge: [wd('2026-12-01', '2026-12-31'), wd('2027-01-01', '2027-01-10')].map((r) => people.filter(r.pick).length),
+    txAll: f({}), txFrom: f({ from: '2026-11-06' }), txTo: f({ to: '2026-11-06' }), txBoth: f({ from: '2026-11-06', to: '2026-11-06' }), txBooth: f({ booth: 'PIM', from: '2026-11-05', to: '2026-11-07' }),
+  });
+})()`));
+assert.deepStrictEqual(rg.nov[0], rg.nov[1], 'range = whole November gives the November period numbers');
+assert.deepStrictEqual(rg.oct[0], rg.oct[1], 'range = Oct 19-31 gives the October period numbers');
+assert.strictEqual(rg.wdNov, 21); assert.ok(Math.abs(rg.wdOct - 21 * 13 / 31) < 1e-9);
+assert.ok(Math.abs(rg.wdSpan - (21 * 13 / 31 + 21)) < 1e-9, 'working days add up per calendar month');
+assert.ok(Math.abs(rg.wdWeek - 21 * 7 / 30) < 1e-9, 'one November week = 7/30 of 21 days');
+assert.ok(Math.abs(rg.wdWide - (21 * 13 / 31 + 21 + 21 + 21 * 10 / 31)) < 1e-9, 'days outside the event add nothing');
+assert.strictEqual(rg.wdBefore, 0);
+assert.deepStrictEqual(rg.m1, [{ from: '2027-01-01', to: '2027-01-31' }, { from: '2026-12-01', to: '2026-12-31' }]);
+assert.deepStrictEqual([rg.lateIn, rg.lateOut], [true, false], 'a verification after the event only counts when the range reaches the event end');
+assert.strictEqual(rg.txAll, 'abc'); assert.strictEqual(rg.txFrom, 'bc'); assert.strictEqual(rg.txTo, 'ab'); assert.strictEqual(rg.txBoth, 'b'); assert.strictEqual(rg.txBooth, 'ac');
+
 console.log('booth-event smoke test passed');
