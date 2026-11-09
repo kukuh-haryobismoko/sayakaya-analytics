@@ -8300,8 +8300,8 @@ function boothHoldState(r, cfg, today) {
   return { key: days >= need ? 'held' : 'holding', days };
 }
 
-// Booth SID target: one seat per sales code of the booth, so a new sales in the roster raises it.
-const boothSidTarget = (cfg, booth, period) => cfg.roster.filter((r) => r.role === 'sales' && r.booth === booth).length * cfg.teamLead.dailySidTarget * period.workDays;
+// Booth SID target: cfg.salesSlots seats per booth (fixed: off and replacement codes do not move it); falls back to the sales codes in the roster.
+const boothSidTarget = (cfg, booth, period) => ((cfg.salesSlots || {})[booth] ?? cfg.roster.filter((r) => r.role === 'sales' && r.booth === booth).length) * cfg.teamLead.dailySidTarget * period.workDays;
 // Incentives for one period: sales and flying team per person, team leads per booth.
 function boothIncentives(people, cfg, period, today) {
   const scale = period.workDays / cfg.fullMonthWorkDays;
@@ -8431,7 +8431,7 @@ const bEsc = (v) => escapeHtml(v == null ? '' : v);
 const bWho = (cfg, person) => {
   if (!person) return '';
   const r = cfg.roster.find((x) => x.person === person && x.name);
-  return r ? `${r.name} (${person})` : person;
+  return r ? `${r.name} (${person})${r.off ? ' - off' : ''}` : person;
 };
 const bStatusLabel = (k, x) => ({
   running: bL('Running (estimate)', 'Berjalan (sementara)'),
@@ -8886,7 +8886,7 @@ function renderBoothRules(cfg, period, scale) {
       ${li('Social media follow and app store rating (small SAM merchandise) and Sucorwave sign-ups happen outside SayaKaya, so they are not in this data; the Sucorwave table counts the SayaKaya steps of each journey.', 'Follow media sosial dan rating app store (merchandise SAM kecil) serta pendaftaran Sucorwave terjadi di luar SayaKaya, jadi tidak ada di data ini; tabel Sucorwave menghitung langkah SayaKaya dari tiap journey.')}
     </ul>`;
   genTable('#beRoster', cfg.roster.map((r) => ({
-    code: bEsc(r.code), person: bEsc(r.person), name: bEsc(r.name || ''), role: { sales: 'Sales', team_lead: 'Team lead', flying: 'Flying team' }[r.role] || bEsc(r.role),
+    code: bEsc(r.code), person: bEsc(r.person), name: bEsc((r.name || '') + (r.off ? ` (${r.off})` : '')), role: { sales: 'Sales', team_lead: 'Team lead', flying: 'Flying team' }[r.role] || bEsc(r.role),
     booth: bEsc(cfg.booths[r.booth] || r.booth), email: bEsc(r.email),
   })), [{ key: 'code', label: bL('Code', 'Kode') }, { key: 'person', label: bL('Position', 'Posisi') }, { key: 'name', label: bL('Name', 'Nama') }, { key: 'role', label: bL('Role', 'Peran') },
     { key: 'booth', label: 'Booth' }, { key: 'email', label: bL('Sales account', 'Akun sales') }], '');

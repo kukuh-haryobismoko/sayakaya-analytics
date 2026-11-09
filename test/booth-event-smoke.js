@@ -164,10 +164,10 @@ assert.strictEqual(cfgInfo.lastDay, '2027-01', 'KYC on the last event day (10 Ja
 // Sales names from the sheet: the position (person) stays the key, the name is display only.
 const who = JSON.parse(run(`JSON.stringify({
   named: bWho(BOOTH_EVENT, 'Sales PIM 1'), lead: bWho(BOOTH_EVENT, 'Team Lead GC'), dotted: bWho(BOOTH_EVENT, 'Sales PIM 5'),
-  flying: bWho(BOOTH_EVENT, 'Flying Team 1'), noName: bWho(BOOTH_EVENT, 'Sales CP 7'), emptyLead: bWho(BOOTH_EVENT, 'Team Lead CP'),
+  flying: bWho(BOOTH_EVENT, 'Flying Team 1'), noName: bWho(BOOTH_EVENT, 'Flying Team 2'), offName: bWho(BOOTH_EVENT, 'Sales PIM 3'), off: BOOTH_EVENT.roster.filter((x) => x.off).map((x) => x.code).join(), emptyLead: bWho(BOOTH_EVENT, 'Team Lead CP'),
   none: bWho(BOOTH_EVENT, null), unknown: bWho(BOOTH_EVENT, 'Nobody'),
   tpl: boothRoster({ CP: { lead: 'L', sales: ['a', null, 'c'] } }, ['f']).map((r) => r.code + ':' + r.person + ':' + r.role).join(' '),
-  target: boothSidTarget(BOOTH_EVENT, 'CP', { workDays: 21 }), more: boothSidTarget({ ...BOOTH_EVENT, roster: boothRoster({ CP: { lead: null, sales: Array(10).fill(null) } }, []) }, 'CP', { workDays: 21 }),
+  target: boothSidTarget(BOOTH_EVENT, 'CP', { workDays: 21 }), more: boothSidTarget({ ...BOOTH_EVENT, salesSlots: undefined, roster: boothRoster({ CP: { lead: null, sales: Array(10).fill(null) } }, []) }, 'CP', { workDays: 21 }),
   filled: BOOTH_EVENT.roster.filter((r) => r.name).length, total: BOOTH_EVENT.roster.length,
   badName: BOOTH_EVENT.roster.filter((r) => r.name !== null && (typeof r.name !== 'string' || r.name !== r.name.trim() || !r.name)).map((r) => r.code),
   nameByCode: Object.fromEntries(BOOTH_EVENT.roster.filter((r) => r.name).map((r) => [r.code, r.name])),
@@ -176,18 +176,20 @@ assert.strictEqual(who.named, 'Viki Setiadi (Sales PIM 1)');
 assert.strictEqual(who.lead, 'Sandy (Team Lead GC)');
 assert.strictEqual(who.dotted, 'M. Zhafran (Sales PIM 5)');
 assert.strictEqual(who.flying, 'Kiki Wulansari (Flying Team 1)', 'one flying person for the 3 mall codes');
-assert.strictEqual(who.noName, 'Sales CP 7');
+assert.strictEqual(who.noName, 'Flying Team 2');
+assert.strictEqual(who.offName, 'Gabriel Rizal Pratama (Sales PIM 3) - off');
+assert.strictEqual(who.off, 'SPIM3,SGC3,SCP2,SCP5', 'resigned / moved codes stay in the roster flagged off');
 assert.strictEqual(who.emptyLead, 'Widya Sartika (Team Lead CP)', 'TLCP and SCP5 are both Widya: same name on two positions');
 assert.strictEqual(who.tpl, 'TLCP:Team Lead CP:team_lead SCP1:Sales CP 1:sales SCP2:Sales CP 2:sales SCP3:Sales CP 3:sales FT1CP:Flying Team 1:flying', 'codes and positions come from the template');
-assert.deepStrictEqual([who.target, who.more], [441, 630], 'booth SID target follows the number of sales codes: SCP1-SCP7 = 441, SCP1-SCP10 = 630');
+assert.deepStrictEqual([who.target, who.more], [441, 630], 'booth SID target is fixed by salesSlots (CP 7 = 441, SGC7 replacement does not raise GC); without salesSlots it counts sales codes (10 = 630)');
 assert.strictEqual(who.none, '');
 assert.strictEqual(who.unknown, 'Nobody');
-assert.deepStrictEqual([who.filled, who.total], [24, 28], '24 of 28 codes have a name so far (FT2 x3 and SCP7 are empty)');
+assert.deepStrictEqual([who.filled, who.total], [26, 29], '26 of 29 codes have a name so far (FT2 x3 are empty)');
 assert.deepStrictEqual(who.badName, []);
 assert.deepStrictEqual(who.nameByCode, {
   TLPIM: 'Herlangga', SPIM1: 'Viki Setiadi', SPIM2: 'Ilham Ramadhan', SPIM3: 'Gabriel Rizal Pratama', SPIM4: 'Novi Yulianti', SPIM5: 'M. Zhafran', SPIM6: 'Zulham Donni',
-  SCP1: 'Nur Haliza', SCP2: 'Khairy Harianto', SCP3: 'M. Ilham Saputra', SCP4: 'Milza Anindya Putri', SCP5: 'Widya Sartika', SCP6: 'Marlinda', TLCP: 'Widya Sartika',
-  TLGC: 'Sandy', SGC1: 'Eka Muhammad Rizki', SGC2: 'Jihan', SGC3: 'Arfan Herdian', SGC4: 'Agus Rinaldi Rusli', SGC5: 'Edi Sudrajat', SGC6: 'Mira Yuliyana',
+  SCP1: 'Nur Haliza', SCP2: 'Khairy Harianto', SCP3: 'M. Ilham Saputra', SCP4: 'Milza Anindya Putri', SCP5: 'Widya Sartika', SCP6: 'Marlinda', SCP7: 'Michael', TLCP: 'Widya Sartika',
+  TLGC: 'Sandy', SGC1: 'Eka Muhammad Rizki', SGC2: 'Jihan', SGC3: 'Arfan Herdian', SGC4: 'Agus Rinaldi Rusli', SGC5: 'Edi Sudrajat', SGC6: 'Mira Yuliyana', SGC7: 'Dara',
   FT1PIM: 'Kiki Wulansari', FT1GC: 'Kiki Wulansari', FT1CP: 'Kiki Wulansari',
 });
 

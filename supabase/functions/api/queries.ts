@@ -6821,7 +6821,7 @@ export const fxOff = (q: Query, convertIdr?: boolean): Query => (convertIdr === 
 // MIS channel tab: sign-up journey per channel (cohort = registration month) and AUM split IDR / USD.
 // Add a channel = add a WHEN line (order matters, first match wins). Downloads: GA4 device -> user_id -> users; devices never logged in = no_account.
 // shortcut: booth codes copied from roster in public/booth-event-config.js, update here when the roster changes.
-const MCH_BOOTH = "('TLPIM', 'SPIM1', 'SPIM2', 'SPIM3', 'SPIM4', 'SPIM5', 'SPIM6', 'TLGC', 'SGC1', 'SGC2', 'SGC3', 'SGC4', 'SGC5', 'SGC6', 'TLCP', 'SCP1', 'SCP2', 'SCP3', 'SCP4', 'SCP5', 'SCP6', 'SCP7', 'FT1PIM', 'FT1GC', 'FT1CP', 'FT2PIM', 'FT2GC', 'FT2CP')";
+const MCH_BOOTH = "('TLPIM', 'SPIM1', 'SPIM2', 'SPIM3', 'SPIM4', 'SPIM5', 'SPIM6', 'TLGC', 'SGC1', 'SGC2', 'SGC3', 'SGC4', 'SGC5', 'SGC6', 'SGC7', 'TLCP', 'SCP1', 'SCP2', 'SCP3', 'SCP4', 'SCP5', 'SCP6', 'SCP7', 'FT1PIM', 'FT1GC', 'FT1CP', 'FT2PIM', 'FT2GC', 'FT2CP')";
 // karyawan = user whose buy used a SRIKAYA promo code (CTE emp in misChannelFunnel); booth = one of the roster codes in sales_code or referrer_code; rest organic (friend referral included).
 const MCH_CHANNEL = `CASE
   WHEN u.id IN (SELECT user_id FROM emp) THEN 'karyawan'

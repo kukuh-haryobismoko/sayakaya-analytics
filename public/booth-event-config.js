@@ -6,8 +6,8 @@
 
 // Roster template: team = { booth: { lead, sales: [names] } }, flying = [names], one
 // flying person per entry with a code for every booth. role: sales | team_lead | flying.
-function boothRoster(team, flying) {
-  const row = (code, person, name, role, booth) => ({ code, person, name, role, booth, email: `andreagibras+${code.toLowerCase()}@gmail.com` });
+function boothRoster(team, flying, off = {}) {
+  const row = (code, person, name, role, booth) => ({ code, person, name, role, booth, off: off[code] || null, email: `andreagibras+${code.toLowerCase()}@gmail.com` });
   const booths = Object.keys(team);
   return booths.flatMap((b) => [
     row(`TL${b}`, `Team Lead ${b}`, team[b].lead, 'team_lead', b),
@@ -55,9 +55,14 @@ const BOOTH_EVENT = {
   // tempat kode dipakai, jadi SID flying team masuk ke target tim mall itu.
   roster: boothRoster({
     PIM: { lead: 'Herlangga', sales: ['Viki Setiadi', 'Ilham Ramadhan', 'Gabriel Rizal Pratama', 'Novi Yulianti', 'M. Zhafran', 'Zulham Donni'] },
-    GC: { lead: 'Sandy', sales: ['Eka Muhammad Rizki', 'Jihan', 'Arfan Herdian', 'Agus Rinaldi Rusli', 'Edi Sudrajat', 'Mira Yuliyana'] },
-    CP: { lead: 'Widya Sartika', sales: ['Nur Haliza', 'Khairy Harianto', 'M. Ilham Saputra', 'Milza Anindya Putri', 'Widya Sartika', 'Marlinda', null] },
-  }, ['Kiki Wulansari', null]),
+    GC: { lead: 'Sandy', sales: ['Eka Muhammad Rizki', 'Jihan', 'Arfan Herdian', 'Agus Rinaldi Rusli', 'Edi Sudrajat', 'Mira Yuliyana', 'Dara'] },
+    CP: { lead: 'Widya Sartika', sales: ['Nur Haliza', 'Khairy Harianto', 'M. Ilham Saputra', 'Milza Anindya Putri', 'Widya Sartika', 'Marlinda', 'Michael'] },
+  }, ['Kiki Wulansari', null], {
+    // Kode off: orang sudah resign / pindah role. Kode tetap di roster supaya SID lama tetap terhitung.
+    SPIM3: 'resign', SGC3: 'resign', SCP2: 'off', SCP5: 'jadi TL CP',
+  }),
+  // Jumlah kode sales per booth untuk target SID. Tetap walau ada kode off atau kode pengganti (SGC7).
+  salesSlots: { PIM: 6, GC: 6, CP: 7 },
 
   // Definisi yang dipakai semua rule.
   // - SID baru: nasabah yang daftar dengan kode selama event dan KYC-nya
