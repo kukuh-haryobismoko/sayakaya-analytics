@@ -22,7 +22,7 @@ const TABS = {
   "aum": {
     summary: "Pergerakan total AUM dan revenue platform dari waktu ke waktu.",
     datasets: "mi_fee_logs.mi_fee, main.funds, main.transactions",
-    computation: "AUM per periode = nilai hari terakhir periode (bukan jumlah). Revenue = jumlah aperd_share_per_day. Net flow = buy dikurangi sell. Market effect = perubahan AUM dikurangi net flow. Tanggal transaksi digeser +1 hari karena baris mi_fee hari D sudah memuat transaksi D-1. Hanya fund ACTIVE.",
+    computation: "AUM per periode = nilai hari terakhir periode (bukan jumlah). Revenue = jumlah aperd_share_per_day. Net flow = buy dikurangi sell. Market effect = perubahan AUM dikurangi net flow. Tanggal transaksi digeser +1 hari karena baris mi_fee hari D sudah memuat transaksi D-1. Fund ACTIVE dan UPDATE; INACTIVE dikeluarkan.",
   },
   "revenue-trend": {
     summary: "Tren revenue AperD per hari, minggu, atau bulan, dengan penjelasan penyebab perubahan dan rincian per fund.",
@@ -475,7 +475,7 @@ const TAB_DETAILS = {
   },
   aum: {
     panels: {
-      'AUM & revenue history': { note: 'Garis AUM platform per hari atau bulan dan batang revenue AperD per periode, dari mi_fee_logs.mi_fee (hanya fund ACTIVE).', },
+      'AUM & revenue history': { note: 'Garis AUM platform per hari atau bulan dan batang revenue AperD per periode, dari mi_fee_logs.mi_fee (fund ACTIVE dan UPDATE, tanpa INACTIVE).', },
       'What moved AUM': { note: 'Memecah perubahan AUM tiap periode menjadi arus bersih (beli dikurangi jual) dan efek pasar (sisanya). Klik batang untuk rincian per fund.', },
       Detail: { note: 'Angka per periode di balik grafik, dengan baris total di bawah.', columns: [
         ['AUM', 'AUM platform pada hari terakhir periode itu (bukan jumlah harian).'],

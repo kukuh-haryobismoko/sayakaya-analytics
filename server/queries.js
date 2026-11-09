@@ -293,9 +293,9 @@ const txFilterValues = () => ({
 // AUM history (from mi_fee_logs.mi_fee: daily AUM + revenue per fund)
 // AUM is a point-in-time stock: daily = sum across funds that day; monthly =
 // end-of-month value. Revenue (aperd_share_per_day) is a flow: always summed.
-// Joined to FUNDS and filtered to listing_status='ACTIVE' — a liquidated fund
-// stops being a real ongoing position once it's inactive, so its AUM
-// shouldn't keep counting past that point. Same rule as platformAumAsOf below.
+// Joined to FUNDS and filtered to listing_status ACTIVE or UPDATE — a liquidated
+// (INACTIVE) fund stops being a real ongoing position, so its AUM shouldn't
+// keep counting past that point.
 //
 // Root cause columns: ΔAUM = net flow (completed buy − sell) + market effect
 // (the rest: NAV moves, reinvestments, bonus units). mi_fee's row for day D
@@ -314,7 +314,7 @@ const aumHistory = (from, to, granularity = 'month') => {
           COUNT(DISTINCT m.fund_id) AS funds
         FROM ${MIFEE} m
         JOIN ${FUNDS} f ON f.id = m.fund_id
-        WHERE DATE(m.created_at) BETWEEN @from AND @to AND f.listing_status = 'ACTIVE'
+        WHERE DATE(m.created_at) BETWEEN @from AND @to AND f.listing_status IN ('ACTIVE', 'UPDATE')
         GROUP BY d
       ),
       flows AS (
@@ -323,7 +323,7 @@ const aumHistory = (from, to, granularity = 'month') => {
           SUM(IF(t.type = 'sell', t.final_amount, 0)) AS reds
         FROM ${TX} t
         JOIN ${FUNDS} f ON f.id = t.fund_id
-        WHERE t.status = 'completed' AND t.type IN ('buy', 'sell') AND f.listing_status = 'ACTIVE'
+        WHERE t.status = 'completed' AND t.type IN ('buy', 'sell') AND f.listing_status IN ('ACTIVE', 'UPDATE')
           AND ${AUM_FLOW_DATE} BETWEEN @from AND @to
         GROUP BY d
       ),
@@ -451,7 +451,7 @@ const aumHistoryDrill = (start, end) => ({
       LEFT JOIN ${IM} im ON im.id = f.investment_manager_id
       LEFT JOIN aum a ON a.fund_id = f.id
       LEFT JOIN flows fl ON fl.fund_id = f.id
-      WHERE f.listing_status = 'ACTIVE' AND (a.fund_id IS NOT NULL OR fl.fund_id IS NOT NULL)
+      WHERE f.listing_status IN ('ACTIVE', 'UPDATE') AND (a.fund_id IS NOT NULL OR fl.fund_id IS NOT NULL)
     )
     SELECT fund, manager,
       ROUND(aum_start) AS aum_start, ROUND(aum_end) AS aum_end,
