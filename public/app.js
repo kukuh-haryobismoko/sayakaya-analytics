@@ -8330,7 +8330,7 @@ function boothWindows(from, to, group) {
   return out.reverse();
 }
 // Top funds by number of buys and by amount (admin bonus units excluded); rows come from boothTxFilter.
-function boothTopFunds(rows, n = 3) {
+function boothTopFunds(rows, n = 1) {
   const by = new Map();
   for (const r of rows) {
     if (r.type !== 'buy' || r.payment_method === 'manual_bonus' || !r.fund) continue;
@@ -8338,7 +8338,7 @@ function boothTopFunds(rows, n = 3) {
     f.n++; f.rp += r.amount; by.set(r.fund, f);
   }
   const all = [...by.values()];
-  return { byN: [...all].sort((a, b) => b.n - a.n || b.rp - a.rp).slice(0, n), byRp: all.sort((a, b) => b.rp - a.rp || b.n - a.n).slice(0, n) };
+  return { byN: [...all].sort((a, b) => b.n - a.n || b.rp - a.rp).slice(0, n), byRp: all.sort((a, b) => b.rp - a.rp || b.n - a.n).slice(0, n), all };
 }
 // Incentives for one period: sales and flying team per person, team leads per booth.
 function boothIncentives(people, cfg, period, today) {
@@ -8659,9 +8659,10 @@ function renderBoothRecap(people) {
   const upto = view.to < lastDay ? view.to : lastDay;
   const rows = [];
   if (dFrom <= upto) {
-    const wins = boothWindows(dFrom, upto, $('#beGroup').value || 'day');
-    const name = (a, b) => (a === b ? a : `${a} s.d. ${b}`);
-    if (wins.length > 1) rows.push(...block(dFrom, upto, () => ({ day: `<strong>Total ${name(dFrom, upto)}</strong>` })));
+    const grp = $('#beGroup').value;
+    const wins = boothWindows(dFrom, upto, grp || 'day');
+    const name = (a, b) => (a === b ? a : `${a} s.d. ${b}`) + (grp === 'month' ? ` (${bDays(a, b) + 1}/${new Date(Date.UTC(+a.slice(0, 4), +a.slice(5, 7), 0)).getUTCDate()} ${bL('days', 'hari')})` : '');
+    if (wins.length > 1) rows.push(...block(dFrom, upto, () => ({ day: `<strong>Total ${dFrom} s.d. ${upto}</strong>` })));
     wins.forEach(([a, b]) => rows.push(...block(a, b, () => ({ day: name(a, b) }))));
   }
   genTable('#beRecapDay', rows, cols(true), bL('No event day in these dates yet.', 'Belum ada hari event di tanggal ini.'));
@@ -8719,8 +8720,13 @@ function renderBoothEvent() {
   const txRows = BOOTH.tx && BOOTH.tx.rows ? boothTxFilter(BOOTH.tx.rows, cfg, { ...view, ...boothStatusPick(stEl.value) }) : null;
   const tc = txRows ? boothTxCount(txRows) : null;
   const top = txRows ? boothTopFunds(txRows) : null;
-  const topKpi = (label, list, byAmt) => kpi(label, top ? (list[0] ? bEsc(list[0].fund) : 'n/a') : '...',
-    top && list[0] ? `${num(list[0].n)} ${bL('buys', 'transaksi beli')}, ${idr(list[0].rp)}${list.length > 1 ? `<br>${bL('Next', 'Lalu')}: ${list.slice(1).map((f) => `${bEsc(f.fund)} (${byAmt ? idr(f.rp) : num(f.n)})`).join(', ')}` : ''}` : '', '', ICONS.coin);
+  const fundRp = top ? top.all.reduce((s, x) => s + x.rp, 0) : 0;
+  genTable('#beTopFunds', top ? top.all.sort((a, b) => b.rp - a.rp || b.n - a.n).map((f, i) => ({ rank: i + 1, ...f, share: fundRp ? (f.rp / fundRp) * 100 : null })) : [],
+    [{ key: 'rank', label: '#', type: 'num' }, { key: 'fund', label: bL('Fund', 'Fund') }, { key: 'n', label: bL('Buys (number)', 'Jumlah transaksi beli'), type: 'num' },
+      { key: 'rp', label: bL('Bought (amount)', 'Nominal beli'), type: 'idr' }, { key: 'share', label: bL('% of amount', '% dari nominal'), type: 'pct' }],
+    top ? bL('No purchases in these filters.', 'Belum ada pembelian di filter ini.') : bL('Loading...', 'Memuat...'));
+  const topKpi = (label, list) => kpi(label, top ? (list[0] ? bEsc(list[0].fund) : 'n/a') : '...',
+    top && list[0] ? `${num(list[0].n)} ${bL('buys', 'transaksi beli')}, ${idr(list[0].rp)}` : '', '', ICONS.coin);
   const txv = (k) => (tc ? num(tc[k]) : '...');
   const jy = boothJourney(mine, tc ? BOOTH.tx.rows : []);
   const jPct = (n, d) => (d ? `${((n / d) * 100).toFixed(1)}%` : 'n/a');
@@ -8734,8 +8740,8 @@ function renderBoothEvent() {
     kpi(bL('Bought', 'Beli'), tc ? idr(tc.buy.all.rp) : '...', flow(tc && tc.buy, 'buys', 'beli'), '', ICONS.trendUp),
     kpi(bL('Sold', 'Jual'), tc ? idr(tc.sell.all.rp) : '...', flow(tc && tc.sell, 'sells', 'jual'), '', ICONS.trendUp),
     kpi(bL('Net money in', 'Dana bersih masuk'), tc ? idr(tc.buy.all.rp - tc.sell.all.rp) : '...', tc ? bL(`bought minus sold; new ${idr(tc.buy.new.rp - tc.sell.new.rp)}, existing ${idr(tc.buy.old.rp - tc.sell.old.rp)}`, `beli dikurangi jual; baru ${idr(tc.buy.new.rp - tc.sell.new.rp)}, existing ${idr(tc.buy.old.rp - tc.sell.old.rp)}`) : '', '', ICONS.trendUp),
-    topKpi(bL('Top fund by number of buys', 'Fund terbanyak dibeli (jumlah)'), top ? top.byN : [], false),
-    topKpi(bL('Top fund by amount', 'Fund terbesar dibeli (nominal)'), top ? top.byRp : [], true),
+    topKpi(bL('Top fund by number of buys', 'Fund terbanyak dibeli (jumlah)'), top ? top.byN : []),
+    topKpi(bL('Top fund by amount', 'Fund terbesar dibeli (nominal)'), top ? top.byRp : []),
     kpi(bL('Avg days holding', 'Rata-rata lama menahan'), held.length ? `${num(Math.round(held.reduce((a, x) => a + x.heldDays, 0) / held.length))} ${bL('days', 'hari')}` : 'n/a',
       bL(`${num(mine.filter((x) => x.holding === 'holding').length)} still hold today`, `${num(mine.filter((x) => x.holding === 'holding').length)} masih menahan hari ini`), '', ICONS.hourglass),
   ].join('');

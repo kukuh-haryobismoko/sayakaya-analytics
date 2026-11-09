@@ -332,12 +332,12 @@ assert.strictEqual(rg.wdBefore, 0);
 assert.deepStrictEqual(rg.m1, [{ from: '2027-01-01', to: '2027-01-31' }, { from: '2026-12-01', to: '2026-12-31' }]);
 assert.deepStrictEqual([rg.lateIn, rg.lateOut], [true, false], 'SID counts on the registration day (created_at), not the later KYC day');
 const wn = JSON.parse(run(`JSON.stringify({ w: boothWindows('2026-10-19', '2026-11-10', 'week'), w4: boothWindows('2026-10-19', '2026-11-10', 'week4'), m: boothWindows('2026-10-19', '2026-12-05', 'month'), d: boothWindows('2026-11-01', '2026-11-02', 'day'),
-  top: boothTopFunds([{ type: 'buy', fund: 'A', amount: 1 }, { type: 'buy', fund: 'A', amount: 1 }, { type: 'buy', fund: 'B', amount: 9 }, { type: 'buy', fund: 'B', amount: 0, payment_method: 'manual_bonus' }, { type: 'sell', fund: 'B', amount: 99 }, { type: 'buy', fund: '', amount: 5 }]) })`));
+  top: boothTopFunds([{ type: 'buy', fund: 'A', amount: 1 }, { type: 'buy', fund: 'A', amount: 1 }, { type: 'buy', fund: 'B', amount: 9 }, { type: 'buy', fund: 'B', amount: 0, payment_method: 'manual_bonus' }, { type: 'sell', fund: 'B', amount: 99 }, { type: 'buy', fund: '', amount: 5 }], 9) })`));
 assert.deepStrictEqual(wn.w, [['2026-11-09', '2026-11-10'], ['2026-11-02', '2026-11-08'], ['2026-10-26', '2026-11-01'], ['2026-10-19', '2026-10-25']], 'weeks start at the From date, newest first, last one clipped');
 assert.deepStrictEqual(wn.w4, [['2026-10-19', '2026-11-10']], '4 weeks = one 28-day window, clipped');
 assert.deepStrictEqual(wn.m, [['2026-12-01', '2026-12-05'], ['2026-11-01', '2026-11-30'], ['2026-10-19', '2026-10-31']], 'calendar months clipped to the range');
 assert.deepStrictEqual(wn.d, [['2026-11-02', '2026-11-02'], ['2026-11-01', '2026-11-01']]);
-assert.deepStrictEqual([wn.top.byN.map((f) => f.fund), wn.top.byRp.map((f) => f.fund), wn.top.byN[0].n], [['A', 'B'], ['B', 'A'], 2], 'top funds: buys only, no bonus units, no blank fund');
+assert.deepStrictEqual([wn.top.byN.map((f) => f.fund), wn.top.byRp.map((f) => f.fund), wn.top.byN[0].n, wn.top.all.length], [['A', 'B'], ['B', 'A'], 2, 2], 'top funds: buys only, no bonus units, no blank fund');
 assert.strictEqual(rg.txAll, 'abc'); assert.strictEqual(rg.txFrom, 'bc'); assert.strictEqual(rg.txTo, 'ab'); assert.strictEqual(rg.txBoth, 'b'); assert.strictEqual(rg.txBooth, 'ac');
 
 console.log('booth-event smoke test passed');
