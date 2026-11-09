@@ -795,8 +795,8 @@ The exact number of people shows below once you pick a group, and again before y
         </div>
       </div>
 
-      <details class="panel be-fold">
-        <summary><h2 data-i18n="fpe_report_title">Fund performance report</h2></summary>
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="fpe_report_title">Fund performance report</h2></div>
         <div class="field-card-row">
           <div class="field-card">
             <label class="field-card-top" for="fpeFundScope" data-i18n="fpe_scope_label">Funds in the report</label>
@@ -1069,26 +1069,26 @@ The exact number of people shows below once you pick a group, and again before y
         <div id="erKpis" class="kpi-grid" style="margin-top:14px"></div>
       </div>
 
-      <details class="panel be-fold">
-        <summary><h2 data-i18n="er_trend_title">Emails per day</h2></summary>
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="er_trend_title">Emails per day</h2></div>
         <span class="hint" data-i18n="er_trend_hint">By the day each email was sent (WIB). Opens and clicks stay on the day the email went out, so recent days keep growing as people open them later.</span>
         <p id="erTrendEmpty" class="empty" data-i18n="er_trend_empty" hidden>No emails were sent in this period.</p>
         <div class="chart-wrap"><canvas id="erTrendChart" aria-label="Emails sent, opened, and clicked per day"></canvas></div>
       </div>
 
-      <details class="panel be-fold">
-        <summary><h2 data-i18n="er_category_title">By category</h2></summary>
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="er_category_title">By category</h2></div>
         <div id="erCategoryTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
 
-      <details class="panel be-fold">
-        <summary><h2 data-i18n="er_subject_title">By subject</h2></summary>
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="er_subject_title">By subject</h2></div>
         <span class="hint" data-i18n="er_subject_hint">One row per subject line and category, most recently sent first. A recurring schedule with the same subject rolls up into one row. Emails sent before this log existed have no subject recorded.</span>
         <div id="erSubjectTable" class="table-wrap tall" style="margin-top:14px"></div>
       </div>
 
-      <details class="panel be-fold">
-        <summary><h2 data-i18n="er_links_title">Clicked links</h2></summary>
+      <div class="panel">
+        <div class="panel-head"><h2 data-i18n="er_links_title">Clicked links</h2></div>
         <span class="hint" data-i18n="er_links_hint">Links people clicked inside emails sent in this period. The part after "?" is removed before saving, since it can hold a one-time login token.</span>
         <div id="erLinksTable" class="table-wrap" style="margin-top:14px"></div>
       </div>
@@ -3127,31 +3127,31 @@ The exact number of people shows below once you pick a group, and again before y
         <div id="beTx" class="table-wrap" style="margin-top:12px; max-height:60vh"></div>
       </div>
 
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="be_welcome_title">Welcome bonus (new customers)</h2></div>
+      <details class="panel be-fold">
+        <summary><h2 data-i18n="be_welcome_title">Welcome bonus (new customers)</h2></summary>
         <span class="hint" data-i18n="be_welcome_hint">New customers who bought: whether the first purchase qualifies, and when the bonus units can be credited after the holding period.</span>
         <div id="beWelcome" class="table-wrap" style="margin-top:12px"></div>
       </details>
 
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="be_plans_title">Nabung rutin bonus</h2></div>
+      <details class="panel be-fold">
+        <summary><h2 data-i18n="be_plans_title">Nabung rutin bonus</h2></summary>
         <span class="hint" data-i18n="be_plans_hint">Recurring plans (investment_plans) started since the event began, by customers of the event, with how many months in a row they have been paid.</span>
         <div id="bePlans" class="table-wrap" style="margin-top:12px"></div>
       </details>
 
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="be_topup_title">Top up bonus (existing customers)</h2></div>
+      <details class="panel be-fold">
+        <summary><h2 data-i18n="be_topup_title">Top up bonus (existing customers)</h2></summary>
         <span class="hint" data-i18n="be_topup_hint">Customers registered before the event who bought SAM funds with a sales code (or an event promo code) as promo code.</span>
         <div id="beTopUp" class="table-wrap" style="margin-top:12px"></div>
       </details>
 
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="be_sucorwave_title">Sucorwave community journeys</h2></div>
+      <details class="panel be-fold">
+        <summary><h2 data-i18n="be_sucorwave_title">Sucorwave community journeys</h2></summary>
         <div id="beSucorwave" class="table-wrap" style="margin-top:12px"></div>
       </details>
 
-      <div class="panel">
-        <div class="panel-head"><h2 data-i18n="be_rules_title">Rules and how it is counted</h2></div>
+      <details class="panel be-fold">
+        <summary><h2 data-i18n="be_rules_title">Rules and how it is counted</h2></summary>
         <span class="hint" data-i18n="be_rules_hint">Written from the same config file the numbers use (booth-event-config.js), so it always matches the tables above.</span>
         <div id="beRules" class="be-rules" style="margin-top:12px"></div>
         <div id="beRoster" class="table-wrap" style="margin-top:16px"></div>
