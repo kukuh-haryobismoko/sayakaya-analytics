@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `c0a373a (2026-11-09)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `11b6e28 (2026-11-09)`.
 
 ## Cara membaca dokumen ini
 
@@ -1035,6 +1035,7 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Cara hitung**: % perubahan per periode sama dengan tab Performance. Filter fund diterapkan sebelum PDF dibuat (kategori = funds.type, fund = funds.id); jika filter tidak cocok dengan fund mana pun, kiriman gagal alih-alih mengirim PDF kosong. Penerima dicari per nama (* sebagai wildcard), SID, email, atau nomor HP, ditempel, atau diunggah sebagai CSV (semua email di file diambil). Lebih dari 50 email sekaligus dikirim lewat antrean (job once csv_list, OTP). Satu email per penerima. Jadwal menyimpan pilihan fund yang sama (kolom fund_filter); melanjutkan jadwal yang dijeda langsung mengirim yang terlewat sekali dan memperbarui tanggal kirim berikutnya. Penerima jadwal: satu email, daftar tempel/CSV, investor dengan AUM di fund aktif (allActiveFundInvestors: kepemilikan live main.portfolios + main.bonus_portfolios on_going, hanya fund ACTIVE, aturan sama dengan tab Product), investor terverifikasi dengan AUM di fund aktif (verifiedActiveFundInvestors: kelompok yang sama, hanya users.verification_status = 'verified'; 5.208 orang per 19 Oktober 2026), semua investor dengan AUM (allInvestorsWithAum: snapshot portfolio_fix terakhir, termasuk sisa unit fund nonaktif seperti promo Avrist Liquid), atau semua pengguna terdaftar. Per 13 Oktober 2026: 13.837 dibanding 232.392 orang; semua 13.837 termasuk di kelompok kedua. Jumlah penerima tampil di form untuk setiap pilihan sebelum OTP. Kirim batch ke kelompok = job frekuensi once (konfirmasi OTP, statement_month / nav_as_of dari form, portofolio selalu live) lewat antrean yang sama. Antrean diproses pg_cron tiap 10 detik selama ada pekerjaan (dashboard_schedule_workers: 5 runner paralel bila ada antrean, 1 bila ada jadwal jatuh tempo); tiap runner mengklaim potongan satu job lewat dashboard_claim_queue (FOR UPDATE SKIP LOCKED, jadi tidak ada email dobel): 10 statement (kontak, holding, transaksi diambil 3 query untuk satu potongan) atau 50 fund performance, dikirim 5 sekaligus. Email yang ditolak SES karena batas kecepatan dikembalikan ke antrean; baris yang macet di status sending 10 menit ditandai gagal, tidak dikirim ulang. Kolom Emails = view dashboard_schedule_progress (terkirim, menunggu, gagal, dilewati). Daftar pengecualian (dashboard_send_exclusions): email/SID yang diketik plus SID, email, dan nama hasil BigQuery saat ditambahkan; cakupan all, statement, atau fund_performance. Diterapkan di resolveSendable (hitungan form, OTP, isi antrean, preview detail), lagi di drainChunk sebelum tiap email (baris jadi skipped), dan di kirim batch manual (dilaporkan sebagai excluded). Kirim e-statement ke satu investor tidak memakai daftar ini.
 - **Isi tab**:
   - *Recipients* (Penerima): Daftar penerima: cari investor per nama, SID, email, atau nomor HP, atau tempel daftar email. Bisa juga satu kelompok penerima, dikirim sekali lewat antrean jadwal setelah kode OTP.
+  - *Fund, performance, report* (Laporan, performa, produk): PDF "Reksa Dana Update": persen perubahan NAV per periode (sama dengan tab Performance) untuk semua fund, kategori tertentu, atau fund pilihan, dengan NAV per tanggal terpilih.
   - *Automated, sending*: Jadwal kirim laporan performa fund berulang. Penerima: satu email, daftar tempel/CSV, investor dengan AUM di fund aktif (holding live ACTIVE, sama dengan tab Product, ~13,8 rb per Okt 2026), semua investor dengan AUM (snapshot portfolio_fix terakhir, termasuk sisa unit fund nonaktif, ~232 rb), atau semua pengguna terdaftar. Jumlah penerima tampil sebelum OTP.
     - **Sends / Pengiriman**: Apa yang dikirim: Portfolio, E-statement, atau Fund performance beserta cakupan fund-nya.
     - **Status**: Active (berjalan), Paused (dijeda), Ended (melewati tanggal akhir).
@@ -1062,6 +1063,12 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
     - **Clicked / Diklik**: Email yang tautannya diklik minimal sekali (persen dari Delivered dan dari yang membuka).
     - **Bounced / Bounce**: Email yang ditolak server penerima (alamat salah atau penuh).
     - **Marked as spam / Ditandai spam**: Penerima menandai email sebagai spam.
+  - *Emails, per, day* (Email, per, hari): Batang: email terkirim per hari (WIB). Garis: yang dibuka dan diklik, tetap dicatat di hari email dikirim.
+  - *By, category* (Per, kategori): Hasil pengiriman per jenis email.
+    - **Category / Kategori**: Jenis email: E-statement & portfolio, Fund performance, Account invite, Password reset, Schedule confirmation code, Other sender.
+    - **Open rate / Tingkat buka**: Opened dibagi Delivered.
+    - **Click rate / Tingkat klik**: Clicked dibagi Delivered.
+  - *By, subject* (Per, subjek): Satu baris per subjek dan kategori; jadwal berulang dengan subjek sama digabung.
   - *Every, email* (Semua, email): Satu baris per email, bisa dicari dan disaring per hasil. Tombol di ujung baris membuka riwayat event email itu.
     - **Category / Kategori**: Jenis email.
     - **Sent from / Dikirim dari**: Asal kiriman: Manual send, Batch send, Schedule, Account emails, Script.
@@ -1372,11 +1379,6 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
   - *Team, lead, incentive* (Insentif, team, lead): Satu baris per booth: semua kode booth dijumlah, minimum funded 1,5 jt.
   - *Customers* (Nasabah): Setiap nasabah baru dengan kontak, kode, tanggal daftar dan KYC, beli pertama, total beli, dana bersih, saldo hari ini, lama menahan, dan status dana.
   - *Transactions* (Transaksi): Daftar mentah transaksi pada rentang tanggal filter atas, semua status (expired dan cancelled disembunyikan kecuali dipilih di filter Status), milik dua kelompok: nasabah baru (daftar dengan kode event) dan user existing yang membeli dengan kode sales sebagai kode promo, termasuk transaksi lain mereka sesudah event mulai. Kolom: tanggal WIB, tipe nasabah (New = daftar dengan kode event; Existing = daftar sebelum event; Other = daftar saat event tanpa kode event, tidak masuk bonus mana pun), nama, email, HP, SID, IFUA, booth, sales, kode referrer, kode sales, tanggal daftar, kode promo transaksi itu, tipe, status, metode bayar, produk, dan nominal (final_amount, kalau kosong amount). Filter tipe nasabah, status, tipe, nominal minimum dan maksimum, plus filter booth dan sales di atas halaman; export lewat tombol Copy/CSV/XLSX/PDF/PNG. Hari holding hanya untuk beli completed: jumlah hari berturut-turut unit produk itu di snapshot harian (mi_fee_logs.portfolio_fix) tidak turun di bawah unit sesaat sesudah pembelian, maksimal txHoldDays (30) hari; aturannya sama dengan program referral. Pembelian yang unitnya turun di hari ke-N berhenti di N-1 hari. Snapshot tertinggal sekitar sehari, jadi pembelian hari ini menunggu snapshot pertama.
-  - *Welcome, bonus, (new, customers)* (Welcome, bonus, (nasabah, baru)): Nasabah baru yang sudah beli: apakah pembelian pertama memenuhi syarat, tanggal akhir holding, layak, atau gugur.
-  - *Nabung, rutin, bonus* (Bonus, nabung, rutin): Rencana nabung rutin yang dibuat selama event dan bulan berturut-turut yang sudah terbayar.
-  - *Top, up, bonus, (existing, customers)* (Bonus, top, up, (nasabah, existing)): Nasabah lama yang membeli produk SAM 5 jt+ dengan kode sales sebagai kode promo, cashback, dan statusnya.
-  - *Sucorwave, community, journeys* (Journey, komunitas, Sucorwave): Langkah SayaKaya dari tiap journey Sucorwave: daftar dan KYC verified, beli, serta verified dan beli SAM 1 jt+. Pendaftaran Sucorwave sendiri ada di luar data ini.
-  - *Rules, and, how, it, is, counted* (Aturan, dan, cara, hitung): Ditulis otomatis dari booth-event-config.js untuk rentang tanggal terpilih, ditambah roster kode.
 - **Catatan penting**:
   - Ubah aturan atau T&C hanya di public/booth-event-config.js; tabel dan panel aturan langsung mengikuti setelah deploy.
   - Baris "Data per ... WIB" di bawah judul = waktu salin terlama dari main.users, main.user_profiles, dan main.transactions. Tabel itu disalin dari database utama oleh scheduled query (users-sc, user_profiles-sc, transactions-sc), jadi yang daftar atau beli sesudah jam itu baru muncul setelah salinan berikutnya.
@@ -1846,8 +1848,9 @@ Bagian berikut belum lengkap saat dokumen ini dibuat:
 - Tab "MIS Channel & AUM" (mis-channel) tidak punya entri di tab Documentation.
 - Dataset BigQuery "github" belum punya deskripsi di docs/content.js DATASETS.
 - Dataset BigQuery "mis" belum punya deskripsi di docs/content.js DATASETS.
-- Tab "Send fund performance": panel "Fund performance report" di TAB_DETAILS tidak ditemukan di halaman.
-- Tab "Email recap": panel "Emails per day" di TAB_DETAILS tidak ditemukan di halaman.
-- Tab "Email recap": panel "By category" di TAB_DETAILS tidak ditemukan di halaman.
-- Tab "Email recap": panel "By subject" di TAB_DETAILS tidak ditemukan di halaman.
 - Tab "Booth event": panel "Journey: registration to purchase" di TAB_DETAILS tidak ditemukan di halaman.
+- Tab "Booth event": panel "Welcome bonus (new customers)" di TAB_DETAILS tidak ditemukan di halaman.
+- Tab "Booth event": panel "Nabung rutin bonus" di TAB_DETAILS tidak ditemukan di halaman.
+- Tab "Booth event": panel "Top up bonus (existing customers)" di TAB_DETAILS tidak ditemukan di halaman.
+- Tab "Booth event": panel "Sucorwave community journeys" di TAB_DETAILS tidak ditemukan di halaman.
+- Tab "Booth event": panel "Rules and how it is counted" di TAB_DETAILS tidak ditemukan di halaman.
