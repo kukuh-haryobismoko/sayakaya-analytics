@@ -7989,6 +7989,8 @@ function renderHnwiRules(cfg) {
 // units stayed and the fee they earned (portfolio_with_code, server side),
 // and the bonus already sent. The per-promo summary is built here.
 const PR = { data: null, loading: false };
+// Only cancelled and expired are failed; every other status (verified, completed_payment, ...) is a buy. Only completed has a bonus row.
+const PR_FAILED = ['cancelled', 'expired'];
 const prStatus = (k) => ({
   on_going: bL('Waiting for the holding date', 'Menunggu holding selesai'),
   succeeded: bL('Eligible', 'Layak'),
@@ -8025,9 +8027,9 @@ function promoSummary(transactions, participants) {
   };
   for (const t of transactions) {
     const r = row(t.promo, t);
-    if (t.status !== 'completed') { r.failed++; continue; }
+    if (PR_FAILED.includes(t.status)) { r.failed++; continue; }
     r.buys++; r.users.add(t.user_id); r.amount += Number(t.amount) || 0;
-    if (!t.bonus) r.no_bonus++;
+    if (t.status === 'completed' && !t.bonus) r.no_bonus++;
   }
   for (const p of participants) {
     const r = row(p.promo, p);
@@ -8071,7 +8073,7 @@ function renderPromoRecap() {
   const sum = promoSummary(transactions, participants);
   const total = (k) => sum.reduce((a, r) => a + (Number(r[k]) || 0), 0);
   $('#prKpis').innerHTML = [
-    kpi(bL('Promo buys', 'Beli dengan promo'), num(total('buys')), bL(`${num(new Set(transactions.filter((x) => x.status === 'completed').map((x) => x.user_id)).size)} customers, ${idr(total('amount'))}`, `${num(new Set(transactions.filter((x) => x.status === 'completed').map((x) => x.user_id)).size)} nasabah, ${idr(total('amount'))}`), 'accent', ICONS.receipt),
+    kpi(bL('Promo buys', 'Beli dengan promo'), num(total('buys')), bL(`${num(new Set(transactions.filter((x) => !PR_FAILED.includes(x.status)).map((x) => x.user_id)).size)} customers, ${idr(total('amount'))}`, `${num(new Set(transactions.filter((x) => !PR_FAILED.includes(x.status)).map((x) => x.user_id)).size)} nasabah, ${idr(total('amount'))}`), 'accent', ICONS.receipt),
     kpi(bL('Eligible', 'Layak'), num(total('eligible')), bL('holding period done', 'holding selesai'), '', ICONS.check),
     kpi(bL('Waiting', 'Menunggu'), num(total('waiting')), bL('still locked', 'masih terkunci'), '', ICONS.hourglass),
     kpi(bL('Lapsed', 'Gugur'), num(total('lapsed')), bL(`withdrawn early; ${num(total('no_bonus'))} buys got no bonus`, `ditarik lebih awal; ${num(total('no_bonus'))} beli tidak dapat bonus`), '', ICONS.xCircle),
