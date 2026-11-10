@@ -8073,7 +8073,8 @@ function renderPromoRecap() {
   const sum = promoSummary(transactions, participants);
   const total = (k) => sum.reduce((a, r) => a + (Number(r[k]) || 0), 0);
   $('#prKpis').innerHTML = [
-    kpi(bL('Promo buys', 'Beli dengan promo'), num(total('buys')), bL(`${num(new Set(transactions.filter((x) => !PR_FAILED.includes(x.status)).map((x) => x.user_id)).size)} customers, ${idr(total('amount'))}`, `${num(new Set(transactions.filter((x) => !PR_FAILED.includes(x.status)).map((x) => x.user_id)).size)} nasabah, ${idr(total('amount'))}`), 'accent', ICONS.receipt),
+    kpi(bL('Promo buys', 'Beli dengan promo'), num(total('buys')), bL(`${num(new Set(transactions.filter((x) => !PR_FAILED.includes(x.status)).map((x) => x.user_id)).size)} customers`, `${num(new Set(transactions.filter((x) => !PR_FAILED.includes(x.status)).map((x) => x.user_id)).size)} nasabah`), 'accent', ICONS.receipt),
+    kpi(bL('Amount trx', 'Nominal transaksi'), idr(total('amount')), bL('promo buys, not cancelled or expired', 'beli promo, tidak batal atau expired'), 'accent', ICONS.coin),
     kpi(bL('Eligible', 'Layak'), num(total('eligible')), bL('holding period done', 'holding selesai'), '', ICONS.check),
     kpi(bL('Waiting', 'Menunggu'), num(total('waiting')), bL('still locked', 'masih terkunci'), '', ICONS.hourglass),
     kpi(bL('Lapsed', 'Gugur'), num(total('lapsed')), bL(`withdrawn early; ${num(total('no_bonus'))} buys got no bonus`, `ditarik lebih awal; ${num(total('no_bonus'))} beli tidak dapat bonus`), '', ICONS.xCircle),
