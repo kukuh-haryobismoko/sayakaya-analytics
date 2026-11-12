@@ -193,6 +193,18 @@ const TABS = {
     datasets: "analytics_266759216.events_* (ekspor GA4), main.users, main.transactions, main.portfolios, main.bonus_portfolios, main.funds",
     computation: "Cohort: ponsel (user_pseudo_id) yang pertama kali register_click atau SignupOauthScreen (setelah Continue with Google) di rentang tanggal, lalu diikuti tanpa batas akhir. Langkah sebelum akun dari GA4 per ponsel (otp_on_submit). user_id pertama yang muncul di ponsel itu menghubungkannya ke main.users: akun dibuat (created_at), KYC terverifikasi (verification_status, verified_at), order beli pertama dan pembelian dibayar pertama (main.transactions buy; dibayar = completed, completed_payment, verified; manual_bonus tidak dihitung). Membuka dan mengirim KYC dari GA4 per user_id (kyc_start/VerificationIntroScreen, kyc_success/VerificationSuccessScreen) atau hasil review di database. Ponsel yang login ke akun yang dibuat lebih dari sehari sebelum mulai mendaftar dihitung terpisah dan tidak masuk funnel. Pecahan: platform, cara mendaftar, sumber install (traffic_source), versi aplikasi, wilayah (geo.region), merek ponsel, kode di akun (referrer_code lalu sales_code), dan minggu mulai (WIB). Kolom dalam 7 hari hanya menghitung ponsel yang mulai paling sedikit 7 hari lalu. Titik berhenti: langkah terjauh, layar terakhir (screen_view), app_remove (hanya Android), dan aktivitas 7 hari terakhir. Install: first_open di rentang, lalu tamu, membuka fund sebelum login, mulai mendaftar, akun baru (lalu KYC terverifikasi dan pembelian dibayar pertama), atau login ke akun lama; juga per hari (event_date GA4) dan platform. Uninstall: setiap ponsel dengan app_remove di rentang (hanya Android), akunnya dari user_id di event itu atau user_id terakhir di ponsel itu dalam 30 hari sebelumnya, tahap akun hari ini (kepemilikan live fund ACTIVE, pembelian dibayar, verification_status), lama terpasang dari user_first_touch_timestamp, layar terakhir, versi aplikasi, dan apakah akun itu dipakai lagi setelahnya. GA4 dibaca dari awal rentang sampai hari ini; default 90 hari terakhir.",
   },
+  "mis-report": {
+    docKey: "docs_mis_report_desc",
+    summary: "Laporan harian, mingguan, dan bulanan untuk manajemen: download aplikasi, uninstall, KYC, investor baru, pembelian, penjualan, dan AUM, bisa diekspor ke PDF.",
+    datasets: "analytics_266759216.events_* (first_open, app_remove), mis.download_manual, main.users, main.transactions, mi_fee_logs.portfolio_with_code",
+    computation: "Download = event first_open GA4, uninstall = app_remove. Angka yang diketik di tabel input manual menggantikan angka GA4 untuk hari itu (disimpan lewat /api/mis/download). Penjualan dan AUM dari database utama; App = user dengan minimal 75% order lewat aplikasi, Manual = sisanya. Transaksi setelah jam cut-off (COT) belum completed dan diberi catatan *. Keterangan data-per memakai tabel utama saja; mis.download_manual diabaikan karena hanya berubah saat ada input manual.",
+  },
+  "mis-channel": {
+    docKey: "docs_mis_channel_desc",
+    summary: "Perjalanan nasabah per channel akuisisi (sales booth, karyawan, organic, belum punya akun) per bulan, ditambah AUM akhir bulan dalam Rupiah dan USD.",
+    datasets: "main.users, main.transactions, main.funds, mi_fee_logs.mi_fee, main.fx_rates, analytics_266759216.events_* (downloads)",
+    computation: "Channel per user: karyawan = pernah transaksi dengan kode promo SRIKAYA; sales_booth = sales_code atau referrer_code sama dengan salah satu kode roster booth; organic = sisanya (termasuk referral teman); no_account = sudah install tapi belum login, hanya punya angka Downloads. Registered = cohort bulan daftar; Paid = pernah beli dengan status selain cancelled, expired, atau pending_payment. AUM akhir bulan hanya fund ACTIVE dan UPDATE, fund USD dipisah dan dikonversi dengan kurs fx_rates terakhir bulan itu.",
+  },
   "user-behavior": {
     summary: "Investor journey: cari satu investor lalu lihat aktivitas aplikasi dan transaksinya dalam satu linimasa.",
     datasets: "analytics_266759216.events_* (GA4) dengan user_id = main.users.id, main.transactions, main.portfolios, main.bonus_portfolios, main.users, main.user_profiles, main.funds",
@@ -297,6 +309,7 @@ const DATASETS = {
   firebase_performance: 'Ekspor Firebase Performance Monitoring: durasi pemanggilan API (GraphQL) dan pemuatan layar, satu tabel per platform.',
   firebase_messaging: 'Log pengiriman push notification Firebase Cloud Messaging (FCM): diterima atau gagal per pesan. Tidak berisi user_id, jadi tidak bisa dihubungkan ke investor.',
   adjust_analytics: 'Ekspor Adjust (atribusi iklan): klik, install, dan event dari setiap channel iklan, termasuk pembayaran yang dilaporkan aplikasi.',
+  mis: 'Tabel kecil untuk tab MIS Report: angka download yang diketik manual untuk hari di mana angka Google Analytics salah.',
   sinvest: 'Feed transaksi dari S-INVEST (KSEI), sistem kustodian. Sumber independen untuk mencocokkan transaksi aplikasi; semua kolomnya bertipe teks.',
   ml: 'Model BigQuery ML yang dibuat oleh dashboard (forecast AUM dan transaksi, model churn) beserta tabel fiturnya.',
 };

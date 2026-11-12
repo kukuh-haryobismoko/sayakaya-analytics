@@ -165,7 +165,7 @@ function panelsOf(tabId) {
 
 const appJs = read('server/app.js');
 const aliases = Object.fromEntries([...appJs.matchAll(/const (\w+) = require\('\.\/([a-z0-9-]+)'\)/g)].map((m) => [m[1], `server/${m[2]}.js`]));
-const TABLE_RE = /`?(sayakaya\.[a-z0-9_]+\.[A-Za-z0-9_*]+)`?/g;
+const TABLE_RE = /`?(?<![-\w])(sayakaya\.[a-z0-9_]+\.[A-Za-z0-9_*]+)`?/g;
 const SUPA_RE = /\b(dashboard_[a-z_]+)\b/g;
 const supabaseTables = [...new Set(fs.readdirSync(path.join(ROOT, 'supabase/migrations')).filter((f) => f.endsWith('.sql'))
   .flatMap((f) => [...read(`supabase/migrations/${f}`).matchAll(/create (?:or replace )?(?:table|view|function) (?:if not exists )?(?:public\.)?([a-z_]+)/gi)].map((m) => m[1])))];

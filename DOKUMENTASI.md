@@ -135,8 +135,8 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 |---|---|
 | [App health](#tab-app-health) | Crash dan trace paling lambat, Android dan iOS digabung. |
 | [Product funnel](#tab-product-funnel) | Setiap ponsel yang mulai mendaftar: berapa yang membuat akun, lolos KYC, dan membayar pembelian pertama, di mana mereka berhenti, siapa yang paling banyak sampai, tren per minggu, berapa lama tiap langkah, install baru sebelum mendaftar, download per hari per platform, dan uninstall Android. |
-| [MIS Report](#tab-mis-report) | (belum ada ringkasan) |
-| [MIS Channel & AUM](#tab-mis-channel) | (belum ada ringkasan) |
+| [MIS Report](#tab-mis-report) | Laporan harian, mingguan, dan bulanan untuk manajemen: download aplikasi, uninstall, KYC, investor baru, pembelian, penjualan, dan AUM, bisa diekspor ke PDF. |
+| [MIS Channel & AUM](#tab-mis-channel) | Perjalanan nasabah per channel akuisisi (sales booth, karyawan, organic, belum punya akun) per bulan, ditambah AUM akhir bulan dalam Rupiah dan USD. |
 | [Onboarding analysis](#tab-onboarding-analysis) | Rincian KYC: layar KYC yang dicapai di aplikasi, hasil review KYC, profil risiko, waktu mengisi KYC, jam review, dan bagian KYC yang dikembalikan. Jalur sebelum dan sesudah KYC ada di Product funnel. |
 | [Subscription analysis](#tab-subscription-analysis) | Analisis alur beli (subscription) di aplikasi: funnel dari form beli sampai dibayar, dari layar mana orang membuka form beli, di mana mereka keluar dari alur beli, order per metode pembayaran (dibayar, kedaluwarsa, dibatalkan), daftar tindak lanjut orang yang mulai beli tapi tidak bayar, layar dan aksi yang dilakukan pembeli sebelum membeli, jam dan hari beli, serta tombol nominal cepat. Mencakup setiap pembelian, pertama atau ulang. |
 | [Engagement analysis](#tab-engagement-analysis) | Pengguna aplikasi per hari, pemakaian dan pembelian menurut status investor, fitur aplikasi yang dipakai dibandingkan dengan kepemilikan dan transaksi, investor menurut besar portofolio dan hari aktif di aplikasi (termasuk uang yang dipegang investor yang tidak membuka aplikasi), kata kunci pencarian sampai fund yang dibeli, dan pilihan urutan, rekomendasi ahli, serta level risiko, dampak kampanye push, dan halaman fund dilihat lalu dibeli. |
@@ -377,14 +377,6 @@ Ekspor Firebase Performance Monitoring: durasi pemanggilan API (GraphQL) dan pem
 | `com_sayakaya_android_ANDROID` |  | App health |
 | `com_sayakaya_ios_IOS` |  | App health |
 
-#### `github`
-
-(Belum ada deskripsi.)
-
-| Tabel | Isi | Dipakai di tab |
-|---|---|---|
-| `io` |  | alat bantu (Ask, Data explorer, ML) |
-
 #### `main`
 
 Salinan database produksi aplikasi Sayakaya di BigQuery: akun dan profil pengguna, transaksi, kepemilikan (portofolio), produk reksa dana, kampanye promo, referral, dan snapshot NAV/AUM harian. Sumber kebenaran untuk uang dan pengguna.
@@ -427,7 +419,7 @@ Hasil pipeline perhitungan fee: fee harian per manajer investasi dan snapshot po
 
 #### `mis`
 
-(Belum ada deskripsi.)
+Tabel kecil untuk tab MIS Report: angka download yang diketik manual untuk hari di mana angka Google Analytics salah.
 
 | Tabel | Isi | Dipakai di tab |
 |---|---|---|
@@ -1528,9 +1520,10 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 <a id="tab-mis-report"></a>
 #### MIS Report
 
-- **Untuk apa**: _(belum ada ringkasan di docs/content.js)_
-- **Data yang dibaca**: _(belum diisi)_
-- **Cara hitung**: _(belum diisi)_
+- **Untuk apa**: Laporan harian, mingguan, dan bulanan untuk manajemen: download aplikasi, uninstall, KYC, investor baru, pembelian, penjualan, dan AUM, bisa diekspor ke PDF.
+- **Penjelasan sederhana**: Laporan, manajemen, mingguan:, download, aplikasi, uninstall, KYC, investor, baru, pembelian, penjualan, dan, AUM, satu, baris, per, hari, dengan, total, mingguan, dan, bulanan, bisa, diekspor, ke, PDF., Download, berasal, dari, Google, Analytics;, jika, angka, satu, hari, tampak, salah, ketik, angka, yang, benar, di, kotak, manual, dan, angka, itu, menggantikan, Google, Analytics, untuk, hari, tersebut.
+- **Data yang dibaca**: analytics_266759216.events_* (first_open, app_remove), mis.download_manual, main.users, main.transactions, mi_fee_logs.portfolio_with_code
+- **Cara hitung**: Download = event first_open GA4, uninstall = app_remove. Angka yang diketik di tabel input manual menggantikan angka GA4 untuk hari itu (disimpan lewat /api/mis/download). Penjualan dan AUM dari database utama; App = user dengan minimal 75% order lewat aplikasi, Manual = sisanya. Transaksi setelah jam cut-off (COT) belum completed dan diberi catatan *. Keterangan data-per memakai tabel utama saja; mis.download_manual diabaikan karena hanya berubah saat ada input manual.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `mis-report`
   - Endpoint: `GET /api/analysis/coverage`, `POST /api/mis/download`, `GET /api/mis/daily`, `GET /api/mis/weekly`, `GET /api/mis/monthly`, `GET /api/mis/sales`
@@ -1540,9 +1533,10 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 <a id="tab-mis-channel"></a>
 #### MIS Channel & AUM
 
-- **Untuk apa**: _(belum ada ringkasan di docs/content.js)_
-- **Data yang dibaca**: _(belum diisi)_
-- **Cara hitung**: _(belum diisi)_
+- **Untuk apa**: Perjalanan nasabah per channel akuisisi (sales booth, karyawan, organic, belum punya akun) per bulan, ditambah AUM akhir bulan dalam Rupiah dan USD.
+- **Penjelasan sederhana**: Menunjukkan, per, bulan, dari, mana, nasabah, datang, dan, sampai, di, mana, mereka:, download, pendaftaran, KYC, dan, pembayaran, pertama., Channel-nya, sales, booth, karyawan, (kode, promo, SRIKAYA), organic, (semua, lainnya, termasuk, referral, teman), dan, tanpa, akun, (sudah, install, tapi, belum, pernah, login)., Juga, menampilkan, total, dana, yang, dipegang, di, akhir, tiap, bulan, dalam, Rupiah, dan, USD.
+- **Data yang dibaca**: main.users, main.transactions, main.funds, mi_fee_logs.mi_fee, main.fx_rates, analytics_266759216.events_* (downloads)
+- **Cara hitung**: Channel per user: karyawan = pernah transaksi dengan kode promo SRIKAYA; sales_booth = sales_code atau referrer_code sama dengan salah satu kode roster booth; organic = sisanya (termasuk referral teman); no_account = sudah install tapi belum login, hanya punya angka Downloads. Registered = cohort bulan daftar; Paid = pernah beli dengan status selain cancelled, expired, atau pending_payment. AUM akhir bulan hanya fund ACTIVE dan UPDATE, fund USD dipisah dan dikonversi dengan kurs fx_rates terakhir bulan itu.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `mis-channel`
   - Endpoint: `GET /api/analysis/coverage`, `GET /api/mch/funnel`, `GET /api/mch/aum`
@@ -1842,12 +1836,6 @@ Endpoint yang tidak terikat pada satu tab: login dan akun, admin, ekspor, jadwal
 
 Bagian berikut belum lengkap saat dokumen ini dibuat:
 
-- Tab "MIS Report" (mis-report) belum punya entri di docs/content.js TABS.
-- Tab "MIS Report" (mis-report) tidak punya entri di tab Documentation.
-- Tab "MIS Channel & AUM" (mis-channel) belum punya entri di docs/content.js TABS.
-- Tab "MIS Channel & AUM" (mis-channel) tidak punya entri di tab Documentation.
-- Dataset BigQuery "github" belum punya deskripsi di docs/content.js DATASETS.
-- Dataset BigQuery "mis" belum punya deskripsi di docs/content.js DATASETS.
 - Tab "Booth event": panel "Journey: registration to purchase" di TAB_DETAILS tidak ditemukan di halaman.
 - Tab "Booth event": panel "Welcome bonus (new customers)" di TAB_DETAILS tidak ditemukan di halaman.
 - Tab "Booth event": panel "Nabung rutin bonus" di TAB_DETAILS tidak ditemukan di halaman.
