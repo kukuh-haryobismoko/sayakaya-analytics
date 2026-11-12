@@ -96,10 +96,10 @@ function splitRowsBySheet(rows: Record<string, unknown>[], keyField: string) {
 }
 
 // Friendly column names for the "Portfolio" sheet in the combined export.
-// USD/IDR for the portfolio exports: rate on `date` (default latest), forward-filled.
+// USD/IDR for the portfolio exports: T-1 rate (day before `date`, default today), forward-filled.
 async function fxInfo(date?: string): Promise<Fx | null> {
   const d = date || new Date().toLocaleDateString('sv', { timeZone: 'Asia/Jakarta' });
-  const [r] = await runQuery('SELECT rate, rate_date FROM `sayakaya.main.fx_rates` WHERE rate_date <= CAST(@d AS DATE) ORDER BY rate_date DESC LIMIT 1', { d });
+  const [r] = await runQuery('SELECT rate, rate_date FROM `sayakaya.main.fx_rates` WHERE rate_date <= DATE_SUB(CAST(@d AS DATE), INTERVAL 1 DAY) ORDER BY rate_date DESC LIMIT 1', { d });
   return r ? { rate: Number(r.rate), date: String(val(r.rate_date)) } : null;
 }
 

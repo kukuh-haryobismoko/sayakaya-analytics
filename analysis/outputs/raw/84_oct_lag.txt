@@ -1,0 +1,2 @@
+## oct_lag
+[{"per":"JulSep","lagb":"a<=1d","n":95,"bought7":28},{"per":"JulSep","lagb":"b2-7d","n":35,"bought7":10},{"per":"JulSep","lagb":"c8-30d","n":7,"bought7":2},{"per":"JulSep","lagb":"d>30d","n":8,"bought7":2},{"per":"Oct","lagb":"a<=1d","n":377,"bought7":28},{"per":"Oct","lagb":"b2-7d","n":31,"bought7":3},{"per":"Oct","lagb":"c8-30d","n":8,"bought7":0},{"per":"Oct","lagb":"d>30d","n":14,"bought7":2}]

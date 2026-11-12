@@ -1,0 +1,4 @@
+## gate_outcome
+[{"abandoned":false,"users":69,"ordered_after":41},{"abandoned":true,"users":28,"ordered_after":13}]
+## pay_fail_cohort
+[{"pm":"virtual_account","orders":3782,"failed":420},{"pm":"bank_transfer","orders":2279,"failed":250},{"pm":"QRIS","orders":765,"failed":170},{"pm":"INSTANT_PAYMENT","orders":264,"failed":5}]

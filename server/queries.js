@@ -20,12 +20,15 @@ const FX_END = "(SELECT rate FROM `sayakaya.main.fx_rates` WHERE rate_date <= LE
 // SUM of a per-row amount where only USD funds get the period-end rate (scalar subquery must sit outside the aggregate).
 const ccySum = (x, fx = FX_END) => `(SUM(IF(f.currency = 'USD', ${x}, 0)) * ${fx} + SUM(IF(f.currency = 'USD', 0, ${x})))`;
 const FX_NOW = "(SELECT rate FROM `sayakaya.main.fx_rates` ORDER BY rate_date DESC LIMIT 1)";
-// Per-row IDR multiplier for unit*NAV values: FX_NOW for live holdings, rate on @param date for as-of ones.
-const kNow = `IF(f.currency = 'USD', ${FX_NOW}, 1)`;
-// Rate column for export summaries; 1.0 keeps fxOff from neutralising it.
-const kNowFx = `IF(f.currency = 'USD', ${FX_NOW}, 1.0)`;
+// Portfolio valuation uses the PREVIOUS day's USD rate (T-1): live = yesterday, as-of D = D-1. Forward-filled over weekends.
+const FX_PREV = "(SELECT rate FROM `sayakaya.main.fx_rates` WHERE rate_date <= DATE_SUB(CURRENT_DATE('Asia/Jakarta'), INTERVAL 1 DAY) ORDER BY rate_date DESC LIMIT 1)";
+// Per-row IDR multiplier for unit*NAV values: FX_PREV (T-1) for live holdings; kPrev = rate on the day before the @param date for as-of ones.
+const kNow = `IF(f.currency = 'USD', ${FX_PREV}, 1)`;
+// Rate column for export summaries.
+const kNowFx = `IF(f.currency = 'USD', ${FX_PREV}, 1.0)`;
 const kAt = (p) => `IF(f.currency = 'USD', (SELECT rate FROM \`sayakaya.main.fx_rates\` WHERE rate_date <= CAST(@${p} AS DATE) ORDER BY rate_date DESC LIMIT 1), 1)`;
-const kAtFx = (p) => `IF(f.currency = 'USD', (SELECT rate FROM \`sayakaya.main.fx_rates\` WHERE rate_date <= CAST(@${p} AS DATE) ORDER BY rate_date DESC LIMIT 1), 1.0)`;
+const kPrev = (p) => `IF(f.currency = 'USD', (SELECT rate FROM \`sayakaya.main.fx_rates\` WHERE rate_date <= DATE_SUB(CAST(@${p} AS DATE), INTERVAL 1 DAY) ORDER BY rate_date DESC LIMIT 1), 1)`;
+const kAtFx = (p) => `IF(f.currency = 'USD', (SELECT rate FROM \`sayakaya.main.fx_rates\` WHERE rate_date <= DATE_SUB(CAST(@${p} AS DATE), INTERVAL 1 DAY) ORDER BY rate_date DESC LIMIT 1), 1.0)`;
 const TX_RAW = '`sayakaya.main.transactions`';
 // Transaction amounts in IDR: the app's own fx_rate when set, else the rate on the transaction date. `currency` stays the fund's currency.
 const TX = `(SELECT * EXCEPT (fx_k) REPLACE (amount * fx_k AS amount, final_amount * fx_k AS final_amount, transfer_fee * fx_k AS transfer_fee, amount_fee * fx_k AS amount_fee, payment_fee * fx_k AS payment_fee, user_fee * fx_k AS user_fee, app_covered_fee * fx_k AS app_covered_fee, stamp_duty_amount * fx_k AS stamp_duty_amount, realized_gain_loss * fx_k AS realized_gain_loss)
@@ -924,8 +927,8 @@ const userHoldingsFromTxAsOf = (userId, date) => ({
       SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
         COALESCE(cn.nav, f.latest_nav_value) AS nav, @date AS nav_date,
         f.currency AS ccy, ${kAtFx('date')} AS fx,
-        ROUND(m.unit * m.avg_buy_price * ${kAt('date')}) AS fund_value,
-        ROUND(m.unit * COALESCE(cn.nav, f.latest_nav_value) * ${kAt('date')}) AS value,
+        ROUND(m.unit * m.avg_buy_price * ${kPrev('date')}) AS fund_value,
+        ROUND(m.unit * COALESCE(cn.nav, f.latest_nav_value) * ${kPrev('date')}) AS value,
         m.opened_at
       FROM merged m
       JOIN ${FUNDS} f ON f.id = m.fund_id
@@ -945,8 +948,8 @@ const userPortfolioSplit = (userId) => ({
       SELECT bp.fund_id, bp.unit FROM ${BONUS_PORT} bp WHERE bp.status = 'on_going' AND bp.user_id = @userId
     )
     SELECT
-      (SELECT COALESCE(${ccySum('r.unit * f.latest_nav_value', FX_NOW)}, 0) FROM regular r JOIN ${FUNDS} f ON f.id = r.fund_id) AS regular_value,
-      (SELECT COALESCE(${ccySum('b.unit * f.latest_nav_value', FX_NOW)}, 0) FROM bonus b JOIN ${FUNDS} f ON f.id = b.fund_id) AS bonus_value`,
+      (SELECT COALESCE(${ccySum('r.unit * f.latest_nav_value', FX_PREV)}, 0) FROM regular r JOIN ${FUNDS} f ON f.id = r.fund_id) AS regular_value,
+      (SELECT COALESCE(${ccySum('b.unit * f.latest_nav_value', FX_PREV)}, 0) FROM bonus b JOIN ${FUNDS} f ON f.id = b.fund_id) AS bonus_value`,
   params: { userId },
 });
 
@@ -959,14 +962,14 @@ const userPortfolioSplit = (userId) => ({
 const GOALS = '`sayakaya.main.goals`';
 const GS_RAW = '`sayakaya.main.goal_snapshots`';
 const GOAL_SNAPSHOTS = `(SELECT * EXCEPT (fx_k) REPLACE (IF(currency = 'USD', COALESCE(amount_idr, amount * fx_k), amount) AS amount)
-  FROM (SELECT s.*, fx.rate AS fx_k FROM ${GS_RAW} s LEFT JOIN ${FXD} fx ON fx.d = s.date))`;
+  FROM (SELECT s.*, fx.rate AS fx_k FROM ${GS_RAW} s LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(s.date, INTERVAL 1 DAY)))`;
 
 // Portfolio Explorer AUM history: SUM(unit * nav) per day over the investor's
 // goal_snapshots, the latest row per (goal, fund, date) so a re-written
 // snapshot isn't double counted. Same shape as userAumHistory/userPerformance.
 const goalDailyAum = `SELECT d, SUM(unit * nav) AS amount FROM (
       SELECT gs.date AS d, gs.unit, gs.nav * IF(gs.currency = 'USD', fx.rate, 1) AS nav
-      FROM ${GOAL_SNAPSHOTS} gs JOIN ${GOALS} g ON g.id = gs.goal_id LEFT JOIN ${FXD} fx ON fx.d = gs.date
+      FROM ${GOAL_SNAPSHOTS} gs JOIN ${GOALS} g ON g.id = gs.goal_id LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(gs.date, INTERVAL 1 DAY)
       WHERE g.user_id = @userId AND g.deleted_at IS NULL
       QUALIFY ROW_NUMBER() OVER (PARTITION BY gs.goal_id, gs.fund_id, gs.date ORDER BY gs.created_at DESC) = 1
     ) GROUP BY d`;
@@ -1077,8 +1080,8 @@ const goalUserHoldings = (userId, asOfDate) => ({
         COALESCE(pb.avg_buy_price, h.fallback_avg_buy_price) AS avg_buy_price,
         COALESCE(cn.nav, h.fallback_nav) AS nav, h.nav_date, h.opened_at,
         f.currency AS ccy, ${kAtFx('asOfDate')} AS fx,
-        ROUND(h.unit * COALESCE(pb.avg_buy_price, h.fallback_avg_buy_price) * ${kAt('asOfDate')}) AS fund_value,
-        ROUND(h.unit * COALESCE(cn.nav, h.fallback_nav) * ${kAt('asOfDate')}) AS value
+        ROUND(h.unit * COALESCE(pb.avg_buy_price, h.fallback_avg_buy_price) * ${kPrev('asOfDate')}) AS fund_value,
+        ROUND(h.unit * COALESCE(cn.nav, h.fallback_nav) * ${kPrev('asOfDate')}) AS value
       FROM holdings h
       JOIN ${FUNDS} f ON f.id = h.fund_id
       LEFT JOIN canon_nav cn ON cn.fund_id = h.fund_id
@@ -1130,10 +1133,10 @@ const goalUserHoldingsByGoal = (userId, asOfDate) => ({
       l.unit, COALESCE(pb.avg_buy_price, l.buy_nav) AS avg_buy_price,
       COALESCE(cn.nav, l.nav) AS nav, l.nav_date,
       f.currency AS ccy, ${kAtFx('asOfDate')} AS fx,
-      ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kAt('asOfDate')}) AS fund_value,
-      ROUND(l.unit * COALESCE(cn.nav, l.nav) * ${kAt('asOfDate')}) AS value,
-      ROUND(l.unit * COALESCE(cn.nav, l.nav) * ${kAt('asOfDate')}) - ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kAt('asOfDate')}) AS gain_loss,
-      SAFE_DIVIDE(ROUND(l.unit * COALESCE(cn.nav, l.nav) * ${kAt('asOfDate')}) - ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kAt('asOfDate')}), ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kAt('asOfDate')})) * 100 AS gain_pct
+      ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kPrev('asOfDate')}) AS fund_value,
+      ROUND(l.unit * COALESCE(cn.nav, l.nav) * ${kPrev('asOfDate')}) AS value,
+      ROUND(l.unit * COALESCE(cn.nav, l.nav) * ${kPrev('asOfDate')}) - ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kPrev('asOfDate')}) AS gain_loss,
+      SAFE_DIVIDE(ROUND(l.unit * COALESCE(cn.nav, l.nav) * ${kPrev('asOfDate')}) - ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kPrev('asOfDate')}), ROUND(l.unit * COALESCE(pb.avg_buy_price, l.buy_nav) * ${kPrev('asOfDate')})) * 100 AS gain_pct
     FROM latest l
     JOIN ${GOALS} g ON g.id = l.goal_id
     JOIN ${FUNDS} f ON f.id = l.fund_id
@@ -1150,7 +1153,7 @@ const PORT_WITH_CODE_RAW = '`sayakaya.mi_fee_logs.portfolio_with_code`';
 const PORT_WITH_CODE = `(SELECT * EXCEPT (fx_k) REPLACE (amount * fx_k AS amount, buy_amount * fx_k AS buy_amount)
   FROM (SELECT p.*, IF(f.currency = 'USD', fx.rate, 1) AS fx_k FROM ${PORT_WITH_CODE_RAW} p
         LEFT JOIN ${FUNDS} f ON f.id = p.id
-        LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY)))`;
+        LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(DATE(p.created_at), INTERVAL 2 DAY)))`;
 
 // Partitioned by DATE(created_at). Filters shift the parameter, not the
 // column (DATE(created_at) = @date + 1 day), so BigQuery reads one partition
@@ -1251,9 +1254,9 @@ const userHoldingsAsOf = (sid, date) => ({
       COALESCE(cn.nav, p.latest_nav_value) AS nav, p.nav_date,
       f.currency AS ccy, ${kAtFx('date')} AS fx,
       ROUND(p.buy_amount) AS fund_value,
-      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) AS value,
-      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) - ROUND(p.buy_amount) AS gain_loss,
-      SAFE_DIVIDE(ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) - ROUND(p.buy_amount), ROUND(p.buy_amount)) * 100 AS gain_pct
+      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kPrev('date')}) AS value,
+      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kPrev('date')}) - ROUND(p.buy_amount) AS gain_loss,
+      SAFE_DIVIDE(ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kPrev('date')}) - ROUND(p.buy_amount), ROUND(p.buy_amount)) * 100 AS gain_pct
     FROM pwc p
     LEFT JOIN ${FUNDS} f ON f.id = p.fund_id
     LEFT JOIN canon_nav cn ON cn.fund_id = p.fund_id
@@ -1271,7 +1274,7 @@ const PORT_FIX_RAW = '`sayakaya.mi_fee_logs.portfolio_fix`';
 const PORT_FIX = `(SELECT * EXCEPT (fx_k) REPLACE (amount * fx_k AS amount, buy_amount * fx_k AS buy_amount)
   FROM (SELECT p.*, IF(f.currency = 'USD', fx.rate, 1) AS fx_k FROM ${PORT_FIX_RAW} p
         LEFT JOIN ${FUNDS} f ON f.id = p.id
-        LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(DATE(p.created_at), INTERVAL 1 DAY)))`;
+        LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(DATE(p.created_at), INTERVAL 2 DAY)))`;
 
 const userAumHistoryFix = (sid) => ({
   sql: `SELECT FORMAT_DATE('%Y-%m-%d', DATE(created_at)) AS bucket, SUM(amount) AS amount
@@ -1317,7 +1320,7 @@ const userAumHistoryFromTx = (userId) => ({
       LEFT JOIN (SELECT fund_id, d, SUM(du) AS du FROM tx GROUP BY fund_id, d) t USING (fund_id, d)
       LEFT JOIN nav n USING (fund_id, d)
       JOIN ${FUNDS} f ON f.id = g.fund_id
-      LEFT JOIN ${FXD} fx ON fx.d = g.d
+      LEFT JOIN ${FXD} fx ON fx.d = DATE_SUB(g.d, INTERVAL 1 DAY)
     )
     SELECT FORMAT_DATE('%Y-%m-%d', d) AS bucket, ROUND(SUM(GREATEST(unit, 0) * nav * k)) AS amount
     FROM daily
@@ -1377,9 +1380,9 @@ const userHoldingsAsOfFix = (sid, date) => ({
       COALESCE(cn.nav, p.latest_nav_value) AS nav, p.nav_date,
       f.currency AS ccy, ${kAtFx('date')} AS fx,
       ROUND(p.buy_amount) AS fund_value,
-      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) AS value,
-      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) - ROUND(p.buy_amount) AS gain_loss,
-      SAFE_DIVIDE(ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kAt('date')}) - ROUND(p.buy_amount), ROUND(p.buy_amount)) * 100 AS gain_pct
+      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kPrev('date')}) AS value,
+      ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kPrev('date')}) - ROUND(p.buy_amount) AS gain_loss,
+      SAFE_DIVIDE(ROUND(p.unit * COALESCE(cn.nav, p.latest_nav_value) * ${kPrev('date')}) - ROUND(p.buy_amount), ROUND(p.buy_amount)) * 100 AS gain_pct
     FROM pwc p
     LEFT JOIN ${FUNDS} f ON f.id = p.fund_id
     LEFT JOIN canon_nav cn ON cn.fund_id = p.fund_id
@@ -4267,8 +4270,8 @@ const sinvestHoldingsAsOf = (sid, date) => {
       SELECT f.name AS fund, f.type AS fund_type, m.unit, m.avg_buy_price,
         COALESCE(cn.nav, f.latest_nav_value) AS nav, @date AS nav_date,
         f.currency AS ccy, ${kAtFx('date')} AS fx,
-        ROUND(m.unit * m.avg_buy_price * ${kAt('date')}) AS fund_value,
-        ROUND(m.unit * COALESCE(cn.nav, f.latest_nav_value) * ${kAt('date')}) AS value,
+        ROUND(m.unit * m.avg_buy_price * ${kPrev('date')}) AS fund_value,
+        ROUND(m.unit * COALESCE(cn.nav, f.latest_nav_value) * ${kPrev('date')}) AS value,
         m.opened_at
       FROM merged m
       JOIN ${FUNDS} f ON f.sinvest_code = m.fund_code
@@ -6728,12 +6731,6 @@ const dataFreshness = () => ({
   params: {},
 });
 
-// Holdings query in each fund's own currency (USD stays USD) when convertIdr === false: swap the FX multipliers and converted views for raw ones.
-// shortcut: string surgery on the SQL, breaks if the multiplier text changes; upgrade to a flag param on the holdings builders.
-const KAT_RE = new RegExp(kAt('PLACEHOLDER').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace('PLACEHOLDER', '\\w+'), 'g');
-const fxOff = (q, convertIdr) => (convertIdr === false ? { ...q, sql: q.sql.split(kNow).join('1').replace(KAT_RE, '1')
-  .split(PORT_WITH_CODE).join(PORT_WITH_CODE_RAW).split(PORT_FIX).join(PORT_FIX_RAW)
-  .split(GOAL_SNAPSHOTS).join(GS_RAW).split(TX).join(TX_RAW) } : q);
 
 // MIS channel tab: sign-up journey per channel (cohort = registration month) and AUM split IDR / USD.
 // Add a channel = add a WHEN line (order matters, first match wins). Downloads: GA4 device -> user_id -> users; devices never logged in = no_account.
@@ -6845,7 +6842,6 @@ const misChannelAum = (from, to) => {
 
 module.exports = {
   misChannelFunnel, misChannelAum,
-  fxOff,
   normalizeUserFilter, overviewUsers, overviewTx, overviewFunds,
   trends, breakdownBy, fundTypes, aumHistory, revenueTrend, revenueTrendDrill, aumHistoryDrill, topInvestors,
   userGrowth, verificationBreakdown,

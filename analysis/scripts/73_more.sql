@@ -1,0 +1,6 @@
+-- Q:distinct_steps
+WITH {{BASE}} SELECT event_name, COUNT(DISTINCT e.user_id) users FROM `sayakaya.analytics_266759216.events_*` e JOIN U ON U.id=e.user_id WHERE _TABLE_SUFFIX BETWEEN '20261001' AND '20261108' AND event_name IN ('hfm_ready','hfm_ready_unverified','buy_bottom_sheet','order_button','order_created','payment_complete','risk_profile_gate_triggered','risk_profile_gate_abandoned','kyc_start','kyc_success') GROUP BY 1 ORDER BY 2 DESC
+-- Q:kyc_platform
+WITH {{BASE}}, P AS (SELECT user_id, ARRAY_AGG(platform ORDER BY event_timestamp LIMIT 1)[OFFSET(0)] pf, COUNTIF(event_name='kyc_start')>0 st, COUNTIF(event_name='kyc_success')>0 ok FROM `sayakaya.analytics_266759216.events_*` WHERE _TABLE_SUFFIX BETWEEN '20261001' AND '20261108' AND event_name IN ('kyc_start','kyc_success') AND user_id IS NOT NULL GROUP BY 1) SELECT pf, COUNTIF(st) started, COUNTIF(st AND ok) started_and_submitted FROM P JOIN U ON U.id=P.user_id GROUP BY 1
+-- Q:acq_funnel
+WITH {{BASE}} SELECT CASE WHEN U.sales_code IS NOT NULL THEN 'sales_code' WHEN NULLIF(TRIM(U.referrer_code),'') IS NOT NULL THEN 'referrer_code' ELSE 'none' END grp, COUNT(*) reg, COUNTIF(verification_status IN ('verified','failed')) submitted, COUNTIF(verification_status='verified') approved, COUNTIF(B.user_id IS NOT NULL) inv FROM U LEFT JOIN B ON B.user_id=U.id GROUP BY 1 ORDER BY 2 DESC

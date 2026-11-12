@@ -391,7 +391,7 @@ function portfolioSummaryLines(holdings: Record<string, unknown>[], fx: Fx | nul
   if (!hasUsd && mode !== 'USD') return [];
   const nat = (h: Record<string, unknown>, k: string) => { const v = Number(val(h[k])) || 0; return h.ccy === 'USD' ? v / (Number(val(h.fx)) || 1) : v; };
   const fxOf = (h: Record<string, unknown>) => (h.ccy === 'USD' ? Number(val(h.fx)) || 1 : 1);
-  const lines: string[] = fx?.rate ? [`Kurs USD/IDR: 1 USD = Rp ${idNum(fx.rate, 2)}${fx.date ? ` (per ${fx.date})` : ''}`] : [];
+  const lines: string[] = fx?.rate ? [`Kurs USD/IDR (T-1): 1 USD = Rp ${idNum(fx.rate, 2)}${fx.date ? ` (per ${fx.date})` : ''}`] : [];
   let totIdr = 0;
   for (const c of ['USD', 'IDR']) {
     const rows = holdings.filter((h) => (h.ccy === 'USD' ? 'USD' : 'IDR') === c);
@@ -403,7 +403,7 @@ function portfolioSummaryLines(holdings: Record<string, unknown>[], fx: Fx | nul
     const p = c === 'USD' ? 'USD ' : 'Rp ';
     totIdr += mv * rate;
     lines.push(`${c === 'USD' ? 'Dana USD' : 'Dana Rupiah'}: Fund Value ${p}${idNum(fv, d)} | Market Value ${p}${idNum(mv, d)} | Gain/Loss ${p}${idNum(mv - fv, d)}`
-      + (c === 'USD' ? ` | setara Rp ${idNum(mv * rate)} (kurs 1 USD = Rp ${idNum(rate, 2)} pada tanggal portofolio)` : ''));
+      + (c === 'USD' ? ` | setara Rp ${idNum(mv * rate)} (kurs 1 USD = Rp ${idNum(rate, 2)} T-1)` : ''));
   }
   if (hasUsd) lines.push(`Total Market Value (Rp): ${idNum(totIdr)}`);
   return lines;

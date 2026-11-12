@@ -1,0 +1,709 @@
+<html><head><meta charset="utf-8"></head><body><h1 id="persiapan-raker-funnel-akuisisi-ke-investasi-pertama">Persiapan Raker — Funnel Akuisisi ke Investasi Pertama</h1>
+<p>Disusun 2026-11-09 20:20 WIB (Asia/Jakarta) untuk leadership dan team lead. Bahasa bisnis, data agregat. Semua angka sama dengan dokumen induk <code>SayaKaya_Funnel_Analysis.md</code> (rujukan bagian dicantumkan); tidak ada PII. Periode perencanaan: tahun kalender <strong>2027</strong>, dibagi per kuartal (asumsi: Raker menetapkan target 2027; bila periode berbeda, skala target mengikuti, bukan definisi metrik).</p>
+<p>Dokumen ini memisahkan <strong>Fakta</strong> (Observed, ada di data), <strong>Asumsi</strong> (belum diuji), dan <strong>Usulan</strong> (target, keputusan yang diminta). Angka dari <em>Product &amp; Tech 2027 — Targets, Direction, Objectives</em> (PDF) berlabel <strong>Target</strong> dan tidak pernah dipakai sebagai Fakta; bagian 0 memetakan PDF ke analisis ini, termasuk yang tidak punya dukungan data.</p>
+<h2 id="0-rencana-2027-dan-posisi-analisis-ini">0. Rencana 2027 dan posisi analisis ini</h2>
+<p>Sumber: <em>Product &amp; Tech 2027 — Targets, Direction, Objectives</em> (draf; rencana bisnis CEO-approved Scenario 3 plus existing business). <strong>Semua angka di bagian ini yang berasal dari PDF adalah Target atau Arah, bukan Fakta.</strong> Fakta hanya angka yang berasal dari data analisis (rujukan ke dokumen induk). Bagian ini hanya menyelaraskan; tidak ada kueri baru dijalankan.</p>
+<h3 id="01-apa-yang-diminta-rencana-target-dari-pdf">0.1 Apa yang diminta rencana (Target, dari PDF)</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Target 2027</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AUM total akhir Desember</td>
+<td>Rp700,9 miliar (Rp258 miliar existing, ditahan datar, + Rp442,9 miliar baru)</td>
+</tr>
+<tr>
+<td>Nasabah baru berdana (new funded customers)</td>
+<td>10.982; kumulatif 1.770 (Mar), 4.464 (Jun), 7.274 (Sep)</td>
+</tr>
+<tr>
+<td>Net revenue setahun</td>
+<td>Rp3,53 miliar (Rp144 juta/bulan di Januari ke Rp571 juta/bulan di Desember)</td>
+</tr>
+<tr>
+<td>Objective Product &amp; Tech (draf)</td>
+<td>O1 Tawarkan lebih dari reksa dana (Product, Data); O2 Mudahkan mulai dan lanjut berinvestasi, nasabah baru dan lama (Product, Data); O3 Rilis tepat waktu tanpa merusak produksi, platform yang skala (Engineering, QA)</td>
+</tr>
+<tr>
+<td>KR</td>
+<td>Belum ada angka. PDF: KR ditulis tiap tim objective, dengan titik awal dan target</td>
+</tr>
+</tbody>
+</table>
+<p>Laju yang tersirat (aritmetika dari target kumulatif): Q1 1.770 (590/bulan), Q2 2.694 (898/bulan), Q3 2.810 (937/bulan), Q4 3.708 (1.236/bulan).</p>
+<h3 id="02-cakupan-analisis-ini-menutup-nasabah-ritel-bukan-kanal-rm">0.2 Cakupan: analisis ini menutup nasabah ritel, bukan kanal RM</h3>
+<table>
+<thead>
+<tr>
+<th>Kanal (Target, PDF)</th>
+<th>Nasabah baru berdana</th>
+<th>AUM baru</th>
+<th>Rata-rata AUM/nasabah</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RM &amp; Advisory</td>
+<td>732</td>
+<td>Rp394,9 miliar (89%)</td>
+<td>sekitar Rp540 juta</td>
+</tr>
+<tr>
+<td>Sales Booth (3 mal)</td>
+<td>7.938 (72%)</td>
+<td>Rp26,9 miliar</td>
+<td>sekitar Rp3,4 juta</td>
+</tr>
+<tr>
+<td>B2B2C</td>
+<td>2.031</td>
+<td>Rp18,7 miliar</td>
+<td>sekitar Rp9,2 juta</td>
+</tr>
+<tr>
+<td>Marketing &amp; Community</td>
+<td>163</td>
+<td>Rp1,0 miliar</td>
+<td>sekitar Rp6,3 juta</td>
+</tr>
+<tr>
+<td>Digital Ads</td>
+<td>118</td>
+<td>Rp0,1 miliar</td>
+<td>sekitar Rp0,7 juta</td>
+</tr>
+<tr>
+<td>SBN ke nasabah existing</td>
+<td>nasabah existing</td>
+<td>Rp1,3 miliar</td>
+<td>–</td>
+</tr>
+</tbody>
+</table>
+<p>Aritmetika dari tabel: kanal non-RM = 10.250 dari 10.982 nasabah (93,3%) tetapi hanya Rp46,7 miliar dari Rp442,9 miliar AUM baru (10,5%). Analisis funnel (daftar, KYC, beli pertama, retensi) relevan untuk bagian pertama; ia tidak mengatakan apa pun tentang kanal RM, yang membawa sebagian besar AUM.</p>
+<ul>
+<li><strong>Fakta:</strong> kohort analisis mengeluarkan 119 user HNWI (AUM ≥Rp500 juta pada satu snapshot harian) dan referrer RAIZ/RAIZKAYA (<code>definitions.md</code>, provenance log).</li>
+<li><strong>Inferred (keyakinan rendah):</strong> user HNWI kemungkinan beririsan dengan nasabah RM (rata-rata AUM RM sekitar Rp540 juta). Data tidak punya penanda kanal RM, jadi irisan ini tidak bisa diuji.</li>
+<li><strong>Gap:</strong> tidak ada data RM, B2B2C, atau SBN dalam analisis ini; tidak ada data revenue.</li>
+</ul>
+<h3 id="03-keselarasan-objective">0.3 Keselarasan Objective</h3>
+<table>
+<thead>
+<tr>
+<th>Objective P&amp;T 2027</th>
+<th>Bagian analisis yang mendukung</th>
+<th>Dukungan data</th>
+<th>Catatan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O2 Mudahkan mulai dan lanjut berinvestasi</td>
+<td>Seluruh Objective dan KR1-KR3 dokumen ini (aktivasi, KYC Android, repeat). Temuan V1, V2, T1, T2, T3, O1-O3, M1, M6</td>
+<td><strong>Kuat</strong> (baseline Observed ada)</td>
+<td>"Mulai" = KR1, KR2. "Lanjut" = KR3. Kolam approved belum beli 13.093 user (78,6%) adalah tuas terbesar yang terukur</td>
+</tr>
+<tr>
+<td>O3 Rilis tepat waktu, platform yang skala</td>
+<td>T5 (error klien tanpa crash/ANR/alert), kualitas data (GA vs DB), O2 (satu akun review memikul 75,9% dari 922 keputusan, relevan dengan arah "KYC otomatis, tanpa tambah headcount ops")</td>
+<td><strong>Parsial.</strong> Ada baseline instrumentasi dan beban review; tidak ada data ketepatan rilis, insiden produksi, atau bug</td>
+<td>Rekomendasi: KR3 = instrumentasi (Crashlytics/ANR, <code>user_id</code> GA, event server-side). Titik awal ketepatan rilis harus dari tim Engineering/QA</td>
+</tr>
+<tr>
+<td>O1 Tawarkan lebih dari reksa dana</td>
+<td>Tidak ada</td>
+<td><strong>Tidak ada data</strong></td>
+<td>SBN, ekuitas, multi-asset, DPLK, alokasi rekomendasi: tidak dianalisis. Tidak ada baseline dan tidak diisi di sini</td>
+</tr>
+</tbody>
+</table>
+<p>Objective dokumen ini (<em>setiap user yang lolos KYC membeli dalam 30 hari, dan setiap pembeli pertama membeli lagi dalam 90 hari</em>) adalah <strong>turunan O2</strong>, bukan pengganti objective P&amp;T. Empat KR di bagian 3 adalah <strong>draf usulan</strong> untuk slot KR O2 (dan KR instrumentasi untuk O3); PDF belum menetapkan KR, jadi tidak ada angka KR yang berasal dari PDF.</p>
+<h3 id="04-keselarasan-target-bisnis-dengan-data-fakta-vs-target">0.4 Keselarasan target bisnis dengan data (Fakta vs Target)</h3>
+<table>
+<thead>
+<tr>
+<th>Pertanyaan</th>
+<th>Fakta (analisis ini)</th>
+<th>Target (PDF)</th>
+<th>Kesimpulan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Booth: berapa registrasi untuk 7.938 nasabah berdana?</td>
+<td>Registrasi sales code 2026-10-01..2026-11-09: 858, investor 79 = 9,2% (kohort muda). Sales code seluruh riwayat: 21,7% (232/1.068)</td>
+<td>7.938 nasabah booth</td>
+<td>Aritmetika: pada 9,2% perlu 86.283 registrasi; pada 21,7% perlu 36.581. Konversi riil di antara dua angka itu belum diketahui (§3.2, §4.2 M1)</td>
+</tr>
+<tr>
+<td>Booth: apakah nasabah bertahan?</td>
+<td>Sales code: repeat mature 39,3% vs 60,0% organik; churn mature &gt;90 hari 90,1% (inaktif, bukan penarikan dana)</td>
+<td>AUM booth Rp26,9 miliar, rata-rata sekitar Rp3,4 juta</td>
+<td>Median tiket pertama sales code Rp125.950 (tiket, bukan AUM). Retensi booth adalah risiko Observed terhadap target AUM booth</td>
+</tr>
+<tr>
+<td>Laju bulanan</td>
+<td>Kohort registrasi Okt 2026: 43 investor sampai 2026-11-09. Kohort Jan-Sep 2026: 233 investor dari 1.800 registrasi (26 per bulan registrasi)</td>
+<td>Q1 590/bulan</td>
+<td><strong>Tidak sebanding</strong>: kohort registrasi (bukan bulan beli pertama), belum matang, tanpa RAIZ/HNWI. Baseline nasabah berdana bulanan sesuai definisi rencana belum ada</td>
+</tr>
+<tr>
+<td>Definisi "funded"</td>
+<td>Investor = pembelian sukses non-bonus pertama</td>
+<td>"New funded customers" (definisi tidak ada di PDF)</td>
+<td><strong>Asumsi:</strong> keduanya sama. Perlu konfirmasi (ambang dana minimal? bonus dihitung?)</td>
+</tr>
+<tr>
+<td>AUM existing datar</td>
+<td>Tidak diukur. Churn 83,6% adalah inaktivitas &gt;90 hari (transaksi), bukan arus keluar AUM</td>
+<td>Rp258 miliar ditahan datar</td>
+<td>Gap: retensi AUM per kohort belum dihitung</td>
+</tr>
+</tbody>
+</table>
+<h3 id="05-keselarasan-roadmap-pt-2027-dengan-temuan">0.5 Keselarasan roadmap P&amp;T 2027 dengan temuan</h3>
+<table>
+<thead>
+<tr>
+<th>Item roadmap (draf, PDF)</th>
+<th>Objective</th>
+<th>Temuan terkait</th>
+<th>Baseline Observed yang bisa dipakai</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Migrasi payment gateway (VA), Q1</td>
+<td>O2</td>
+<td>T2</td>
+<td>Fail rate VA 11,1% (420/3.782), QRIS 22,2% (170/765), transfer bank 11,0%. Metrik sukses migrasi: fail rate VA vs 11,1%</td>
+</tr>
+<tr>
+<td>Auto debit Mandiri dan BNI (live Jan, roadmap 2026), BCA (Q2)</td>
+<td>O2</td>
+<td>Belum ada</td>
+<td>Auto debit tidak muncul sebagai metode di tabel T2 (VA, bank transfer, QRIS, instant payment). Apakah tercatat sebagai metode terpisah belum dicek; data request</td>
+</tr>
+<tr>
+<td>Redesain website (Q2), redesain app (Q3)</td>
+<td>O2</td>
+<td>T1, T3, T4</td>
+<td>KYC start ke submit Android 79,6% vs iOS 88,1% (KR2); approved yang membuka buy sheet 43 dari 257 (T3); gate risk profile ditinggalkan 28 dari 97 (T4). Jadikan baseline pra-redesain</td>
+</tr>
+<tr>
+<td>Dukungan B2B2C dan RM, S-Invest H2H (Q2)</td>
+<td>O2, O3</td>
+<td>Belum ada</td>
+<td>Tidak ada data B2B2C/RM</td>
+</tr>
+<tr>
+<td>Alokasi rekomendasi, SBN primary, multi-asset (Q1), DPLK (Q3), ekuitas (Q4)</td>
+<td>O1</td>
+<td>Belum ada</td>
+<td>Tidak ada baseline</td>
+</tr>
+<tr>
+<td>Arah: KYC otomatis tanpa tambah headcount ops</td>
+<td>O3</td>
+<td>O1, O2, O3 (Ops &amp; KYC)</td>
+<td>1 akun = 75,9% dari 922 keputusan; 34,5% keputusan di jam 10 WIB; P90 15,7 jam. Belum diketahui berapa persen otomatis vs manual (data request)</td>
+</tr>
+<tr>
+<td>Arah: onboarding lebih cepat di booth dan event korporat</td>
+<td>O2</td>
+<td>M1, T1, T3, V1</td>
+<td>Registrasi sales code ke approved 70,5%; ke investor 21,7% seluruh riwayat; booth-era 9,2% (muda)</td>
+</tr>
+</tbody>
+</table>
+<p>Roadmap kuartalan di bagian 5 tetap dipakai sebagai urutan kerja analisis. Item P&amp;T yang sudah ada di roadmap (gateway VA, redesain web/app) menjadi wadah bagi perbaikan T1, T2, T3: jangan tambahkan proyek baru bila bisa masuk ke item itu.</p>
+<h2 id="1-situasi-saat-ini">1. Situasi saat ini</h2>
+<p><strong>Fakta — funnel (kohort 63.795, tarik 2026-11-09, §3 dokumen induk).</strong></p>
+<table>
+<thead>
+<tr>
+<th>Tahap</th>
+<th>User</th>
+<th>Konversi tahap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Terdaftar</td>
+<td>63.795</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Submit KYC</td>
+<td>22.773</td>
+<td>35,7% dari terdaftar</td>
+</tr>
+<tr>
+<td>KYC disetujui</td>
+<td>16.659</td>
+<td>73,2% dari submit</td>
+</tr>
+<tr>
+<td>Investor pertama</td>
+<td>3.587</td>
+<td>21,5% dari approved, 5,6% dari terdaftar</td>
+</tr>
+<tr>
+<td>Repeat (2+ hari)</td>
+<td>2.132</td>
+<td>59,4% dari investor</td>
+</tr>
+<tr>
+<td>Masih aktif</td>
+<td>587</td>
+<td>16,4% dari investor</td>
+</tr>
+<tr>
+<td>Churn &gt;90 hari</td>
+<td>3.000</td>
+<td>83,6% dari investor</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Tiga kebocoran terbesar.</strong></p>
+<ol>
+<li><strong>Approved tidak pernah membeli: 13.093 user (78,6% dari approved).</strong> Ini kolam terbesar dan paling murah disentuh: mereka sudah lolos KYC. Di antara yang masih terlihat di aplikasi (257 user dalam 39 hari), hanya 43 membuka layar beli dan 8 membuat order (§4.4 T3).</li>
+<li><strong>Konversi pasca-approval jatuh di Oktober: 7,5% beli dalam 7 hari vs 29,2% pada Juli-September.</strong> Bukan karena antrean KYC: penurunan sama besar pada approval hari yang sama (7,4% vs 29,5%). Pada rate lama, Oktober kehilangan sekitar 90 pembeli (§4.5 V1). Penyebab belum teridentifikasi.</li>
+<li><strong>Insentif tidak menghasilkan pembayar: 3.629 dari 6.130 penerima bonus (59,2%) tidak pernah membeli berbayar; Rp469,4 juta kredit berakhir di non-pembayar.</strong> Hanya 407 penerima (6,6%) menerima kredit sebelum pembelian berbayar pertamanya (§4.2 M2).</li>
+</ol>
+<p><strong>Yang berhasil.</strong> Sign-up lewat sales code dan referral sama-sama berkonversi tinggi ke investor (21,7% dan 20,6% per registrasi vs 3,7% organik, §4.2 M1): kanal berpeople-power efektif membawa user sampai membeli. KYC tidak lambat di median: 50% keputusan selesai dalam 10 menit (§4.3 O1).</p>
+<p><strong>Yang tidak berhasil.</strong> Retensi: repeat mature sales code 39,3% vs 60,0% organik, dan churn investor 83,6%. Bonus sebagai insentif akuisisi. Email lifecycle: hanya batch laporan performa, tanpa click tracking, tanpa email untuk approved-belum-beli atau KYC gagal (§4.2 M4, M6).</p>
+<h2 id="2-objective-perusahaan-satu-lintas-tim">2. Objective perusahaan (satu, lintas tim)</h2>
+<p><strong>Usulan Objective 2027:</strong> <em>Setiap user yang lolos KYC membeli dalam 30 hari, dan setiap pembeli pertama membeli lagi dalam 90 hari.</em></p>
+<p><strong>Posisi terhadap P&amp;T 2027.</strong> Objective ini adalah turunan O2 (<em>Mudahkan mulai dan lanjut berinvestasi</em>, bagian 0.3). O1 dan sebagian O3 tidak punya data di analisis ini.</p>
+<p><strong>Mengapa ini, mengapa sekarang.</strong> Hampir seluruh kerugian yang bisa dikendalikan terjadi setelah KYC, bukan sebelum: 13.093 user approved belum membeli, dan 83,6% investor berhenti. Akuisisi bukan bottleneck utama — funnel pra-approval sudah menyaring, dan dua kanal berbayar-people (sales code, referral) berkonversi 21% per registrasi. Artinya pertumbuhan tercepat tidak datang dari menambah user, tetapi dari memonetisasi user yang sudah lolos KYC dan mempertahankan yang sudah membeli.</p>
+<p><strong>Yang TIDAK diprioritaskan 2027 (usulan, sadar dan tertulis).</strong></p>
+<ul>
+<li>Menambah volume registrasi berbayar: kanal organik berkonversi 3,7%, dan penyebab penurunan Oktober belum diketahui; menambah volume di atas funnel yang bocor memperbesar kebocoran.</li>
+<li>Desain ulang alur KYC secara besar-besaran: median 10 menit dan approval 73,2%; yang perlu diperbaiki adalah titik putus di dalam aplikasi (T1), bukan prosesnya.</li>
+<li>Program promo baru: belum ada bukti promo menaikkan retensi; bukti yang ada justru korelasi negatif (M3).</li>
+</ul>
+<h2 id="3-key-results">3. Key Results</h2>
+<p>Empat KR, semuanya outcome (bukan aktivitas), mencakup kualitas akuisisi, KYC, aktivasi, dan retensi. Target diturunkan dari baseline yang ada di data; tidak ada angka yang dikarang. Target KR di bawah adalah usulan analisis, bukan angka dari PDF (PDF belum menetapkan KR). Pemetaan ke objective P&amp;T: KR1, KR2 = "mulai" (O2); KR3 = "lanjut" (O2); KR4 dimiliki Marketing/Finance, hanya tidak langsung terkait O2, dan bisa dikeluarkan dari OKR P&amp;T tanpa mengubah baseline. Draf KR O3: instrumentasi (bagian 7, keputusan 4); titik awal ketepatan rilis belum ada.</p>
+<h3 id="kr1-aktivasi-approved-ke-pembelian-pertama-dalam-7-hari">KR1 — Aktivasi: approved ke pembelian pertama dalam 7 hari</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Isi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Definisi metrik</td>
+<td>% user dengan keputusan KYC verified yang membuat pembelian sukses non-bonus dalam 7 hari setelah keputusan</td>
+</tr>
+<tr>
+<td>Baseline</td>
+<td>7,5% (31/416 keputusan Oktober 2026, submit terhubung GA; §4.5 V1)</td>
+</tr>
+<tr>
+<td>Target konservatif / base / stretch</td>
+<td>12% / 18% / 25%</td>
+</tr>
+<tr>
+<td>Cara menurunkan target</td>
+<td>Base = separuh jalan dari 7,5% ke rate historis 29,2% (7,5 + 10,85 = 18,35 → 18%). Konservatif = sepertiga jalan (≈12%). Stretch = 25%, sedikit di bawah level historis Juli-September</td>
+</tr>
+<tr>
+<td>Sumber</td>
+<td><code>84_oct_lag.sql</code>, <code>86_oct_week.sql</code>; provenance log</td>
+</tr>
+<tr>
+<td>Pemilik</td>
+<td>Ops &amp; KYC (keputusan + antrean) dan Tech (permukaan pasca-approval); didukung Marketing (trigger CRM)</td>
+</tr>
+<tr>
+<td>Irama review</td>
+<td>Bulanan, per kanal akuisisi di dalam bulan itu</td>
+</tr>
+<tr>
+<td>Keyakinan</td>
+<td>Sedang — baseline kuat, penyebab penurunan Oktober belum diketahui</td>
+</tr>
+<tr>
+<td>Terukur hari ini?</td>
+<td>Partial — submit KYC hanya terhubung ke GA untuk sebagian user; perlu event server-side</td>
+</tr>
+</tbody>
+</table>
+<h3 id="kr2-kyc-start-ke-submit-di-android">KR2 — KYC: start ke submit di Android</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Isi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Definisi metrik</td>
+<td>% user Android yang <code>kyc_start</code> dan mencapai <code>kyc_success</code> (submit) dalam 30 hari</td>
+</tr>
+<tr>
+<td>Baseline</td>
+<td>{AND:.1f}% (386/485, GA 2026-10-01..2026-11-08; §4.4 T1). iOS {IOS:.1f}% sebagai pembanding</td>
+</tr>
+<tr>
+<td>Target konservatif / base / stretch</td>
+<td>83% / 85% / 88%</td>
+</tr>
+<tr>
+<td>Cara menurunkan target</td>
+<td>Konservatif = +3,4 pp (separuh gap ke iOS), base = +5,4 pp, stretch = paritas iOS (88%)</td>
+</tr>
+<tr>
+<td>Sumber</td>
+<td><code>73_more.sql</code> (kyc_platform), <code>79_kyc_screens.sql</code>; provenance log</td>
+</tr>
+<tr>
+<td>Pemilik</td>
+<td>Tech (instrumentasi + perbaikan layar selfie); didukung Ops (pesan bantuan)</td>
+</tr>
+<tr>
+<td>Irama review</td>
+<td>Bulanan, per layar</td>
+</tr>
+<tr>
+<td>Keyakinan</td>
+<td>Sedang — titik putus terlokalisasi, penyebab teknis belum</td>
+</tr>
+<tr>
+<td>Terukur hari ini?</td>
+<td>Yes (level layar), Partial (penyebab)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="kr3-retensi-repeat-mature-seluruh-investor">KR3 — Retensi: repeat mature seluruh investor</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Isi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Definisi metrik</td>
+<td>% investor yang membeli pada 2+ hari berbeda, diukur hanya pada investor mature (pembelian pertama ≥120 hari lalu)</td>
+</tr>
+<tr>
+<td>Baseline</td>
+<td>{REPEAT_ALL:.1f}% ({_repeat:,}/{_mature:,}; §4.2 M1). Sales code 39,3% vs organik 60,0%</td>
+</tr>
+<tr>
+<td>Target konservatif / base / stretch</td>
+<td>+3 pp / +6 pp / +9 pp dari baseline</td>
+</tr>
+<tr>
+<td>Cara menurunkan target</td>
+<td>Tiga pp setara menutup seperempat gap sales-code–organik (20,7 pp) pada kelompok itu saja; sembilan pp menutup gap hampir penuh</td>
+</tr>
+<tr>
+<td>Sumber</td>
+<td><code>75_mature_repeat.sql</code>; provenance log</td>
+</tr>
+<tr>
+<td>Pemilik</td>
+<td>Marketing (follow-up agen, lifecycle) dan Tech (permukaan repeat); didukung Ops</td>
+</tr>
+<tr>
+<td>Irama review</td>
+<td>Bulanan, per kanal akuisisi</td>
+</tr>
+<tr>
+<td>Keyakinan</td>
+<td>Sedang — baseline kuat, tuas perbaikan belum diuji</td>
+</tr>
+<tr>
+<td>Terukur hari ini?</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="kr4-kualitas-insentif-penerima-bonus-yang-menjadi-pembayar-berbayar">KR4 — Kualitas insentif: penerima bonus yang menjadi pembayar berbayar</h3>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Isi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Definisi metrik</td>
+<td>% penerima kredit bonus yang punya minimal satu pembelian berbayar (di luar metode bonus)</td>
+</tr>
+<tr>
+<td>Baseline</td>
+<td>{BONUS_PAID:.1f}% ({_bonus['bonus_users']-_bonus['never_paid']:,}/{_bonus['bonus_users']:,}; 59,2% tidak pernah bayar; §4.2 M2)</td>
+</tr>
+<tr>
+<td>Target konservatif / base / stretch</td>
+<td>45% / 55% / 65%</td>
+</tr>
+<tr>
+<td>Cara menurunkan target</td>
+<td>Baseline berlaku walau kebijakan tidak diubah; konservatif = kredit hanya setelah pembelian berbayar pertama untuk kohort baru (menghapus 59,2% non-pembayar dari program), base = ditambah nudge 30 hari, stretch = ditambah konversi dari email/push</td>
+</tr>
+<tr>
+<td>Sumber</td>
+<td><code>76_bonus_chk.sql</code> (bonus_before_paid, bonus_exposure); provenance log</td>
+</tr>
+<tr>
+<td>Pemilik</td>
+<td>Marketing (kebijakan) dan Finance (anggaran); didukung Tech (flag kredit)</td>
+</tr>
+<tr>
+<td>Irama review</td>
+<td>Kuartalan</td>
+</tr>
+<tr>
+<td>Keyakinan</td>
+<td>Tinggi untuk baseline, rendah untuk proyeksi</td>
+</tr>
+<tr>
+<td>Terukur hari ini?</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p>Catatan: bila leadership ingin KR churn (83,6% baseline), metrik itu bergerak lambat dan tumpang tindih dengan KR3; usul: KR3 dipakai sebagai leading indicator retensi, churn dilaporkan sebagai metrik pemantau, bukan KR.</p>
+<h2 id="4-peta-kontribusi-tim">4. Peta kontribusi tim</h2>
+<table>
+<thead>
+<tr>
+<th>KR</th>
+<th>Marketing</th>
+<th>Ops &amp; KYC</th>
+<th>Tech</th>
+<th>Kontribusi terukur</th>
+<th>Usaha</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KR1 approved→beli 7 hari</td>
+<td>Trigger CRM pasca-approval, pesan investasi pertama (M6)</td>
+<td>Antrean keputusan dengan due date, slot malam/akhir pekan (O1, O2)</td>
+<td>Permukaan buy sheet pasca-approval (T3)</td>
+<td>+10,5 pp base; 476 approval/bulan menjadi sasaran langsung</td>
+<td>M</td>
+</tr>
+<tr>
+<td>KR2 KYC Android</td>
+<td>Pesan bantuan capture, panduan selfie</td>
+<td>Dukungan user yang gagal capture</td>
+<td>Instrumentasi hasil per layar + perbaikan izin/capture (T1)</td>
+<td>+21 submit/39 hari bila separuh gap ditutup</td>
+<td>M</td>
+</tr>
+<tr>
+<td>KR3 repeat mature</td>
+<td>Follow-up agen hari 7 dan 30, lifecycle email (M1, M6)</td>
+<td>— (dependensi tak langsung: kecepatan balasan)</td>
+<td>Permukaan repeat di aplikasi</td>
+<td>191 investor mature sales code x 20,7 pp gap = 40 tambahan bila gap tertutup penuh</td>
+<td>M</td>
+</tr>
+<tr>
+<td>KR4 bonus→pembayar</td>
+<td>Kebijakan kredit + nudge 30 hari (M2)</td>
+<td>—</td>
+<td>Flag kredit, event konversi</td>
+<td>Rp469,4 juta eksposur dipindahkan ke syarat pembelian berbayar</td>
+<td>S</td>
+</tr>
+</tbody>
+</table>
+<p>Setiap KR punya dependensi lintas tim. Tidak ada KR yang bisa dicapai satu tim saja: KR1 butuh keputusan (Ops), trigger (Marketing), dan permukaan (Tech) pada user yang sama.</p>
+<h2 id="5-roadmap-kuartalan-2027">5. Roadmap kuartalan 2027</h2>
+<table>
+<thead>
+<tr>
+<th>Kuartal</th>
+<th>Milestone</th>
+<th>Dependensi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q1</td>
+<td>Quick win 30-60 hari: kebijakan bonus baru (KR4), trigger CRM pasca-approval, slot review malam/akhir pekan, <code>user_id</code> pada log email</td>
+<td>keputusan program bonus, roster Ops, skema Supabase</td>
+</tr>
+<tr>
+<td>Q1-Q2</td>
+<td>Permukaan pasca-approval di aplikasi (KR1), instrumentasi layar KYC + perbaikan selfie Android (KR2)</td>
+<td>desain, rilis aplikasi</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>Follow-up agen hari 7/30 untuk kohort sales code (KR3); holdout promo 10%</td>
+<td>data agen, CRM</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>Lifecycle email penuh (onboarding, approved, reaktivasi); holdout push dengan <code>campaign_id</code></td>
+<td>click tracking, skema event</td>
+</tr>
+<tr>
+<td>Q3-Q4</td>
+<td>Server-side event register/approve/order/pay; diagnosis penurunan Oktober tuntas</td>
+<td>pipeline data</td>
+</tr>
+<tr>
+<td>Q4</td>
+<td>Review KR vs baseline, reset target 2028</td>
+<td>seluruh data 2027</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Quick win 30-60 hari (Q1):</strong> kebijakan bonus (S, tanpa kode), trigger CRM pasca-approval (tanpa rilis aplikasi), slot review malam, dan kolom alasan penolakan KYC. Keempatnya bisa jalan sebelum rilis aplikasi pertama 2027.</p>
+<h2 id="6-risiko-dan-asumsi">6. Risiko dan asumsi</h2>
+<table>
+<thead>
+<tr>
+<th>Risiko / asumsi</th>
+<th>Dampak</th>
+<th>Mitigasi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Penyebab penurunan Oktober tidak diketahui</td>
+<td>KR1 bisa salah tuas</td>
+<td>Diagnosis bauran kanal di Q1; kalau penyebabnya eksternal, target KR1 diturunkan, bukan dinaikkan usahanya</td>
+</tr>
+<tr>
+<td>Submit KYC tidak tercatat di DB (hanya GA, user_id parsial)</td>
+<td>KR1 sulit diukur</td>
+<td>Event server-side; sebelum itu, ukur di level keputusan + order DB</td>
+</tr>
+<tr>
+<td>Tidak ada click tracking email</td>
+<td>KR4 dan lifecycle tidak bisa diatribusi</td>
+<td>Tambah click event di Q1</td>
+</tr>
+<tr>
+<td>Alasan penolakan KYC tidak disimpan</td>
+<td>Perbaikan tertarget buta</td>
+<td>Kolom reason di Q1</td>
+</tr>
+<tr>
+<td>Musiman: Oktober turun drastis vs Juli-September</td>
+<td>Target kuartalan bisa menyesatkan</td>
+<td>Bandingkan YoY dan per kanal, bukan bulan ke bulan</td>
+</tr>
+<tr>
+<td>Regulasi KYC/e-KYC tidak berubah selama 13 bulan data</td>
+<td>Rekomendasi tetap valid</td>
+<td>Konfirmasi ke compliance sebelum rilis</td>
+</tr>
+<tr>
+<td>Basis retensi dari investor mature (≥120 hari)</td>
+<td>Perbaikan baru terlihat 4 bulan kemudian</td>
+<td>KR3 di-review bulanan tetapi dinilai kuartalan</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7-keputusan-yang-diminta-dari-leadership">7. Keputusan yang diminta dari leadership</h2>
+<ol>
+<li><strong>Kebijakan bonus:</strong> setujui syarat kredit hanya setelah pembelian berbayar pertama. Dasar: Rp469,4 juta kredit berakhir di 3.629 non-pembayar; hanya 6,6% penerima menerima kredit sebelum membeli (§4.2 M2).</li>
+<li><strong>SLA KYC:</strong> setujui target P90 ≤24 jam dengan slot review malam/akhir pekan. Dasar: 23 keputusan &gt;24 jam dalam 39 hari, seluruhnya menumpuk di luar jam batch 10:00 (§4.3 O1).</li>
+<li><strong>Headcount/reviewer:</strong> setujui reviewer kedua atau delegasi terdokumentasi. Dasar: satu akun memikul 75,9% dari 922 keputusan (§4.3 O2).</li>
+<li><strong>Instrumentasi:</strong> setujui pekerjaan tracking (user_id GA, click email, campaign_id, alasan penolakan, crash). Dasar: lima KR di atas hanya bisa dinilai sebagian tanpa itu; tanpa itu 2027 akan mengulang perdebatan 2026.</li>
+<li><strong>Periode target:</strong> konfirmasi tahun kalender 2027 dan definisi kuartal yang dipakai.</li>
+<li><strong>Definisi "new funded customer":</strong> tetapkan apakah sama dengan investor di dokumen ini (pembelian sukses non-bonus pertama) dan apakah ada ambang dana minimal. Tanpa ini baseline bulanan untuk target 10.982 tidak bisa dihitung (bagian 0.4).</li>
+<li><strong>Kepemilikan data O1 dan O3:</strong> tunjuk pemilik baseline untuk O1 (SBN, ekuitas, multi-asset) dan O3 (ketepatan rilis, insiden produksi). Analisis ini tidak punya datanya.</li>
+</ol>
+<h2 id="8-agenda-raker-75-menit-dan-pertanyaan-diskusi">8. Agenda Raker (75 menit) dan pertanyaan diskusi</h2>
+<table>
+<thead>
+<tr>
+<th>Waktu</th>
+<th>Sesi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0-10</td>
+<td>Rencana 2027, cakupan data, situasi: funnel, tiga kebocoran (bagian 0-1)</td>
+</tr>
+<tr>
+<td>10-25</td>
+<td>Objective dan apa yang tidak diprioritaskan (bagian 2)</td>
+</tr>
+<tr>
+<td>25-45</td>
+<td>Key Results: baseline, target, cara menurunkan (bagian 3)</td>
+</tr>
+<tr>
+<td>45-60</td>
+<td>Peta kontribusi dan dependensi (bagian 4)</td>
+</tr>
+<tr>
+<td>60-70</td>
+<td>Roadmap dan quick win Q1 (bagian 5)</td>
+</tr>
+<tr>
+<td>70-75</td>
+<td>Keputusan yang diminta (bagian 7)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Marketing.</strong> (1) Kanal mana yang siap menerima tambahan volume setelah Oktober? (2) Siapa pemilik follow-up agen hari 7 dan 30? (3) Apakah program bonus bisa diubah kuartal ini? (4) Kanal mana yang tidak boleh ditambah sampai penyebab Oktober jelas? (5) Data bauran kanal per bulan bisa disiapkan kapan?</p>
+<p><strong>Ops &amp; KYC.</strong> (1) Berapa reviewer yang tersedia untuk slot malam/akhir pekan? (2) Siapa yang memutuskan delegasi akun review? (3) Apakah alasan penolakan bisa dicatat mulai Q1? (4) Berapa lama proses pengajuan ulang yang realistis? (5) Apakah ada batas regulasi pada kecepatan keputusan?</p>
+<p><strong>Tech.</strong> (1) Berapa lama instrumentasi layar KYC dan perbaikan selfie Android? (2) Kapasitas untuk event server-side kuartal ini? (3) Siapa pemilik permukaan pasca-approval? (4) Apakah click tracking email dan <code>user_id</code> bisa masuk Q1? (5) Apakah Crashlytics bisa diekspor?</p>
+<h2 id="9-ringkasan-satu-halaman">9. Ringkasan satu halaman</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Key Result</th>
+<th>Baseline</th>
+<th>Target (konservatif / base / stretch)</th>
+<th>Pemilik</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Setiap user yang lolos KYC membeli dalam 30 hari, dan setiap pembeli pertama membeli lagi dalam 90 hari</td>
+<td>KR1 Approved→beli 7 hari</td>
+<td>7,5% (Okt 2026, n=416)</td>
+<td>12% / 18% / 25%</td>
+<td>Ops + Tech, didukung Marketing</td>
+</tr>
+<tr>
+<td></td>
+<td>KR2 KYC start→submit Android</td>
+<td>{AND:.1f}% (n=485)</td>
+<td>83% / 85% / 88%</td>
+<td>Tech, didukung Ops</td>
+</tr>
+<tr>
+<td></td>
+<td>KR3 Repeat mature</td>
+<td>{REPEAT_ALL:.1f}% (n={_mature:,})</td>
+<td>+3 / +6 / +9 pp</td>
+<td>Marketing + Tech</td>
+</tr>
+<tr>
+<td></td>
+<td>KR4 Bonus→pembayar berbayar</td>
+<td>{BONUS_PAID:.1f}% (n={_bonus['bonus_users']:,})</td>
+<td>45% / 55% / 65%</td>
+<td>Marketing + Finance</td>
+</tr>
+</tbody>
+</table>
+<p><em>Catatan: kolom Objective di tabel di atas adalah turunan O2 (P&amp;T 2027). Angka PDF: lihat bagian 0.</em></p></body></html>

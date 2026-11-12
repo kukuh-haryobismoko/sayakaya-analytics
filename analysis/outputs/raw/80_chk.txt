@@ -1,0 +1,4 @@
+## paid_users_2026
+[{"u_paid_2026":964,"paid_orders":6242}]
+## inv_total
+[{"inv":3587}]

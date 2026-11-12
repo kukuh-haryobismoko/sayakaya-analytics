@@ -1,0 +1,1 @@
+SELECT event_name, COUNT(*) n, COUNT(DISTINCT user_pseudo_id) dev FROM `sayakaya.analytics_266759216.events_*` WHERE _TABLE_SUFFIX BETWEEN '20261001' AND '20261108' GROUP BY 1 HAVING n<=526 ORDER BY n DESC

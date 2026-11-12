@@ -22,3 +22,12 @@ console.log('fx smoke ok');
   assert.strictEqual(convertHoldings(rows, 'IDR')[0].value, 36000);
   console.log('convertHoldings ok');
 }
+
+// Portfolio USD valuation uses the T-1 rate: as-of D -> rate of D-1, live -> yesterday.
+{
+  const Q = require('../server/queries');
+  const h = Q.goalUserHoldings('u', '2026-10-30').sql;
+  assert.ok(/rate_date <= DATE_SUB\(CAST\(@asOfDate AS DATE\), INTERVAL 1 DAY\)/.test(h), 'as-of holdings must use D-1 rate');
+  assert.ok(/rate_date <= DATE_SUB\(CURRENT_DATE\('Asia\/Jakarta'\), INTERVAL 1 DAY\)/.test(Q.userHoldings('u').sql), 'live holdings must use yesterday rate');
+  console.log('T-1 fx ok');
+}

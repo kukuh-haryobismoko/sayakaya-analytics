@@ -1,0 +1,2 @@
+## push_click_vs_buy
+[{"clicked":false,"users":79,"bought_in_window":1},{"clicked":true,"users":24,"bought_in_window":2}]

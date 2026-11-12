@@ -1,0 +1,1 @@
+SELECT table_name, column_name, data_type FROM `sayakaya.mi_fee_logs.INFORMATION_SCHEMA.COLUMNS` WHERE table_name IN ('data_hnwi','nasabah_type','nasabah_promo','portfolio_with_code','user_holding') ORDER BY table_name, ordinal_position

@@ -1,0 +1,10 @@
+WITH u AS (SELECT id, sid_code, created_at, verification_status, is_institution,
+  (referrer_code IS NULL OR UPPER(TRIM(referrer_code)) NOT IN ('RAIZ','RAIZKAYA')) AS not_raiz,
+  IFNULL(sid_code,'') IN (SELECT sid_code FROM (SELECT sid_code, DATE(created_at) d, SUM(amount) aum FROM `sayakaya.mi_fee_logs.portfolio_with_code` WHERE DATE(created_at)>='2026-01-14' GROUP BY 1,2) GROUP BY sid_code HAVING MAX(aum)>=500000000) AS hnwi FROM `sayakaya.main.users`),
+b AS (SELECT user_id, MIN(created_at) first_buy FROM `sayakaya.main.transactions` WHERE type='buy' AND status IN ('completed','completed_payment','verified','verified_by_operational') AND IFNULL(payment_method,'') NOT IN ('manual_bonus','bonus') GROUP BY 1)
+SELECT 'A raw' step, COUNT(*) registered, COUNTIF(verification_status='verified') kyc_verified, COUNTIF(verification_status='failed') kyc_failed, COUNTIF(b.user_id IS NOT NULL) investors FROM u LEFT JOIN b ON b.user_id=u.id
+UNION ALL SELECT 'B minus RAIZ/RAIZKAYA', COUNT(*), COUNTIF(verification_status='verified'), COUNTIF(verification_status='failed'), COUNTIF(b.user_id IS NOT NULL) FROM u LEFT JOIN b ON b.user_id=u.id WHERE not_raiz
+UNION ALL SELECT 'C minus HNWI too (analysis cohort)', COUNT(*), COUNTIF(verification_status='verified'), COUNTIF(verification_status='failed'), COUNTIF(b.user_id IS NOT NULL) FROM u LEFT JOIN b ON b.user_id=u.id WHERE not_raiz AND NOT hnwi
+UNION ALL SELECT 'X hnwi only (in raw)', COUNT(*), COUNTIF(verification_status='verified'), COUNTIF(verification_status='failed'), COUNTIF(b.user_id IS NOT NULL) FROM u LEFT JOIN b ON b.user_id=u.id WHERE hnwi
+UNION ALL SELECT 'Y hnwi & raiz', COUNT(*), COUNTIF(verification_status='verified'), COUNTIF(verification_status='failed'), COUNTIF(b.user_id IS NOT NULL) FROM u LEFT JOIN b ON b.user_id=u.id WHERE hnwi AND NOT not_raiz
+UNION ALL SELECT 'Z institution in cohort C', COUNT(*), COUNTIF(verification_status='verified'), COUNTIF(verification_status='failed'), COUNTIF(b.user_id IS NOT NULL) FROM u LEFT JOIN b ON b.user_id=u.id WHERE not_raiz AND NOT hnwi AND is_institution

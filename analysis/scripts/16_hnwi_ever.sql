@@ -1,0 +1,1 @@
+SELECT sid_code FROM (SELECT sid_code, DATE(created_at) d, SUM(amount) aum FROM `sayakaya.mi_fee_logs.portfolio_with_code` WHERE DATE(created_at)>='2026-01-14' GROUP BY 1,2) GROUP BY sid_code HAVING MAX(aum)>=500000000

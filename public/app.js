@@ -610,7 +610,7 @@ function holdingsTableHtml(rows, { selectable = false, excluded = new Set(), ccy
   // A USD fund row carries the rate for its as-of date; header rate (latest) is the fallback.
   const usdRow = rows.find((r) => r.ccy === 'USD');
   const rate = (usdRow && Number(val(usdRow.fx))) || Number(usdRate) || null;
-  const rateNote = rate ? `<div class="hint" style="margin:4px 0">USD/IDR ${new Intl.NumberFormat('id-ID').format(rate)} · ${asOf ? 'per ' + escapeHtml(asOf) : 'latest'}</div>` : '';
+  const rateNote = rate ? `<div class="hint" style="margin:4px 0">USD/IDR ${new Intl.NumberFormat('id-ID').format(rate)} · kurs T-1 (hari sebelum ${asOf ? escapeHtml(asOf) : 'hari ini'}), khusus fund USD</div>` : '';
   // Apply currency conversion if a mode is requested
   let displayRows = rows;
   if (ccyMode !== 'IDR') {

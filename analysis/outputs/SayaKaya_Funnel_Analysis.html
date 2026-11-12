@@ -1,0 +1,2249 @@
+<html><head><meta charset="utf-8"></head><body><h1 id="sayakaya-analisis-funnel-akuisisi-ke-investasi-pertama">SayaKaya — Analisis Funnel Akuisisi ke Investasi Pertama</h1>
+<p>Disusun 2026-11-09 20:20 WIB (Asia/Jakarta). Semua angka dari BigQuery <code>sayakaya</code> (read-only, cap 5 GB per kueri) dan Supabase <code>dashboard_email_log</code>/<code>dashboard_email_events</code> (read-only), tarik data 2026-11-09. Tidak ada PII di dokumen ini; semua sel &lt;10 disembunyikan.</p>
+<h2 id="1-ringkasan-eksekutif">1. Ringkasan eksekutif</h2>
+<p>Kohort: 63.795 user terdaftar (tanpa referrer RAIZ/RAIZKAYA, tanpa HNWI). Funnel: 35,7% submit KYC, 73,2% dari submit disetujui, 21,5% dari approved menjadi investor. Artinya 5,6% user terdaftar pernah membeli, dan 83,6% investor kemudian diam lebih dari 90 hari.</p>
+<p>Lima temuan terpenting:</p>
+<ol>
+<li><strong>Kolam approved yang tidak pernah membeli adalah kebocoran terbesar: 13.093 user (78,6% dari approved).</strong> Ini satu masalah yang dilihat tiga tim: tidak ada trigger CRM, tidak ada permukaan di aplikasi, tidak ada antrean operasi. Dari 257 user kolam itu yang terlihat di GA dalam 39 hari, 43 membuka buy sheet dan 8 membuat order (§4.4 T3, §4.5 V2).</li>
+<li><strong>Konversi approved ke pembelian jatuh di Oktober: 7,5% vs 29,2% (Juli-September), dan bukan karena waktu tunggu.</strong> Penurunan tetap ada di bucket approval hari yang sama (7,4% vs 29,5%). Pada rate lama, Oktober kehilangan sekitar 90 pembeli (z=-6,6, §4.5 V1).</li>
+<li><strong>Bonus kredit tidak menciptakan pembayar: 3.629 dari 6.130 penerima (59,2%) tidak pernah membeli berbayar; Rp469.400.000 kredit berakhir di non-pembayar.</strong> Hanya 407 penerima (6,6%) menerima kredit sebelum pembelian berbayar pertamanya; 2.094 (34,2%) sudah pembayar, jadi program ini lebih mirip reward daripada akuisisi (§4.2 M2).</li>
+<li><strong>Funnel KYC putus di dalam aplikasi, bukan di KYC itu sendiri: identity verification ke selfie camera −11,3%, submit Android 79,6% vs iOS 88,1% (z=-2,93).</strong> Menutup separuh gap Android-iOS ≈ 21 submit tambahan per 39 hari (§4.4 T1).</li>
+<li><strong>Sign-up sales code berkonversi setara referral (21,7% vs 20,6% investor/registrasi) tetapi retensi mature-nya terburuk: 39,3% repeat vs 60,0% grup organik, median tiket pertama Rp125.950.</strong> Gap repeat = 191 investor mature x 20,7 pp (§4.2 M1).</li>
+</ol>
+<p><strong>User yang bisa dipulihkan.</strong> Tidak dijumlahkan lintas temuan karena beberapa tindakan menyasar kolam yang sama (V2/T3/M6 semuanya kolam approved). Estimasi per tindakan, semua aritmetika dan bukan hasil eksperimen:</p>
+<table>
+<thead>
+<tr>
+<th>Tindakan</th>
+<th>Dasar</th>
+<th>Estimasi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Permukaan + CRM pasca-approval (V2/T3)</td>
+<td>10% dari 257 user GA-visible x rate order→bayar 84,3%</td>
+<td>22 investor / 39 hari (≈206/tahun)</td>
+</tr>
+<tr>
+<td>Nudge investasi pertama (M6)</td>
+<td>476 approval 30 hari terakhir x 10% gap 21,7 pp</td>
+<td>10 investor / 30 hari</td>
+</tr>
+<tr>
+<td>Perbaikan gap KYC Android (T1)</td>
+<td>485 start x 8,5 pp / 2 x 73,2% x 21,5%</td>
+<td>21 submit → 3,3 investor / 39 hari</td>
+</tr>
+<tr>
+<td>Pengajuan ulang pasca-penolakan (O3)</td>
+<td>10% dari 70 user gagal Okt x 67,5% verified x 73,2%</td>
+<td>3,5 investor / bulan</td>
+</tr>
+<tr>
+<td>QRIS ke fail rate VA (T2)</td>
+<td>(22,2% − 11,1%) x 765 order</td>
+<td>85 order terselamatkan (batas atas)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Batasan yang harus dibaca bersama angka di atas.</strong> Tidak ada eksperimen acak di data ini: seluruh klaim sebab-akibat berlabel Inferred. Penyebab penurunan Oktober belum teridentifikasi (tiga hipotesis terbuka). GA tidak membawa <code>user_id</code> pra-login (85% device), jadi funnel GA adalah sampel, bukan sensus. Alasan penolakan KYC tidak disimpan. Email tidak punya click tracking dan baris batch tidak punya <code>user_id</code>.</p>
+<p><strong>Keselarasan dengan rencana Product &amp; Tech 2027.</strong> Rencana (PDF <em>Product &amp; Tech 2027</em>, angka berlabel Target) menargetkan 10.982 nasabah baru berdana dan AUM Rp700,9 miliar. Analisis ini menutup nasabah ritel: kanal non-RM = 93,3% nasabah target tetapi 10,5% AUM baru. Temuan memetakan ke Objective 2 (<em>mudahkan mulai dan lanjut berinvestasi</em>); tidak ada data untuk Objective 1 (produk non-reksa dana) dan hanya sebagian untuk Objective 3 (T5, kualitas data). Pemetaan, gap, dan perbandingan Fakta vs Target ada di <code>raker_preparation.md</code> bagian 0. Angka di dokumen ini tidak berubah.</p>
+<h2 id="2-lingkup-definisi-dan-kualitas-data">2. Lingkup, definisi, dan kualitas data</h2>
+<h3 id="21-sumber">2.1 Sumber</h3>
+<table>
+<thead>
+<tr>
+<th>Sumber</th>
+<th>Isi</th>
+<th>Window</th>
+<th>Catatan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BigQuery <code>sayakaya.main.*</code></td>
+<td>users, user_profiles, transactions, user_status_logs, funds</td>
+<td>seluruh riwayat</td>
+<td>salinan terjadwal dari Postgres produksi</td>
+</tr>
+<tr>
+<td>BigQuery <code>sayakaya.mi_fee_logs</code></td>
+<td>snapshot AUM harian</td>
+<td>sejak 2026-01-14</td>
+<td>dasar definisi HNWI</td>
+</tr>
+<tr>
+<td>BigQuery <code>analytics_266759216.events_*</code></td>
+<td>GA4 app events</td>
+<td>2026-10-01..2026-11-08</td>
+<td>tanpa <code>user_id</code> sebelum login</td>
+</tr>
+<tr>
+<td>Supabase <code>dashboard_email_log</code>, <code>dashboard_email_events</code></td>
+<td>log kirim email + event</td>
+<td>2026-08-31..2026-11-03</td>
+<td>tanpa click event, <code>user_id</code> NULL pada batch</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-definisi-kunci">2.2 Definisi kunci</h3>
+<table>
+<thead>
+<tr>
+<th>Istilah</th>
+<th>Definisi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registrasi</td>
+<td>baris di <code>main.users</code> (<code>created_at</code> +7 jam)</td>
+</tr>
+<tr>
+<td>KYC submitted / approved / rejected</td>
+<td>status <code>verified</code> atau <code>failed</code> / <code>verified</code> / <code>failed</code></td>
+</tr>
+<tr>
+<td>Investor</td>
+<td>pembelian sukses non-bonus pertama (<code>completed</code>, <code>completed_payment</code>, <code>verified</code>, <code>verified_by_operational</code>; bukan <code>manual_bonus</code>/<code>bonus</code>)</td>
+</tr>
+<tr>
+<td>Repeat</td>
+<td>pembelian pada 2 hari berbeda atau lebih</td>
+</tr>
+<tr>
+<td>Churn</td>
+<td>tidak ada beli/jual/switch-in selama &gt;90 hari (gap p90 = 86 hari; peluang kembali 53,7% pada 90 hari). 180 hari dipakai sebagai sensitivitas</td>
+</tr>
+<tr>
+<td>Mature (repeat)</td>
+<td>pembelian pertama ≥120 hari sebelum tarik data</td>
+</tr>
+<tr>
+<td>HNWI</td>
+<td>SID dengan AUM ≥Rp500.000.000 pada salah satu snapshot harian (119 user), dikeluarkan dari kohort</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-pengecualian-dan-ukuran-kohort">2.3 Pengecualian dan ukuran kohort</h3>
+<p>320.606 registrasi → 63.912 setelah mengeluarkan referrer RAIZ/RAIZKAYA → 63.793 setelah mengeluarkan HNWI (Fase 1). Fase 2 memakai 63.795 karena dua registrasi baru di antara dua run. 27 akun internal dan 15 institusi tetap di dalam kohort sesuai aturan; bila dikeluarkan, angka bergeser &lt;1 pp.</p>
+<h3 id="24-kualitas-data-ringkas">2.4 Kualitas data (ringkas)</h3>
+<ul>
+<li><code>user_status_logs</code> baru ada sejak 2026-07-21, jadi analisis waktu keputusan hanya mencakup periode itu.</li>
+<li>4.118 user berstatus verified tidak punya <code>verified_at</code>.</li>
+<li>GA tidak membawa <code>user_id</code> pada 85% device pra-login; <code>kyc_success</code> menyala saat submit, bukan saat approve; <code>register_success</code> terkirim ganda pada 4,3%; <code>payment_complete</code> melewatkan status yang diset operasi.</li>
+<li><code>has_completed_first_subscription</code> tidak dapat dipakai (tidak konsisten dengan transaksi).</li>
+<li>Seluruh detail ada di <code>outputs/data_quality.md</code> dan <code>outputs/data_provenance_log.md</code>.</li>
+</ul>
+<h2 id="3-funnel-dan-rekonsiliasi-ga-vs-db">3. Funnel dan rekonsiliasi GA vs DB</h2>
+<h3 id="stage-conversion-n-63795-registered">Stage conversion (n = 63,795 registered)</h3>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Users</th>
+<th>% of registered</th>
+<th>Step conversion</th>
+<th>95% CI of step</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registered</td>
+<td>63,795</td>
+<td>100%</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>KYC submitted (verified or failed)</td>
+<td>22,773</td>
+<td>35.7%</td>
+<td>35.7% of registered</td>
+<td>35.3-36.1%</td>
+</tr>
+<tr>
+<td>KYC approved</td>
+<td>16,659</td>
+<td>26.1%</td>
+<td>73.2% of submitted</td>
+<td>72.6-73.7%</td>
+</tr>
+<tr>
+<td>KYC rejected</td>
+<td>6,114</td>
+<td>9.6%</td>
+<td>26.8% of submitted</td>
+<td>26.3-27.4%</td>
+</tr>
+<tr>
+<td>Investor (first paid buy)</td>
+<td>3,587</td>
+<td>5.6%</td>
+<td>21.5% of approved</td>
+<td>20.9-22.2%</td>
+</tr>
+<tr>
+<td>Repeat investor (buys on 2+ days)</td>
+<td>2,132</td>
+<td>3.3%</td>
+<td>59.4% of investors</td>
+<td>57.8-61.0%</td>
+</tr>
+<tr>
+<td>Still active (last activity within 90 d)</td>
+<td>587</td>
+<td>0.9%</td>
+<td>16.4% of investors</td>
+<td>15.2-17.6%</td>
+</tr>
+<tr>
+<td>Churned (no activity &gt; 90 d)</td>
+<td>3,000</td>
+<td></td>
+<td>83.6% of investors</td>
+<td>82.4-84.8%</td>
+</tr>
+</tbody>
+</table>
+<p>Not finished KYC (status unverified): 41,021 = 64.3% of registered. Investors not verified: 21. Verified, never bought: 13,093 = 78.6% of approved.
+Churn base note: 128 investors made their first buy within 90 days, so are not yet classifiable; excluding them churn is 3,000 / 3,459 = 86.7%.
+Sensitivity: with a 180-day line, 2,742 of 3,587 investors are churned (76.4%) vs 83.6% at 90 days; the funnel shape does not change.
+Cohort size is 63,795, 2 more than the 63,793 of Phase 1: users who registered after the Phase 1 run (Observed; same rules).
+Churn count here (activity = buy, sell, SWITCH_IN) is 3,000. Phase 1 <code>definitions.md</code> quoted 3,165 using buys only; the 165 difference are users whose last buy is older than 90 d but who sold or switched in the last 90 d (<code>49_chk.sql</code>). Phase 2 uses the activity definition.</p>
+<p>Before/after exclusion (Observed, Phase 1 <code>20_cohort_stages.sql</code>): registered 320,606 -&gt; 63,912 (excl. RAIZ/RAIZKAYA) -&gt; 63,793 (excl. HNWI); approved 17,210 -&gt; 16,776 -&gt; 16,657; investors 260,219 -&gt; 3,706 -&gt; 3,587.</p>
+<h3 id="time-between-stages-days-cohort-c-users-with-a-valid-timestamp-pair">Time between stages (days, cohort C; users with a valid timestamp pair)</h3>
+<table>
+<thead>
+<tr>
+<th>Transition</th>
+<th>n</th>
+<th>p50</th>
+<th>p90</th>
+<th>Pairs with negative gap (dropped)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Register -&gt; approved</td>
+<td>12,636</td>
+<td>0.62</td>
+<td>3.63</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Approved -&gt; first buy</td>
+<td>2,369</td>
+<td>1.03</td>
+<td>90.77</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Register -&gt; first buy</td>
+<td>3,587</td>
+<td>5.58</td>
+<td>243.7</td>
+<td>19</td>
+</tr>
+</tbody>
+</table>
+<p>n for register -&gt; approved is lower than 16,659 approved because <code>verified_at</code> is empty for 4,023 approved users (data quality #5). Reading: half of approved users are approved within a day, 90% within about 4 days; buyers who buy do it fast (median about 1 day after approval) but the p90 is 91 days, so a long tail buys much later.</p>
+<h3 id="register-cohorts-by-month-full-table-cohortscsv-chart-chartscohort_monthlypng">Register cohorts by month (full table: <code>cohorts.csv</code>, chart: <code>charts/cohort_monthly.png</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Reg month</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved %</th>
+<th>Investor within 7 d</th>
+<th>Within 7 d %</th>
+<th>Investor ever %</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2025-10</td>
+<td>450</td>
+<td>233</td>
+<td>51.8%</td>
+<td>36</td>
+<td>8.0%</td>
+<td>11.1%</td>
+</tr>
+<tr>
+<td>2025-11</td>
+<td>220</td>
+<td>95</td>
+<td>43.2%</td>
+<td>43</td>
+<td>19.5%</td>
+<td>24.1%</td>
+</tr>
+<tr>
+<td>2025-12</td>
+<td>208</td>
+<td>78</td>
+<td>37.5%</td>
+<td>26</td>
+<td>12.5%</td>
+<td>17.3%</td>
+</tr>
+<tr>
+<td>2026-01</td>
+<td>448</td>
+<td>167</td>
+<td>37.3%</td>
+<td>54</td>
+<td>12.1%</td>
+<td>15.8%</td>
+</tr>
+<tr>
+<td>2026-02</td>
+<td>235</td>
+<td>91</td>
+<td>38.7%</td>
+<td>22</td>
+<td>9.4%</td>
+<td>13.6%</td>
+</tr>
+<tr>
+<td>2026-03</td>
+<td>260</td>
+<td>105</td>
+<td>40.4%</td>
+<td>21</td>
+<td>8.1%</td>
+<td>10.8%</td>
+</tr>
+<tr>
+<td>2026-04</td>
+<td>217</td>
+<td>75</td>
+<td>34.6%</td>
+<td>13</td>
+<td>6.0%</td>
+<td>7.8%</td>
+</tr>
+<tr>
+<td>2026-05</td>
+<td>147</td>
+<td>59</td>
+<td>40.1%</td>
+<td>12</td>
+<td>8.2%</td>
+<td>11.6%</td>
+</tr>
+<tr>
+<td>2026-06</td>
+<td>138</td>
+<td>54</td>
+<td>39.1%</td>
+<td>8</td>
+<td>5.8%</td>
+<td>10.1%</td>
+</tr>
+<tr>
+<td>2026-07</td>
+<td>126</td>
+<td>46</td>
+<td>36.5%</td>
+<td>7</td>
+<td>5.6%</td>
+<td>8.7%</td>
+</tr>
+<tr>
+<td>2026-08</td>
+<td>97</td>
+<td>58</td>
+<td>59.8%</td>
+<td>11</td>
+<td>11.3%</td>
+<td>17.5%</td>
+</tr>
+<tr>
+<td>2026-09</td>
+<td>132</td>
+<td>68</td>
+<td>51.5%</td>
+<td>21</td>
+<td>15.9%</td>
+<td>19.7%</td>
+</tr>
+<tr>
+<td>2026-10</td>
+<td>611</td>
+<td>425</td>
+<td>69.6%</td>
+<td>31</td>
+<td>5.1%</td>
+<td>7.0%</td>
+</tr>
+<tr>
+<td>2026-11</td>
+<td>247</td>
+<td>157</td>
+<td>63.6%</td>
+<td>36</td>
+<td>14.6%</td>
+<td>14.6%</td>
+</tr>
+</tbody>
+</table>
+<p>Recent months are not mature (a 2026-11 user has had at most 9 days). Compare 7-day conversion, which is mature for all months through 2026-11-02.</p>
+<h3 id="biggest-leaks-and-recoverable-users-arithmetic-shown">Biggest leaks and recoverable users (arithmetic shown)</h3>
+<h4 id="leak-1-registered-but-kyc-not-finished">Leak 1. Registered but KYC not finished</h4>
+<ul>
+<li>Observed: 41,021 of 63,795 (64.3%) never reached a KYC result. Last 13 registration months (2025-11 to 2026-11): 1,315 of 3,086 (42.6%).</li>
+<li>Observed: Jan-Sep 2026 cohorts left 892 of 1,800 (49.6%) unfinished; the Oct 2026 cohort (booth month) left 141 of 611 (23.1%). Difference significant (z = -11.4).</li>
+<li>Estimate: if Jan-Sep cohorts had finished like Oct, 892 - 1,800 x 141/611 = 477 more users reach KYC result. At the Jan-Sep investor-per-approved rate (233 / 723 = 32.2% ever) that is about 154 investors; at the Oct verified-to-buy-within-7-days rate (33 / 430 = 7.7%) about 37. Assumption: the Oct pattern is reproducible outside booths (not tested).</li>
+</ul>
+<h4 id="leak-2-approved-but-never-buys-largest-in-user-count">Leak 2. Approved but never buys (largest in user count)</h4>
+<ul>
+<li>Observed: 13,093 of 16,659 approved users (78.6%) never made a paid buy. Approved from 2025-11 on: 1,094 of 1,506 (72.6%) never bought.</li>
+<li>Observed: users approved in Oct 2026 bought within 7 days at 33 / 430 = 7.7% (5.5-10.6%) vs Jan-Sep 2026 197 / 730 = 27.0% (23.9-30.3%); z = -8.0. More approvals did not bring more buyers.</li>
+<li>Estimate: Oct approvals at the Jan-Sep rate would be 430 x 197/730 = 116 buyers within 7 days; observed 33; shortfall 83 investors. Oct cohort buying may still arrive later, so treat the shortfall as an upper bound (Observed: the 30-day figure for early-Oct approvals is 44 of 430).</li>
+<li>Pool: each +1 percentage point of the 1,094 recent never-buyers = 11 investors.</li>
+<li>Observed (<code>52_oct_split.sql</code> cut of the Oct 2026 cohort, 611 registered): with a sales code 363 registered, 271 approved, 26 bought ever = 7.2%; without 219 registered, 130 approved, 14 bought = 6.4%. Both are low, so the Oct drop is not only a booth effect. Cause not identified; Phase 3 should look at what the booth sign-up flow asks users to do after KYC.</li>
+</ul>
+<h4 id="leak-3-first-time-investors-who-do-not-come-back-churn">Leak 3. First-time investors who do not come back (churn)</h4>
+<ul>
+<li>Observed: 3,000 of 3,587 investors are silent for more than 90 days (83.6%); 2,742 for more than 180 d. 1,455 (40.6%) bought on only one day. See <code>churn_profile.md</code>.</li>
+<li>Estimate: each +10% of churned users reactivated = 300 users (Proposed; no observed reactivation campaign rate in data yet).</li>
+</ul>
+<h4 id="leak-4-kyc-rejection">Leak 4. KYC rejection</h4>
+<ul>
+<li>Observed: 6,114 rejected of 22,773 submitted (26.8%); last 13 months 293 of 1771 (16.5%). Rejection reasons are not in BigQuery (data request).</li>
+<li>Estimate (Proposed): halving the last-13-month rejection count recovers 146 approved users, about 31 investors at the all-time investor-per-approved rate (21.5%).</li>
+</ul>
+<h3 id="verified-to-buy-by-month-of-approval-46_leaksql">Verified-to-buy by month of approval (<code>46_leak.sql</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Approval month</th>
+<th>Approved</th>
+<th>Bought within 7 d</th>
+<th>%</th>
+<th>Never bought (to date)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2025-10</td>
+<td>229</td>
+<td>39</td>
+<td>17.0%</td>
+<td>178</td>
+</tr>
+<tr>
+<td>2025-11</td>
+<td>96</td>
+<td>46</td>
+<td>47.9%</td>
+<td>44</td>
+</tr>
+<tr>
+<td>2025-12</td>
+<td>83</td>
+<td>31</td>
+<td>37.3%</td>
+<td>43</td>
+</tr>
+<tr>
+<td>2026-01</td>
+<td>149</td>
+<td>55</td>
+<td>36.9%</td>
+<td>86</td>
+</tr>
+<tr>
+<td>2026-02</td>
+<td>92</td>
+<td>27</td>
+<td>29.3%</td>
+<td>58</td>
+</tr>
+<tr>
+<td>2026-03</td>
+<td>120</td>
+<td>29</td>
+<td>24.2%</td>
+<td>84</td>
+</tr>
+<tr>
+<td>2026-04</td>
+<td>77</td>
+<td>16</td>
+<td>20.8%</td>
+<td>60</td>
+</tr>
+<tr>
+<td>2026-05</td>
+<td>56</td>
+<td>14</td>
+<td>25.0%</td>
+<td>38</td>
+</tr>
+<tr>
+<td>2026-06</td>
+<td>60</td>
+<td>10</td>
+<td>16.7%</td>
+<td>44</td>
+</tr>
+<tr>
+<td>2026-07</td>
+<td>47</td>
+<td>8</td>
+<td>17.0%</td>
+<td>36</td>
+</tr>
+<tr>
+<td>2026-08</td>
+<td>55</td>
+<td>12</td>
+<td>21.8%</td>
+<td>41</td>
+</tr>
+<tr>
+<td>2026-09</td>
+<td>74</td>
+<td>26</td>
+<td>35.1%</td>
+<td>44</td>
+</tr>
+<tr>
+<td>2026-10</td>
+<td>430</td>
+<td>33</td>
+<td>7.7%</td>
+<td>386</td>
+</tr>
+<tr>
+<td>2026-11</td>
+<td>167</td>
+<td>37</td>
+<td>22.2%</td>
+<td>130</td>
+</tr>
+</tbody>
+</table>
+<p>Within-7-day count includes the few users who bought before <code>verified_at</code> (data quality #10).</p>
+<h3 id="31-churn-profile">3.1 Churn profile</h3>
+<h3 id="who-and-when-observed">Who and when (Observed)</h3>
+<ul>
+<li>3,000 of 3,587 investors churned (83.6%). To avoid counting young accounts, tables below use the 3,459 investors whose first buy is more than 90 days ago (3,000 churned = 86.7%).</li>
+<li>Among churned users, last activity falls: same day as first buy 11.6%; within 7 days 14.4%; within 30 days 23.8%; median 203 days after first buy; p75 585 days.</li>
+</ul>
+<h3 id="survival-curve-kaplan-meier-share-of-investors-not-yet-churned-days-since-first-buy">Survival curve (Kaplan-Meier, share of investors not yet churned, days since first buy)</h3>
+<p>Churn is dated 90 days after the last activity; users still active or inside the window are censored at their age.</p>
+<table>
+<thead>
+<tr>
+<th>Days since first buy</th>
+<th>90</th>
+<th>120</th>
+<th>180</th>
+<th>270</th>
+<th>365</th>
+<th>450</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Not churned</td>
+<td>89.9%</td>
+<td>79.3%</td>
+<td>68.1%</td>
+<td>58.3%</td>
+<td>50.7%</td>
+<td>46.2%</td>
+</tr>
+</tbody>
+</table>
+<p>Reading: 10% churn before day 90 (they never came back after the first buy day); half are gone by about one year. This chart is dominated by the 2022-2025 buyers (older buyers outnumber recent ones, see "By first-buy half-year").</p>
+<h3 id="after-what-behaviour-observed-correlation">After what behaviour (Observed, correlation)</h3>
+<p>Active days in first life (all activity days, users with first buy over 90 d ago):
+| Group | Users | Churned | Churn % | 95% CI |
+|---|---|---|---|---|
+| 1 | 349 | 349 | 100.0% | 98.9-100.0% |
+| 2-3 | 1,230 | 1,186 | 96.4% | 95.2-97.3% |
+| 4-9 | 867 | 799 | 92.2% | 90.2-93.8% |
+| 10+ | 1,013 | 666 | 65.7% | 62.8-68.6% |</p>
+<p>Read: all 349 one-day users churned by definition (one active day cannot be followed by a return), so this table mostly says "repeat buyers survive". Not independent of the definition.</p>
+<p>Leading indicators measured at first buy / first 30 days (users with first buy at least 120 days ago, so every user has had the same observation time; churn = silent &gt; 90 d now). Indicators are measured before churn, so they are usable for early warning, but these are Correlation, not Causal:</p>
+<p>Activity in the 30 days after first buy (count of active days):
+| Group | Users | Churned | Churn % | 95% CI |
+|---|---|---|---|---|
+| 0 | 1,641 | 1,491 | 90.9% | 89.4-92.2% |
+| 1 | 978 | 853 | 87.2% | 85.0-89.2% |
+| 2-3 | 623 | 504 | 80.9% | 77.6-83.8% |
+| 4+ | 201 | 149 | 74.1% | 67.7-79.7% |</p>
+<p>z-test 0 vs 4+ days: 7.2. Evidence: High (large n, big gap).</p>
+<p>Size of the first buy:
+| Group | Users | Churned | Churn % | 95% CI |
+|---|---|---|---|---|
+| &lt;100k | 598 | 571 | 95.5% | 93.5-96.9% |
+| 100-500k | 1,245 | 1,117 | 89.7% | 87.9-91.3% |
+| 0.5-5jt | 954 | 775 | 81.2% | 78.6-83.6% |
+| 5jt+ | 646 | 534 | 82.7% | 79.6-85.4% |</p>
+<p>z-test &lt;100k vs 0.5-5jt: 8.1. Evidence: Med (could reflect testers or bonus-triggered tiny buys).</p>
+<p>Fund type of the first buy:
+| Group | Users | Churned | Churn % | 95% CI |
+|---|---|---|---|---|
+| EQUITY | 606 | 550 | 90.8% | 88.2-92.8% |
+| FIXED_INCOME | 907 | 759 | 83.7% | 81.1-85.9% |
+| MIXED | 860 | 744 | 86.5% | 84.1-88.6% |
+| MONEY_MARKET | 1,030 | 913 | 88.6% | 86.6-90.4% |
+| PROTECTED | 40 | 31 | 77.5% | 62.5-87.7% |</p>
+<p>Payment method of the first buy:
+| Group | Users | Churned | Churn % | 95% CI |
+|---|---|---|---|---|
+| INSTANT_PAYMENT | 40 | 37 | 92.5% | 80.1-97.4% |
+| QRIS | 67 | 58 | 86.6% | 76.4-92.8% |
+| bank_transfer | 2,439 | 2,111 | 86.6% | 85.1-87.8% |
+| virtual_account | 897 | 791 | 88.2% | 85.9-90.1% |</p>
+<p>Types or methods with fewer than 10 users are shown as <code>&lt;10</code>; PROTECTED n = 40 is low-confidence.</p>
+<h3 id="by-first-buy-half-year-simpson-survivorship-check">By first-buy half-year (Simpson / survivorship check)</h3>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Users</th>
+<th>Churned</th>
+<th>Churn %</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2021-H2</td>
+<td>25</td>
+<td>20</td>
+<td>80.0%</td>
+<td>60.9-91.1%</td>
+</tr>
+<tr>
+<td>2022-H1</td>
+<td>977</td>
+<td>830</td>
+<td>85.0%</td>
+<td>82.6-87.1%</td>
+</tr>
+<tr>
+<td>2022-H2</td>
+<td>367</td>
+<td>328</td>
+<td>89.4%</td>
+<td>85.8-92.1%</td>
+</tr>
+<tr>
+<td>2023-H1</td>
+<td>193</td>
+<td>162</td>
+<td>83.9%</td>
+<td>78.1-88.4%</td>
+</tr>
+<tr>
+<td>2023-H2</td>
+<td>219</td>
+<td>192</td>
+<td>87.7%</td>
+<td>82.7-91.4%</td>
+</tr>
+<tr>
+<td>2024-H1</td>
+<td>247</td>
+<td>221</td>
+<td>89.5%</td>
+<td>85.0-92.7%</td>
+</tr>
+<tr>
+<td>2024-H2</td>
+<td>250</td>
+<td>220</td>
+<td>88.0%</td>
+<td>83.4-91.5%</td>
+</tr>
+<tr>
+<td>2025-H1</td>
+<td>642</td>
+<td>603</td>
+<td>93.9%</td>
+<td>91.8-95.5%</td>
+</tr>
+<tr>
+<td>2025-H2</td>
+<td>313</td>
+<td>260</td>
+<td>83.1%</td>
+<td>78.5-86.8%</td>
+</tr>
+<tr>
+<td>2026-H1</td>
+<td>203</td>
+<td>156</td>
+<td>76.8%</td>
+<td>70.6-82.1%</td>
+</tr>
+<tr>
+<td>2026-H2</td>
+<td>23</td>
+<td>&lt;10</td>
+<td>34.8%</td>
+<td>18.8-55.1%</td>
+</tr>
+</tbody>
+</table>
+<p>Newer cohorts show lower churn mainly because they have had less time to churn (right-censoring), so do not read 2026-H1 as an improvement without the survival curve.</p>
+<h3 id="leading-indicator-summary">Leading indicator summary</h3>
+<ul>
+<li>Observed: no follow-up activity in the 30 days after the first buy -&gt; 90.9% churn vs 74.1% with 4+ active days.</li>
+<li>Observed: first buy under Rp100k -&gt; 95.5% churn vs 81.2% for Rp0.5-5 million.</li>
+<li>Inferred: a 30-day reactivation push after first buy is the earliest lever; first buy size under Rp100k marks low commitment. Proposed for Phase 3.</li>
+<li>Not available: churn by marketing source/device (the DB has no acquisition field; GA user mapping covers only Oct-Nov 2026). Added to Data Requests.</li>
+</ul>
+<h3 id="32-segmen">3.2 Segmen</h3>
+<p>Profile fields (gender, age, occupation, income, city) are filled only after KYC, so for those cuts the useful denominator is approved users. For approved users the 'Investor % of approved' column is the fair comparison; the <code>(null)</code> rows are users who never reached the profile step.
+Monthly income and city are not analysed: income is empty for all 63,795 users (Observed, <code>44_segments.sql</code>); city has about 500 values, most cells under 10.</p>
+<h3 id="acquisition-referrer-code-db">Acquisition: referrer code (DB)</h3>
+<ul>
+<li>Observed: with a referrer code (not RAIZ/RAIZKAYA): 6,308 registered, 3,337 approved, 1,324 investors = 21.0% of registered (20.0-22.0%). No code (NULL or empty): 57,487 registered, 13,322 approved, 2,263 investors = 3.9% of registered (3.8-4.1%). z = 55.8. Referral codes: 658 distinct.</li>
+<li>
+<p>Top codes by registered users (personal-looking codes are pseudonymised):
+| Segment | Registered | Approved | Approved % (95% CI) | Investors | Investor % of approved (95% CI) | Investor % of registered |
+|---|---|---|---|---|---|---|
+| (none) | 57,487 | 13,322 | 23.2% (22.8-23.5%) | 2,263 | 17.0% (16.4-17.6%) | 3.9% |
+| personal-code-01 | 402 | 310 | 77.1% (72.8-81.0%) | 251 | 81.0% (76.2-84.9%) | 62.4% |
+| personal-code-02 | 370 | 48 | 13.0% (9.9-16.8%) | &lt;10 | 14.6% (7.2-27.2%) | 1.9% |
+| personal-code-03 | 339 | 46 | 13.6% (10.3-17.6%) | &lt;10 | 13.0% (6.1-25.7%) | 1.8% |
+| personal-code-04 | 299 | 47 | 15.7% (12.0-20.3%) | &lt;10 | 19.1% (10.4-32.5%) | 3.0% |
+| personal-code-05 | 242 | 26 | 10.7% (7.4-15.3%) | &lt;10 | 15.4% (6.1-33.5%) | 1.7% |
+| personal-code-06 | 236 | 28 | 11.9% (8.3-16.6%) | &lt;10 | 17.9% (7.9-35.6%) | 2.1% |
+| UPNVJT | 218 | 167 | 76.6% (70.6-81.7%) | 13 | 7.8% (4.6-12.9%) | 6.0% |
+| UBAYA | 200 | 165 | 82.5% (76.6-87.1%) | 20 | 12.1% (8.0-18.0%) | 10.0% |
+| BEMITS | 183 | 156 | 85.2% (79.4-89.7%) | 14 | 9.0% (5.4-14.5%) | 7.7% |
+| CMCUNESA | 179 | 152 | 84.9% (78.9-89.4%) | 15 | 9.9% (6.1-15.6%) | 8.4% |
+| personal-code-07 | 173 | 146 | 84.4% (78.2-89.0%) | &lt;10 | 4.8% (2.3-9.6%) | 4.0% |
+| personal-code-08 | 163 | &lt;10 | 2.5% (1.0-6.1%) | &lt;10 | n/a (n/a) | 0.6% |</p>
+</li>
+<li>
+<p>Inferred: code <code>personal-code-01</code> converts at a very different rate from other personal codes with similar volume (1.7-3.0% investors per registered for codes 02-06 vs 62.4%); the high-volume personal codes register many users who do not finish KYC. A reward tied to registration instead of first buy could explain it; not tested. Phase 3 should use this for the incentive rule.</p>
+</li>
+</ul>
+<h3 id="sales-code-booth-sales-rep">Sales code (booth / sales rep)</h3>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved % (95% CI)</th>
+<th>Investors</th>
+<th>Investor % of approved (95% CI)</th>
+<th>Investor % of registered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>no</td>
+<td>62,727</td>
+<td>15,906</td>
+<td>25.4% (25.0-25.7%)</td>
+<td>3,355</td>
+<td>21.1% (20.5-21.7%)</td>
+<td>5.3%</td>
+</tr>
+<tr>
+<td>yes</td>
+<td>1,068</td>
+<td>753</td>
+<td>70.5% (67.7-73.2%)</td>
+<td>232</td>
+<td>30.8% (27.6-34.2%)</td>
+<td>21.7%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Observed: users with a sales code reach investor at 21.7% of registered vs 5.3%; approval 70.5% vs 25.4%. Investor per approved: 30.8% vs 21.1% (z = 6.3). Selection: sales-code users were helped through KYC, so approval is not comparable.</li>
+</ul>
+<h3 id="registration-period">Registration period</h3>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved % (95% CI)</th>
+<th>Investors</th>
+<th>Investor % of approved (95% CI)</th>
+<th>Investor % of registered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>before 2026-10</td>
+<td>62,937</td>
+<td>16,077</td>
+<td>25.5% (25.2-25.9%)</td>
+<td>3,508</td>
+<td>21.8% (21.2-22.5%)</td>
+<td>5.6%</td>
+</tr>
+<tr>
+<td>2026-10+ (booth era)</td>
+<td>858</td>
+<td>582</td>
+<td>67.8% (64.6-70.9%)</td>
+<td>79</td>
+<td>13.6% (11.0-16.6%)</td>
+<td>9.2%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Observed: Oct 2026 onward (booth event) approval 67.8% vs 25.5% before. Investor rate is not comparable yet because the Oct-Nov cohort is young; use the 7-day columns in <code>funnel_overview.md</code> (Oct 2026: 5.1% within 7 d vs Jan-Sep 9.4%; z = -3.3).</li>
+</ul>
+<h3 id="demographics-approved-users-only-are-comparable">Demographics (approved users only are comparable)</h3>
+<p>Gender:
+| Segment | Registered | Approved | Approved % (95% CI) | Investors | Investor % of approved (95% CI) | Investor % of registered |
+|---|---|---|---|---|---|---|
+| (null) | 37,013 | 65 | 0.2% (0.1-0.2%) | 20 | 30.8% (20.9-42.8%) | 0.1% |
+| male | 17,909 | 10,368 | 57.9% (57.2-58.6%) | 1,976 | 19.1% (18.3-19.8%) | 11.0% |
+| female | 8,873 | 6,226 | 70.2% (69.2-71.1%) | 1,591 | 25.6% (24.5-26.7%) | 17.9% |</p>
+<ul>
+<li>Observed: female approved users invest at 25.6% vs male 19.1%; z = 9.9. Evidence: High (large n), Correlation.</li>
+</ul>
+<p>Age (at registration):
+| Segment | Registered | Approved | Approved % (95% CI) | Investors | Investor % of approved (95% CI) | Investor % of registered |
+|---|---|---|---|---|---|---|
+| (null) | 37,013 | 65 | 0.2% (0.1-0.2%) | 20 | 30.8% (20.9-42.8%) | 0.1% |
+| 25-34 | 9,004 | 5,802 | 64.4% (63.4-65.4%) | 1,645 | 28.4% (27.2-29.5%) | 18.3% |
+| &lt;25 | 7,498 | 4,342 | 57.9% (56.8-59.0%) | 716 | 16.5% (15.4-17.6%) | 9.5% |
+| 35-44 | 6,479 | 4,049 | 62.5% (61.3-63.7%) | 760 | 18.8% (17.6-20.0%) | 11.7% |
+| 45-54 | 3,013 | 1,909 | 63.4% (61.6-65.1%) | 317 | 16.6% (15.0-18.3%) | 10.5% |
+| 55+ | 788 | 492 | 62.4% (59.0-65.7%) | 129 | 26.2% (22.5-30.3%) | 16.4% |</p>
+<p>Occupation:
+| Segment | Registered | Approved | Approved % (95% CI) | Investors | Investor % of approved (95% CI) | Investor % of registered |
+|---|---|---|---|---|---|---|
+| (null) | 37,060 | 66 | 0.2% (0.1-0.2%) | 20 | 30.3% (20.6-42.2%) | 0.1% |
+| pegawai swasta | 9,404 | 6,491 | 69.0% (68.1-70.0%) | 1,602 | 24.7% (23.6-25.7%) | 17.0% |
+| lainnya | 5,425 | 2,990 | 55.1% (53.8-56.4%) | 567 | 19.0% (17.6-20.4%) | 10.5% |
+| pelajar/mahasiswa | 4,490 | 2,719 | 60.6% (59.1-62.0%) | 449 | 16.5% (15.2-18.0%) | 10.0% |
+| pengusaha | 3,006 | 1,931 | 64.2% (62.5-65.9%) | 367 | 19.0% (17.3-20.8%) | 12.2% |
+| ibu rumah tangga | 2,760 | 1,383 | 50.1% (48.2-52.0%) | 286 | 20.7% (18.6-22.9%) | 10.4% |
+| pns | 972 | 643 | 66.2% (63.1-69.1%) | 178 | 27.7% (24.4-31.3%) | 18.3% |
+| guru/dosen | 369 | 257 | 69.6% (64.8-74.1%) | 80 | 31.1% (25.8-37.0%) | 21.7% |
+| pensiunan | 163 | 91 | 55.8% (48.2-63.2%) | 31 | 34.1% (25.2-44.3%) | 19.0% |
+| tentara/polisi | 144 | 86 | 59.7% (51.6-67.4%) | &lt;10 | 8.1% (4.0-15.9%) | 4.9% |</p>
+<ul>
+<li>Observed: <code>tentara/polisi</code> &lt;10 investors of 86 approved (8.1%), far below <code>pegawai swasta</code> (24.7%); <code>pensiunan</code>, <code>guru/dosen</code>, <code>pns</code> are highest. Occupation and age overlap (Simpson risk): not separated here.</li>
+</ul>
+<p>Other: bank_account_skipped = true: 653 registered, 237 approved, &lt;10 investors; institutions: 15 registered, &lt;10 investors (n=15 low-confidence).</p>
+<h3 id="acquisition-source-device-and-region-ga-oct-1-nov-8-2026-users-who-registered-and-logged-in">Acquisition source, device and region (GA, Oct 1 - Nov 8, 2026, users who registered and logged in)</h3>
+<p>Source / medium (GA first-touch of the device):
+| Segment | Registered (GA, cohort C) | KYC success | KYC % (95% CI) | Payment complete | Payment % (95% CI) |
+|---|---|---|---|---|---|
+| google-play / organic | 482 | 350 | 72.6% (68.5-76.4%) | 37 | 7.7% (5.6-10.4%) |
+| (direct) / (none) | 287 | 233 | 81.2% (76.3-85.3%) | 30 | 10.5% (7.4-14.5%) |
+| card / offline (low n) | 10 | 10 | 100.0% (72.2-100.0%) | &lt;10 | 0.0% (-0.0-27.8%) |</p>
+<p>OS:
+| Segment | Registered (GA, cohort C) | KYC success | KYC % (95% CI) | Payment complete | Payment % (95% CI) |
+|---|---|---|---|---|---|
+| Android | 519 | 378 | 72.8% (68.8-76.5%) | 39 | 7.5% (5.5-10.1%) |
+| iOS | 269 | 220 | 81.8% (76.7-85.9%) | 28 | 10.4% (7.3-14.6%) |</p>
+<ul>
+<li>Observed: iOS KYC 81.8% vs Android 72.8% (z = 2.8, significant); payment complete 10.4% vs 7.5% (z = 1.4, not significant).
+App version:
+| Segment | Registered (GA, cohort C) | KYC success | KYC % (95% CI) | Payment complete | Payment % (95% CI) |
+|---|---|---|---|---|---|
+| 2.28.2 | 741 | 565 | 76.2% (73.1-79.2%) | 60 | 8.1% (6.3-10.3%) |
+| 2.29.0 (low n) | 25 | 17 | 68.0% (48.4-82.8%) | &lt;10 | 20.0% (8.9-39.1%) |
+| 2.28.1 (low n) | 21 | 16 | 76.2% (54.9-89.4%) | &lt;10 | 9.5% (2.7-28.9%) |</li>
+</ul>
+<p>Region (GA geo):
+| Segment | Registered (GA, cohort C) | KYC success | KYC % (95% CI) | Payment complete | Payment % (95% CI) |
+|---|---|---|---|---|---|
+| Jakarta | 523 | 405 | 77.4% (73.7-80.8%) | 48 | 9.2% (7.0-12.0%) |
+| West Java | 79 | 60 | 75.9% (65.5-84.0%) | &lt;10 | 7.6% (3.5-15.6%) |
+| Banten | 50 | 35 | 70.0% (56.2-80.9%) | &lt;10 | 6.0% (2.1-16.2%) |
+| East Java (low n) | 24 | 18 | 75.0% (55.1-88.0%) | &lt;10 | 8.3% (2.3-25.8%) |
+| Lampung (low n) | 20 | 12 | 60.0% (38.7-78.1%) | &lt;10 | 0.0% (-0.0-16.1%) |
+| North Sumatra (low n) | 19 | 14 | 73.7% (51.2-88.2%) | &lt;10 | 15.8% (5.5-37.6%) |</p>
+<p>Campaign: GA campaign is <code>(null)</code> or <code>(direct)</code> for 774 of 788 registered users: not usable for campaign analysis (Data Request).
+- Observed (GA, devices, not users, <code>51_ga_src.sql</code>): <code>google / cpc</code> shows 130 devices in the window with 0 first_open, 0 registrations and 3 devices with payment_complete. Inferred: ad-attributed devices are mostly installs from before Oct 1, or the attribution field is stale; cannot judge ad performance from this table. Data Request.
+- Caveats: GA attributes only users who logged in (user_id); version 2.28.2 holds almost all users so version cannot explain differences.</p>
+<h3 id="33-ga-vs-db">3.3 GA vs DB</h3>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>GA metric</th>
+<th>GA</th>
+<th>DB metric</th>
+<th>DB</th>
+<th>GA / DB</th>
+<th>Likely cause (Inferred unless stated)</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Register</td>
+<td><code>register_success</code>, users in cohort C</td>
+<td>788</td>
+<td>users with <code>created_at</code> in window</td>
+<td>832</td>
+<td>94.7%</td>
+<td>Missing events: 45 DB registrations (5.4%) have no GA <code>register_success</code> for the same user_id (Observed). Possible: event not sent offline/ad-block/consent, web or non-app registration path</td>
+<td>Log register server-side; check whether web sign-up exists</td>
+</tr>
+<tr>
+<td>Register (duplicates)</td>
+<td><code>register_success</code> events vs users, all users</td>
+<td>831 events</td>
+<td>distinct users</td>
+<td>797</td>
+<td>4.3% extra events</td>
+<td>Event fires more than once per user (Observed)</td>
+<td>Fire once per user_id; dedupe in reports</td>
+</tr>
+<tr>
+<td>KYC</td>
+<td><code>kyc_success</code>, users in cohort C</td>
+<td>617</td>
+<td>KYC approved (<code>verified_at</code> in window)</td>
+<td>572</td>
+<td>107.9%</td>
+<td>GA fires on submission, not approval: 68 GA users are not approved in the DB (Observed). DB approved matched in GA 542 of 572 (94.8%)</td>
+<td>Rename to <code>kyc_submitted</code>; add <code>kyc_approved</code> from the server</td>
+</tr>
+<tr>
+<td>KYC (compare to submitted)</td>
+<td><code>kyc_success</code>, users in cohort C</td>
+<td>617</td>
+<td>registered in window, status verified or failed</td>
+<td>636</td>
+<td>97.0%</td>
+<td>Closer match supports "GA = submission". Windows differ (registered in window vs event date), so approximate</td>
+<td></td>
+</tr>
+<tr>
+<td>KYC start</td>
+<td><code>kyc_start</code>, users in cohort C</td>
+<td>746</td>
+<td>no DB equivalent</td>
+<td>n/a</td>
+<td></td>
+<td>Not available: DB records no 'started' state</td>
+<td></td>
+</tr>
+<tr>
+<td>Order</td>
+<td><code>order_created</code>, users in cohort C</td>
+<td>287</td>
+<td>users with a buy transaction (any status, not bonus)</td>
+<td>304</td>
+<td>94.4%</td>
+<td>Missing events (Observed gap 17 users)</td>
+<td>Same as register</td>
+</tr>
+<tr>
+<td>Paid</td>
+<td><code>payment_complete</code>, users in cohort C</td>
+<td>242</td>
+<td>users with successful buy</td>
+<td>278</td>
+<td>87.1%</td>
+<td>DB successful buyers matched in GA: 238 of 278 (85.6%). Statuses set by operations (<code>verified_by_operational</code> 27 users, <code>verified</code> 10) are not triggered in the app, so GA cannot see them</td>
+<td>Server-side purchase event on status change</td>
+</tr>
+<tr>
+<td>Paid (events)</td>
+<td><code>payment_complete</code> events, cohort C</td>
+<td>500</td>
+<td>successful buy transactions</td>
+<td>626</td>
+<td>79.9%</td>
+<td>Fewer events than transactions; payment on a different day than creation also shifts counts (window by event date vs <code>created_at</code>)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="other-checks-observed">Other checks (Observed)</h3>
+<ul>
+<li><code>user_id</code> is set only after login: <code>first_open</code> has 0 users with <code>user_id</code>, and 2,869 of 3,375 devices (85%) have rows without it (Phase 1 DQ #25). Pre-login steps (install, open, sign-up start) can only be counted per device.</li>
+<li>GA to DB mapping: 2,254 of 2,257 GA user_ids exist in <code>main.users</code>. Of 2,257 GA users: 144 are RAIZ/RAIZKAYA, 77 HNWI, 2,033 kept (Phase 1 DQ #26).</li>
+<li>Timezone: GA <code>event_date</code> is WIB; DB <code>created_at</code> is UTC and shifted +7 h. Checked on one day only.</li>
+<li>Not tested: bot traffic (no bot flag in the export), consent mode / ad-block (no consent field read), consent rate.</li>
+</ul>
+<h3 id="fix-list-proposed-order-by-value">Fix list (Proposed, order by value)</h3>
+<ol>
+<li>Server-side events for register, KYC approved, order created, payment complete (closes 45 register and 40 paid user gaps in this window).</li>
+<li>Rename or split <code>kyc_success</code> into submitted and approved.</li>
+<li>Dedupe <code>register_success</code>.</li>
+<li>Send <code>user_id</code> (or a hashed id) from the first screen so pre-login funnel steps can be tied to users.</li>
+<li>Fill <code>campaign</code>/<code>source</code> consistently (campaign is empty for most registrations).</li>
+</ol>
+<h2 id="4-analisis-per-tim">4. Analisis per tim</h2>
+<p>Format temuan mengikuti <code>00_rules.md</code>: Pain point, Evidence (Observed), Root cause (Inferred, keyakinan), Expected impact (aritmetika), Effort, Priority, KPI/validation. Interval kepercayaan Wilson 95%; sel &lt;10 disembunyikan.</p>
+<p>Pemetaan temuan ke Objective Product &amp; Tech 2027 (draf):</p>
+<table>
+<thead>
+<tr>
+<th>Objective P&amp;T 2027</th>
+<th>Temuan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O2 Mudahkan mulai</td>
+<td>V1, V2, T1, T2, T3, T4, O1, O2, O3, M6</td>
+</tr>
+<tr>
+<td>O2 Mudahkan lanjut berinvestasi</td>
+<td>M1, M3, M6</td>
+</tr>
+<tr>
+<td>O3 Platform yang skala</td>
+<td>T5, O2 (beban review, arah KYC otomatis), kualitas data §2.4</td>
+</tr>
+<tr>
+<td>Di luar objective P&amp;T (Marketing/Finance), mendukung data O2</td>
+<td>M2, M4, M5</td>
+</tr>
+<tr>
+<td>O1 Lebih dari reksa dana</td>
+<td>tidak ada data</td>
+</tr>
+</tbody>
+</table>
+<h3 id="41-temuan-lintas-tim">4.1 Temuan lintas tim</h3>
+<h3 id="v1-approved-ke-beli-jatuh-di-oktober-dan-ini-bukan-soal-waktu-tunggu">V1 — Approved ke beli jatuh di Oktober, dan ini bukan soal waktu tunggu</h3>
+<p><strong>Pain point.</strong> User approved Oktober membeli dalam 7 hari pada 7.5%, vs 29.2% untuk approval Juli-September. Ini penurunan terbesar yang ditemukan di seluruh Fase 3.</p>
+<p><strong>Evidence (Observed).</strong> Keputusan verified dengan submit GA di window, dipecah bulan approval dan jeda registrasi ke approval. Pembelian = order sukses dalam 7 hari setelah approval.</p>
+<ul>
+<li>Juli-September (jeda &lt;=30 hari): 40/137 = 29.2% (95% CI 22.2-37.3%). Oktober: 31/416 = 7.5% (95% CI 5.3-10.4%). z=-6.6, p&lt;0.0001.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Minggu approval</th>
+<th>Approved</th>
+<th>Beli &lt;=7 hari</th>
+<th>Rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-08-03</td>
+<td>18</td>
+<td>5</td>
+<td>27.8% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-08-10</td>
+<td>16</td>
+<td>2</td>
+<td>12.5% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-08-17</td>
+<td>4</td>
+<td>0</td>
+<td>0.0% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-08-24</td>
+<td>11</td>
+<td>2</td>
+<td>18.2% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-08-31</td>
+<td>23</td>
+<td>9</td>
+<td>39.1% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-09-07</td>
+<td>22</td>
+<td>11</td>
+<td>50.0% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-09-14</td>
+<td>8</td>
+<td>2</td>
+<td>25.0% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-09-21</td>
+<td>19</td>
+<td>2</td>
+<td>10.5% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-09-28</td>
+<td>22</td>
+<td>6</td>
+<td>27.3% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-10-05</td>
+<td>31</td>
+<td>1</td>
+<td>3.2%</td>
+</tr>
+<tr>
+<td>2026-10-12</td>
+<td>97</td>
+<td>5</td>
+<td>5.2%</td>
+</tr>
+<tr>
+<td>2026-10-19</td>
+<td>183</td>
+<td>12</td>
+<td>6.6%</td>
+</tr>
+<tr>
+<td>2026-10-26</td>
+<td>105</td>
+<td>13</td>
+<td>12.4%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Jeda bukan penjelas: pada bucket approval hari yang sama (jeda &lt;=1 hari), Juli-September 29.5% (28/95) vs Oktober 7.4% (28/377). Penurunan sama besar di dalam bucket tercepat, jadi bukan efek antrean (O1/O4).</p>
+</li>
+<li>
+<p>Waktu tunggu juga tidak menjelaskan: O4 menunjukkan tidak ada korelasi tunggu ke beli, dan penurunan tetap ada di bucket hari yang sama.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan rendah).</strong> Tiga penjelasan yang sejalan dengan temuan lain, semuanya belum diuji: (a) bauran akuisisi berubah ke kanal dengan niat rendah (lihat M1: sales code tumbuh, repeat mature 39,3%); (b) kolam approved menumpuk tanpa messaging lifecycle (M6) dan tanpa jalur kembali ke investasi (T3); (c) ada perubahan produk atau operasi pada minggu 2026-10-05. Data tidak bisa memilih di antara ketiganya.</p>
+<p><strong>Expected impact (aritmetika).</strong> Bila Oktober berjalan pada rate Juli-September: 416 x 29.2% = 121 pembeli, vs 31 aktual = 90 pembeli hilang di Oktober saja.</p>
+<p><strong>Effort.</strong> M (diagnosis: uji bauran kanal vs perubahan produk pada kohort Oktober).</p>
+<p><strong>Priority.</strong> P0.</p>
+<p><strong>KPI / validation.</strong> Approved ke beli 7 hari per bulan approval, dan per kanal akuisisi di dalam bulan itu. Uji ulang November dengan data lengkap.</p>
+<h3 id="v2-kolam-approved-yang-menumpuk-adalah-satu-masalah-dengan-tiga-wajah">V2 — Kolam approved yang menumpuk adalah satu masalah dengan tiga wajah</h3>
+<p><strong>Pain point.</strong> Marketing melihatnya sebagai tidak ada lifecycle (M6), engineering sebagai tidak ada jalur kembali (T3), operasi sebagai antrean yang tidak memicu apa pun (O1/O2). Semuanya merujuk ke 13,093 user approved-belum-beli.</p>
+<p><strong>Evidence (Observed).</strong> 13,093 user approved tanpa pembelian selesai; 476 approved dalam 30 hari terakhir; 257 dari kolam itu terlihat di GA dalam 39 hari, 43 membuka buy sheet, 8 membuat order.</p>
+<p><strong>Root cause (Inferred, keyakinan sedang).</strong> Approval adalah akhir dari proses, bukan awal dari proses berikutnya. Tidak ada trigger (CRM), tidak ada permukaan (produk), tidak ada antrean (operasi) yang membawa user approved ke investasi pertama. Ini kegagalan koordinasi, bukan kegagalan satu tim.</p>
+<p><strong>Expected impact (aritmetika).</strong> Titik acuan konservatif: 10% dari 257 user GA-visible terkonversi ke order pada rate order ke pembayaran 84.3% = 22 investor per 39 hari (206/tahun). Skenario penuh memakai 13,093 user; jangan dilaporkan sebelum diukur.</p>
+<p><strong>Effort.</strong> M (satu program: trigger approval ke CRM + permukaan di aplikasi + antrean operasi dengan due date).</p>
+<p><strong>Priority.</strong> P0.</p>
+<p><strong>KPI / validation.</strong> Approved ke investasi pertama 7/30 hari, satu dashboard lintas tim; target +10 pp dari basis Oktober.</p>
+<h3 id="ringkasan-prioritas">Ringkasan prioritas</h3>
+<table>
+<thead>
+<tr>
+<th>Prioritas</th>
+<th>Temuan</th>
+<th>Alasan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P0</td>
+<td>V1 / V2 / T3 (kolam approved), M2 (bonus ke non-pembayar), T1 (funnel KYC)</td>
+<td>Dampak terbesar, angka bisa dihitung, sebagian besar bisa dikendalikan produk/kebijakan</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>M1 (retensi sales code), M4 (email tak terukur), M6 (lifecycle), O1/O2/O3 (SLA, key-person, penolakan), T2 (QRIS)</td>
+<td>Dampak sedang, usaha kecil-menengah</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>M3 (promo), M5 (push), O4 (wait), T4 (gate), T5 (error)</td>
+<td>Bukti lemah atau bersifat korelasi</td>
+</tr>
+</tbody>
+</table>
+<h3 id="semua-angka-yang-belum-bisa-diuji">Semua angka yang belum bisa diuji</h3>
+<ul>
+<li>
+<p>Lift bonus (M2), promo (M3), push (M5), messaging lifecycle (M6), dan permukaan pasca-approval (T3/V2) adalah estimasi aritmetika dari korelasi. Tidak ada eksperimen acak di data ini.</p>
+</li>
+<li>
+<p>T1 dan T4: n kecil di bucket tertentu; flag <code>n&lt;30</code> ditandai di tabel.</p>
+</li>
+<li>
+<p>V1: penyebab belum diidentifikasi; tiga hipotesis terbuka, semuanya butuh data bauran kanal Oktober.</p>
+</li>
+</ul>
+<h3 id="follow-up-fase-2-yang-terjawab-di-sini">Follow-up Fase 2 yang terjawab di sini</h3>
+<ul>
+<li>
+<p>Approved-belum-beli (Fase 2: 78,6%) diperdalam: 257 terlihat di GA, 43 buka buy sheet, 8 order (T3), dan penurunan Oktober diukur (V1).</p>
+</li>
+<li>
+<p>Pertanyaan Fase 2 'apa yang terjadi setelah KYC': alur berhenti tanpa trigger, tanpa permukaan, tanpa antrean (V2).</p>
+</li>
+<li>
+<p>Pertanyaan Fase 2 soal bauran booth: sales code berkontribusi pada bauran berintensi rendah tetapi bukan penjelas tunggal (M1).</p>
+</li>
+</ul>
+<h3 id="42-marketing">4.2 Marketing</h3>
+<p>Kohort = Fase 1/2 (tanpa referrer RAIZ/RAIZKAYA, tanpa HNWI): 63,795 registrasi, 3,587 investor. Tarik data 2026-11-09.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Temuan</th>
+<th>Bukti</th>
+<th>Keyakinan</th>
+<th>Dampak</th>
+<th>Usaha</th>
+<th>Prioritas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M1</td>
+<td>Sign-up sales code: konversi setara referral, retensi mature terburuk</td>
+<td>21,7% investor/reg vs 20,6% referral, 3,7% none; repeat mature 39,3% vs 60,0%</td>
+<td>Tinggi (observasional)</td>
+<td>Tinggi</td>
+<td>M</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>M2</td>
+<td>Bonus kredit 6.130 user, 59,2% tidak pernah beli berbayar</td>
+<td>Rp469.400.000 kredit ke 3.629 non-pembayar</td>
+<td>Tinggi</td>
+<td>Tinggi</td>
+<td>S (policy)</td>
+<td>P0</td>
+</tr>
+<tr>
+<td>M3</td>
+<td>Promo di beli-pertama berkorelasi repeat lebih rendah</td>
+<td>52,9% vs 61,7%</td>
+<td>Sedang (confounded)</td>
+<td>Sedang</td>
+<td>S</td>
+<td>P2</td>
+</tr>
+<tr>
+<td>M4</td>
+<td>Email lifecycle tidak terukur; batch kena throttle, 0 click</td>
+<td>93/743 gagal (454), semua dikirim ulang; 0 click event; open 497/497 dalam 2 jam</td>
+<td>Tinggi</td>
+<td>Sedang</td>
+<td>S</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>M5</td>
+<td>Push menjangkau non-investor, konversi pasca-klik tak terukur</td>
+<td>252 approved-belum-beli klik; uji klik→beli hanya 103 user</td>
+<td>Rendah</td>
+<td>Sedang</td>
+<td>M</td>
+<td>P2</td>
+</tr>
+<tr>
+<td>M6</td>
+<td>Tiga kolam macet tanpa messaging lifecycle</td>
+<td>13.093 approved-belum-beli; 191 unverified &lt;30 h; 92 investor diam 60-90 h</td>
+<td>Tinggi</td>
+<td>Tinggi</td>
+<td>M</td>
+<td>P1</td>
+</tr>
+</tbody>
+</table>
+<h3 id="m1-sales-code-konversi-setara-referral-retensi-mature-terburuk">M1 — Sales code: konversi setara referral, retensi mature terburuk</h3>
+<p><strong>Pain point.</strong> Sign-up dengan sales code (booth/agen) menghasilkan investor hampir 6x grup organik, tetapi repeat rate mature-nya terendah dan tiket pertamanya terkecil.</p>
+<p><strong>Evidence (Observed).</strong> Kohort penuh, registrasi s.d. 2026-11-09.</p>
+<table>
+<thead>
+<tr>
+<th>Grup</th>
+<th>Registrasi</th>
+<th>Submit KYC</th>
+<th>Approved</th>
+<th>Investor</th>
+<th>Investor/reg</th>
+<th>Approved/submit</th>
+<th>Investor/approved</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sales_code</td>
+<td>1,068</td>
+<td>835 (78.2%)</td>
+<td>753 (70.5%)</td>
+<td>232</td>
+<td>21.7%</td>
+<td>90.2%</td>
+<td>30.8%</td>
+</tr>
+<tr>
+<td>referrer_code</td>
+<td>6,109</td>
+<td>3,472 (56.8%)</td>
+<td>3,206 (52.5%)</td>
+<td>1,259</td>
+<td>20.6%</td>
+<td>92.3%</td>
+<td>39.3%</td>
+</tr>
+<tr>
+<td>none</td>
+<td>56,618</td>
+<td>18,466 (32.6%)</td>
+<td>12,700 (22.4%)</td>
+<td>2,096</td>
+<td>3.7%</td>
+<td>68.8%</td>
+<td>16.5%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Sales code vs none, investor/reg: 21.7% (95% CI 19.4-24.3%) vs 3.7% (95% CI 3.5-3.9%); z=29.6, p&lt;0.0001.</p>
+</li>
+<li>
+<p>Sales code vs none, approved/submit: 90.2% (95% CI 88.0-92.0%) vs 68.8% (95% CI 68.1-69.4%); z=13.2, p&lt;0.0001.</p>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Grup</th>
+<th>Investor</th>
+<th>Repeat (2+ hari beli)</th>
+<th>Mature (beli-1 ≥120 h)</th>
+<th>Repeat mature</th>
+<th>Churn mature &gt;90 h</th>
+<th>Median tiket-1</th>
+<th>Tiket-1 &lt;Rp100k</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sales_code</td>
+<td>232</td>
+<td>34.1%</td>
+<td>191</td>
+<td>39.3%</td>
+<td>90.1%</td>
+<td>Rp125,950</td>
+<td>8.2%</td>
+</tr>
+<tr>
+<td>referrer_code</td>
+<td>1,259</td>
+<td>63.8%</td>
+<td>1,197</td>
+<td>65.8%</td>
+<td>86.9%</td>
+<td>Rp500,000</td>
+<td>10.0%</td>
+</tr>
+<tr>
+<td>none</td>
+<td>2,096</td>
+<td>59.6%</td>
+<td>2,055</td>
+<td>60.0%</td>
+<td>86.9%</td>
+<td>Rp200,000</td>
+<td>22.3%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Repeat mature, sales code vs none: 39.3% (95% CI 32.6-46.3%) vs 60.0% (95% CI 57.9-62.1%); z=-5.6, p&lt;0.0001. Vs referral: 65.8%.</p>
+</li>
+<li>
+<p>Churn dihitung pada investor mature saja; churn mentah seluruh investor menyesatkan karena kohort sales code lebih muda.</p>
+</li>
+<li>
+<p>Median tiket pertama Rp125,950 vs Rp500,000 (referral) dan Rp200,000 (none). Gap tiket adalah efek bauran akuisisi (minimum agen), bukan bukti penyebab churn.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan sedang).</strong> Investor sales code masuk dengan tiket kecil yang dibantu agen dan tetap bergantung pada agen, bukan dorongan diri sendiri, sehingga lebih jarang repeat. Belum diuji: follow-up agen setelah beli pertama; apakah kode dipakai untuk beli sekali saat promo.</p>
+<p><strong>Expected impact (aritmetika).</strong> 191 investor mature x gap repeat 20.8 pp = 40 investor repeat tambahan bila gap tertutup penuh. Menutup 30% lewat follow-up agen hari ke-7 dan ke-30 = 12 user. Asumsi: gap bisa diperbaiki, bukan seleksi.</p>
+<p><strong>Effort.</strong> M (alur kerja agen + task CRM, tanpa ubah produk).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> Repeat rate mature per grup akuisisi, bulanan. Uji before/after follow-up agen hari ke-7 dan ke-30 pada kohort sales code baru; target +5 pp dalam 90 hari.</p>
+<h3 id="m2-bonus-kredit-adalah-kebocoran-belanja-marketing-terbesar">M2 — Bonus kredit adalah kebocoran belanja marketing terbesar</h3>
+<p><strong>Pain point.</strong> 3,629 dari 6,130 penerima bonus organik tidak pernah membuat pembelian berbayar; Rp469,400,000 kredit habis ke non-pembayar.</p>
+<p><strong>Evidence (Observed).</strong> Seluruh data s.d. 2026-11-09. Bonus = transaksi beli dengan <code>payment_method</code> in ('manual_bonus','bonus'); berbayar = beli sukses di luar metode itu.</p>
+<ul>
+<li>
+<p>Penerima bonus 6,130 (status valid 6,128); tidak pernah bayar 3,629 = 59.2% (95% CI 58.0-60.4%); nilai ke non-pembayar Rp469,400,000.</p>
+</li>
+<li>
+<p>Status pembayaran penerima: sudah pembayar sebelum kredit 2,094 (34.2% — bonus berfungsi sebagai reward); dapat kredit sebelum beli berbayar 407 (6.6% — ini satu-satunya kelompok yang bisa dibaca sebagai akuisisi); tidak pernah beli berbayar 3,629 (59.2%).</p>
+</li>
+<li>
+<p>Status transaksi bonus: completed 11,378; cancelled 166.</p>
+</li>
+<li>
+<p>User approved dengan bonus 6,130: investor 40.8%, repeat 25.8%. Tanpa bonus 10,529: investor 10.1%, repeat 5.2%. Grup bonus terseleksi post-hoc (2,094 dapat bonus setelah bayar); ini korelasi, bukan estimasi lift.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan sedang).</strong> Hanya 407 penerima (6.6%) menerima kredit sebelum pembelian berbayar, jadi program ini bukan mesin akuisisi; ia reward untuk pembayar yang sudah ada. Masalahnya 3,629 penerima (59.2%) tidak pernah menghasilkan pembayaran berbayar sama sekali, dan Rp469,400,000 kredit mereka tidak menciptakan pendapatan. Aturan program tidak ada di data; konfirmasi ke pemilik konfigurasi bonus.</p>
+<p><strong>Expected impact (aritmetika).</strong> Kredit rata-rata per non-pembayar Rp129,347. Mengonversi 10% dari 3,629 = 363 user; pada median tiket-1 grup none Rp200,000 = Rp72,580,000 tiket pertama. Alternatif: syaratkan kredit pada pembelian berbayar pertama, memangkas eksposur Rp469,400,000.</p>
+<p><strong>Effort.</strong> S (kebijakan/konfigurasi: siapa dapat kredit dan kapan).</p>
+<p><strong>Priority.</strong> P0 (nilai terbesar, usaha terkecil).</p>
+<p><strong>KPI / validation.</strong> Share penerima bonus yang beli berbayar dalam 30 hari; biaya bonus per user yang terkonversi. Uji kohort kredit-saat-beli-pertama vs kredit-saat-signup.</p>
+<h3 id="m3-promo-di-pembelian-pertama-berkorelasi-dengan-repeat-lebih-rendah-confounded">M3 — Promo di pembelian pertama berkorelasi dengan repeat lebih rendah (confounded)</h3>
+<p><strong>Pain point.</strong> Investor yang beli pertama memakai promo repeat 52.9% vs 61.7% tanpa promo.</p>
+<p><strong>Evidence (Observed).</strong> Beli pertama berpromo n=919: repeat 486 = 52.9% (95% CI 49.7-56.1%), churn90 86.0%. Tanpa promo n=2,668: repeat 61.7%, churn90 82.8%. z=-4.7, p&lt;0.0001.</p>
+<ul>
+<li>Kontradiksi: menghitung promo di pembelian mana pun membalik tanda. Pemakai promo 72.6% repeat (n=1,601) vs 48.8% (n=1,986). Pemakaian promo adalah akibat dari sering beli, jadi potongan ini tidak boleh dibaca sebagai lift.</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan rendah).</strong> Promo kemungkinan menarik pembeli sekali-jalan yang sensitif harga, tetapi promo beli-pertama juga ditargetkan ke kelompok ini. Seleksi tidak bisa dipisahkan tanpa eksposur acak.</p>
+<p><strong>Expected impact.</strong> Tidak dikuantifikasi. Gap 8.8 pp x 919 investor promo = 81 investor repeat hanya batas atas bila gap sepenuhnya kausal; data tidak bisa menunjukkan itu.</p>
+<p><strong>Effort.</strong> S (analisis: holdout acak).</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> Repeat 90 hari untuk user baru eligible promo, acak promo vs tanpa promo (holdout 10%).</p>
+<h3 id="m4-email-lifecycle-throttle-tanpa-click-tracking-lift-tak-terukur">M4 — Email lifecycle: throttle, tanpa click tracking, lift tak terukur</h3>
+<p><strong>Pain point.</strong> Satu-satunya batch email di log (<code>fund_performance</code>/<code>batch</code>) punya 93 kiriman gagal karena throttle, 0 click event, dan 650 kiriman tanpa <code>user_id</code>, sehingga konversi pasca-klik tidak bisa diukur.</p>
+<p><strong>Evidence (Observed).</strong> Supabase <code>dashboard_email_log</code>/<code>dashboard_email_events</code>, tarik 2026-11-09. Batch per hari: 2026-10-13 = 150, 2026-10-26 = 497, 2026-11-03 = 3.</p>
+<ul>
+<li>
+<p>Gagal 93 (semua 2026-10-26), error <code>454 Throttling failure: Maximum sending rate exceeded.</code>. Semua 93 penerima gagal terkirim kemudian, tidak ada kehilangan permanen.</p>
+</li>
+<li>
+<p>Cakupan tracking: 500/650 log terkirim punya event; batch 2026-10-13 (150 kiriman) nol event.</p>
+</li>
+<li>
+<p>Open: 497/500 log berevent punya Open (99.4%), 993 open event. Semua open datang dalam dua jam setelah kirim (2026-10-26 07:00Z: 478, 2026-10-26 08:00Z: 201), tanda prefetch/security scanning aplikasi mail, bukan dibaca. Jangan laporkan sebagai engagement.</p>
+</li>
+<li>
+<p>Click event: 0 (tipe yang ada hanya Open/Delivery/Send). Konversi pasca-klik: <strong>tidak tersedia</strong>.</p>
+</li>
+<li>
+<p>Kategori lain di log: fund_performance/batch sent 650; fund_performance/batch failed 93; statement/schedule sent 93; statement/manual sent 13; fund_performance/manual sent 12; fund_performance/schedule sent 10; schedule_otp/system sent 3; password_reset/system sent 1. Tidak ada kategori onboarding, KYC-macet, belum-investasi, atau reaktivasi.</p>
+</li>
+<li>
+<p>Suppression 0 baris; scheduled jobs 9; queue 753.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan tinggi untuk mekaniknya).</strong> Batch dikirim serentak melewati rate limit provider (454) dan event hanya tercatat untuk batch berikutnya, jadi pipeline pelaporan mulai dari kiriman 2026-10-26. Apakah ada email lifecycle di luar dashboard ini belum diketahui.</p>
+<p><strong>Expected impact.</strong> Tidak bisa dikuantifikasi tanpa <code>user_id</code> per kiriman dan click/open yang terhubung ke hasil investasi. Perbaikan throughput hanya melindungi pengiriman: 93 dari 743 batch (12.5%) butuh retry.</p>
+<p><strong>Effort.</strong> S (tambah <code>user_id</code> + click event; sebar pengiriman batch).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> % kiriman batch dengan <code>user_id</code>; click rate per kategori/segmen; lalu uji holdout pada batch reaktivasi.</p>
+<h3 id="m5-push-menjangkau-non-investor-klik-ke-beli-tak-terukur">M5 — Push menjangkau non-investor, klik ke beli tak terukur</h3>
+<p><strong>Pain point.</strong> Push menjangkau approved-belum-beli dan user yang belum approved, tetapi uji klik ke beli hanya 103 user tanpa grup kontrol; tidak ada klaim lift.</p>
+<p><strong>Evidence (Observed).</strong> GA4, 2026-10-01..2026-11-08 (39 hari).</p>
+<table>
+<thead>
+<tr>
+<th>Segmen</th>
+<th>User dengan notifikasi</th>
+<th>User Android terima</th>
+<th>Receive</th>
+<th>Klik/buka</th>
+<th>Klik/receiver (Android)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>investor</td>
+<td>897</td>
+<td>680</td>
+<td>37,450</td>
+<td>1,744</td>
+<td>27.2%</td>
+</tr>
+<tr>
+<td>approved, belum beli</td>
+<td>567</td>
+<td>396</td>
+<td>12,149</td>
+<td>1,076</td>
+<td>27.8%</td>
+</tr>
+<tr>
+<td>belum approved</td>
+<td>212</td>
+<td>196</td>
+<td>5,360</td>
+<td>38</td>
+<td>10.2%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Receive 54,959 vs dismiss 30,924 event (56.3% dismiss per event). iOS tidak mencatat receive/dismiss, jadi pengiriman iOS tak terukur.</p>
+</li>
+<li>
+<p>Pemegang klik: 659 user klik; 373 sudah investor, 252 approved-belum-beli, 34 belum approved.</p>
+</li>
+<li>
+<p>Uji klik ke beli (Android, approved sebelum 2026-10-01, belum beli): klik 24 user menghasilkan 2 beli; tidak klik 79 menghasilkan 1. <strong>Sel klik n&lt;30; tidak diuji.</strong></p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan rendah).</strong> Konten push generik (tidak ada id kampanye/segmen di GA), jadi tidak ada yang menghubungkan pesan ke perilaku.</p>
+<p><strong>Expected impact.</strong> Tidak dikuantifikasi. Satu-satunya klaim sah: 567 user approved-belum-beli menerima notifikasi dalam 39 hari.</p>
+<p><strong>Effort.</strong> M (id kampanye + param segmen di event notifikasi; siapkan holdout).</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> Beli pertama dalam 7 hari pasca-klik vs holdout tanpa push 10%, per id kampanye.</p>
+<h3 id="m6-tiga-kolam-macet-tanpa-messaging-lifecycle">M6 — Tiga kolam macet tanpa messaging lifecycle</h3>
+<p><strong>Pain point.</strong> Email dan push hanya mencakup statement, fund performance, OTP, dan notifikasi sekali-jalan. Kolam macet terbesar tidak punya pesan berulang yang tertarget di log.</p>
+<p><strong>Evidence (Observed).</strong> <code>stuck_sizes</code> + kategori email, 2026-11-09.</p>
+<table>
+<thead>
+<tr>
+<th>Kolam</th>
+<th>Ukuran</th>
+<th>Yang ada sekarang</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Approved, belum beli</td>
+<td>13,093 (approved 30 hari terakhir: 476)</td>
+<td>tidak ada kategori email investasi-pertama; push ada (M5)</td>
+</tr>
+<tr>
+<td>Registrasi, belum verifikasi (30 hari)</td>
+<td>191</td>
+<td>tidak ada kategori pengingat KYC; push ada</td>
+</tr>
+<tr>
+<td>KYC gagal (all time)</td>
+<td>6,114 (daftar 30 hari: 66)</td>
+<td>tidak ada kategori email penolakan; alasan tidak disimpan (O3)</td>
+</tr>
+<tr>
+<td>Investor diam 60-90 hari</td>
+<td>92 (dari 587 belum churn)</td>
+<td>tidak ada kategori reaktivasi</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Root cause (Inferred, keyakinan sedang).</strong> Messaging dipicu produk/event (statement, performa, OTP), bukan status lifecycle.</p>
+<p><strong>Expected impact (aritmetika).</strong> Approval terbaru (n=476) beli dalam 7 hari 7.5% sekarang vs 29.2% Jul-Sep (V1). Nudge investasi-pertama yang menutup 10% gap: 476 x 0.022 = 10 investor per 30 hari. Asumsi: 10% gap bisa dipulihkan lewat messaging; belum diuji.</p>
+<p><strong>Effort.</strong> M (tiga urutan berbasis trigger + holdout).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> Beli-pertama 7 hari, nudged vs holdout, per kolam; re-KYC rate kolam gagal.</p>
+<h3 id="data-requests-marketing">Data requests (Marketing)</h3>
+<ul>
+<li>
+<p>Tidak ada id kampanye di push/email; sumber registrasi GA kosong hampir sepanjang window (Fase 2). Tambahkan <code>campaign_id</code> ke event <code>notification_*</code> dan <code>dashboard_email_log</code>.</p>
+</li>
+<li>
+<p>Baris batch <code>dashboard_email_log</code> punya <code>user_id</code> NULL (650/650); tanpa itu tidak ada join email ke investasi.</p>
+</li>
+<li>
+<p>Tidak ada tipe event klik di <code>dashboard_email_events</code>.</p>
+</li>
+<li>
+<p>Aturan program bonus (siapa, kapan, berapa) tidak ada di BigQuery; dibutuhkan untuk mengukur M2 dengan benar.</p>
+</li>
+</ul>
+<h3 id="43-operations-kyc">4.3 Operations &amp; KYC</h3>
+<p>Basis: baris keputusan di <code>main.user_status_logs</code> dengan <code>origin_status='pending_verification'</code> (status verified/failed), di-join ke kohort Fase 1/2. <code>user_status_logs</code> baru ada sejak 2026-07-21 dan GA tidak membawa <code>user_id</code> pra-login, jadi waktu submit diambil dari event GA <code>kyc_success</code> (event ini menyala saat submit, lihat rekonsiliasi Fase 2).</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Temuan</th>
+<th>Bukti</th>
+<th>Keyakinan</th>
+<th>Dampak</th>
+<th>Usaha</th>
+<th>Prioritas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O1</td>
+<td>Ekor keputusan: P90 15,7 jam; submit di luar jam kerja dan akhir pekan menunggu paling lama</td>
+<td>548 keputusan verified, 21 &gt;24 jam; P90 akhir pekan 17,2 jam vs 11,9 jam hari kerja</td>
+<td>Tinggi</td>
+<td>Sedang</td>
+<td>S</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>O2</td>
+<td>Review terkonsentrasi di satu akun dan berbentuk batch</td>
+<td>1 aktor = 75,9% dari 922 keputusan; 3 aktor = 97%; 34,5% keputusan di jam 10</td>
+<td>Tinggi</td>
+<td>Tinggi</td>
+<td>M</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>O3</td>
+<td>User ditolak jarang mengajukan ulang; alasan penolakan tidak disimpan</td>
+<td>Oktober: 6/70 mengajukan ulang; 27/40 yang akhirnya verified mengajukan ulang</td>
+<td>Sedang</td>
+<td>Sedang</td>
+<td>M</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>O4</td>
+<td>Keputusan lebih cepat tidak berkorelasi dengan pembelian lebih tinggi</td>
+<td>&lt;2 jam 5,9% vs 2-24 jam 11,3% beli dalam 14 hari, semua sel kecil</td>
+<td>Rendah</td>
+<td>Rendah</td>
+<td>S</td>
+<td>P2</td>
+</tr>
+</tbody>
+</table>
+<h3 id="o1-masalah-sla-ada-di-ekor-bukan-median">O1 — Masalah SLA ada di ekor, bukan median</h3>
+<p><strong>Pain point.</strong> Median submit ke keputusan 10 menit, tetapi P90 15,7 jam dan 21 keputusan verified butuh lebih dari 24 jam.</p>
+<p><strong>Evidence (Observed).</strong> Submit GA 2026-10-01..2026-11-08, keputusan &gt;= submit.</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>n</th>
+<th>P50</th>
+<th>P90</th>
+<th>&gt;24 jam</th>
+<th>&gt;72 jam</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>verified</td>
+<td>548</td>
+<td>0.17 jam</td>
+<td>15.70 jam</td>
+<td>21</td>
+<td>3</td>
+</tr>
+<tr>
+<td>failed</td>
+<td>102</td>
+<td>0.17 jam</td>
+<td>15.73 jam</td>
+<td>2</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Submit akhir pekan: n=152, &gt;4 jam 68 = 44.7% (95% CI 37.1-52.7%), &gt;24 jam 9. Hari kerja: n=461, &gt;4 jam 60 = 13.0% (95% CI 10.2-16.4%), &gt;24 jam 6. z=8.3, p&lt;0.0001.</p>
+</li>
+<li>
+<p>P90 submit ke keputusan: akhir pekan 17.2 jam (n=152) vs hari kerja 11.9 jam (n=461).</p>
+</li>
+<li>
+<p>Submit di luar 09:00-20:00 WIB: n=92, &gt;4 jam 52 (56.5%), &gt;12 jam 30 (32.6%). Di dalam jam kerja: n=521, &gt;4 jam 76 (14.6%), &gt;12 jam 76 (14.6%). z=9.1, p&lt;0.0001.</p>
+</li>
+<li>
+<p>Petunjuk penting: setiap kasus jam kerja yang lewat 4 jam juga lewat 12 jam (76/76). Artinya diantrekan ke hari kerja berikutnya, bukan dikerjakan lambat.</p>
+</li>
+<li>
+<p>Jam keputusan (semua keputusan, n=922): puncak jam 10:00 WIB = 318 (34.5%); 21:00-08:59 hanya 23 (2.5%). Keputusan Sabtu 66 + Minggu 77 = 143 (15.5%).</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan tinggi).</strong> Keputusan dieksekusi sebagai batch pagi (jam 10) oleh satu operator; submit setelah batch menunggu pagi hari kerja berikutnya. Ekor malam dan akhir pekan adalah waktu antre, bukan waktu proses.</p>
+<p><strong>Expected impact (aritmetika).</strong> 23 keputusan &gt;24 jam dalam 39 hari = 18/bulan di ekor. Bila satu slot review malam/akhir pekan memindahkan 10 dari 21 kasus verified ke dalam 24 jam, dan mereka membeli dalam 14 hari pada laju populasi approved (7,7% Okt / 27,0% Jan-Sep, Fase 2), investor yang pulih = 10 x 0,077 = 0.8 sampai 10 x 0,27 = 2.7. Kecil: nilai utamanya kredibilitas SLA dan kecepatan siklus penolakan, bukan volume investor.</p>
+<p><strong>Effort.</strong> S (ubah roster/antrean, tanpa kode).</p>
+<p><strong>Priority.</strong> P1 (murah dan terlihat, dampak investor kecil; peringkat di bawah O2).</p>
+<p><strong>KPI / validation.</strong> P90 submit ke keputusan dan jumlah &gt;24 jam, mingguan; before/after slot tambahan.</p>
+<h3 id="o2-satu-reviewer-dan-satu-jam-batch-memikul-hampir-semua-keputusan">O2 — Satu reviewer dan satu jam batch memikul hampir semua keputusan</h3>
+<p><strong>Pain point.</strong> 75,9% keputusan berasal dari satu aktor; tiga aktor menutup 97%. Keputusan menumpuk di jam 10. Ini risiko key-person pada langkah yang diregulasi.</p>
+<p><strong>Evidence (Observed).</strong> <code>user_status_logs.auth_user_id</code> atas keputusan kohort, seluruh data sejak 2026-07-21.</p>
+<table>
+<thead>
+<tr>
+<th>Peringkat aktor</th>
+<th>Keputusan</th>
+<th>Share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>700</td>
+<td>75.9%</td>
+</tr>
+<tr>
+<td>2</td>
+<td>102</td>
+<td>11.1%</td>
+</tr>
+<tr>
+<td>3</td>
+<td>92</td>
+<td>10.0%</td>
+</tr>
+<tr>
+<td>4</td>
+<td>13</td>
+<td>1.4%</td>
+</tr>
+<tr>
+<td>5</td>
+<td>6</td>
+<td>0.7%</td>
+</tr>
+<tr>
+<td>6</td>
+<td>5</td>
+<td>0.5%</td>
+</tr>
+<tr>
+<td>7</td>
+<td>4</td>
+<td>0.4%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Aktor per status: verified 7 aktor (740 keputusan), failed 6 aktor (182 keputusan); keputusan tanpa aktor 0.</p>
+</li>
+<li>
+<p>Keputusan per bulan: 2026-07 verified 16 / failed 8; 2026-08 verified 55 / failed 16; 2026-09 verified 74 / failed 19; 2026-10 verified 432 / failed 91; 2026-11 verified 163 / failed 48.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan sedang).</strong> Satu akun operasi mengerjakan mayoritas (kemungkinan otomatis, atau login bersama yang dipakai satu anggota tim), dengan akun kedua dan ketiga menutup sisanya. Data tidak bisa membedakan approval otomatis dari manusia yang login di akun bersama.</p>
+<p><strong>Expected impact.</strong> Tidak bisa dikuantifikasi langsung; risikonya antrean berhenti. Eksposur konkret: jam batch 10:00 saja memuat 318 keputusan (34.5%). Bila akun itu tidak tersedia satu hari kerja, semua submit non-batch menunggu minimal 24 jam; ekor yang sudah teramati menunjukkan biayanya.</p>
+<p><strong>Effort.</strong> M (reviewer kedua / delegasi terdokumentasi + alert umur antrean).</p>
+<p><strong>Priority.</strong> P1 (risiko operasional tinggi, usaha sedang).</p>
+<p><strong>KPI / validation.</strong> Share keputusan per aktor (target: tidak ada aktor &gt;50%); alert umur antrean 12 jam.</p>
+<h3 id="o3-penolakan-hampir-final-dan-alasannya-tidak-dicatat">O3 — Penolakan hampir final, dan alasannya tidak dicatat</h3>
+<p><strong>Pain point.</strong> Dari user yang ditolak Oktober, 6 dari 70 mengajukan ulang; yang tidak mengajukan ulang hilang tanpa alasan tercatat.</p>
+<p><strong>Evidence (Observed).</strong> Kegagalan Oktober + potongan seluruh window, event GA 2026-10-01..2026-11-08.</p>
+<table>
+<thead>
+<tr>
+<th>Potongan</th>
+<th>User gagal</th>
+<th>Ajukan ulang</th>
+<th>Rate</th>
+<th>Akhirnya verified</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Oktober, masih failed</td>
+<td>70</td>
+<td>6</td>
+<td>8.6% (95% CI 4.0-17.5%)</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Oktober, akhirnya verified</td>
+<td>40</td>
+<td>27</td>
+<td>67.5% (95% CI 52.0-79.9%)</td>
+<td>40</td>
+</tr>
+<tr>
+<td>Window, masih failed</td>
+<td>86</td>
+<td>7</td>
+<td>8.1%</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Window, akhirnya verified</td>
+<td>51</td>
+<td>37</td>
+<td>72.5%</td>
+<td>51</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Pengajuan ulang memisahkan hasil dengan tajam: Oktober, yang akhirnya verified mengajukan ulang 67.5% (27/40), yang masih failed 8.6% (6/70). Korelasional: pengaju ulang adalah kelompok yang lebih gigih, terseleksi sendiri.</p>
+</li>
+<li>
+<p>Keputusan Oktober: 432 verified, 91 failed = 17.4% baris keputusan gagal. Share rejected Fase 2 (level user, 13 bulan) 26,8%; baris keputusan berbeda dari user.</p>
+</li>
+<li>
+<p>Alasan penolakan: <strong>tidak tersedia</strong>. Tidak ada kolom reason/note di <code>user_status_logs</code> maupun <code>user_problems</code>. GA punya layar penolakan (<code>BankRejectedScreen</code>, <code>OccupationRejectedScreen</code>) tetapi tanpa param alasan.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan sedang).</strong> Tidak ada nudge pasca-penolakan: tidak ada email atau push untuk user KYC gagal (lihat M6), jadi 91,4% yang tidak mengajukan ulang tidak pernah dihubungi. Alasan tidak dicatat memblokir perbaikan tertarget.</p>
+<p><strong>Expected impact (aritmetika).</strong> Memindahkan 10% dari 70 user masih-failed Oktober ke pengajuan ulang = 7 user; pada rate ajukan-ulang ke verified 67.5% = 4.7 verified; pada rate approved ke investor 73.2% (Fase 2) = 3.5 investor/bulan. Kecil tetapi murah.</p>
+<p><strong>Effort.</strong> M (simpan alasan + email/push pengajuan ulang berbasis trigger).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> Rate pengajuan ulang dalam 14 hari pasca-penolakan (target 10% dari 8,6%); konversi rejected ke approved.</p>
+<h3 id="o4-waktu-tunggu-tidak-berkorelasi-dengan-pembelian">O4 — Waktu tunggu tidak berkorelasi dengan pembelian</h3>
+<p><strong>Pain point.</strong> Asumsi umum bahwa approval KYC lebih cepat menaikkan investasi tidak didukung data ini; estimasi titik malah berlawanan arah.</p>
+<p><strong>Evidence (Observed).</strong> Keputusan approved s.d. 2026-10-25 dengan waktu submit GA di window, n=291.</p>
+<table>
+<thead>
+<tr>
+<th>Tunggu submit ke approved</th>
+<th>n</th>
+<th>Beli dalam 14 hari</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a&lt;2h</td>
+<td>221</td>
+<td>13 (5.9%)</td>
+</tr>
+<tr>
+<td>b2-24h</td>
+<td>53</td>
+<td>6 (11.3%)</td>
+</tr>
+<tr>
+<td>c&gt;=24h</td>
+<td>17</td>
+<td>3 (17.6%) ⚠n&lt;30</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>&lt;2 jam vs &gt;=2 jam: 5.9% vs 12.9% (z=-1.92, p=0.054, tidak signifikan). Hanya bucket &gt;=24 jam yang n&lt;30.</p>
+</li>
+<li>
+<p>Seleksi: keputusan cepat berasal dari submit di batch pagi, yang mungkin user dengan dokumen lengkap pada jam kerja. n terlalu kecil untuk mengontrolnya.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan rendah).</strong> Tidak ada efek kausal yang terdeteksi; penurunan approved ke beli Oktober vs Jan-Sep (Fase 2: 7,7% vs 27,0%) tidak dijelaskan waktu tunggu, lihat V1: penurunan tetap ada di bucket approval hari yang sama.</p>
+<p><strong>Expected impact.</strong> Tidak ada klaim. Jangan jadikan kenaikan investor sebagai alasan program SLA; pakai untuk kepatuhan dan pengalaman.</p>
+<p><strong>Effort.</strong> S.</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> Ulangi dengan window lebih besar (n&gt;100 per bucket) sebelum ada klaim.</p>
+<h3 id="data-requests-ops-kyc">Data requests (Ops &amp; KYC)</h3>
+<ul>
+<li>
+<p>Alasan penolakan / catatan reviewer per keputusan gagal (dibutuhkan O3).</p>
+</li>
+<li>
+<p>Timestamp submit KYC di DB (join GA kehilangan user tanpa <code>user_id</code>; <code>user_status_logs</code> mulai 2026-07-21).</p>
+</li>
+<li>
+<p>Pembedaan keputusan otomatis vs manual (<code>auth_user_id</code> bisa akun bersama atau bot).</p>
+</li>
+</ul>
+<h3 id="44-product-engineering">4.4 Product &amp; Engineering</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Temuan</th>
+<th>Bukti</th>
+<th>Keyakinan</th>
+<th>Dampak</th>
+<th>Usaha</th>
+<th>Prioritas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T1</td>
+<td>KYC putus di dalam aplikasi: identity ke selfie −11,3%, Android 8,5 pp di bawah iOS</td>
+<td>745 identity ke 661 selfie; submit Android 79,6% vs iOS 88,1%</td>
+<td>Tinggi</td>
+<td>Tinggi</td>
+<td>M</td>
+<td>P0</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>QRIS gagal dua kali lebih sering dari metode lain</td>
+<td>170/765 (22,2%) vs 11,0-11,1% VA/bank</td>
+<td>Tinggi</td>
+<td>Sedang</td>
+<td>S</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>T3</td>
+<td>User approved yang belum beli tidak pernah kembali ke alur beli</td>
+<td>dari 257 yang terlihat pasca-approval, 43 buka buy sheet, 8 buat order</td>
+<td>Tinggi</td>
+<td>Tinggi</td>
+<td>M</td>
+<td>P0</td>
+</tr>
+<tr>
+<td>T4</td>
+<td>Gate risk profile ditinggalkan 28,9%, tanpa kerugian hilir yang signifikan</td>
+<td>28/97 abandon; 46,4% abandoner tetap order vs 59,4%</td>
+<td>Sedang</td>
+<td>Rendah</td>
+<td>S</td>
+<td>P2</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>Error klien tercatat di GA, tanpa crash/ANR dan tanpa alert</td>
+<td>45 <code>continue_with_google_failed</code>, 10 <code>app_exception</code>, tanpa monitoring</td>
+<td>Tinggi</td>
+<td>Rendah</td>
+<td>S</td>
+<td>P2</td>
+</tr>
+</tbody>
+</table>
+<h3 id="t1-alur-kyc-kehilangan-user-di-dalam-aplikasi-terburuk-di-android-pada-langkah-selfie">T1 — Alur KYC kehilangan user di dalam aplikasi, terburuk di Android pada langkah selfie</h3>
+<p><strong>Pain point.</strong> KYC dimulai 746 kali, hanya 617 user sampai submit (82.7%). Setelah submit, alur investasi kehilangan 47% lagi sebelum order. Di dalam KYC, penurunan terbesar yang bisa dilokalisasi ke satu layar adalah identity verification ke selfie camera, dan Android 8,5 pp lebih buruk dari iOS.</p>
+<p><strong>Evidence (Observed).</strong> GA4 user per event, 2026-10-01..2026-11-08.</p>
+<table>
+<thead>
+<tr>
+<th>Langkah</th>
+<th>User</th>
+<th>Perubahan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kyc_start</code></td>
+<td>746</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>kyc_success</code> (submit)</td>
+<td>617</td>
+<td>-129 (-17.3%)</td>
+</tr>
+</tbody>
+</table>
+<p>Funnel investasi di window yang sama (populasi user, bukan kohort): <code>buy_bottom_sheet</code> 343 ke <code>order_button</code> 290 (-15.5%) ke <code>order_created</code> 287 (-1.0%) ke <code>payment_complete</code> 242 (84.3% dari order).</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>KYC dimulai</th>
+<th>Submit</th>
+<th>Submit rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ANDROID</td>
+<td>485</td>
+<td>386</td>
+<td>79.6% (95% CI 75.8-82.9%)</td>
+</tr>
+<tr>
+<td>IOS</td>
+<td>261</td>
+<td>230</td>
+<td>88.1% (95% CI 83.6-91.5%)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Android vs iOS: 79.6% vs 88.1% (z=-2.93, p&lt;0.0001). Selisih absolut: 99 user Android tidak selesai vs 31 iOS.</p>
+</li>
+<li>
+<p>Abandonment per layar (user yang melihat): <code>IntroScreen</code> 816 ke <code>IdentityVerificationScreen</code> 745 (-71, -8.7%); <code>IdentityVerificationScreen</code> ke <code>SelfieCameraScreen</code> 661 (-84, -11.3%). Setelah selfie semua layar tetap di atas 617, jadi kehilangan terkonsentrasi sebelum selfie diambil.</p>
+</li>
+<li>
+<p><code>IdentityCameraScreen</code> hanya 440 user, padahal layar sebelumnya 745. Kemungkinan besar event hanya menyala untuk sebagian user (bukan semua yang membuka kamera), atau ada drop nyata di capture dokumen. Tidak bisa dibedakan dari data ini.</p>
+</li>
+<li>
+<p>Versi 2.28.2 memuat 577 dari 619 submit KYC (93.2%). Versi 2.29.0: 76.9% start ke submit (n=26) vs 82.9% pada 2.28.2. Arahnya lebih buruk di build terbaru tetapi n&lt;30, tidak signifikan.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan sedang).</strong> Dua hipotesis, keduanya belum diuji: (a) izin/capture kamera selfie gagal atau membingungkan di perangkat Android; (b) capture dokumen identitas adalah penghalang sebenarnya dan user keluar sebelum selfie. <code>kyc_screen_view</code> tidak memisahkan 'melihat lalu keluar' dari 'capture lalu gagal'; butuh data level perangkat.</p>
+<p><strong>Expected impact (aritmetika).</strong> Menutup separuh gap Android-iOS: 485 start x gap 8.5 pp / 2 = 21 submit tambahan per 39 hari. Pada share approved/submit 73.2% dan approved ke investor 21.5%: 3.3 investor per 39 hari = 31/tahun. Asumsi: gap berasal dari friksi produk, bukan bauran perangkat/demografi.</p>
+<p><strong>Effort.</strong> M (instrumentasi tiap layar KYC dengan event hasil: izin diberikan, capture dicoba, capture gagal, back ditekan).</p>
+<p><strong>Priority.</strong> P0 (kebocoran funnel terbesar yang bisa dikendalikan produk).</p>
+<p><strong>KPI / validation.</strong> KYC start ke submit per platform dan per layar; target Android dalam 3 pp dari iOS.</p>
+<h3 id="t2-pembayaran-qris-gagal-dua-kali-lebih-sering-dari-va-atau-transfer-bank">T2 — Pembayaran: QRIS gagal dua kali lebih sering dari VA atau transfer bank</h3>
+<p><strong>Pain point.</strong> QRIS memegang 10.8% order dan gagal 22.2%, vs 11.1% virtual account dan 11.0% transfer bank. Instant payment hanya 1.9%.</p>
+<p><strong>Evidence (Observed).</strong> <code>main.transactions</code>, order pada kohort, seluruh data s.d. 2026-11-09.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Order</th>
+<th>Gagal/expired</th>
+<th>Fail rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>virtual_account</td>
+<td>3,782</td>
+<td>420</td>
+<td>11.1% (95% CI 10.1-12.1%)</td>
+</tr>
+<tr>
+<td>bank_transfer</td>
+<td>2,279</td>
+<td>250</td>
+<td>11.0% (95% CI 9.8-12.3%)</td>
+</tr>
+<tr>
+<td>QRIS</td>
+<td>765</td>
+<td>170</td>
+<td>22.2% (95% CI 19.4-25.3%)</td>
+</tr>
+<tr>
+<td>INSTANT_PAYMENT</td>
+<td>264</td>
+<td>5</td>
+<td>1.9% (95% CI 0.8-4.4%)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>QRIS vs VA: z=8.3, p&lt;0.0001.</p>
+</li>
+<li>
+<p>Percobaan order: 1,016 user membuat order; 36 (3.5%) punya order gagal dan tidak pernah menyelesaikan satu pun. Itu inti yang bisa dipulihkan; 304 user pernah gagal tetapi 268 di antaranya berhasil dengan cara lain.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan rendah).</strong> Kegagalan QRIS kemungkinan besar expiry/timeout (user scan lalu pergi), bukan reject teknis; data hanya berisi status, tanpa kode error provider. Verifikasi kode error gateway sebelum mengubah apa pun.</p>
+<p><strong>Expected impact (aritmetika).</strong> Menurunkan QRIS ke fail rate VA menyelamatkan (22.2% − 11.1%) x 765 order QRIS = 85 order yang sekarang mati (batas atas, karena sebagian user mengulang dengan metode lain).</p>
+<p><strong>Effort.</strong> S (tampilkan kode error provider; tambah pengingat expiry di layar pembayaran).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> Fail rate per metode dan per kode error provider, mingguan; target QRIS &lt;15%.</p>
+<h3 id="t3-user-approved-yang-belum-beli-tidak-kembali-ke-alur-beli">T3 — User approved yang belum beli tidak kembali ke alur beli</h3>
+<p><strong>Pain point.</strong> Dari 13,093 user approved-belum-beli, hanya 257 yang terlihat di GA (window 39 hari, cakupan <code>user_id</code> parsial), dan dari jumlah itu 43 membuka buy sheet; 8 sampai membuat order.</p>
+<p><strong>Evidence (Observed).</strong> GA4, user dengan keputusan verified dan tanpa pembelian selesai, 2026-10-01..2026-11-08.</p>
+<ul>
+<li>
+<p>Approved-belum-beli terlihat di GA: 257; buka <code>buy_bottom_sheet</code> 43 (16.7% (95% CI 12.7-21.8%)); buat order 8 (3.1%).</p>
+</li>
+<li>
+<p>Bandingkan dengan user yang submit KYC di window yang sama: 617 submit vs 287 user membuat order (46.5%). Dua populasi berbeda (bukan funnel), tetapi skalanya menunjukkan alur beli bekerja untuk user yang baru submit, dan tidak bekerja untuk kolam pasca-approval.</p>
+</li>
+<li>
+<p>Funnel investasi keseluruhan: <code>kyc_success</code> 617 ke <code>buy_bottom_sheet</code> 343 (55.6%) ke <code>order_created</code> 287 (83.7%) ke <code>payment_complete</code> 242 (84.3%). Order ke pembayaran selesai 84.3%.</p>
+</li>
+<li>
+<p>Gate risk profile 28 user di kohort ini, 8 ditinggalkan (28.6%).</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan sedang).</strong> Aplikasi tidak punya jalur kembali ke investasi setelah approval: approval berakhir sebagai notifikasi, dan entry point beli tidak ditonjolkan saat user kembali. Ini sejalan dengan M6 (tanpa messaging lifecycle) dan V1 (penurunan pasca-Oktober): tiga sudut pandang atas gap yang sama.</p>
+<p><strong>Expected impact (aritmetika).</strong> Bila buy sheet ditampilkan ke user approved saat membuka aplikasi, dan 10% dari 257 user GA-visible itu terkonversi pada rate order ke pembayaran 84.3%: 22 investor per 39 hari. Skala ke seluruh 13,093 user (asumsi perilaku setara, belum diuji) jauh lebih besar; jangan pakai angka itu sebelum diukur.</p>
+<p><strong>Effort.</strong> M (state pendaratan pasca-approval + entry point buy sheet).</p>
+<p><strong>Priority.</strong> P0.</p>
+<p><strong>KPI / validation.</strong> % user approved yang membuka buy sheet dalam 7/30 hari; rate order ke pembayaran kohort pasca-approval.</p>
+<h3 id="t4-gate-risk-profile-tidak-ada-kerugian-hilir-yang-terukur">T4 — Gate risk profile: tidak ada kerugian hilir yang terukur</h3>
+<p><strong>Pain point.</strong> 28 dari 97 user yang memicu gate risk profile meninggalkannya, tetapi abandoner tetap berkonversi pada rate yang tidak berbeda signifikan.</p>
+<p><strong>Evidence (Observed).</strong> GA <code>risk_profile_gate_triggered</code>/<code>abandoned</code>, 2026-10-01..2026-11-08.</p>
+<ul>
+<li>Trigger 97, abandon 28 (28.9%). Order setelahnya: abandoner 13/28 (46.4%), non-abandoner 41/69 (59.4%). z=-1.17, p=0.243.</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan rendah).</strong> Abandonment nyata tetapi sementara; gate ditampilkan ulang belakangan. Dengan n&lt;100 di kedua sisi, ini bisa jadi kurang bertenaga, bukan benar-benar tidak berbahaya.</p>
+<p><strong>Expected impact.</strong> Tidak ada klaim; hanya 75 user per 30 hari. Instrumentasi dulu, jangan desain ulang.</p>
+<p><strong>Effort.</strong> S.</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> Gate abandonment rate dan rate order 7 hari, bulanan, dengan n&gt;=100.</p>
+<h3 id="t5-error-klien-tercatat-tanpa-crashanr-dan-tanpa-alert">T5 — Error klien tercatat, tanpa crash/ANR dan tanpa alert</h3>
+<p><strong>Pain point.</strong> <code>continue_with_google_failed</code> 45 event di 9+ perangkat, <code>app_exception</code> 10 event, tanpa alert atau SLA. Tidak ada data crash/ANR sama sekali.</p>
+<p><strong>Evidence (Observed).</strong> GA4, 2026-10-01..2026-11-08.</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Event</th>
+<th>Perangkat</th>
+<th>Android</th>
+<th>iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>continue_with_google_failed</code></td>
+<td>45</td>
+<td>9+</td>
+<td>38</td>
+<td>7</td>
+</tr>
+<tr>
+<td><code>app_exception</code></td>
+<td>10</td>
+<td>5+</td>
+<td>9</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Volume kecil, tetapi berada di jalur registrasi (<code>continue_with_google_failed</code>) dan tanpa jejak tumpukan. Fase 2 sudah menunjukkan event registrasi tidak andal, jadi ini indikatif, bukan sensus.</li>
+</ul>
+<p><strong>Root cause (Inferred, keyakinan rendah).</strong> Tidak ada data crash/ANR di GA (Crashlytics tidak diekspor), dan <code>app_exception</code> adalah event serba-guna tanpa stack trace di export. Severity tidak bisa diperingkat.</p>
+<p><strong>Expected impact.</strong> Tidak bisa dikuantifikasi tanpa stack trace. Alasan memperbaiki adalah proses: error di jalur signup dan pembayaran harus memicu alert, bukan menumpuk.</p>
+<p><strong>Effort.</strong> S (alert pada rate <code>continue_with_google_failed</code> dan <code>app_exception</code>; ekspor Crashlytics).</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> Rate event error per 1.000 sesi, mingguan, dengan ambang alert.</p>
+<h3 id="data-requests-product-engineering">Data requests (Product &amp; Engineering)</h3>
+<ul>
+<li>
+<p>Event hasil per layar KYC (capture dicoba/gagal, izin ditolak, back ditekan): memblokir T1.</p>
+</li>
+<li>
+<p>Kode error provider pada transaksi gagal: memblokir sizing T2.</p>
+</li>
+<li>
+<p>Ekspor Crashlytics/ANR: memblokir severity T5.</p>
+</li>
+<li>
+<p><code>user_id</code> pada event GA pra-login, dan id kampanye pada event notifikasi.</p>
+</li>
+</ul>
+<h2 id="5-roadmap-lintas-tim-now-next-later">5. Roadmap lintas tim (now / next / later)</h2>
+<p>Selaras dengan roadmap P&amp;T 2027 (draf): gateway VA (Q1) menampung T2; redesain website (Q2) dan app (Q3) menampung T1, T3, T4. Lihat <code>raker_preparation.md</code> bagian 0.5.</p>
+<p><strong>Now (0-30 hari) — tanpa kode baru, atau kode kecil.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Aksi</th>
+<th>Pemilik</th>
+<th>Dependensi</th>
+<th>Ukuran keberhasilan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ubah kebijakan bonus: kredit hanya setelah pembelian berbayar pertama (M2)</td>
+<td>Marketing + Finance</td>
+<td>keputusan pemilik program</td>
+<td>eksposur kredit ke non-pembayar</td>
+</tr>
+<tr>
+<td>Trigger CRM pasca-approval + pesan investasi pertama (M6, V2)</td>
+<td>Marketing + Ops</td>
+<td>daftar approved harian</td>
+<td>beli pertama 7 hari vs holdout</td>
+</tr>
+<tr>
+<td>Slot review malam/akhir pekan + alert umur antrean 12 jam (O1, O2)</td>
+<td>Ops</td>
+<td>roster reviewer</td>
+<td>P90 dan jumlah &gt;24 jam</td>
+</tr>
+<tr>
+<td>Simpan alasan penolakan KYC + email pengajuan ulang (O3)</td>
+<td>Ops + Tech</td>
+<td>kolom reason</td>
+<td>rate pengajuan ulang 14 hari</td>
+</tr>
+<tr>
+<td><code>user_id</code> pada log email batch + click event (M4)</td>
+<td>Tech</td>
+<td>skema Supabase</td>
+<td>% kiriman ter-join</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Next (30-90 hari) — perubahan produk.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Aksi</th>
+<th>Pemilik</th>
+<th>Dependensi</th>
+<th>Ukuran keberhasilan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Permukaan pasca-approval: buy sheet saat user approved membuka aplikasi (T3, V2)</td>
+<td>Tech + Product</td>
+<td>desain + state</td>
+<td>% approved buka buy sheet 7/30 hari</td>
+</tr>
+<tr>
+<td>Instrumentasi hasil per layar KYC (T1)</td>
+<td>Tech</td>
+<td>event baru</td>
+<td>KYC start→submit Android vs iOS</td>
+</tr>
+<tr>
+<td>Follow-up agen hari ke-7 dan ke-30 untuk kohort sales code (M1)</td>
+<td>Marketing</td>
+<td>CRM task</td>
+<td>repeat mature +5 pp dalam 90 hari</td>
+</tr>
+<tr>
+<td>Tampilkan kode error provider pembayaran + pengingat expiry QRIS (T2)</td>
+<td>Tech</td>
+<td>gateway</td>
+<td>fail rate QRIS &lt;15%</td>
+</tr>
+<tr>
+<td>Holdout 10% untuk promo beli pertama (M3)</td>
+<td>Marketing</td>
+<td>eksperimen</td>
+<td>repeat 90 hari promo vs kontrol</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Later (90-180 hari) — data dan skala.</strong></p>
+<table>
+<thead>
+<tr>
+<th>Aksi</th>
+<th>Pemilik</th>
+<th>Dependensi</th>
+<th>Ukuran keberhasilan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ekspor Crashlytics/ANR + alert error jalur signup/pembayaran (T5)</td>
+<td>Tech</td>
+<td>SDK</td>
+<td>rate error per 1.000 sesi</td>
+</tr>
+<tr>
+<td><code>campaign_id</code> pada push/email + holdout push (M5)</td>
+<td>Marketing + Tech</td>
+<td>skema event</td>
+<td>beli pertama 7 hari pasca-klik vs holdout</td>
+</tr>
+<tr>
+<td>Diagnosis penurunan Oktober: bauran kanal vs perubahan produk (V1)</td>
+<td>semua tim</td>
+<td>data bauran kanal</td>
+<td>penyebab teridentifikasi</td>
+</tr>
+<tr>
+<td>Server-side event untuk register/approve/order/pay (rekonsiliasi Fase 2)</td>
+<td>Tech</td>
+<td>pipeline</td>
+<td>selisih GA vs DB &lt;2%</td>
+</tr>
+</tbody>
+</table>
+<p>Dependensi lintas tim: tidak ada satu pun P0 yang bisa selesai di dalam satu tim. Kolam approved butuh Marketing (trigger), Tech (permukaan), dan Ops (antrean dengan due date) sekaligus; itulah alasan V2 ditulis sebagai satu program, bukan tiga tiket.</p>
+<h2 id="6-lampiran">6. Lampiran</h2>
+<h3 id="61-data-dictionary-definisi-kualitas">6.1 Data dictionary, definisi, kualitas</h3>
+<p>Lihat <code>outputs/data_dictionary.md</code>, <code>outputs/definitions.md</code>, <code>outputs/data_quality.md</code>.</p>
+<h3 id="62-skrip-dan-kueri">6.2 Skrip dan kueri</h3>
+<p>Fase 1: <code>01</code>-<code>06</code>, <code>10</code>-<code>16</code>, <code>20</code>-<code>22</code>, <code>30</code>, <code>31</code>. Fase 2: <code>40</code>-<code>42</code>, <code>44</code>-<code>52</code>. Fase 3: <code>60</code>-<code>62</code>, <code>70</code>-<code>73</code>, <code>75</code>-<code>86</code>. Pembangun dokumen: <code>build_phase2.py</code>, <code>build_phase3.py</code>, <code>build_phase4.py</code>. Runner: <code>bq.js</code> (kueri tunggal, JSON), <code>q.py</code> (blok <code>-- Q:</code>), <code>run_many.py</code>. Semua kueri SELECT-only dengan <code>maximumBytesBilled</code> 5e9.</p>
+<h3 id="63-provenance">6.3 Provenance</h3>
+<p>Lihat <code>outputs/data_provenance_log.md</code> (setiap angka utama dengan sumber, window, dan skrip).</p>
+<h3 id="64-data-requests-gabungan">6.4 Data requests (gabungan)</h3>
+<ul>
+<li>Alasan penolakan KYC per keputusan, dan timestamp submit KYC di DB.</li>
+<li>Pembedaan keputusan otomatis vs manual pada <code>user_status_logs.auth_user_id</code>.</li>
+<li><code>user_id</code> pada event GA pra-login; <code>campaign_id</code> pada event notifikasi dan log email; tipe event klik pada email.</li>
+<li>Kode error provider pada transaksi gagal.</li>
+<li>Ekspor Crashlytics/ANR.</li>
+<li>Aturan program bonus (siapa, kapan, berapa).</li>
+<li>Bauran kanal akuisisi per bulan (untuk menjelaskan V1).</li>
+</ul>
+<h3 id="65-skill-dan-alat">6.5 Skill dan alat</h3>
+<p>Skill <code>gcp-bigquery</code> (aturan proyek dan definisi). <code>@google-cloud/bigquery</code> via <code>scripts/bq.js</code>. Supabase MCP read-only (project <code>josptpfisrsdjeggkqke</code>). Tidak ada dependensi baru yang dipasang.</p></body></html>

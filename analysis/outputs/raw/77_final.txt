@@ -1,0 +1,6 @@
+## push_android_by_seg
+[{"seg":"not_approved","users_recv":196,"users_recv_and_click":20,"receives":5360,"clicks":27},{"seg":"investor","users_recv":680,"users_recv_and_click":185,"receives":37450,"clicks":898},{"seg":"approved_no_buy","users_recv":396,"users_recv_and_click":110,"receives":12149,"clicks":459}]
+## approved_nobuy_ga
+[{"users_home":257,"sheet":43,"ordr":8,"gate":28,"gate_ab":8}]
+## resub_oct
+[{"st":"failed","failed_users":70,"resubmitted":6},{"st":"verified","failed_users":40,"resubmitted":27}]

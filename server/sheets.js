@@ -143,7 +143,7 @@ async function portfolioReport({ contact, holdings }, options = {}) {
   const portfolioRows = [
     ['CUSTOMER PORTFOLIO', '', '', 'Close NAV', statementDate(holdings)],
     [`Exported by ${username || 'dashboard'} · ${new Date().toISOString()}`],
-    ...(fx?.rate ? [['USD/IDR', fx.rate, fx.date || '']] : []),
+    ...(fx?.rate ? [['USD/IDR (T-1)', fx.rate, fx.date || '']] : []),
     [],
     ['NAME', String(val(contact?.name) || 'n/a')],
     ['SID', String(val(contact?.sid) || 'n/a')],

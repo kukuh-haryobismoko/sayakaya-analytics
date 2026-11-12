@@ -1,0 +1,2 @@
+## actor_rank
+[{"actor_rank":1,"n":700,"pct":75.9},{"actor_rank":2,"n":102,"pct":11.1},{"actor_rank":3,"n":92,"pct":10},{"actor_rank":4,"n":13,"pct":1.4},{"actor_rank":5,"n":6,"pct":0.7},{"actor_rank":6,"n":5,"pct":0.5},{"actor_rank":7,"n":4,"pct":0.4}]

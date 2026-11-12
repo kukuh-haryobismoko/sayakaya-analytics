@@ -1,0 +1,112 @@
+{
+ "email_batch": {
+  "sent_logs": 650,
+  "failed_logs": 93,
+  "failed_distinct": 93,
+  "failed_later_sent": 93,
+  "days": {
+   "2026-10-13": {
+    "sent": 150,
+    "with_events": 0,
+    "with_open": 0
+   },
+   "2026-10-26": {
+    "sent": 497,
+    "with_events": 497,
+    "with_open": 497
+   },
+   "2026-11-03": {
+    "sent": 3,
+    "with_events": 3,
+    "with_open": 0
+   }
+  },
+  "delivery": 500,
+  "open_logs": 497,
+  "open_events": 993,
+  "click_events": 0,
+  "send_logs_events": 500,
+  "error": "454 Throttling failure: Maximum sending rate exceeded.",
+  "sent_nouser": 650,
+  "exclusions": 0,
+  "jobs": 9,
+  "queue": 753,
+  "by_cat": [
+   [
+    "fund_performance",
+    "batch",
+    "sent",
+    650,
+    "2026-10-13",
+    "2026-11-03"
+   ],
+   [
+    "fund_performance",
+    "batch",
+    "failed",
+    93,
+    "2026-10-26",
+    "2026-10-26"
+   ],
+   [
+    "statement",
+    "schedule",
+    "sent",
+    93,
+    "2026-09-05",
+    "2026-10-17"
+   ],
+   [
+    "statement",
+    "manual",
+    "sent",
+    13,
+    "2026-08-31",
+    "2026-09-01"
+   ],
+   [
+    "fund_performance",
+    "manual",
+    "sent",
+    12,
+    "2026-09-03",
+    "2026-10-19"
+   ],
+   [
+    "fund_performance",
+    "schedule",
+    "sent",
+    10,
+    "2026-09-05",
+    "2026-09-10"
+   ],
+   [
+    "schedule_otp",
+    "system",
+    "sent",
+    3,
+    "2026-10-13",
+    "2026-10-26"
+   ],
+   [
+    "password_reset",
+    "system",
+    "sent",
+    1,
+    "2026-11-02",
+    "2026-11-02"
+   ]
+  ],
+  "open_hours": [
+   {
+    "h": "2026-10-26 07:00Z",
+    "opens": 478
+   },
+   {
+    "h": "2026-10-26 08:00Z",
+    "opens": 201
+   }
+  ]
+ },
+ "pulled": "2026-11-09 (Supabase project josptpfisrsdjeggkqke, schema public)"
+}

@@ -1,0 +1,6 @@
+## distinct_steps
+[{"event_name":"hfm_ready","users":1071},{"event_name":"kyc_start","users":746},{"event_name":"hfm_ready_unverified","users":643},{"event_name":"kyc_success","users":617},{"event_name":"buy_bottom_sheet","users":343},{"event_name":"order_button","users":290},{"event_name":"order_created","users":287},{"event_name":"payment_complete","users":242},{"event_name":"risk_profile_gate_triggered","users":97},{"event_name":"risk_profile_gate_abandoned","users":28}]
+## kyc_platform
+[{"pf":"ANDROID","started":485,"started_and_submitted":386},{"pf":"IOS","started":261,"started_and_submitted":230}]
+## acq_funnel
+[{"grp":"none","reg":56618,"submitted":18466,"approved":12700,"inv":2096},{"grp":"referrer_code","reg":6109,"submitted":3472,"approved":3206,"inv":1259},{"grp":"sales_code","reg":1068,"submitted":835,"approved":753,"inv":232}]

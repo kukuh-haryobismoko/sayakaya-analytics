@@ -1,0 +1,11 @@
+-- Q:push_android_by_seg
+WITH {{BASE}}, R AS (SELECT e.user_id, COUNTIF(event_name='notification_receive') rc, COUNTIF(event_name IN ('notification_click','notification_open')) cl FROM `sayakaya.analytics_266759216.events_*` e WHERE _TABLE_SUFFIX BETWEEN '20261001' AND '20261108' AND platform='ANDROID' AND event_name LIKE 'notification_%' AND e.user_id IS NOT NULL GROUP BY 1)
+SELECT CASE WHEN B.user_id IS NOT NULL THEN 'investor' WHEN U.verification_status='verified' THEN 'approved_no_buy' ELSE 'not_approved' END seg, COUNTIF(rc>0) users_recv, COUNTIF(rc>0 AND cl>0) users_recv_and_click, SUM(rc) receives, SUM(cl) clicks FROM R JOIN U ON U.id=R.user_id LEFT JOIN B ON B.user_id=R.user_id GROUP BY 1
+-- Q:approved_nobuy_ga
+WITH {{BASE}}, G AS (SELECT e.user_id, COUNTIF(event_name='hfm_ready')>0 home, COUNTIF(event_name='buy_bottom_sheet')>0 sheet, COUNTIF(event_name='order_created')>0 ordr, COUNTIF(event_name='risk_profile_gate_triggered')>0 gate, COUNTIF(event_name='risk_profile_gate_abandoned')>0 gate_ab FROM `sayakaya.analytics_266759216.events_*` e WHERE _TABLE_SUFFIX BETWEEN '20261001' AND '20261108' AND e.user_id IS NOT NULL AND event_name IN ('hfm_ready','buy_bottom_sheet','order_created','risk_profile_gate_triggered','risk_profile_gate_abandoned') GROUP BY 1)
+SELECT COUNT(*) users_home, COUNTIF(sheet) sheet, COUNTIF(ordr) ordr, COUNTIF(gate) gate, COUNTIF(gate_ab) gate_ab FROM G JOIN U ON U.id=G.user_id LEFT JOIN B ON B.user_id=G.user_id WHERE G.home AND U.verification_status='verified' AND B.user_id IS NULL
+-- Q:resub_oct
+WITH {{BASE}}, F AS (SELECT l.user_id, MIN(l.created_at) ft FROM `sayakaya.main.user_status_logs` l JOIN U ON U.id=l.user_id WHERE l.status='failed' AND l.created_at>=TIMESTAMP '2026-10-01' GROUP BY 1),
+S AS (SELECT user_id, TIMESTAMP_MICROS(event_timestamp) s FROM `sayakaya.analytics_266759216.events_*` WHERE _TABLE_SUFFIX BETWEEN '20261001' AND '20261108' AND event_name='kyc_success' AND user_id IS NOT NULL),
+O AS (SELECT F.user_id, U.verification_status st, COUNTIF(S.s>TIMESTAMP_ADD(F.ft,INTERVAL 5 MINUTE)) resub FROM F JOIN U ON U.id=F.user_id LEFT JOIN S ON S.user_id=F.user_id GROUP BY 1,2)
+SELECT st, COUNT(*) failed_users, COUNTIF(resub>0) resubmitted FROM O GROUP BY 1

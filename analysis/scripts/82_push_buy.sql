@@ -1,0 +1,3 @@
+-- Q:push_click_vs_buy
+WITH {{BASE}}, R AS (SELECT e.user_id, COUNTIF(event_name='notification_receive')>0 rc, COUNTIF(event_name IN ('notification_click','notification_open'))>0 cl FROM `sayakaya.analytics_266759216.events_*` e WHERE _TABLE_SUFFIX BETWEEN '20261001' AND '20261108' AND platform='ANDROID' AND event_name LIKE 'notification_%' AND e.user_id IS NOT NULL GROUP BY 1)
+SELECT R.cl clicked, COUNT(*) users, COUNTIF(B.first_buy>=DATETIME '2026-10-01') bought_in_window FROM R JOIN U ON U.id=R.user_id LEFT JOIN B ON B.user_id=R.user_id WHERE R.rc AND U.verification_status='verified' AND DATE(U.ver_at)<DATE '2026-10-01' AND (B.user_id IS NULL OR B.first_buy>=DATETIME '2026-10-01') GROUP BY 1

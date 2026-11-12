@@ -1,0 +1,14 @@
+## decisions_by_month
+[{"m":"2026-07","status":"failed","n":8,"u":7},{"m":"2026-07","status":"verified","n":16,"u":16},{"m":"2026-08","status":"failed","n":16,"u":10},{"m":"2026-08","status":"verified","n":55,"u":55},{"m":"2026-09","status":"failed","n":19,"u":11},{"m":"2026-09","status":"verified","n":74,"u":74},{"m":"2026-10","status":"failed","n":91,"u":68},{"m":"2026-10","status":"verified","n":432,"u":430},{"m":"2026-11","status":"failed","n":48,"u":43},{"m":"2026-11","status":"verified","n":163,"u":163}]
+## decision_dow_hour
+[{"dow":"Sun","dn":1,"n":77,"failed":19},{"dow":"Mon","dn":2,"n":210,"failed":38},{"dow":"Tue","dn":3,"n":137,"failed":35},{"dow":"Wed","dn":4,"n":158,"failed":28},{"dow":"Thu","dn":5,"n":133,"failed":20},{"dow":"Fri","dn":6,"n":141,"failed":22},{"dow":"Sat","dn":7,"n":66,"failed":20}]
+## decision_hour
+[{"h":8,"n":1},{"h":9,"n":21},{"h":10,"n":318},{"h":11,"n":70},{"h":12,"n":57},{"h":13,"n":95},{"h":14,"n":62},{"h":15,"n":78},{"h":16,"n":73},{"h":17,"n":39},{"h":18,"n":27},{"h":19,"n":37},{"h":20,"n":22},{"h":21,"n":20},{"h":22,"n":2}]
+## sla_ga_submit_to_decision
+[{"status":"verified","n":548,"p50_h":0.17,"p90_h":15.7,"over24h":21,"over72h":3},{"status":"failed","n":102,"p50_h":0.17,"p90_h":15.73,"over24h":2,"over72h":0}]
+## sla_by_submit_weekend
+[{"weekend_submit":true,"n":152,"p50_h":0.8,"p90_h":17.23},{"weekend_submit":false,"n":461,"p50_h":0.13,"p90_h":11.9}]
+## resubmit_after_fail
+[{"st":"failed","failed_users":86,"resubmitted":7},{"st":"verified","failed_users":51,"resubmitted":37}]
+## wait_vs_buy
+[{"wait":"a<2h","n":221,"bought14d":13},{"wait":"b2-24h","n":53,"bought14d":6},{"wait":"c>=24h","n":17,"bought14d":3}]
