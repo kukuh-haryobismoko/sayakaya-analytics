@@ -82,16 +82,16 @@ slide(2, "SUMMARY", "AI turned the analytics team into a service the whole compa
  "Four messages. The rest of the deck proves each one with a real screen. Colleagues named later are login names; I inferred their function from the sections they can open, so confirm roles before presenting.")
 
 slide(3, "WHO USES IT", "Eleven Sayakaya logins work in the dashboard, from operations to campaigns to management",
- '<table class="t" style="margin-top:22px"><tr><th>Team (inferred from access)</th><th>Logins</th><th>Sections they use</th></tr>'
+ '<table class="t" style="margin-top:22px"><tr><th>Team</th><th>Logins</th><th>Sections they use</th></tr>'
  '<tr><td>Analytics owner</td><td>kukuh</td><td>Full access. Builds and reviews every feature, manages access, sends scheduled reports.</td></tr>'
- '<tr><td>Management</td><td>maureen</td><td>Full access incl. AI Insights, Ask, booth and promo views, monthly review, presentation.</td></tr>'
+ '<tr><td>Executives (CEO and CPO)</td><td>maureen, ramano</td><td>Near-full access: growth, revenue, funnel, booth and promo views, Ask, monthly review, presentation. Maureen also has AI Insights.</td></tr>'
  '<tr><td>Operations and reconciliation</td><td>audrey, robby, tiur</td><td>Portfolio fix, reconciliation, revenue, partner revenue, booth and referral views.</td></tr>'
  '<tr><td>Marketing and sales campaigns</td><td>hardy, gilang</td><td>Booth events, promo recap, referral, push, bonus lists. Hardy also has Ask.</td></tr>'
  '<tr><td>Customer service</td><td>cs</td><td>Overview, growth, investor lists and explorer. Most frequent logins.</td></tr>'
- '<tr><td>Analysts, broad access</td><td>imel, ramano</td><td>Funnel, win-back, email tracking, engagement, Ask, monthly review.</td></tr>'
+ '<tr><td>Product manager</td><td>imel</td><td>Explores the product: funnel, user behaviour, subscription, onboarding, engagement, Ask, SQL explorer.</td></tr>'
  '<tr><td>Viewer</td><td>guest</td><td>Presentation tab only, for decks like this one.</td></tr></table>'
- '<p style="margin:12px 0 0;font-size:12.5px;color:var(--muted)">Team labels are inferred from each login\'s access list; the system stores no job titles. No usage counts shown.</p>',
- "Source: dashboard user list (11 logins) and activity log since September. Team labels are my inference from which sections each login can open, not recorded roles. Confirm with each person or edit before the meeting. Activity since September: kukuh, audrey and cs are the heaviest; guest is lightest. Logins are personal data: consider showing team names only.")
+ '<p style="margin:12px 0 0;font-size:12.5px;color:var(--muted)">Executive and product-manager roles confirmed by the analytics owner. Other team labels are inferred from each login\'s access list. No usage counts shown.</p>',
+ "Source: dashboard user list (11 logins) and activity log since September. Roles of maureen and ramano (CEO and CPO) and imel (product manager) were confirmed by Kukuh; other team labels are my inference from access lists. Confirm before the meeting. Activity since September: kukuh, audrey and cs are the heaviest; guest is lightest. Logins are personal data: consider showing team names only.")
 
 slide(4, "ONE PLATFORM, SAFE ACCESS", "Each colleague gets only the sections they need, and every action leaves a trail",
  row(img("admin", "Manage users: each login has a per-section access list. Names and emails are blurred."),

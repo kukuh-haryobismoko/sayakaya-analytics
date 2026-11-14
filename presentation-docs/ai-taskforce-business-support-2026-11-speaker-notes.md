@@ -7,7 +7,7 @@ Companion to the numbers deck. This one shows the working dashboard itself and t
 Four messages. The rest of the deck proves each one with a real screen. Colleagues named later are login names; I inferred their function from the sections they can open, so confirm roles before presenting.
 
 ## Slide 3: Eleven Sayakaya logins work in the dashboard, from operations to campaigns to management
-Source: dashboard user list (11 logins) and activity log since September. Team labels are my inference from which sections each login can open, not recorded roles. Confirm with each person or edit before the meeting. Activity since September: kukuh, audrey and cs are the heaviest; guest is lightest. Logins are personal data: consider showing team names only.
+Source: dashboard user list (11 logins) and activity log since September. Roles of maureen and ramano (CEO and CPO) and imel (product manager) were confirmed by Kukuh; other team labels are my inference from access lists. Confirm before the meeting. Activity since September: kukuh, audrey and cs are the heaviest; guest is lightest. Logins are personal data: consider showing team names only.
 
 ## Slide 4: Each colleague gets only the sections they need, and every action leaves a trail
 Why it matters: investor data is sensitive. Access is per section, takes effect immediately, and exports and sensitive views are recorded. This was already introduced in September; here it shows it is in daily use.
