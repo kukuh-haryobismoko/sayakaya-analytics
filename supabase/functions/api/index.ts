@@ -434,6 +434,7 @@ const PRESENTATIONS_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 const PRESENTATIONS: Record<string, { tab: string }> = {
   july: { tab: 'presentation' },
   september: { tab: 'presentation' },
+  november: { tab: 'presentation' },
   august: { tab: 'monthly-review' },
   'review-september': { tab: 'monthly-review' },
   'review-october': { tab: 'monthly-review' },

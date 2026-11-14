@@ -332,6 +332,7 @@ function createApp({ serveStatic = true } = {}) {
   const PRESENTATIONS = {
     july: { label: 'July 2026', file: 'Sayakaya AI taskforce presentation.pdf', tab: 'presentation' },
     september: { label: 'September 2026', file: 'AI Taskforce Sayakaya - September.pdf', tab: 'presentation' },
+    november: { label: 'November 2026', file: 'AI Taskforce Sayakaya - Business Support.pdf', tab: 'presentation' },
     august: { label: 'August 2026', file: 'sayakaya-august-review-deck.pdf', tab: 'monthly-review' },
     'review-september': { label: 'September 2026', file: 'sayakaya-september-review-deck.pdf', tab: 'monthly-review' },
     'review-october': { label: 'October 2026', file: 'sayakaya-october-review-deck.pdf', tab: 'monthly-review' },
