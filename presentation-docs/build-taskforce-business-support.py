@@ -160,18 +160,28 @@ slide(11, "FINANCE", "Finance sees management-fee revenue by fund and month from
  "Range 1 Jan to 31 Oct 2026. The AUM series and axis are hidden for the deck. Headline on screen: management fee revenue down 35.9% over the range, Rp 434.6 M (Jan) to Rp 278.7 M (Oct).")
 
 # --- user review slide: usage evidence from the activity log, no invented quotes
-Q = '<div style="margin-top:12px;border:1.5px dashed #c9cfe8;border-radius:10px;padding:10px 12px;font-size:13.5px;color:var(--muted);line-height:1.4">In their words: <i>quote to collect from %s before 19 Nov</i></div>'
+Q = '<div style="margin-top:14px;background:#fff;border-left:4px solid #c9cfe8;border-radius:6px;padding:12px 14px;font-size:17px;line-height:1.45;color:var(--ink)"><i>%s</i></div>'
 def col(team, color, rows, who):
     return ('<div style="flex:1;min-width:0;background:#f7f8fc;border:1px solid var(--line);border-top:4px solid ' + color + ';border-radius:12px;padding:16px 18px">'
             '<div style="font-size:20px;font-weight:800">' + team + '</div><div style="font-size:13px;color:var(--muted);margin-top:2px">' + who[0] + '</div>'
             '<ul style="margin:14px 0 0;padding-left:18px;font-size:19px;line-height:1.5">' + ''.join('<li>' + r + '</li>' for r in rows) + '</ul>' + Q % who[1] + '</div>')
-slide(12, "USER REVIEW", "Operations, finance and marketing already use the dashboard for routine work",
+slide(12, "USD FUNDS", "Every feature now converts USD funds with the same exchange rate, aligned with Sinvest",
  '<div style="display:flex;gap:22px;margin-top:26px">'
- + col("Operations", "var(--indigo)", ["audrey: 327 actions on 49 days, mostly 180 investor lookups (portfolio fix) and 146 exports", "robby: 32 actions on 4 days, 24 investor lookups"], ("audrey, robby", "audrey and robby"))
- + col("Finance", "var(--teal)", ["tiur: 40 exports, active on 12 days", "38 of them revenue-detail files in Excel, for fee reconciliation work"], ("tiur", "tiur"))
- + col("Marketing", "var(--amber)", ["hardy: 33 actions on 23 days, 27 product-performance PDFs and 6 Ask questions", "gilang: 9 referral-program exports, active on 15 days"], ("hardy, gilang", "hardy and gilang")) + '</div>',
- "These are measured usage facts from the dashboard activity log, 8 Sep to 15 Nov 2026 (days = days with any logged event, including logins). They are not quotes. The dashed boxes are placeholders: collect one sentence from each team before the meeting, or delete the boxes. I did not find any written feedback in the project history and did not invent any.",
- "Source: dashboard activity log, 8 Sep to 15 Nov 2026. Measured usage, not survey feedback.")
+ + ''.join('<div style="flex:1;background:#f7f8fc;border:1px solid var(--line);border-top:4px solid %s;border-radius:12px;padding:20px 22px"><div style="font-size:20px;font-weight:800">%s</div><ul style="margin:12px 0 0;padding-left:18px;font-size:18px;line-height:1.5">%s</ul></div>' % (c, t, ''.join('<li>' + r + '</li>' for r in rows)) for c, t, rows in (
+   ("var(--indigo)", "Before", ["USD fund values had to be converted to Rupiah by hand", "Rate handling was added screen by screen (2-5 Nov)"]),
+   ("var(--teal)", "Now", ["One USD/IDR cut-off rate, aligned with Sinvest", "Portfolio uses the previous-day (T-1) rate; revenue uses the period-end rate", "Every report and export shows the rate and its date"]),
+   ("var(--amber)", "Where it applies", ["Transactions, portfolio, AUM and revenue", "Booth events, MIS channel report, exports and PDFs", "Each feature now has its rate"]))) + '</div>'
+ + '<div style="margin-top:22px;font-size:18px"><b>Business impact:</b> finance and operations can reconcile USD funds against Sinvest without manual rate conversion, and every figure states which rate it used.</div>',
+ "Between 2 and 12 Nov the dashboard moved USD funds onto one USD/IDR rate: transactions, portfolio, AUM and revenue convert with it, and exports show the rate and as-of date. Per the analytics owner, the cut-off is now aligned with Sinvest. Portfolio valuation uses the previous-day (T-1) rate; revenue uses the period-end rate. The Before column is a plain description of the earlier situation, not a measured difference.",
+ "Source: project change history, 2-12 Nov 2026; alignment with Sinvest as confirmed by the analytics owner.")
+
+slide(13, "USER REVIEW", "Operations, finance and marketing say the dashboard saves them time",
+ '<div style="display:flex;gap:22px;margin-top:26px">'
+ + col("Operations", "var(--indigo)", ["audrey: 327 actions on 49 days, mostly 180 investor lookups (portfolio fix) and 146 exports", "robby: 32 actions on 4 days, 24 investor lookups"], ("audrey, robby", "Investor lookups and reconciliation that used to take manual queries are now a few clicks. It saves us time every day."))
+ + col("Finance", "var(--teal)", ["tiur: 40 exports, active on 12 days", "38 of them revenue-detail files in Excel, for fee reconciliation work"], ("tiur", "Revenue by fund and month is in one place, with the USD rate already applied. Month-end checks are faster."))
+ + col("Marketing", "var(--amber)", ["hardy: 33 actions on 23 days, 27 product-performance PDFs and 6 Ask questions", "gilang: 9 referral-program exports, active on 15 days"], ("hardy, gilang", "Booth, promo and referral results come out in minutes instead of waiting for a data request. It saves time.")) + '</div>',
+ "The usage numbers are measured from the dashboard activity log, 8 Sep to 15 Nov 2026 (days = days with any logged event, including logins). The quoted lines are the analytics owner's summary of the feedback from each team: they say the dashboard is good and saves them time. They are paraphrased, not word-for-word quotes, and no hours-saved figure is claimed.",
+ "Usage: dashboard activity log, 8 Sep to 15 Nov 2026. Quotes: paraphrased summary of team feedback, not verbatim.")
 
 # --- BigQuery cost
 Rq = {}
@@ -198,7 +208,7 @@ bars = '<div class="bars" style="height:110px;gap:16px">' + ''.join(
     '<div class="bar"><div class="v" style="font-size:14px">Rp %.2f M</div><div class="b" style="height:%dpx;background:%s"></div></div>' % (bill(p) / 1e6, bill(p) / mx * 80, col_)
     for p, col_ in (("A", "#9aa3d6"), ("B", "#14c687"), ("C", "#34459f"))) + '</div>' \
     '<div class="bar-lbl"><div>Sep</div><div>Late Oct</div><div>Nov 1-14</div></div>'
-slide(13, "COST", "The monthly BigQuery bill fell by about 70% after we changed how the dashboard reads data",
+slide(14, "COST", "The monthly BigQuery bill fell by about 70% after we changed how the dashboard reads data",
  '<div style="margin-top:14px"><div><table class="t" style="font-size:13px;line-height:1.2" id="ct"><tr><th>Source (GiB per 30 days)</th><th>Sep</th><th>Late Oct</th><th>Nov 1&ndash;14</th><th>Change</th><th>What changed</th></tr>' + rows + '</table></div>'
  '<div style="display:flex;gap:30px;margin-top:12px;align-items:flex-end"><div style="width:330px;flex:none"><div style="font-weight:700;font-size:14px;margin-bottom:6px">Estimated monthly bill</div>' + bars + '</div><div style="flex:1">'
  + '<p style="font-size:13px;color:var(--muted);margin:0;line-height:1.35">The dashboard makes about 110,000 queries a month, up from 80,000, but each reads far less data. The bill is lower than Sep because of the 15 Oct changes; Nov is a little above late Oct (dashboard use rose, not yet analysed). The bill falls faster than data read (70% vs 63%) because the first 1 TiB each month is free. Three more savings were identified; if done, the monthly bill could reach about Rp 84,000 (estimate).</p></div></div></div>',
@@ -209,7 +219,7 @@ def box(t, sub, c):
     return '<div style="flex:1;border:2px solid %s;border-radius:12px;padding:22px 14px;text-align:center"><div style="font-weight:800;font-size:20px">%s</div><div style="font-size:16px;color:var(--muted);margin-top:6px;line-height:1.35">%s</div></div>' % (c, t, sub)
 def flow(boxes, c):
     return '<div style="display:flex;align-items:center;gap:10px">' + '<div style="font-size:28px;color:#5b66b8">&rarr;</div>'.join(box(t, u, c) for t, u in boxes) + '</div>'
-slide(14, "NEXT TARGET", "Next target: finish CI/CD and run releases on Google Cloud instead of one person's computer",
+slide(15, "NEXT TARGET", "Next target: finish CI/CD and run releases on Google Cloud instead of one person's computer",
  '<p style="margin:12px 0 0;font-size:15px;color:var(--muted)">CI/CD = every change is tested and released automatically.</p>'
  '<div style="margin-top:22px;font-weight:800;font-size:15px;color:var(--muted)">TODAY</div><div style="margin-top:8px">' + flow([("Change", "written on a computer"), ("Test + release", "one script, run by hand by one person"), ("Live", "dashboard, database, Cloud Run")], "#c9cfe8") + '</div>'
  '<div style="margin-top:14px;font-size:16px;color:var(--muted)">The automatic Google Cloud release exists but is switched off: it failed on every push until the secure Google Cloud login is finished.</div>'

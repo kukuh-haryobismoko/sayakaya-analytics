@@ -33,11 +33,14 @@ Anomaly scan run live on the dashboard. Row shown: 2026-11-05 buy volume Rp 35,1
 ## Slide 11: Finance sees management-fee revenue by fund and month from one screen
 Range 1 Jan to 31 Oct 2026. The AUM series and axis are hidden for the deck. Headline on screen: management fee revenue down 35.9% over the range, Rp 434.6 M (Jan) to Rp 278.7 M (Oct).
 
-## Slide 12: Operations, finance and marketing already use the dashboard for routine work
-These are measured usage facts from the dashboard activity log, 8 Sep to 15 Nov 2026 (days = days with any logged event, including logins). They are not quotes. The dashed boxes are placeholders: collect one sentence from each team before the meeting, or delete the boxes. I did not find any written feedback in the project history and did not invent any.
+## Slide 12: Every feature now converts USD funds with the same exchange rate, aligned with Sinvest
+Between 2 and 12 Nov the dashboard moved USD funds onto one USD/IDR rate: transactions, portfolio, AUM and revenue convert with it, and exports show the rate and as-of date. Per the analytics owner, the cut-off is now aligned with Sinvest. Portfolio valuation uses the previous-day (T-1) rate; revenue uses the period-end rate. The Before column is a plain description of the earlier situation, not a measured difference.
 
-## Slide 13: The monthly BigQuery bill fell by about 70% after we changed how the dashboard reads data
+## Slide 13: Operations, finance and marketing say the dashboard saves them time
+The usage numbers are measured from the dashboard activity log, 8 Sep to 15 Nov 2026 (days = days with any logged event, including logins). The quoted lines are the analytics owner's summary of the feedback from each team: they say the dashboard is good and saves them time. They are paraphrased, not word-for-word quotes, and no hours-saved figure is claimed.
+
+## Slide 14: The monthly BigQuery bill fell by about 70% after we changed how the dashboard reads data
 BigQuery bills per amount of data read. Source: BigQuery job log (billed bytes), Sep 1-30, Oct 16-31 (16 days) and Nov 1-14 (14 days), each scaled to 30 days. Late Oct is the first stretch after the 15 Oct changes. Dashboard screens: the snapshot tables (portfolios and similar) were split by date and the date filters rewritten; tested identical on 15 of 15 queries; the Largest funds query went from 5.2 GiB to 30 MB. Connected Sheets: two files from daily to weekly, six switched off. Scheduled queries: kalcer and kalcer_fix switched off. Metabase and ad-hoc were not changed. ESTIMATE basis: US$7.50 per TiB, 1 TiB free per month, Rp 18,050 per US$, storage excluded. These are list-price assumptions, not billing records, so check against the Google Cloud invoice. The earlier figure Rp 1,045,000 to about Rp 246,000 used a 14-day baseline; this slide uses calendar periods, so the numbers differ slightly.
 
-## Slide 14: Next target: finish CI/CD and run releases on Google Cloud instead of one person's computer
+## Slide 15: Next target: finish CI/CD and run releases on Google Cloud instead of one person's computer
 User-stated target: complete CI/CD development and move it to Google Cloud from GitHub. Current state from the repo: the Cloud Run deploy workflow exists but its push trigger is commented out until the keyless Google Cloud login (workload identity federation) is set up; its last runs on 17 Sep were skipped. Today the release is done by a script run on one machine. Some scheduled jobs (monthly review deck, e-statement schedule backup tick, GitHub Pages) also still run on GitHub. Business results are expected benefits, not measured.
