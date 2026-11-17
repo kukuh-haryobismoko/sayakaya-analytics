@@ -576,10 +576,10 @@ async function main() {
     raiz AS (SELECT id FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes)),
     acct AS (
       SELECT user_id FROM \`sayakaya.main.transactions\`
-      WHERE status='completed' AND type IN ('buy','sell') AND completed_at >= TIMESTAMP(@rStart) AND completed_at < TIMESTAMP(@rEnd)
+      WHERE status='completed' AND type IN ('buy','sell') AND completed_at >= TIMESTAMP(@rStart) AND completed_at < TIMESTAMP(@pEnd)
         AND user_id NOT IN (SELECT id FROM raiz)
       GROUP BY user_id
-      ORDER BY ABS(SUM(IF(type='buy', final_amount, 0)) - SUM(IF(type='sell', final_amount, 0))) DESC LIMIT 1
+      ORDER BY SUM(final_amount) DESC LIMIT 1  -- gross, not net: the Rp 50 B account nets ~0 in a month it sells and buys back
     )`;
   out.largestAccount = {
     moves: await runQuery(`
@@ -600,7 +600,7 @@ async function main() {
         (SELECT ROUND(SUM(h.unit * f.latest_nav_value * IF(f.currency = 'USD', fx.rate, 1))) FROM held h JOIN \`sayakaya.main.funds\` f ON f.id = h.fund_id
           CROSS JOIN (SELECT rate FROM \`sayakaya.main.fx_rates\` ORDER BY rate_date DESC LIMIT 1) fx
           WHERE h.fund_id NOT IN UNNEST(@fundExcludeIds)) aum_today`,
-      { raizCodes: RAIZ_CODES, rStart, rEnd, fundExcludeIds: FUND_EXCLUDE_IDS }))[0],
+      { raizCodes: RAIZ_CODES, rStart, rEnd, pEnd, fundExcludeIds: FUND_EXCLUDE_IDS }))[0],
   };
 
   // Daily AUM from the start of the review month to today, same basis as

@@ -130,7 +130,7 @@ close_cmp_end = max((x for x in daily if f"{x[0]:%Y-%m}" == cmp_ym), default=Non
 # when the book sits well below its level ten days earlier; counting those days
 # keeps the copy right on every refresh instead of hard-coding "six of the
 # seven days" (written for the 8 Oct run).
-STEP = 40e9
+STEP = 30e9  # the Nov return was Rp 35 B of the Rp 50 B
 part_days_list = [(day, a) for day, a in daily if f"{day:%Y-%m}" == part_ym and day.isoformat() < d["partialThrough"]]
 # Days of the partial month the Rp 50 B account was out, from the trade dates
 # the generator returns (sold 29 Sep, bought back 6 Oct): on the 8 Oct data
@@ -141,18 +141,27 @@ def iso(x):
 
 
 _moves = sorted(d["largestAccount"]["moves"], key=lambda m: iso(m["d"]).isoformat())
-_starts = [iso(m["d"]) for m in _moves if m["type"] in ("sell", "SWITCH_OUT") and num(m["amount"]) >= STEP]
+_starts = [iso(m["d"]) for m in _moves if m["type"] == "sell" and num(m["amount"]) >= STEP]  # switches stay invested, not exits
 _ends = [iso(m["d"]) for m in _moves if m["type"] in ("buy", "SWITCH_IN") and num(m["amount"]) >= STEP]
 _out_start = next((t for t in reversed(_starts) if t <= through), None)
 _back = next((t for t in _ends if _out_start and t > _out_start and t <= through), None)
 out_days, out_range = 0, "no closes yet"
 if _out_start and _back:
-    out_days = max(0, (_back - _out_start).days - 1)  # sold 29 Sep, back 6 Oct -> out 30 Sep to 5 Oct
-    out_range = f"{dlabel(_out_start + timedelta(days=1))} to {dlabel(_back - timedelta(days=1))}"
+    _s = max(_out_start + timedelta(days=1), date.fromisoformat(part_ym + "-01"))  # count only days inside the partial month
+    out_days = max(0, (_back - _s).days)
+    out_range = f"{dlabel(_s)} to {dlabel(_back - timedelta(days=1))}"
 elif _out_start:  # sold and not bought back yet: an exit on the 29th to 31st, or a new month's first days
     out_days = min(part_days, max(0, (through - _out_start).days))  # only days inside the partial month
     if out_days:
         out_range = f"{dlabel(_out_start + timedelta(days=1))} to {dlabel(through)}"
+_ex = [t for t in _starts if t <= through]  # exits to date
+_W = {2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven"}
+_ord = lambda n: f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+n_exit = _W.get(len(_ex), str(len(_ex)))
+exit_since = FULL[_ex[0].month - 1] if _ex else "May"
+exit_lo, exit_hi = (min(t.day for t in _ex), max(t.day for t in _ex)) if _ex else (29, 31)
+exit_when = f"the {_ord(exit_lo)} to the {_ord(exit_hi)} of the month ({', '.join(FULL[t.month - 1] for t in _ex)})"
+next_me = f"{exit_lo} to {min(exit_hi, part_month_days)} {MONTHS[int(part_ym[5:]) - 1]}"
 back_label = dlabel(_back) if _back else None
 back_part = f", back on {back_label}" if _back else ", still out"
 back_since = ", back since" if _back else ", still out"
@@ -294,13 +303,16 @@ traj = [
     ("Signups via referral", intc(refm[cmp_ym]["via_referral"]), intc(refm[rev_ym]["via_referral"]), intc(refm[part_ym]["via_referral"]), intc(pace(refm[part_ym]["via_referral"]))),
 ]
 everyone_aug = num(tx["comparison"]["buy_volume"]) - max(num(nf[cmp_ym]["largest_account_net"]), 0)
+_bv = num(tx["review"]["buy_volume"]) / everyone_aug - 1
+buy_dir = f"{abs(_bv) * 100:.0f}% " + ("more" if _bv >= 0 else "less")
+buy_why = "Orders grew far less than volume: larger buyers came back." if _bv >= 0 else "The larger buyers paused; small buying carried on."
 slide(f"""
 <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:40px">
   {head("02 · Trajectory", f"{CMP} → {REV} → {PART}")}
   <div class="note" style="max-width:380px;text-align:right">{PART} is {part_days} of {part_month_days} days. Pace scales the {part_days}-day total to a full month; balances and people counts are never projected. Buys, sells and total flow get no pace: one Rp 50 B order makes a projection meaningless. *The Rp 50 B account was out for {out_days} of the {part_days} days ({out_range}), back since.</div>
 </div>
 <div class="card" style="padding:0;overflow:hidden">{table(["Metric", CMP, REV, f"{mon(part_ym)} · {part_days}d", f"{mon(part_ym)} pace"], traj, "t traj")}</div>
-{callout(f"Everyone except that account bought <strong>{b(everyone_aug)}</strong> in {CMP} and <strong>{b(tx['review']['buy_volume'])}</strong> in {REV}, {abs((num(tx['review']['buy_volume']) / everyone_aug - 1) * 100):.0f}% less, from almost the same number of buy orders ({intc(tx['comparison']['buy_count'])} → {intc(tx['review']['buy_count'])}). The larger buyers paused; small buying carried on.", "#14c687", "The number nobody will spot on their own")}
+{callout(f"Everyone except that account bought <strong>{b(everyone_aug)}</strong> in {CMP} and <strong>{b(tx['review']['buy_volume'])}</strong> in {REV}, {buy_dir}, from {intc(tx['comparison']['buy_count'])} → {intc(tx['review']['buy_count'])} buy orders. {buy_why}", "#14c687", "The number nobody will spot on their own")}
 """)
 
 # ---- 03 AUM trend -------------------------------------------------------------
@@ -339,13 +351,21 @@ sx2 = lambda i: X0 + (X1 - X0) * i / max(len(dw) - 1, 1)
 sy2 = lambda val: Y1 - (min(max(val, dmin), dmax) - dmin) / (dmax - dmin) * (Y1 - Y0)
 dpts = [(sx2(i), sy2(val)) for i, (_, val) in enumerate(dw)]
 low = [i for i, (_, val) in enumerate(dw) if val < 230e9]
-band = f'<rect x="{dpts[low[0]][0]-6:.1f}" y="{Y0}" width="{dpts[low[-1]][0]-dpts[low[0]][0]+12:.1f}" height="{Y1-Y0}" fill="#ff3165" fill-opacity="0.08"/>' if low else ""
+runs = []  # one band per stretch the account was out, not one block from the first low day to the last
+for i in low:
+    if runs and i == runs[-1][1] + 1:
+        runs[-1][1] = i
+    else:
+        runs.append([i, i])
+band = "".join(f'<rect x="{dpts[a][0]-6:.1f}" y="{Y0}" width="{dpts[z][0]-dpts[a][0]+12:.1f}" height="{Y1-Y0}" fill="#ff3165" fill-opacity="0.08"/>' for a, z in runs)
 ticks2 = "".join(f'<line class="gl" x1="{X0}" y1="{sy2(t*1e9):.1f}" x2="{X1}" y2="{sy2(t*1e9):.1f}"/><text class="ax" x="{X0-10}" y="{sy2(t*1e9)+5:.1f}" text-anchor="end">{t}</text>' for t in (200, 230, 260))
-xt2 = "".join(f'<text class="ax" x="{sx2(i):.1f}" y="{Y1+24}" text-anchor="middle">{dlabel(dt.isoformat())}</text>' for i, (dt, _) in enumerate(dw) if dt.day in (1, 15) or i == len(dw) - 1)
+xt2 = "".join(f'<text class="ax" x="{sx2(i):.1f}" y="{Y1+24}" text-anchor="middle">{dlabel(dt.isoformat())}</text>' for i, (dt, _) in enumerate(dw) if (dt.day in (1, 15) and len(dw) - 1 - i > 2) or i == len(dw) - 1)
 ann = ""
-if low:
-    ann = (f'<text class="ax" x="{dpts[low[0]][0]-10:.1f}" y="{Y1-8}" text-anchor="end" style="fill:#c00d3f">sold 50.0 B</text>'
-           f'<text class="ax" x="{dpts[low[-1]][0]-4:.1f}" y="{Y0+14}" text-anchor="end" style="fill:#07724d">bought back</text>')
+for a, z in runs:
+    if a > 0:
+        ann += f'<text class="ax" x="{dpts[a][0]-10:.1f}" y="{Y1-8}" text-anchor="end" style="fill:#c00d3f">sold</text>'
+    if z < len(dw) - 1:
+        ann += f'<text class="ax" x="{dpts[z][0]+10:.1f}" y="{Y0+14}" text-anchor="start" style="fill:#07724d">back</text>'
 svg2 = f"""<svg viewBox="0 0 {W2} {H2}" class="chart">{ticks2}{band}
 <polyline points="{' '.join(f'{x:.1f},{y:.1f}' for x, y in dpts)}" fill="none" stroke="#3a50ab" stroke-width="2.5"/>
 <circle cx="{dpts[-1][0]:.1f}" cy="{dpts[-1][1]:.1f}" r="5" fill="#3a50ab"/>{ann}{xt2}
@@ -363,14 +383,14 @@ while i < len(big_moves):
     kind = {"buy": "bought", "sell": "sold"}.get(x["type"], x["type"])
     mv.append((dlabel(x["d"]), f'<span style="color:{GREEN if kind == "bought" else RED};font-weight:600">{kind}</span>', esc(x["fund"]), b(x["amount"])))
     i += 1
-slide(head("02 · Cause", "One account, Rp 50 B, in and out four times since May", sub=f"Registered {FULL[int(acct['profile']['registered'][5:]) - 1]} {acct['profile']['registered'][:4]}. Its moves of Rp 10 B or more; smaller ones left out. No identities in this deck.") + f"""
+slide(head("02 · Cause", f"One account, Rp 50 B, in and out {n_exit} times since {exit_since}", sub=f"Registered {FULL[int(acct['profile']['registered'][5:]) - 1]} {acct['profile']['registered'][:4]}. Its moves of Rp 10 B or more; smaller ones left out. No identities in this deck.") + f"""
 <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:20px">
   <div class="card chart-card"><div class="c-lab">Platform AUM at daily close · Rp billion</div>{svg2}</div>
   <div class="card" style="padding:0;overflow:hidden">{table(["Date", "Move", "Fund", "Amount"], mv, "t small moves")}</div>
 </div>
 <div class="grid3 tight" style="gap:16px">
   {callout(f"Last month we called {CMP}'s {b(net['comparison'], True)} broad participation. <strong>50.0 B of it was this account</strong>; everyone else was {b(nf[cmp_ym]['net_flow_excl_largest'], True)}. Our holdings check compared 31 Jul with 31 Aug, and the money was in place on both dates.", "#c00d3f", "Correction to last month")}
-  {callout("Three exits so far, all on the 29th to the 31st of the month (May, July, September). If that holds, expect about <strong>−50 B around 29 to 31 October</strong>. A pattern, not a known plan: worth asking whoever looks after this account.", "#ffc531", "Watch the end of October")}
+  {callout(f"{n_exit.capitalize()} exits so far, all on {exit_when}. If that holds, expect about <strong>−50 B around {next_me}</strong>. A pattern, not a known plan: worth asking whoever looks after this account.", "#ffc531", f"Watch the end of {PART}")}
   {callout(f"At Sharia Balanced's {fund_rate.get('Sucorinvest Sharia Balanced Fund', 0):.2f}% a year to us, Rp 50 B earned about <strong>Rp {50e9*fund_rate.get('Sucorinvest Sharia Balanced Fund', 0)/100/12/1e6:.0f} M a month</strong>, a fifth of fee revenue. In Money Market ({fund_rate.get('Sucorinvest Money Market Fund', 0):.2f}%) it earns about Rp {50e9*fund_rate.get('Sucorinvest Money Market Fund', 0)/100/12/1e6:.0f} M.", "#3a50ab", "What it is worth")}
 </div>
 """)
@@ -524,7 +544,7 @@ if brg.get("days"):
     _navp = [m_["nav_pct"] for m_ in bwd["movers"]]
     _mvrow = [(m_["fund"], _minus(f"{m_['nav_pct']:.1f}%"), b(m_["market"], True), b(m_["aum"])) for m_ in bwd["movers"][:4]]
     _nav_range = _minus("%.0f%%" % min(_navp)) + " to " + _minus("%.0f%%" % max(_navp))
-    slide(head("02 · Cause", "The fall in the last week was pricing, not redemptions") + f"""
+    slide(head("02 · Cause", f"The {dlabel(_cd(bwd['d']))} fall was pricing, not redemptions") + f"""
 <div class="grid3">
   {kpi("Book at the last close", b(_bd[-1]["aum"]), f"{b(_bd[-1]['aum'] - _wbase, True)} over seven closes", sub_color=MUTED)}
   {kpi("Market move, same window", b(_wm, True), "fund NAVs on units already held", color=signc(_wm), sub_color=MUTED)}
@@ -911,7 +931,7 @@ def srow(label, value, color="#14161f"):
 
 actions = [
     (f"<strong>Top line</strong>: the {b(abs(bwd['market']))} the book lost on {dlabel(date.fromisoformat(str(bwd['d'])) - timedelta(days=1))} was fund pricing, not a redemption: units held were unchanged and flow that day was {b(bwd['flow'], True)}. Confirm the NAV print with the MI." if bwd else ""),
-    f"<strong>Rp 50 B account</strong>: ask whoever looks after it whether the month-end exits are planned. Three so far, all on the 29th to 31st; the next would land around 29 to 31 Oct.",
+    f"<strong>Rp 50 B account</strong>: ask whoever looks after it whether the month-end exits are planned. {n_exit.capitalize()} so far, all on the {_ord(exit_lo)} to {_ord(exit_hi)}; the next would land around {next_me}.",
     f"<strong>Sharia Balanced → Money Market</strong>: {b(top_sw['amount'])} across {intc(top_sw['accounts'])} accounts cut the fee rate from {rc['annualYieldPct']['comparison']:.3f}% to {rc['annualYieldPct']['review']:.3f}%. Find out whether it was advised.",
     f"<strong>Use the app data</strong>: message the {intc(vnb.get('app_users', 0))} verified non-buyers and the {intent['people']} who started buying (lists in User behavior) instead of broadcast campaign pushes.",
     "<strong>Email tracking</strong>: switch on SES event publishing (about 10 minutes in the AWS console) so Email recap shows delivered, opened and clicked from November.",
