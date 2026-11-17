@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `f31ec0b (2026-11-17)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `65d4183 (2026-11-17)`.
 
 ## Cara membaca dokumen ini
 
@@ -33,7 +33,7 @@ Yang bisa dilakukan, secara garis besar:
 - **Marketing dan produk**: atribusi iklan, program referral, push notification, kesehatan aplikasi, dan perilaku pengguna di aplikasi yang dicocokkan dengan database (siapa membeli, di mana orang berhenti, fitur apa yang dipakai).
 - **Alat bantu**: bertanya dalam bahasa biasa (Ask), menjelajah tabel mentah, dan menulis query SQL sendiri (read-only).
 
-Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 54 tab dalam 8 grup.
+Akses diatur per orang: admin (superuser) memilih tab mana yang boleh dibuka setiap akun. Saat ini ada 55 tab dalam 8 grup.
 
 ## 2. Istilah penting
 
@@ -157,6 +157,7 @@ Urutan dan pengelompokan mengikuti sidebar aplikasi. Klik nama tab untuk penjela
 | Tab | Untuk apa |
 |---|---|
 | [AI Taskforce](#tab-presentation) | Deck rapat internal, ditampilkan satu halaman per layar. |
+| [User Acquisition](#tab-user-acquisition) | Deck rapat User Acquisition (booth vs bukan booth), ditampilkan satu halaman per layar. |
 | [Monthly Review](#tab-monthly-review) | Deck rapat internal, ditampilkan satu halaman per layar. |
 | [Manage users](#tab-admin) | Membuat akun login dan memilih section yang boleh dilihat tiap orang (superuser). |
 | [Activity log](#tab-activity-log) | Riwayat login, export, pertanyaan Ask, query SQL, lihat portfolio, lihat linimasa investor di User behavior, dan perubahan akun (superuser). |
@@ -1722,6 +1723,17 @@ Setiap tab berisi: **Untuk apa** (ringkas), **Penjelasan sederhana** (sama denga
 - **Cara hitung**: Hanya tampil untuk akun yang diberi akses tab ini. Dua sidebar tab diberi akses terpisah.
 - **Detail teknis** (otomatis dari kode):
   - Id tab untuk hak akses: `presentation`
+  - Endpoint: `GET /api/presentations/:month`
+
+<a id="tab-user-acquisition"></a>
+#### User Acquisition
+
+- **Untuk apa**: Deck rapat User Acquisition (booth vs bukan booth), ditampilkan satu halaman per layar.
+- **Penjelasan sederhana**: Materi, presentasi, rapat, internal, bisa, ditampilkan, layar, penuh, satu, halaman, per, satu, terbagi, jadi, dua, tab, sidebar, yang, aksesnya, bisa, diberikan, terpisah:, AI, Taskforce, (Juli, September), dan, Monthly, Review, (Agustus, September, Oktober)., Tidak, ditampilkan, untuk, semua, orang:, hanya, akun, yang, oleh, admin, sudah, diberi, akses, ke, tab, tersebut, (mis., login, khusus, untuk, dibagikan, saat, rapat), yang, bisa, melihatnya, sama, seperti, bagian, terbatas, lainnya.
+- **Data yang dibaca**: Berkas deck statis, daftar di PRESENTATIONS (server/app.js)
+- **Cara hitung**: Angka diambil dari BigQuery per 17 Nov 2026 dan tidak berubah otomatis. Hanya tampil untuk akun yang diberi akses tab ini.
+- **Detail teknis** (otomatis dari kode):
+  - Id tab untuk hak akses: `user-acquisition`
   - Endpoint: `GET /api/presentations/:month`
 
 <a id="tab-monthly-review"></a>
