@@ -156,6 +156,8 @@ elif _out_start:  # sold and not bought back yet: an exit on the 29th to 31st, o
 back_label = dlabel(_back) if _back else None
 back_part = f", back on {back_label}" if _back else ", still out"
 back_since = ", back since" if _back else ", still out"
+acct_out = (f"the Rp 50 B account was out {out_range}{back_part}; " if out_days else "")  # kpi lead-in
+acct_note = (f"the Rp 50 B account was out for {out_days} of those days ({out_range}){back_since}. " if out_days else "")
 # A retreat in the last three closes that no visible order explains. The
 # transaction table shows no redemption past Rp 0.7 B, so a fall this size is
 # worth naming rather than leaving for the meeting to spot.
@@ -266,11 +268,11 @@ excl_rev = num(nf[rev_ym]["net_flow_excl_largest"])
 slide(head(f"01 · Where we ended {REV}", "The month in six numbers") + f"""
 <div class="grid3">
   {kpi(f"AUM · {mon(rev_ym)} daily avg", b(aum[rev_ym]), f"{chg(aum[rev_ym], aum[cmp_ym])} vs {mon(cmp_ym)} avg", sub_color=signc(aum[rev_ym]-aum[cmp_ym]))}
-  {kpi("Platform fee (AperD)", m(revenue[rev_ym]), f"{chg(revenue[rev_ym], revenue[cmp_ym])} vs {mon(cmp_ym)}, while AUM rose", sub_color=signc(revenue[rev_ym]-revenue[cmp_ym]))}
+  {kpi("Platform fee (AperD)", m(revenue[rev_ym]), f"{chg(revenue[rev_ym], revenue[cmp_ym])} vs {mon(cmp_ym)}, AUM {chg(aum[rev_ym], aum[cmp_ym])}", sub_color=signc(revenue[rev_ym]-revenue[cmp_ym]))}
   {kpi("Net flow", b(net['review'], True), f"{b(excl_rev, True)} without one account", color=signc(net['review']), sub_color=MUTED)}
   {kpi("New registrations", intc(reg[rev_ym]['registered']), f"{chg(reg[rev_ym]['registered'], reg[cmp_ym]['registered'])} vs {mon(cmp_ym)}, first rise since January", sub_color=GREEN)}
   {kpi("Active investors (bought in month)", intc(tx['review']['active_investors']), f"down from {intc(tx['comparison']['active_investors'])} in {CMP}; {intc(rh['ever_bought'])} ever bought", sub_color=RED)}
-  {kpi(f"AUM · close {dlabel(close_today[0].isoformat())}", b(close_today[1]), f"the Rp 50 B account was out {out_range}{back_part}; lowest close in {PART} {b(min([x[1] for x in part_days_list] or [0]))}", sub_color=MUTED)}
+  {kpi(f"AUM · close {dlabel(close_today[0].isoformat())}", b(close_today[1]), f"{acct_out}lowest close in {PART} {b(min([x[1] for x in part_days_list] or [0]))}", sub_color=MUTED)}
 </div>
 {callout(f"Three of these six numbers are <strong>one account</strong>. It switched Rp 50.7 B into a lower-fee fund on 4 Sep, sold Rp 50.0 B on 29 Sep and bought it back on 6 Oct. Without it, {REV}'s net flow was <strong>{b(excl_rev, True)}</strong>, the second month in a row close to zero after five months of broad outflow. Registrations rose for the first time since January.", "#14c687")}
 """)
@@ -322,9 +324,10 @@ svg = f"""<svg viewBox="0 0 {W} {H}" class="chart">{grid}
 <text class="vl" x="{today_x:.1f}" y="{today_y-16:.1f}" text-anchor="middle">{close_today[1]/1e9:.0f}</text>
 {labels}{xlab}<text class="ax" x="{today_x:.1f}" y="{Y1+28}" text-anchor="middle">{dlabel(close_today[0].isoformat())}</text>
 <line x1="{X0}" y1="{Y1}" x2="{X1}" y2="{Y1}" stroke="#8a90a3" stroke-width="1.5"/></svg>"""
-slide(head(f"01 · Where we ended {REV}", f"AUM has held at 250 to 260 B for three months") + f"""
+_a3 = [aum[k] / 1e9 for k in sorted(k for k in aum if k <= rev_ym)[-3:]]
+slide(head(f"01 · Where we ended {REV}", f"AUM has held at {min(_a3):.0f} to {max(_a3):.0f} B for three months") + f"""
 <div class="card chart-card"><div class="c-lab">Platform AUM, average daily balance per month · Rp billion · excl. RAIZ, 2 funds · last point: close on {dlabel(close_today[0].isoformat())}</div>{svg}</div>
-<div class="note">{REV} averaged {b(aum[rev_ym])} ({chg(aum[rev_ym], aum[cmp_ym])}). {PART}'s {part_days}-day average ({b(aum[part_ym])}) is left off the line: the Rp 50 B account was out for {out_days} of those days ({out_range}){back_since}. Its close on {dlabel(close_today[0].isoformat())}, {b(close_today[1])}, is plotted instead.{f" The last closes sit {b(last_gap[1])} lower than {last_gap[0]} with no order behind it; ask the MI before the meeting." if last_gap else ""}</div>
+<div class="note">{REV} averaged {b(aum[rev_ym])} ({chg(aum[rev_ym], aum[cmp_ym])}). {PART}'s {part_days}-day average ({b(aum[part_ym])}) is left off the line: {acct_note or 'the month is not over. '}Its close on {dlabel(close_today[0].isoformat())}, {b(close_today[1])}, is plotted instead.{f" The last closes sit {b(last_gap[1])} lower than {last_gap[0]} with no order behind it; ask the MI before the meeting." if last_gap else ""}</div>
 <div class="tight">{callout(f"One account is <strong>{top1_share:.1f}% of AUM today</strong> (Rp {acct_aum/1e9:.1f} B of {conc_total/1e9:.1f} B), so every month-level figure moves with it. From this deck on, flows are shown with and without it.", "#3a50ab", "Why the line is flat but the month was not")}</div>
 """)
 
@@ -426,14 +429,16 @@ for i, k in enumerate(rm):
     rb += f'<text class="ax" x="{cx:.1f}" y="{Y1+28}" text-anchor="middle">{mon(k)}{" · " + str(part_days) + "d" if partial else ""}</text>'
 gl4 = "".join(f'<line class="gl" x1="{X0}" y1="{sy4(t*1e6):.1f}" x2="{X1}" y2="{sy4(t*1e6):.1f}"/><text class="ax" x="{X0-12}" y="{sy4(t*1e6)+5:.1f}" text-anchor="end">{t}</text>' for t in (100, 200, 300, 400))
 svg4 = f'<svg viewBox="0 0 {W4} {H4+10}" class="chart">{gl4}{rb}<line x1="{X0}" y1="{Y1}" x2="{X1}" y2="{Y1}" stroke="#8a90a3" stroke-width="1.5"/></svg>'
-slide(head(f"01 · Where we ended {REV}", f"AUM up {chg(aum[rev_ym], aum[cmp_ym])[1:]}, fee revenue down {chg(revenue[rev_ym], revenue[cmp_ym])[1:]}") + f"""
+slide(head(f"01 · Where we ended {REV}", f"AUM {chg(aum[rev_ym], aum[cmp_ym])}, fee revenue {chg(revenue[rev_ym], revenue[cmp_ym])}") + f"""
 <div class="card chart-card"><div class="c-lab">Platform fee revenue, AperD share · Rp million per month · excl. RAIZ, 2 funds</div>{svg4}</div>
-<div class="note">{REV} earned <strong>{m(revenue[rev_ym])}</strong>, {m(abs(revenue[rev_ym]-revenue[cmp_ym]))} less than {CMP}, even though average AUM rose. {PART}'s {part_days}-day pace ({m(pace(revenue[part_ym]))}) understates the month: the Rp 50 B account was out for {out_days} of the {part_days} days ({out_range}){back_since}. Next: where the money went.</div>
+<div class="note">{REV} earned <strong>{m(revenue[rev_ym])}</strong>, {m(abs(revenue[rev_ym]-revenue[cmp_ym]))} {"less" if revenue[rev_ym] < revenue[cmp_ym] else "more"} than {CMP}, with average AUM {chg(aum[rev_ym], aum[cmp_ym])}. {PART}'s {part_days}-day pace ({m(pace(revenue[part_ym]))}) {'understates the month: ' + acct_note.replace('those days', f'the {part_days} days') if acct_note else 'scales the days so far to a full month. '}Next: where the money went.</div>
 """)
 
 # ---- 07 revenue cause -------------------------------------------------------------
-steps = [(CMP, rc["comparison"]["revenue"], None), ("One fewer day", rc["daysEffect"], 1), ("Higher AUM", rc["aumEffect"], 1),
-         ("Cheaper fund mix", rc["rateMixEffect"], 1), (REV, rc["review"]["revenue"], None)]
+_dd = rc["review"]["days"] - rc["comparison"]["days"]
+steps = [(CMP, rc["comparison"]["revenue"], None), ("One more day" if _dd > 0 else "One fewer day" if _dd < 0 else "Same days", rc["daysEffect"], 1),
+         ("Higher AUM" if rc["aumEffect"] >= 0 else "Lower AUM", rc["aumEffect"], 1),
+         ("Richer fund mix" if rc["rateMixEffect"] >= 0 else "Cheaper fund mix", rc["rateMixEffect"], 1), (REV, rc["review"]["revenue"], None)]
 W5, H5, X0, X1, Y0, Y1 = 600, 300, 20, 590, 20, 240
 lo, hi = 130e6, 160e6
 sy5 = lambda val: Y1 - (val - lo) / (hi - lo) * (Y1 - Y0)
@@ -455,7 +460,7 @@ for i, (lab, val, delta) in enumerate(steps):
     wf += f'<text class="ax" x="{cx:.1f}" y="{Y1+24}" text-anchor="middle" style="font-size:12px">{lab}</text>'
 svg5 = f'<svg viewBox="0 0 {W5} {H5}" class="chart">{wf}<line x1="{X0}" y1="{Y1}" x2="{X1}" y2="{Y1}" stroke="#8a90a3" stroke-width="1.5"/></svg>'
 swr = [(esc(r["from_fund"]).replace(" Fund", ""), esc(r["to_fund"]).replace(" Fund", ""), intc(r["accounts"]), b(r["amount"])) for r in sw[:5]]
-slide(head("02 · Cause", f"The {abs(rc['change'])/1e6:.1f} M went on a cheaper fund mix", sub=f"Revenue = days × average AUM × fee rate, so the change splits exactly into three parts. Average AperD rate across the book: {rc['annualYieldPct']['comparison']:.3f}% → {rc['annualYieldPct']['review']:.3f}% a year.") + f"""
+slide(head("02 · Cause", f"The {abs(rc['change'])/1e6:.1f} M {'drop' if rc['change'] < 0 else 'gain'} came mostly from {max(('average AUM', rc['aumEffect']), ('the fund mix', rc['rateMixEffect']), ('the day count', rc['daysEffect']), key=lambda t: abs(t[1]))[0]}", sub=f"Revenue = days × average AUM × fee rate, so the change splits exactly into three parts. Average AperD rate across the book: {rc['annualYieldPct']['comparison']:.3f}% → {rc['annualYieldPct']['review']:.3f}% a year.") + f"""
 <div style="display:grid;grid-template-columns:minmax(0,0.95fr) minmax(0,1.05fr);gap:20px">
   <div class="card chart-card"><div class="c-lab">AperD revenue, {CMP} to {REV} · Rp million</div>{svg5}</div>
   <div class="card" style="padding:0;overflow:hidden"><div class="c-lab" style="padding:18px 20px 6px">Largest fund switches in {REV}</div>{table(["From", "To", "Accounts", "Amount"], swr, "t small moves2")}</div>

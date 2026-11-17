@@ -79,7 +79,11 @@ chrome() {
 if [ "$SKIP_GEN" -eq 0 ]; then
   tmp="$(mktemp "${TMPDIR:-/tmp}/review-data.XXXXXX")"
   echo "generating data for $REVIEW_MONTH (about 2 minutes)..."
-  node presentation-docs/generate-monthly-review-data.js "$REVIEW_MONTH" > "$tmp"
+  # a dropped connection (Mac asleep, wifi blip) makes node exit 0 with no output: retry twice
+  for attempt in 1 2 3; do
+    node presentation-docs/generate-monthly-review-data.js "$REVIEW_MONTH" > "$tmp" && [ -s "$tmp" ] && break
+    echo "generator attempt $attempt wrote no data" >&2; sleep 30
+  done
   # node exits 0 with no output when a query never returns (e.g. the Mac slept mid-run)
   [ -s "$tmp" ] || { echo "generator wrote no data (cut off mid-run?). Nothing written; retry later." >&2; rm -f "$tmp"; exit 3; }
 

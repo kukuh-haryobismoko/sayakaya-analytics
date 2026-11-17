@@ -48,6 +48,15 @@ const RAIZ_CODES = ['RAIZ', 'RAIZKAYA'];
 // the holdings tables, not on transactions.
 const FUND_EXCLUDE_SINVEST = ['TP002MMCAVRLIF00', 'TP002IFCAVINLQ00']; // portfolio_with_code
 const FUND_EXCLUDE_IDS = ['sjmIG8YqZOOp9JiAS_-pE', 'xJAj9OpLhRpSNip63uj0b']; // funds.id / mi_fee_logs.mi_fee.fund_id
+// portfolio_with_code.amount is in the fund's own currency. Convert USD funds
+// by the dashboard's rule (fx_rates, 2 days before the snapshot date), or the
+// deck's AUM runs below the app's KPI by the USD holdings.
+const PWC = `(SELECT p.* EXCEPT (amount), p.amount * IF(f.currency = 'USD', fx.rate, 1) AS amount
+  FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` p
+  LEFT JOIN \`sayakaya.main.funds\` f ON f.id = p.id
+  LEFT JOIN (SELECT d, r.rate FROM (SELECT rate, rate_date, IFNULL(LEAD(rate_date) OVER (ORDER BY rate_date), DATE '2100-01-01') AS nxt FROM \`sayakaya.main.fx_rates\`) r
+    JOIN UNNEST(GENERATE_DATE_ARRAY('2021-01-01', CURRENT_DATE('Asia/Jakarta'))) d ON d >= r.rate_date AND d < r.nxt) fx
+    ON fx.d = DATE_SUB(DATE(p.created_at), INTERVAL 2 DAY))`;
 
 // The current referral program's actual launch (confirmed 2026-09-10,
 // matches the "Bonus Program MGM SayaKaya" campaign's system start_date of
@@ -114,7 +123,7 @@ async function main() {
       SELECT DATE(p.created_at, 'Asia/Jakarta') AS d,
         SUM(IF(r.sid_code IS NULL, p.amount, 0)) AS nonraiz_aum,
         SUM(IF(r.sid_code IS NOT NULL, p.amount, 0)) AS raiz_aum
-      FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` p
+      FROM ${PWC} p
       LEFT JOIN raiz r ON p.sid_code = r.sid_code
       WHERE p.created_at >= TIMESTAMP('2026-01-01') AND p.created_at < TIMESTAMP(@pEnd)
         AND p.sinvest_code NOT IN UNNEST(@fundExcludeSinvest)
@@ -219,9 +228,10 @@ async function main() {
         UNION ALL
         SELECT user_id, fund_id, unit FROM \`sayakaya.main.bonus_portfolios\` WHERE status = 'on_going'
       ),
+      fx AS (SELECT rate FROM \`sayakaya.main.fx_rates\` ORDER BY rate_date DESC LIMIT 1),
       per_user AS (
-        SELECT a.user_id, SUM(a.unit * f.latest_nav_value) aum
-        FROM active a JOIN \`sayakaya.main.funds\` f ON f.id = a.fund_id
+        SELECT a.user_id, SUM(a.unit * f.latest_nav_value * IF(f.currency = 'USD', fx.rate, 1)) aum
+        FROM active a JOIN \`sayakaya.main.funds\` f ON f.id = a.fund_id CROSS JOIN fx
         WHERE a.user_id NOT IN (SELECT id FROM raiz) AND a.fund_id NOT IN UNNEST(@fundExcludeIds)
         GROUP BY a.user_id HAVING aum > 0
       ),
@@ -245,13 +255,13 @@ async function main() {
   out.topMovers = await runQuery(`
     WITH raiz AS (SELECT DISTINCT sid_code FROM \`sayakaya.main.users\` WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) AND sid_code IS NOT NULL),
     start_snap AS (
-      SELECT sid_code, SUM(amount) aum FROM \`sayakaya.mi_fee_logs.portfolio_with_code\`
+      SELECT sid_code, SUM(amount) aum FROM ${PWC}
       WHERE DATE(created_at,'Asia/Jakarta') = DATE_SUB(DATE(@rStart), INTERVAL 1 DAY)
         AND sinvest_code NOT IN UNNEST(@fundExcludeSinvest)
       GROUP BY sid_code
     ),
     end_snap AS (
-      SELECT sid_code, SUM(amount) aum FROM \`sayakaya.mi_fee_logs.portfolio_with_code\`
+      SELECT sid_code, SUM(amount) aum FROM ${PWC}
       WHERE DATE(created_at,'Asia/Jakarta') = DATE_SUB(DATE(@rEnd), INTERVAL 1 DAY)
         AND sinvest_code NOT IN UNNEST(@fundExcludeSinvest)
       GROUP BY sid_code
@@ -587,7 +597,8 @@ async function main() {
         SELECT fund_id, unit FROM \`sayakaya.main.bonus_portfolios\` WHERE status = 'on_going' AND user_id IN (SELECT user_id FROM acct)
       )
       SELECT (SELECT FORMAT_DATETIME('%Y-%m', created_at) FROM \`sayakaya.main.users\` WHERE id IN (SELECT user_id FROM acct)) registered,
-        (SELECT ROUND(SUM(h.unit * f.latest_nav_value)) FROM held h JOIN \`sayakaya.main.funds\` f ON f.id = h.fund_id
+        (SELECT ROUND(SUM(h.unit * f.latest_nav_value * IF(f.currency = 'USD', fx.rate, 1))) FROM held h JOIN \`sayakaya.main.funds\` f ON f.id = h.fund_id
+          CROSS JOIN (SELECT rate FROM \`sayakaya.main.fx_rates\` ORDER BY rate_date DESC LIMIT 1) fx
           WHERE h.fund_id NOT IN UNNEST(@fundExcludeIds)) aum_today`,
       { raizCodes: RAIZ_CODES, rStart, rEnd, fundExcludeIds: FUND_EXCLUDE_IDS }))[0],
   };
@@ -601,7 +612,7 @@ async function main() {
       WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) AND sid_code IS NOT NULL
     )
     SELECT DATE(p.created_at, 'Asia/Jakarta') d, ROUND(SUM(p.amount)) aum
-    FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` p LEFT JOIN raiz r ON p.sid_code = r.sid_code
+    FROM ${PWC} p LEFT JOIN raiz r ON p.sid_code = r.sid_code
     WHERE r.sid_code IS NULL AND p.created_at >= TIMESTAMP(@rStart) AND p.created_at < TIMESTAMP_ADD(TIMESTAMP(@pEnd), INTERVAL 1 DAY)
       AND p.sinvest_code NOT IN UNNEST(@fundExcludeSinvest)
     GROUP BY d ORDER BY d`, { raizCodes: RAIZ_CODES, rStart, pEnd, fundExcludeSinvest: FUND_EXCLUDE_SINVEST });
@@ -834,7 +845,7 @@ async function main() {
       WHERE UPPER(IFNULL(referrer_code,'')) IN UNNEST(@raizCodes) AND sid_code IS NOT NULL)
     SELECT DATE(p.created_at,'Asia/Jakarta') d, p.sinvest_code sc, ANY_VALUE(p.fund) fund,
       SUM(p.total_unit) u, MAX(p.latest_nav_value) nav, SUM(p.amount) a
-    FROM \`sayakaya.mi_fee_logs.portfolio_with_code\` p
+    FROM ${PWC} p
     LEFT JOIN raiz r ON p.sid_code = r.sid_code
     WHERE r.sid_code IS NULL AND p.created_at >= TIMESTAMP(@rStart)
       AND p.created_at < TIMESTAMP_ADD(TIMESTAMP(@pEnd), INTERVAL 1 DAY)
