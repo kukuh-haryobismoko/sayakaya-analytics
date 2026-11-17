@@ -286,12 +286,6 @@ const TABS = {
     datasets: "Berkas deck statis, daftar di PRESENTATIONS (server/app.js)",
     computation: "Hanya tampil untuk akun yang diberi akses tab ini. Dua sidebar tab diberi akses terpisah.",
   },
-  "user-acquisition": {
-    docKey: "docs_presentation_desc",
-    summary: "Deck rapat User Acquisition (booth vs bukan booth), ditampilkan satu halaman per layar.",
-    datasets: "Berkas deck statis, daftar di PRESENTATIONS (server/app.js)",
-    computation: "Angka diambil dari BigQuery per 17 Nov 2026 dan tidak berubah otomatis. Hanya tampil untuk akun yang diberi akses tab ini.",
-  },
   "admin": {
     summary: "Membuat akun login dan memilih section yang boleh dilihat tiap orang (superuser).",
     datasets: "Auth internal aplikasi",

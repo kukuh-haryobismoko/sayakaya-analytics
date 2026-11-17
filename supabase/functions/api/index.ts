@@ -438,7 +438,7 @@ const PRESENTATIONS: Record<string, { tab: string }> = {
   august: { tab: 'monthly-review' },
   'review-september': { tab: 'monthly-review' },
   'review-october': { tab: 'monthly-review' },
-  'ua-2026-11': { tab: 'user-acquisition' },
+  'ua-2026-11': { tab: 'monthly-review' },
 };
 // The daily refresh uploads later months as review-YYYY-MM.pdf; list them so the
 // Monthly Review tab can grow a button without a code change.

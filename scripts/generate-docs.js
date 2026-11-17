@@ -237,7 +237,7 @@ if (arStart >= 0) {
 const PATH_TABS = [
   [/^\/api\/admin\/users/, ['admin']],
   [/^\/api\/admin\/audit-log/, ['activity-log']],
-  [/^\/api\/presentations\//, ['presentation', 'monthly-review', 'user-acquisition']],
+  [/^\/api\/presentations\//, ['presentation', 'monthly-review']],
   [/^\/api\/analysis\/coverage/, analysisTabs],
 ];
 routes.forEach((r) => {

@@ -262,7 +262,6 @@
         <div class="nav-group" data-group="presentation">
           <div class="nav-label"><span>Presentation</span><span class="nav-group-caret"></span></div>
           <button class="nav-link" data-tab="presentation"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-monitor"></use></svg></span>AI Taskforce</button>
-          <button class="nav-link" data-tab="user-acquisition"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-users"></use></svg></span>User Acquisition</button>
           <button class="nav-link" data-tab="monthly-review"><span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24"><use href="#i-calendar"></use></svg></span>Monthly Review</button>
         </div>
         <div class="nav-group hidden" id="adminNavGroup" data-group="admin">
@@ -4279,28 +4278,6 @@ ORDER BY n DESC"></textarea>
          same viewer as AI Taskforce, separate tab so it can be granted
          independently. Add a button + entry in PRESENTATIONS (server/app.js)
          for each new month's deck. -->
-    <section id="user-acquisition" class="view">
-      <div class="panel">
-        <div class="panel-head wrap">
-          <h2>User Acquisition</h2>
-          <span class="hint">November 2026 meeting deck: booth vs not booth, versus last month, in-app behaviour. Data through 17 Nov.</span>
-          <button type="button" class="btn-primary" id="uaPresentBtn">▶ <span data-i18n="presentation_present_btn">Present</span></button>
-        </div>
-        <div class="seg" id="uaMonthSeg">
-          <button type="button" class="on" data-month="ua-2026-11">November</button>
-        </div>
-      </div>
-      <div class="panel">
-        <div id="uaStage" class="presentation-stage">
-          <canvas id="uaCanvas"></canvas>
-          <button type="button" class="pres-nav pres-prev" id="uaPrevBtn" aria-label="Previous page">‹</button>
-          <button type="button" class="pres-nav pres-next" id="uaNextBtn" aria-label="Next page">›</button>
-          <div class="presentation-counter" id="uaCounter">1 / 1</div>
-          <div class="presentation-hint" data-i18n="presentation_exit_hint">Esc to exit · ← → to move</div>
-        </div>
-      </div>
-    </section>
-
     <section id="monthly-review" class="view">
       <div class="panel">
         <div class="panel-head wrap">
@@ -4312,6 +4289,7 @@ ORDER BY n DESC"></textarea>
           <button type="button" data-month="august" data-i18n="presentation_month_august">August</button>
           <button type="button" data-month="review-september" data-i18n="presentation_month_september">September</button>
           <button type="button" class="on" data-month="review-october" data-i18n="presentation_month_october">October</button>
+          <button type="button" data-month="ua-2026-11">User Acquisition Nov</button>
         </div>
       </div>
       <div class="panel">
