@@ -80,23 +80,25 @@ slide(f"""
     <div class="big">SayaKaya<br>User Acquisition</div>
     <div style="font-size:21px;color:#b7bdd2;line-height:1.5">How new users arrive, how booth users differ from everyone else, how they behave in the app, and how this month compares with October. Data through 17 November.</div>
   </div>
-  {callout('<strong>Definitions.</strong> RAIZ / RAIZKAYA referrals are excluded everywhere. <strong>Booth user</strong> = registered on or after 19 Oct 2026 with a referrer or sales code from the 29-code booth roster (PIM, GC, CP). <strong>Not booth</strong> = every other registration. <strong>Funded</strong> = made a first purchase that was not a bonus. Figures can differ by a few users from the Booth event tab, which applies its own rules.', label='Read this first', dark=True)}
+  {callout('<strong>Definitions.</strong> RAIZ / RAIZKAYA referrals are excluded everywhere. <strong>Booth user</strong> = registered on or after 19 Oct 2026 with a referrer or sales code from the 29-code booth roster (PIM, GC, CP). <strong>Not booth</strong> = every other registration. <strong>Funded</strong> = made a first purchase that was not a bonus. <strong>Periods.</strong> <em>Since 19 Oct</em> = 19 Oct to 17 Nov (30 days). <em>November</em> = 1 to 17 Nov only (17 days), so it is shown next to a pace or a per-day rate wherever it meets a full month. Figures can differ by a few users from the Booth event tab, which applies its own rules.', label='Read this first', dark=True)}
 </div>""", dark=True)
 
 # ---- 02 at a glance ---------------------------------------------------------
 tot_regs, tot_fun = B["regs"] + O["regs"], B["fun"] + O["fun"]
 wk_after = sum(b + o for b, o in zip(W_BOOTH[7:11], W_OTHER[7:11])) / 4
 wk_before = sum(W_OTHER[:5]) / 5
+wk_nb = sum(W_OTHER[7:11]) / 4
+d_nov, d_oct, d_sep = 64 / 17, 41 / 31, 29 / 30
 slide(head("01 · Where we are", "User acquisition at a glance", "Booth launched on 19 October. Everything below compares the booth with the rest of the funnel since that day.") + f"""
 <div class="grid3">
-  {kpi("Registrations since 19 Oct", f"{tot_regs}", f"{B['regs']} booth · {O['regs']} not booth", sub_color=BLUE)}
-  {kpi("Sign-ups per week", f"{wk_after:.0f}", f"vs {wk_before:.0f} per week in September · {wk_after / wk_before:.0f}x", sub_color=GREEN)}
+  {kpi("Registrations, 19 Oct to 17 Nov", f"{tot_regs}", f"{B['regs']} booth · {O['regs']} not booth", sub_color=BLUE)}
+  {kpi("Sign-ups per week", f"{wk_after:.0f}", f"19 Oct to 15 Nov vs {wk_before:.0f} a week before the booth (31 Aug to 4 Oct): {wk_after / wk_before:.0f}x. Not booth alone: {wk_nb:.0f} a week, {wk_nb / wk_before:.0f}x.", sub_color=GREEN)}
   {kpi("Booth share of sign-ups", pct0(B['regs'], tot_regs), f"{B['regs']} of {tot_regs} registrations since 19 Oct")}
-  {kpi("Funded since 19 Oct", f"{tot_fun}", f"{B['fun']} booth · {O['fun']} not booth")}
-  {kpi("Registered → funded", pct(B['fun'], B['regs']), f"booth, vs {pct(O['fun'], O['regs'])} not booth", color=RED, sub_color=RED)}
-  {kpi("First-time buyers, Nov to 17th", "64", "vs 41 in all of October, 29 in September", sub_color=GREEN)}
+  {kpi("Funded, same 19 Oct to 17 Nov users", f"{tot_fun}", f"{B['fun']} booth · {O['fun']} not booth")}
+  {kpi("Registered → funded", pct(B['fun'], B['regs']), f"booth, vs {pct(O['fun'], O['regs'])} not booth (same window, bought by 17 Nov)", color=RED, sub_color=RED)}
+  {kpi("First-time buyers, 1 to 17 Nov", "64", f"{d_nov:.1f} a day, vs {d_oct:.1f} in October (41 buyers) and {d_sep:.1f} in September (29)", sub_color=GREEN)}
 </div>
-{callout("Sign-ups are about <strong>seven times</strong> the September weekly rate and most of them come from the booth. What has not moved with them is purchases: a booth sign-up is <strong>less likely to buy</strong> than anyone else. Reach is solved; conversion is the open question.", label="Headline")}
+{callout("Sign-ups are about <strong>seven times</strong> the pre-booth weekly rate, and most of that is the booth: not booth alone is about <strong>twice</strong> (60 vs 32 a week). Buyers are up too, but the conversion rate is not: a booth sign-up is <strong>less likely to buy</strong> than anyone else. Reach is solved; conversion is the open question.", label="Headline")}
 """)
 
 # ---- 03 monthly trend -------------------------------------------------------
@@ -143,11 +145,12 @@ rows = [
     ("First-time buyers (by purchase month)", "29", "41", "64", pace(64)),
     ("&nbsp;&nbsp;of which booth users", "-", "18", "30", pace(30)),
     ("&nbsp;&nbsp;of which other users", "29", "23", "34", pace(34)),
-    ("Sign-ups from that month that have bought", "26", "49", "49", "-"),
+    ("Booth sign-ups per day the booth ran", "-", "22 (13 days)", "24 (17 days)", "-"),
+    ("Sign-ups of that month who have bought so far", "26 (20%)", "49 (8%)", "49 (9%)", "-"),
 ]
-slide(head("05 · Versus last month", "November is already ahead of October on first-time buyers", "Month by month. November covers 1 to 17 Nov; the last column is a straight-line projection to 30 days.") + f"""
+slide(head("05 · Versus last month", "November is already ahead of October on first-time buyers", "Month by month. November covers 1 to 17 Nov; the last column projects it in a straight line to 30 days. October had the booth for 13 of its 31 days (19 to 31 Oct).") + f"""
 <div class="card" style="padding:6px 10px">{table(["", "Sep", "Oct", "Nov (to 17th)", "Nov pace"], rows, "t small")}</div>
-{callout("<strong>First-time buyers: 64 in 17 days</strong> against 41 for all of October. Booth users are 30 of them. But non-booth buyers also rose (23 to 34), partly earlier sign-ups finally buying. Oct 'not booth' includes 1 to 18 Oct, before the booth.", label="Read")}
+{callout("<strong>First-time buyers: 64 in 17 days</strong> against 41 for all of October. Booth users are 30 of them. But non-booth buyers also rose (23 to 34), partly earlier sign-ups finally buying. Per booth day, sign-ups are level (22 vs 24). The last row is not like for like: September sign-ups had two months to buy, November's 17 days. Oct 'not booth' includes 1 to 18 Oct.", label="Read")}
 """)
 
 # ---- 07 quality -------------------------------------------------------------
@@ -155,21 +158,21 @@ qrows = [
     ("Registrations", f"{B['regs']}", f"{O['regs']}", f"{P['regs']}"),
     ("Verified", pct0(B['ver'], B['regs']), pct0(O['ver'], O['regs']), pct0(P['ver'], P['regs'])),
     ("Bought within 7 days (users older than 7 days)", pct(B['mat_f7'], B['mat']), pct(O['mat_f7'], O['mat']), pct(P['mat_f7'], P['mat'])),
-    ("Bought ever (to 17 Nov)", pct(B['fun'], B['regs']), pct(O['fun'], O['regs']), pct(P['fun'], P['regs'])),
+    ("Bought ever (to 17 Nov, older users had longer)", pct(B['fun'], B['regs']), pct(O['fun'], O['regs']), pct(P['fun'], P['regs'])),
     ("Median time from sign-up to first buy", "1 hour", "13 hours", "-"),
     ("Median first ticket (mean)", "Rp 1.0 M (1.4 M)", "Rp 5.0 M (66 M)", "Rp 0.2 M (1.0 M)"),
-    ("Purchase attempts that failed", "18% of 71", "30% of 73", "-"),
+    ("Purchase attempts that failed (since 19 Oct)", "18% of 71", "30% of 73", "-"),
 ]
 slide(head("06 · Quality of the new users", "Booth buyers buy fast and small; fewer pay attempts fail", "Not booth is shown twice: since the booth began, and the 30 days before it (19 Sep to 18 Oct) as last month's baseline.") + f"""
 <div class="card" style="padding:6px 10px">{table(["", f"Booth", "Not booth, since 19 Oct", "Not booth, 19 Sep to 18 Oct"], qrows, "t small")}</div>
-{callout("Booth buyers mostly buy <strong>within an hour</strong> of signing up (81% inside 24 hours). The mean for not booth is pulled up by a few very large tickets; the median is the fairer comparison. Booth users get <strong>no sign-up bonus</strong>; 35 not-booth users did, and only 2 of them bought.", label="Read")}
+{callout("<strong>Use the 'within 7 days' row for a fair comparison:</strong> every user in it had the same 7 days to buy. 'Bought ever' favours older groups. Booth buyers mostly buy <strong>within an hour</strong> of signing up (81% inside 24 hours). Not booth mean is lifted by a few huge tickets, so read the median. Booth users get <strong>no sign-up bonus</strong>; 35 not-booth users did, 2 bought.", label="Read")}
 """)
 
 # ---- 08 locations -----------------------------------------------------------
 locs = [("Central Park", 389, 283, 32, "1.7 M"), ("Gandaria City", 159, 116, 8, "0.5 M"), ("Pondok Indah Mall", 148, 109, 8, "1.4 M")]
 lrows = [(n, r, f"{v} ({pct0(v, r)})", f"{f} ({pct(f, r)})", t) for n, r, v, f, t in locs]
 lrows.append(("<strong>All booths</strong>", f"<strong>{B['regs']}</strong>", f"<strong>{B['ver']} ({pct0(B['ver'], B['regs'])})</strong>", f"<strong>{B['fun']} ({pct(B['fun'], B['regs'])})</strong>", "1.4 M"))
-slide(head("07 · By booth", "Central Park carries the volume and the conversion", "Booth users since 19 Oct, by mall (from the suffix of the sales or referrer code).") + f"""
+slide(head("07 · By booth", "Central Park carries the volume and the conversion", "Booth users registered 19 Oct to 17 Nov, by mall (from the suffix of the sales or referrer code). Same window for all three.") + f"""
 <div class="card" style="padding:6px 10px">{table(["Booth", "Registrations", "Verified", "Funded", "Avg first ticket (Rp)"], lrows, "t big")}</div>
 {callout("Central Park has <strong>56% of booth sign-ups</strong> and 8.2% of them funded. Gandaria City and Pondok Indah Mall verify as well as Central Park but only 5 to 5.4% buy. Gandaria City tickets are the smallest.", label="Read")}
 """)
@@ -189,16 +192,16 @@ arows = [
 ]
 slide(head("08 · In the app", "Booth users sign up, verify, and mostly do not come back", "Google Analytics 4 events of users registered on or after 19 Oct. Shares are of users with at least one event (94% of booth, 89% of not booth).") + f"""
 <div class="card" style="padding:6px 10px">{table(["", "Booth", "Not booth"], arows, "t tiny")}</div>
-{callout("Booth users finish KYC more often (82% vs 59%), then behave like one-visit users: <strong>1.3 sessions</strong> against 3.5. 35% return after sign-up day, 47% for not booth. The buy sheet is opened by 9% of booth users and 18% of others. Android is 67% of booth users, 63% of not booth.", label="Read")}
+{callout("Booth users finish KYC more often (82% vs 59%), then behave like one-visit users: <strong>1.3 sessions</strong> against 3.5. 35% return after sign-up day, 47% for not booth; the gap holds for users 8+ days old (36% vs 49% back in week one). The buy sheet is opened by 9% of booth users and 18% of others. Android is 67% of booth users, 63% of not booth.", label="Read")}
 """)
 
 # ---- 10 takeaways -----------------------------------------------------------
 slide(head("09 · What to take away", "Reach works; the next job is getting verified users to buy") + f"""
 <div class="grid2">
   <div class="card text-card"><div class="k-lab" style="color:{GREEN}">What is working</div>
-    <div class="tx sm">&bull; Sign-ups up about 7x, steady every week.<br>&bull; Booth KYC completion is high: 73% verified.<br>&bull; Those who buy do it within the hour, with fewer failed payments (18% vs 30%).<br>&bull; November first-time buyers are ahead of all of October.</div></div>
+    <div class="tx sm">&bull; Sign-ups about 7x the pre-booth weekly rate (not booth alone: 2x), steady every week.<br>&bull; Booth KYC completion is high: 73% verified.<br>&bull; Those who buy do it within the hour, with fewer failed payments (18% vs 30%).<br>&bull; First-time buyers: 3.8 a day in November, 1.3 in October.</div></div>
   <div class="card text-card"><div class="k-lab" style="color:{RED}">What is not</div>
-    <div class="tx sm">&bull; Only 6.9% of booth sign-ups have bought, vs 11.7% for the rest.<br>&bull; 89% of older verified booth users have not bought.<br>&bull; Low return rate (35%) and 1.3 sessions per user.<br>&bull; Smaller first tickets: median Rp 1.0 M.</div></div>
+    <div class="tx sm">&bull; Since 19 Oct, 6.9% of booth sign-ups have bought, vs 11.7% for the rest (and 6.9% vs 14.7% within 7 days).<br>&bull; 89% of older verified booth users have not bought.<br>&bull; Low return rate (35%) and 1.3 sessions per user.<br>&bull; Smaller first tickets: median Rp 1.0 M.</div></div>
 </div>
 {callout(f"<strong>1.</strong> Follow up the {bm} verified booth users who have not bought (message or call-back with a first-purchase nudge).<br><strong>2.</strong> Set a funded target per sales person, not only a sign-up target.<br><strong>3.</strong> Add booth cost to the picture so we can see cost per funded user.<br><strong>4.</strong> Re-run this deck in two weeks: the cohorts of 9 Nov and later are too young to judge (4 funded of 196 so far).", label="Suggested next steps")}
 """)
