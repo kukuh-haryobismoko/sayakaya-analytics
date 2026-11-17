@@ -271,7 +271,7 @@ slide(head(f"01 · Where we ended {REV}", "The month in six numbers") + f"""
   {kpi("Platform fee (AperD)", m(revenue[rev_ym]), f"{chg(revenue[rev_ym], revenue[cmp_ym])} vs {mon(cmp_ym)}, AUM {chg(aum[rev_ym], aum[cmp_ym])}", sub_color=signc(revenue[rev_ym]-revenue[cmp_ym]))}
   {kpi("Net flow", b(net['review'], True), f"{b(excl_rev, True)} without one account", color=signc(net['review']), sub_color=MUTED)}
   {kpi("New registrations", intc(reg[rev_ym]['registered']), f"{chg(reg[rev_ym]['registered'], reg[cmp_ym]['registered'])} vs {mon(cmp_ym)}, first rise since January", sub_color=GREEN)}
-  {kpi("Active investors (bought in month)", intc(tx['review']['active_investors']), f"down from {intc(tx['comparison']['active_investors'])} in {CMP}; {intc(rh['ever_bought'])} ever bought", sub_color=RED)}
+  {kpi("Active investors (bought in month)", intc(tx['review']['active_investors']), f"{'up' if num(tx['review']['active_investors']) >= num(tx['comparison']['active_investors']) else 'down'} from {intc(tx['comparison']['active_investors'])} in {CMP}; {intc(rh['ever_bought'])} ever bought", sub_color=signc(num(tx['review']['active_investors']) - num(tx['comparison']['active_investors'])))}
   {kpi(f"AUM · close {dlabel(close_today[0].isoformat())}", b(close_today[1]), f"{acct_out}lowest close in {PART} {b(min([x[1] for x in part_days_list] or [0]))}", sub_color=MUTED)}
 </div>
 {callout(f"Three of these six numbers are <strong>one account</strong>. It switched Rp 50.7 B into a lower-fee fund on 4 Sep, sold Rp 50.0 B on 29 Sep and bought it back on 6 Oct. Without it, {REV}'s net flow was <strong>{b(excl_rev, True)}</strong>, the second month in a row close to zero after five months of broad outflow. Registrations rose for the first time since January.", "#14c687")}
@@ -800,6 +800,61 @@ slide(head("05 · Product & revenue mix", "The money moved to the cheapest funds
 </div>
 """)
 
+# ---- November analysis: static, run on 17 Nov from BigQuery (RAIZ excluded) -------------------
+# shortcut: numbers are typed in, not read from data.json; shown only in the November decks, refresh by re-running the queries.
+if "2026-11" in (rev_ym, part_ym):
+    AS_OF = "17 Nov"
+    _own = "a purchase with their own money (bonus purchases do not count)"
+    _w7 = [("Jul to Sep", "", 145, 42), ("October", "", 430, 33), ("", "Booth sign-ups", 205, 19),
+           ("", "Got a bonus, not booth", 129, 5), ("", "Own money, not booth", 96, 9), ("1 to 9 November", "", 173, 38)]
+    _w7_rows = [(f"<strong>{a}</strong>" if a else "", g or "All approved", intc(n_), intc(k_), f"<strong>{k_ / n_ * 100:.1f}%</strong>") for a, g, n_, k_ in _w7]
+    slide(head("05 · After approval", "Approved in October, only 7.7% bought within a week (29.0% before)", color="#c00d3f") + f"""
+<div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px">
+  <div class="card" style="padding:0;overflow:hidden">{table(["Approved in", "Group", "Approved", "Bought in 7 days", "Rate"], _w7_rows, "t small")}</div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    {callout("Of the 129 October approvals outside the booths that received a bonus, <strong>only 9 ever bought with their own money; 120 never did</strong>. In Jul to Sep, accounts with a bonus bought within a week 21 times in 35 (60.0%).", "#c00d3f", "Where October went")}
+    {callout("Cancelled or expired buy orders, Jan to Sep against 1 Oct to 17 Nov: <strong>virtual account 10.7% to 18.8%, bank transfer 8.7% to 14.4%, QRIS 20.1% to 27.8%</strong>.", "#b07400", "Payments")}
+    {callout("1 to 9 Nov looks better, but booths are 140 of 173 approvals and bought at 11.4%; the other 33 bought at 66.7%, too few to rely on.", "#8a90a3", "Reading November")}
+  </div>
+</div>
+<div class="sub" style="margin-top:6px;color:#565b6b;font-size:12.5px">Bought = first purchase paid with own money within 7 days of KYC approval. Booth = signed up from 19 Oct with a booth sales or referrer code. As of {AS_OF}.</div>
+""")
+
+    _bo = [("Signed up", "689", "256"), ("Passed KYC", "499 (72%)", "135 (53%)"), ("Bought with own money", "46 (6.7%)", "32 (12.5%)"),
+           ("Signed up by 9 Nov, bought", "38 of 487 (7.8%)", "30 of 188 (16.0%)"), ("Bought on 2 or more days", "4", "3")]
+    slide(head("05 · Booths since 19 Oct", "Booths brought 689 sign-ups since 19 Oct; 46 have bought", color="#c00d3f") + f"""
+<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px">
+  <div class="card" style="padding:0;overflow:hidden">{table(["19 Oct to " + AS_OF, "Booth sign-ups", "All other sign-ups"], _bo, "t small")}</div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    {callout("Booths fill the top of the funnel: <strong>72% pass KYC against 53%</strong>. They convert at about half the rate: <strong>6.7% buy against 12.5%</strong>.", "#c00d3f", "What we see")}
+    {callout("Sign-ups from the last week have had no time to buy, so read the 9 Nov row for the steadier rate. The 2027 plan counts <strong>7,938 booth customers</strong>; the booths have 46 so far.", "#3a50ab", "Caution")}
+    {callout("Other sign-ups = everyone registered since 19 Oct without a booth code, RAIZ excluded.", "#8a90a3", "Definition")}
+  </div>
+</div>
+""")
+
+    _nb = [("Jan", 72), ("Feb", 42), ("Mar", 42), ("Apr", 22), ("May", 19), ("Jun", 15), ("Jul", 16), ("Aug", 18), ("Sep", 31), ("Oct", 42), ("Nov", 61)]
+    _plan_m = 1770 // 3
+    _bar = lambda lab, v, col: (f'<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px">'
+                                f'<div style="font-size:12px;color:{MUTED}">{v}</div><div style="width:100%;height:{max(2, round(v / _plan_m * 230))}px;background:{col};border-radius:3px 3px 0 0"></div>'
+                                f'<div style="font-size:11px;color:{MUTED}">{lab}</div></div>')
+    _bars = "".join(_bar(k_, v_, "#3a50ab") for k_, v_ in _nb) + _bar("Plan", _plan_m, "#14161f")
+    _need = (700.9e9 - num(close_today[1])) / 13.5 / 1e9
+    slide(head("05 · The 2027 plan", f"The plan needs {_plan_m} new buyers a month; our best month this year had {max(v_ for _, v_ in _nb[:-1])}", color="#c00d3f") + f"""
+<div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px">
+  <div class="card" style="padding:16px 20px 12px">
+    <div class="k-lab">New buyers a month, 2026 (first purchase with own money)</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;height:290px;margin-top:8px">{_bars}</div>
+    <div style="font-size:12px;color:{MUTED};margin-top:6px">Nov counts 1 to 16 Nov. Plan bar: 1,770 new funded customers by March 2027, divided by three (raker preparation).</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    {callout(f"Best full month this year was 72 (January). Spread over Jan to Mar 2027, the 1,770 is about <strong>{_plan_m} a month</strong>; the plan reaches 10,982 by December 2027.", "#c00d3f", "New buyers")}
+    {callout(f"AUM closed {dlabel(close_today[0].isoformat())} at <strong>{b(close_today[1])}</strong>; the plan says Rp 289 B by March and Rp 700.9 B by December 2027. That is about <strong>Rp {_need:.0f} B of net inflow a month</strong> before market moves. Without the one large account, net flow was {b(nf['2026-10']['net_flow_excl_largest'], True)} in October and {b(nf['2026-11']['net_flow_excl_largest'], True)} so far in November.", "#3a50ab", "AUM")}
+    {callout("The plan takes 89% of new AUM from 732 relationship-manager customers, so a few large accounts decide it.", "#8a90a3", "Where the AUM comes from")}
+  </div>
+</div>
+""")
+
 # ---- 19 new in the dashboard --------------------------------------------------------------
 NEW = [
     ("16 Oct", "Product funnel", "Every phone that starts signing up: account, KYC, first purchase, where they stop, installs per platform, Android uninstalls. Details in Onboarding analysis."),
@@ -813,6 +868,15 @@ NEW = [
     ("27 Sep", "Top investors", "Ranking by buys, sells or net deposit, with each investor's share of the period."),
     ("22 to 28 Sep", "Investor tools", "Users transactions search, Event code tracking, and bulk export of many investors' portfolios at once."),
 ]
+if "2026-11" in (rev_ym, part_ym):
+    NEW = [
+        ("14 Nov", "Presentation tab", "The monthly review decks open from the dashboard, November included."),
+        ("9 to 12 Nov", "Booth event, Promo recap", "Booth event: one date range, booth and sales filters on every panel, recap by day, week, 4 weeks or month, a funds-bought table. Promo recap: an Amount trx KPI; only cancelled and expired count as failed."),
+        ("9 Nov", "AUM history", "Funds in UPDATE status are counted now; only INACTIVE funds are left out."),
+        ("3 to 12 Nov", "USD funds in rupiah", "Holdings, AUM, revenue and exports convert USD funds with the fx_rates table, at the previous day's rate. The AUM in this deck follows the same rule. Portfolio export can keep USD or convert."),
+        ("4 to 5 Nov", "MIS Channel & AUM", "Journey by channel (booth, employee, organic), iOS and Android, uninstalls, AUM in IDR and USD at the month-end rate."),
+        ("4 Nov", "Schedules", "A one-time send on a chosen date, a portfolio basis and an e-statement period."),
+    ] + [NEW[0], NEW[1], NEW[3]]
 nrows = "".join(f'<div class="new-row"><div class="new-date">{dt}</div><div><div class="new-name">{nm_}</div><div class="new-tx">{tx_}</div></div></div>' for dt, nm_, tx_ in NEW)
 slide(head("06 · New in the dashboard", "What the team can use from today") + f"""
 <div class="card" style="padding:10px 28px">{nrows}</div>
@@ -982,7 +1046,7 @@ table.t.moves td:nth-child(3), table.t.moves th:nth-child(3), table.t.moves2 td:
 # the figures are fresh, the sentences are the previous deck's.
 DRAFT = os.environ.get("DECK_DRAFT") == "1"
 if DRAFT:
-    CSS += ".draft .slide::after { content: %s; position: absolute; top: 6px; right: 10px; z-index: 99; background: #c00d3f; color: #fff; font: 700 10px/1 \"JetBrains Mono\", monospace; letter-spacing: .6px; padding: 4px 8px; border-radius: 3px; }" % json.dumps("AUTO DRAFT · figures refresh daily · text carried over from the " + os.environ.get("DECK_DRAFT_FROM", "previous") + " deck")
+    CSS += ".draft .slide::after { content: %s; position: absolute; top: 6px; right: 10px; z-index: 99; background: #c00d3f; color: #fff; font: 700 10px/1 \"JetBrains Mono\", monospace; letter-spacing: .6px; padding: 4px 8px; border-radius: 3px; }" % json.dumps("AUTO DRAFT · figures refresh daily · text carried over from the " + os.environ.get("DECK_DRAFT_FROM", "previous") + " deck", ensure_ascii=False)
 
 out = here / "deck-print.html"
 out.write_text(f"""<!doctype html>
