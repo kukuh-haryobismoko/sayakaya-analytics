@@ -336,6 +336,7 @@ function createApp({ serveStatic = true } = {}) {
     august: { label: 'August 2026', file: 'sayakaya-august-review-deck.pdf', tab: 'monthly-review' },
     'review-september': { label: 'September 2026', file: 'sayakaya-september-review-deck.pdf', tab: 'monthly-review' },
     'review-october': { label: 'October 2026', file: 'sayakaya-october-review-deck.pdf', tab: 'monthly-review' },
+    'ua-2026-11': { label: 'User Acquisition, November 2026', file: 'sayakaya-2026-11-user-acquisition-deck.pdf', tab: 'user-acquisition' },
   };
   // The daily refresh publishes later months as review-YYYY-MM with no entry above.
   const REVIEW_KEY = /^review-(\d{4}-(?:0[1-9]|1[0-2]))$/;

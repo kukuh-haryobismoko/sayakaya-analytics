@@ -9888,7 +9888,7 @@ function switchTab(name) {
   ANALYSIS_TABS.forEach((tab) => { if (name === tab.id) (tab.loaded ? repaintAnalysis(tab) : loadAnalysis(tab)); });
   if (name === 'admin') loadAdminUsers();
   if (name === 'activity-log') { loadAdminAuditUserOptions(); loadAdminAuditLog(); }
-  if (name === 'presentation' || name === 'monthly-review') {
+  if (name === 'presentation' || name === 'monthly-review' || name === 'user-acquisition') {
     const cfg = PRES_VIEWS[name];
     (name === 'monthly-review' ? loadReviewMonths() : Promise.resolve()).then(() => loadPresentation(name, $(`${cfg.seg} .on`)?.dataset.month || cfg.defaultMonth));
   }
@@ -9912,6 +9912,7 @@ function switchTab(name) {
 const PRES_VIEWS = {
   presentation: { seg: '#presentationMonthSeg', stage: '#presentationStage', canvas: '#presentationCanvas', counter: '#presentationCounter', defaultMonth: 'september' },
   'monthly-review': { seg: '#monthlyReviewMonthSeg', stage: '#monthlyReviewStage', canvas: '#monthlyReviewCanvas', counter: '#monthlyReviewCounter', defaultMonth: 'review-october' },
+  'user-acquisition': { seg: '#uaMonthSeg', stage: '#uaStage', canvas: '#uaCanvas', counter: '#uaCounter', defaultMonth: 'ua-2026-11' },
 };
 const presentationCache = {}; // month -> pdf.js PDFDocumentProxy
 let presActiveView = 'presentation'; // which PRES_VIEWS entry is on-screen
@@ -10188,9 +10189,9 @@ function wire() {
   wireNavGroups();
   wireNavSearch();
   $$('.nav-link').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
-  const presPresentBtn = { presentation: '#presentBtn', 'monthly-review': '#mrPresentBtn' };
-  const presPrevBtnId = { presentation: '#presPrevBtn', 'monthly-review': '#mrPrevBtn' };
-  const presNextBtnId = { presentation: '#presNextBtn', 'monthly-review': '#mrNextBtn' };
+  const presPresentBtn = { presentation: '#presentBtn', 'monthly-review': '#mrPresentBtn', 'user-acquisition': '#uaPresentBtn' };
+  const presPrevBtnId = { presentation: '#presPrevBtn', 'monthly-review': '#mrPrevBtn', 'user-acquisition': '#uaPrevBtn' };
+  const presNextBtnId = { presentation: '#presNextBtn', 'monthly-review': '#mrNextBtn', 'user-acquisition': '#uaNextBtn' };
   Object.keys(PRES_VIEWS).forEach((view) => {
     const cfg = PRES_VIEWS[view];
     $$(`${cfg.seg} button`).forEach((b) => bindPresSeg(view, b));
