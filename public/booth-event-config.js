@@ -54,14 +54,14 @@ const BOOTH_EVENT = {
   // (Widya: SCP5 dan TLCP), cukup tulis namanya di tiap posisi. booth = mall
   // tempat kode dipakai, jadi SID flying team masuk ke target tim mall itu.
   roster: boothRoster({
-    PIM: { lead: 'Herlangga', sales: ['Viki Setiadi', 'Ilham Ramadhan', 'Gabriel Rizal Pratama', 'Novi Yulianti', 'M. Zhafran', 'Zulham Donni'] },
+    PIM: { lead: 'Herlangga', sales: ['Viki Setiadi', 'Ilham Ramadhan', 'Gabriel Rizal Pratama', 'Novi Yulianti', 'M. Zhafran', 'Zulham Donni', 'Nova Elia', null] },
     GC: { lead: 'Sandy', sales: ['Eka Muhammad Rizki', 'Jihan', 'Arfan Herdian', 'Agus Rinaldi Rusli', 'Edi Sudrajat', 'Mira Yuliyana', 'Dara'] },
     CP: { lead: 'Widya Sartika', sales: ['Nur Haliza', 'Khairy Harianto', 'M. Ilham Saputra', 'Milza Anindya Putri', 'Widya Sartika', 'Marlinda', 'Michael'] },
   }, ['Kiki Wulansari', null], {
     // Kode off: orang sudah resign / pindah role. Kode tetap di roster supaya SID lama tetap terhitung.
-    SPIM3: 'resign', SGC3: 'resign', SCP2: 'off', SCP5: 'jadi TL CP',
+    SPIM1: 'resign', SPIM3: 'resign', SGC3: 'resign', SCP2: 'off', SCP5: 'jadi TL CP',
   }),
-  // Jumlah kode sales per booth untuk target SID. Tetap walau ada kode off atau kode pengganti (SGC7).
+  // Jumlah kode sales per booth untuk target SID. Tetap walau ada kode off atau kode pengganti (SGC7, SPIM7, SPIM8).
   salesSlots: { PIM: 6, GC: 6, CP: 7 },
 
   // Definisi yang dipakai semua rule.
