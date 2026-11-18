@@ -23,7 +23,7 @@ css += """
 .fi{display:flex;gap:26px;margin-top:12px;font-size:14.5px;line-height:1.4}.fi>div{flex:1}.fi .f{color:var(--indigo)}.fi .i{color:#0a8f61}.fi .u{color:var(--muted)}
 .mini{background:#f7f8fc;border:1px solid var(--line);border-left:4px solid var(--indigo);border-radius:9px;padding:10px 14px;margin-bottom:6px}
 .mini.g{border-left-color:var(--teal)}.mini.a{border-left-color:var(--amber)}.mini.r{border-left-color:var(--rose)}
-.mini .h{font-weight:800;font-size:15.5px;line-height:1.25}.mini .b{font-size:13.5px;color:var(--muted);line-height:1.4;margin-top:2px}.mini .q{font-size:13px;font-style:italic;margin-top:4px}
+.mini .h{font-weight:800;font-size:15.5px;line-height:1.25}.mini .b{font-size:13.5px;color:var(--muted);line-height:1.4;margin-top:2px}.big .mini{padding:18px 20px;margin-bottom:14px}.big .mini .h{font-size:20px}.big .mini .b{font-size:16px;line-height:1.45;margin-top:5px}.mini .q{font-size:13px;font-style:italic;margin-top:4px}
 table.t{width:100%;border-collapse:collapse;font-size:13.5px}
 table.t th{text-align:left;padding:7px 9px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;background:var(--indigo-tint);color:var(--indigo)}
 table.t td{padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.3}table.t td:first-child{font-weight:700;white-space:nowrap}
@@ -124,18 +124,19 @@ slide("SUMMARY", "AI made Sayakaya's data usable by the whole team",
       "224 = commits in the project change history from 8 Sep to 18 Nov, excluding automatic documentation refreshes; fixes are included, so it measures activity, not features. Usage: dashboard activity log 7 Sep-15 Nov, excluding the analytics owner, test accounts, logins and admin/system actions: 535 actions, 8 users; weekly 52, 40, 42, 58, 60, 31, 42, 40, 77, 93 (first eight weeks average 45.6, last two 85). Cost: see slide 8 for the basis. 'No new headcount' is how the analytics function is set up (one person plus the AI assistant), not a measured saving. No hours-saved or revenue effect is claimed anywhere in this deck.",
       "Sources: project change history; dashboard activity log; BigQuery job log (cost estimate, see slide 8).")
 
-# 3 business signal
-slide("THE BUSINESS PICTURE", "Revenue is down 36% since January while sign-ups rise",
-      "What management now sees in one screen. Revenue and AUM shown as an index, January = 100.",
-      '<div class="row" style="margin-top:14px"><div style="flex:none;width:690px">' + line_chart(690, 400)
-      + '<div style="font-size:13px;color:var(--muted);margin-top:4px"><b style="color:#3a50ab">&mdash; Management-fee revenue</b> &nbsp; <b style="color:#565b6b">- - Total AUM</b> &nbsp; January to October 2026</div></div>'
-      '<div class="col">'
-      + mini("Revenue &minus;35.9%, AUM &minus;64.5%", "Revenue index 64, AUM index 35. Revenue fell about half as fast as the money under management.")
-      + mini("Sign-ups: 130 in Sep, 612 in Oct, 578 in Nov", "KYC (identity check) rate 52%, then 70%, then 69%. Asked live in Ask.", "g")
-      + mini("AUM fell faster than revenue", "The reason is not analysed in this deck, and AI did not cause it.", "r")
-      + '<div style="font-size:14.5px;line-height:1.45;margin-top:6px"><b>AI role:</b> the Revenue screen and Ask put these numbers in front of management on demand. They do not explain causes.</div></div></div>',
-      "Revenue = management-fee revenue (AperD share plus investment-manager share) from the Revenue screen, 1 Jan-31 Oct 2026, indexed to January = 100: revenue 100, 135, 151, 136, 125, 88, 68, 74, 68, 64; AUM 100, 91, 92, 79, 62, 43, 35, 43, 34, 35. Absolute Rupiah values are deliberately not shown. Sign-up counts from the live Ask answer on 18 Nov: Sep 130 registered / 67 KYC, Oct 612 / 427, Nov 578 / 396. Causes of the revenue and AUM move are not analysed. Do not present them as an AI result.",
-      M + " Revenue screen (Jan-Oct 2026), indexed; sign-ups from Ask, live data 18 Nov 2026. No causes claimed.")
+# 3 what we built
+slide("WHAT WE BUILT", "Six pieces of work, one AI-assisted data platform",
+      "What the AI taskforce delivered at Sayakaya since September. Each piece is shown on the next slides.",
+      '<div class="big" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px 22px;margin-top:30px">'
+      + mini("Ask", "Anyone with access types a question in plain English and gets an answer from live data. Slide 4.")
+      + mini("Weekly digest and anomaly scan", "A written management summary, and a flag on days that look unusual. Slide 5.", "g")
+      + mini("Growth views", "Sign-up funnel, event booth and promo views for marketing and product. Slide 6.", "a")
+      + mini("Access and audit", "Each person sees only their own sections; the company can see who opened or exported what. Slide 9.")
+      + mini("One USD rate", "One exchange rate across the platform, shown with its date on every report. Slide 9.", "g")
+      + mini("Cloud cost", "The data bill was checked line by line and reduced. Slide 8.", "a")
+      + '</div><div style="margin-top:34px;font-size:20px;line-height:1.45"><b>How it was built:</b> by the analytics owner working with an AI assistant. Adoption by colleagues is on slide 7.</div>',
+      "Overview of the workstreams; no performance metrics on this slide on purpose. Each item is demonstrated with a live screen or a table on the slides referenced. The Ask, digest and anomaly scan are AI features; access, audit, the USD rate and the cost work were done with the AI assistant's help in building. Keep the focus on the taskforce's work, not on business results.",
+      "Source: project change history and dashboard screens shown on slides 4-9.")
 
 # 4 Ask
 slide("ASK", "Anyone with access can question the data in plain English",
@@ -236,20 +237,18 @@ slide("CONTROL", "Everyone sees only their own sections, and every action is log
       "Access is a per-user list of allowed screens; a superuser login exists for the analytics owner. The activity log records logins, exports, Ask questions and sensitive views. Digest figures come from the database and the AI writes only the sentences. USD rate: between 2 and 12 Nov the platform moved USD funds onto one USD/IDR rate (portfolio uses the previous-day rate, revenue the period-end rate); alignment with Sinvest is per the analytics owner and was not independently checked. Open: CI/CD. The Cloud Run workflow's push trigger is off, so today a script on one machine releases; the stated target is to finish CI/CD on Google Cloud. Business benefit of that is expected, not measured.",
       "Sources: dashboard user list and activity log; project change history 2-12 Nov 2026. USD/Sinvest alignment as stated by the analytics owner.")
 
-# 10 proposal
-slide("PROPOSAL", "Proposal: make Sayakaya the reference case for AI in the Group",
-      "The pattern worked at Sayakaya. It has not been tested elsewhere. " + P,
-      '<div class="row" style="margin-top:18px;gap:34px"><div class="col"><div style="font-weight:800;font-size:14px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">WHAT WORKED AT SAYAKAYA</div>'
+# 10 next
+slide("NEXT", "Where this goes next",
+      "What has worked at Sayakaya, and what the taskforce is looking at.",
+      '<div class="row big" style="margin-top:24px;gap:40px"><div class="col"><div style="font-weight:800;font-size:14px;color:var(--muted);letter-spacing:1px;margin-bottom:12px">WHAT WORKED AT SAYAKAYA</div>'
       + mini("1. One trusted data layer", "Every team reads the same numbers.") + mini("2. AI on top for the routine work", "Plain-English questions, a written weekly digest, an unusual-day scan.", "g")
       + mini("3. Access and audit from day one", "Per-section access and an activity log.", "a") + mini("4. Cost watched like any other line", "Cloud data bill down about 70% (estimate).", "") + '</div>'
-      '<div class="col"><div style="font-weight:800;font-size:14px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">PROPOSED ASKS TO THE BOARD</div>'
-      '<div style="font-size:18px;line-height:1.45"><p style="margin:0 0 12px"><b>1.</b> Endorse Sayakaya as the Group reference case for AI-assisted analytics.</p>'
-      '<p style="margin:0 0 12px"><b>2.</b> Nominate one more Group company for the same pilot. Effort and savings are not estimated until it is scoped.</p>'
-      '<p style="margin:0 0 12px"><b>3.</b> Back the next Sayakaya target: finish CI/CD so releases run on Google Cloud, not one person&rsquo;s computer.</p></div>'
-      '<div style="font-size:13.5px;color:var(--muted);line-height:1.45;margin-top:4px">Already identified, no decision needed: three more BigQuery savings, about Rp 84,000 a month in total (estimate).</div></div></div>'
-      '<div style="margin-top:26px;border-top:3px solid var(--indigo);padding-top:14px;font-size:19px;line-height:1.45"><b>What we ask for today:</b> a decision in principle on ask 1, and a name for ask 2. Everything else is already running at Sayakaya.</div>',
-      "This slide is the taskforce's proposal for discussion, not a decision and not a plan with owners. The only evidence is Sayakaya. Do not claim results at other Group companies and do not quote a saving for a second company: nothing has been scoped. CI/CD is the target the analytics owner stated. The pilot company and any budget are the Board's call.",
-      P + " Taskforce proposal for discussion. Evidence: Sayakaya only.")
+      '<div class="col"><div style="font-weight:800;font-size:14px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">WHAT COMES NEXT</div>'
+      '<div style="font-size:21px;line-height:1.5"><p style="margin:0 0 20px"><b>1.</b> Finish CI/CD at Sayakaya, so releases run on Google Cloud, not one person&rsquo;s computer.</p>'
+      '<p style="margin:0 0 20px"><b>2.</b> Three more cloud-cost savings, about Rp 84,000 a month in total (estimate).</p>'
+      '<p style="margin:0 0 20px"><b>3.</b> Happy to share the approach with other Group companies that are interested. Nothing is scoped yet.</p></div></div></div>',
+      "Direction for discussion, not a plan with owners or dates. The only evidence is Sayakaya; do not claim results at other Group companies and do not quote a saving for a second company. CI/CD is the target the analytics owner stated. Sharing the approach is an offer, not a commitment.",
+      "Direction for discussion. Evidence: Sayakaya only.")
 
 (here / "ai-taskforce-business-support-2026-11.html").write_text(
     '<!doctype html><html><head><meta charset="utf-8"><title>AI at Sucor Group: the Sayakaya case</title><style>' + css + '</style></head><body>\n'
