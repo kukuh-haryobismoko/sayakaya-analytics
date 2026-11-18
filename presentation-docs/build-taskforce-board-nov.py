@@ -213,7 +213,7 @@ hero = ('<div style="margin-top:2px"><div style="font-size:96px;font-weight:800;
         '<div style="font-size:14.5px;font-weight:700;margin-top:4px">data read</div>'
         '<div style="font-size:14px;color:var(--muted);margin-top:2px">10,372 &rarr; 3,793 GiB<br>per 30 days</div>'
         '<div style="border-top:1px solid var(--line);margin:14px 0 10px"></div>'
-        '<div style="font-size:13.5px;line-height:1.45"><b>Three more savings identified:</b> if done, the bill could fall to about Rp 84,000 a month (' + E + ')</div></div>')
+        '<div style="font-size:13.5px;line-height:1.45"><b>Room for roughly another 75% off the bill</b> (' + E + '). What could drive it is on the last slide.</div></div>')
 slide("COST", "The cloud data bill fell about 70% after one round of fixes",
       "BigQuery (Google's data warehouse) charges by the amount of data a query reads. We changed how the dashboard reads it.",
       '<div class="row" style="margin-top:16px;gap:34px"><div style="flex:none;width:270px">' + hero + '</div>'
@@ -245,9 +245,10 @@ slide("NEXT", "Where this goes next",
       + mini("3. Access and audit from day one", "Per-section access and an activity log.", "a") + mini("4. Cost watched like any other line", "Cloud data bill down about 70% (estimate).", "") + '</div>'
       '<div class="col"><div style="font-weight:800;font-size:14px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">WHAT COMES NEXT</div>'
       '<div style="font-size:21px;line-height:1.5"><p style="margin:0 0 20px"><b>1.</b> Finish CI/CD at Sayakaya, so releases run on Google Cloud, not one person&rsquo;s computer.</p>'
-      '<p style="margin:0 0 20px"><b>2.</b> Three more cloud-cost savings are identified. If all are done, the monthly data bill could fall from about Rp 0.37M to about Rp 84,000 (analyst estimate).</p>'
+      '<p style="margin:0 0 8px"><b>2.</b> Cut the cloud data bill by roughly another 75% (estimate).</p>'
+      '<div style="font-size:15.5px;line-height:1.45;color:var(--muted);margin:0 0 18px">Basis: data read would need to fall about 55% more, from 3,793 to about 1,650 GiB a month. What could do it: saved daily summaries so dashboards stop re-reading raw tables; reusing results for a few minutes; lighter refreshes from Metabase and Connected Sheets; scheduled jobs that add only new data; asking for needed columns only; a cap per query.</div>'
       '<p style="margin:0 0 20px"><b>3.</b> Happy to share the approach with other Group companies that are interested. Nothing is scoped yet.</p></div></div></div>',
-      "Direction for discussion, not a plan with owners or dates. The only evidence is Sayakaya; do not claim results at other Group companies and do not quote a saving for a second company. CI/CD is the target the analytics owner stated. Sharing the approach is an offer, not a commitment. Rp 84,000 is the analyst\'s estimate of the total monthly bill after three identified savings not yet done; the three items are not documented in the repo, so be ready to say they are still to be scoped.",
+      "Direction for discussion, not a plan with owners or dates. The only evidence is Sayakaya; do not claim results at other Group companies and do not quote a saving for a second company. CI/CD is the target the analytics owner stated. Sharing the approach is an offer, not a commitment. The further saving of about 75% is an estimate: the source said the bill could fall to about Rp 84,000 a month, about 77% below Rp 0.37M, which needs data read near 1,650 GiB (about 55% lower). The levers are candidates from the job log, not an approved plan: dashboards are about 78% of data read, and the result cache was switched off for freshness in an earlier commit. The exact three items, owners and dates are not set.",
       "Direction for discussion. Evidence: Sayakaya only.")
 
 (here / "ai-taskforce-business-support-2026-11.html").write_text(
