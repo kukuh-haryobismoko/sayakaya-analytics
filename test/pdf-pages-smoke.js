@@ -1,4 +1,4 @@
-// Portfolio PDF: normal type size, extra funds flow to a second page.
+// Portfolio PDF: normal type size, extra funds flow to a second page (not shrunk to one).
 const assert = require('assert');
 const PDF = require('../server/pdf.js');
 
@@ -16,7 +16,7 @@ const perf = [{
 
 (async () => {
   const two = await PDF.portfolioReport({ contact: { name: 'Test', sid: 'X' }, holdings: mk(22) }, perf, { mode: 'IDR' });
-  assert.strictEqual(pages(two), 2, '22 funds: holdings + NAV = 2 pages');
+  assert.strictEqual(pages(two), 3, '22 funds: holdings flow to 2 pages + 1 NAV page');
 
   const many = await PDF.portfolioReport({ contact: { name: 'Test', sid: 'X' }, holdings: mk(60) }, perf, { mode: 'IDR' });
   assert.ok(pages(many) >= 3, '60 funds: holdings flows onto extra pages, not squeezed');

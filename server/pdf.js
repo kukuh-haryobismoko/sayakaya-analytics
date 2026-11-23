@@ -107,8 +107,8 @@ function table(doc, columns, rows, {
     // past that the table just flows onto the next page (header repeats).
     const limit = fitTo * 0.995;
     const need = (fs, rh, pad) => estimateTableHeight(doc, columns, rows, fs, rh, pad * 2);
-    search: for (let fs = fontSize; fs >= 7; fs -= 0.25) {
-      const rh = Math.max(fs + 3, 10);
+    search: for (let fs = fontSize; fs >= 8; fs -= 0.25) {
+      const rh = Math.max(fs + 3, 12);
       for (const pad of [4, 1, 0.5, 0.25]) {
         if (need(fs, rh, pad) <= limit) { padY = pad; fontSize = fs; rowHeight = rh; break search; }
       }
@@ -171,15 +171,15 @@ const moneyD = (r) => (r?.displayCcy === 'USD' ? 2 : 0);
 const money = (v, r) => idNum(v, moneyD(r));
 const moneyParen = (v, r) => { const n = val(v); return n == null ? 'n/a' : n < 0 ? `(${idNum(-n, moneyD(r))})` : idNum(n, moneyD(r)); };
 const HOLDINGS_COLS = (width) => [
-  { key: 'fund', label: 'Fund Name', width: width * 0.15 },
-  { key: 'fund_type', label: 'Fund Type', width: width * 0.09, format: fundTypeLabel },
-  { key: 'unit', label: 'Unit Balance', width: width * 0.11, align: 'right', format: (v) => idNum(v, 4) },
-  { key: 'avg_buy_price', label: 'Average NAV', width: width * 0.10, align: 'right', format: (v) => idNum(v, 4) },
-  { key: 'nav', label: 'Close NAV', width: width * 0.10, align: 'right', format: (v) => idNum(v, 4) },
-  { key: 'fund_value', label: 'Fund Value', width: width * 0.13, align: 'right', formatRow: money },
-  { key: 'value', label: 'Market Value', width: width * 0.13, align: 'right', formatRow: money },
-  { key: 'gain_loss', label: 'Unrealized Gain/Loss', width: width * 0.12, align: 'right', formatRow: moneyParen },
-  { key: 'gain_pct', label: '%', width: width * 0.07, align: 'right', format: (v) => (val(v) == null ? 'n/a' : idNum(v, 2) + '%') },
+  { key: 'fund', label: 'Fund Name', width: width * 0.21 },
+  { key: 'fund_type', label: 'Fund Type', width: width * 0.12, format: fundTypeLabel },
+  { key: 'unit', label: 'Unit Balance', width: width * 0.1, align: 'right', format: (v) => idNum(v, 4) },
+  { key: 'avg_buy_price', label: 'Average NAV', width: width * 0.09, align: 'right', format: (v) => idNum(v, 4) },
+  { key: 'nav', label: 'Close NAV', width: width * 0.09, align: 'right', format: (v) => idNum(v, 4) },
+  { key: 'fund_value', label: 'Fund Value', width: width * 0.105, align: 'right', formatRow: money },
+  { key: 'value', label: 'Market Value', width: width * 0.105, align: 'right', formatRow: money },
+  { key: 'gain_loss', label: 'Unrealized Gain/Loss', width: width * 0.105, align: 'right', formatRow: moneyParen },
+  { key: 'gain_pct', label: '%', width: width * 0.075, align: 'right', format: (v) => (val(v) == null ? 'n/a' : idNum(v, 2) + '%') },
 ];
 
 // Drops columns not in `keys` (if given), keeping 'fund' always, and renormalizes
@@ -477,10 +477,8 @@ function drawPortfolioHoldingsPage(doc, { contact, holdings: rawHoldings }, opti
   const cols = filterCols(HOLDINGS_COLS(width), width, options.columns);
   const sum = portfolioSummaryLines(rawHoldings, options.fx, options.mode);
   if (holdings.length) {
-    // Every fund on page 1: leave room for the total row, Ringkasan and the disclaimer.
-    const bottom = doc.page.height - doc.page.margins.bottom;
-    const reserve = (holdings.length > 1 ? 30 : 0) + (sum.length ? 12 + sum.length * 10 : 0) + 44;
-    table(doc, cols, holdings, { fontSize: 7, fitTo: bottom - doc.y - reserve });
+    // Normal report type; extra funds continue on the next page (header repeats).
+    table(doc, cols, holdings, { fontSize: 9, rowHeight: 18 });
   } else {
     doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No active holdings.');
     doc.moveDown(0.8);
@@ -536,7 +534,7 @@ function drawPortfolioHoldingsPage(doc, { contact, holdings: rawHoldings }, opti
 
 // performanceSheets: [{ name: fundType, rows: [{ Fund, '1D': pct, ... }] }] — from pivotPerformanceByType()
 function portfolioReport({ contact, holdings }, performanceSheets, options = {}) {
-  const doc = new PDFDocument({ size: 'A4', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40, ...(options.password ? { userPassword: options.password } : {}) });
   if (options.username) doc.info.Author = options.username;
   drawPortfolioHoldingsPage(doc, { contact, holdings }, options);
 
@@ -556,10 +554,10 @@ function portfolioReport({ contact, holdings }, performanceSheets, options = {})
 // fund-performance pages once at the end (same NAV data for everyone, so
 // there's no reason to repeat it per investor like portfolioReport() does).
 function portfolioReportBatch(entries, performanceSheets, options = {}) {
-  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 40 });
   if (options.username) doc.info.Author = options.username;
   entries.forEach((entry, i) => {
-    if (i > 0) doc.addPage({ size: 'A4', margin: 40 });
+    if (i > 0) doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
     drawPortfolioHoldingsPage(doc, entry, options);
   });
   const batchNames = heldFundNames(entries);
