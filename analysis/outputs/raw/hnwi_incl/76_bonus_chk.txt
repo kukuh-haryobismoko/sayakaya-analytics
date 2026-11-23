@@ -1,0 +1,6 @@
+## bonus_status
+[{"bonus_users_ok_status":6212,"never_paid":3632,"idr_never_paid":"469200000"}]
+## bonus_status_all
+[{"status":"completed","n":11391},{"status":"cancelled","n":166}]
+## first_buy_amt
+[{"grp":"none","n":2156,"lt100k":470,"median_amt":200000},{"grp":"referrer_code","n":1312,"lt100k":126,"median_amt":750000},{"grp":"sales_code","n":268,"lt100k":25,"median_amt":200000}]

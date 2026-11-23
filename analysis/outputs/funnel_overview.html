@@ -1,0 +1,410 @@
+<h1>Funnel overview (Phase 2)</h1>
+<blockquote>
+<p><strong>Terms used in this document.</strong>
+<strong>Repeat</strong> = the user bought on 2 or more different days (WIB), counting valid non-bonus purchases only.
+<strong>Mature</strong> = first purchase at least 120 days before the data pull (2026-11-22; first purchase on or before 2026-07-25), so every user had the same time to buy again. Mature repeat = % of mature investors who are repeat. Rates on non-mature users are not comparable.
+<strong>Data window</strong> = all registrations and transactions up to 2026-11-22 unless a section states another window (GA4 events: 2026-10-01 to 2026-11-21).
+Run 2026-11-22 WIB. Cohort C (excl. RAIZ/RAIZKAYA and HNWI), all-time to 2026-11-22, Asia/Jakarta. Scripts: <code>40_funnel.sql</code>, <code>41_timing.sql</code>, <code>42_cohorts.sql</code>, <code>46_leak.sql</code> (via <code>q.py</code>, <code>build_phase2.py</code>). All numbers Observed unless labelled.</p>
+</blockquote>
+<h2>1. Stage conversion (n = 64,274 registered)</h2>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Users</th>
+<th>% of registered</th>
+<th>Step conversion</th>
+<th>95% CI of step</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registered</td>
+<td>64,274</td>
+<td>100%</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>KYC submitted (verified or failed)</td>
+<td>23,131</td>
+<td>36.0%</td>
+<td>36.0% of registered</td>
+<td>35.6-36.4%</td>
+</tr>
+<tr>
+<td>KYC approved</td>
+<td>16,981</td>
+<td>26.4%</td>
+<td>73.4% of submitted</td>
+<td>72.8-74.0%</td>
+</tr>
+<tr>
+<td>KYC rejected</td>
+<td>6,150</td>
+<td>9.6%</td>
+<td>26.6% of submitted</td>
+<td>26.0-27.2%</td>
+</tr>
+<tr>
+<td>Investor (first paid buy)</td>
+<td>3,617</td>
+<td>5.6%</td>
+<td>21.3% of approved</td>
+<td>20.7-21.9%</td>
+</tr>
+<tr>
+<td>Repeat investor (buys on 2+ days)</td>
+<td>2,142</td>
+<td>3.3%</td>
+<td>59.2% of investors</td>
+<td>57.6-60.8%</td>
+</tr>
+<tr>
+<td>Still active (last activity within 90 d)</td>
+<td>609</td>
+<td>0.9%</td>
+<td>16.8% of investors</td>
+<td>15.7-18.1%</td>
+</tr>
+<tr>
+<td>Churned (no activity &gt; 90 d)</td>
+<td>3,008</td>
+<td></td>
+<td>83.2% of investors</td>
+<td>81.9-84.3%</td>
+</tr>
+</tbody>
+</table>
+<p>What this means: of every 100 people who sign up, about 36 send their KYC, about 26 get approved and about 6 ever buy; most of the loss is before and after KYC, not at the buy step itself.</p>
+<p>Not finished KYC (status unverified): 41,139 = 64.0% of registered. Investors not verified: 21. Verified, never bought: 13,385 = 78.8% of approved.
+Churn base note: 152 investors made their first buy within 90 days, so are not yet classifiable; excluding them churn is 3,008 / 3,465 = 86.8%.
+Sensitivity: with a 180-day line, 2,753 of 3,617 investors are churned (76.1%) vs 83.2% at 90 days; the funnel shape does not change.
+Cohort size is 64,274, 481 more than the 63,793 of Phase 1 (Phase 1 figure, not refreshed): users who registered after the Phase 1 run (Observed; same rules).
+Churn count here (activity = buy, sell, SWITCH_IN) is 3,008. A buys-only definition gives 3,163; the 155 difference are users whose last buy is older than 90 d but who sold or switched in the last 90 d (<code>49_chk.sql</code>). Phase 2 uses the activity definition.</p>
+<p>Before/after exclusion (Observed, <code>20_cohort_stages.sql</code>): registered 321,087 -&gt; 64,393 (excl. RAIZ/RAIZKAYA) -&gt; 64,274 (excl. HNWI); approved 17,536 -&gt; 17,100 -&gt; 16,981; investors 260,249 -&gt; 3,736 -&gt; 3,617.</p>
+<h2>2. Time between stages (days, cohort C; users with a valid timestamp pair)</h2>
+<table>
+<thead>
+<tr>
+<th>Transition</th>
+<th>n</th>
+<th>p50</th>
+<th>p90</th>
+<th>Pairs with negative gap (dropped)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Register -&gt; approved</td>
+<td>12,958</td>
+<td>0.6</td>
+<td>3.58</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Approved -&gt; first buy</td>
+<td>2,399</td>
+<td>1.02</td>
+<td>85.15</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Register -&gt; first buy</td>
+<td>3,617</td>
+<td>5.47</td>
+<td>240.03</td>
+<td>19</td>
+</tr>
+</tbody>
+</table>
+<p>n for register -&gt; approved is lower than 16,981 approved because <code>verified_at</code> is empty for 4,023 approved users (data quality #5). Reading: half of approved users are approved within a day, 90% within about 4 days; buyers who buy do it fast (median about 1 day after approval) but the p90 is 85 days, so a long tail buys much later.
+What this means: approval is quick, and people who are going to buy usually do it the next day; if someone has not bought within a week, the chance drops fast.</p>
+<h2>3. Register cohorts by month (full table: <code>cohorts.csv</code>, chart: <code>charts/cohort_monthly.png</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Reg month</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved %</th>
+<th>Investor within 7 d</th>
+<th>Within 7 d %</th>
+<th>Investor ever %</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2025-10</td>
+<td>450</td>
+<td>233</td>
+<td>51.8%</td>
+<td>36</td>
+<td>8.0%</td>
+<td>11.1%</td>
+</tr>
+<tr>
+<td>2025-11</td>
+<td>220</td>
+<td>95</td>
+<td>43.2%</td>
+<td>43</td>
+<td>19.5%</td>
+<td>24.1%</td>
+</tr>
+<tr>
+<td>2025-12</td>
+<td>208</td>
+<td>78</td>
+<td>37.5%</td>
+<td>26</td>
+<td>12.5%</td>
+<td>17.3%</td>
+</tr>
+<tr>
+<td>2026-01</td>
+<td>448</td>
+<td>167</td>
+<td>37.3%</td>
+<td>54</td>
+<td>12.1%</td>
+<td>15.8%</td>
+</tr>
+<tr>
+<td>2026-02</td>
+<td>235</td>
+<td>91</td>
+<td>38.7%</td>
+<td>22</td>
+<td>9.4%</td>
+<td>13.6%</td>
+</tr>
+<tr>
+<td>2026-03</td>
+<td>260</td>
+<td>105</td>
+<td>40.4%</td>
+<td>21</td>
+<td>8.1%</td>
+<td>10.8%</td>
+</tr>
+<tr>
+<td>2026-04</td>
+<td>217</td>
+<td>75</td>
+<td>34.6%</td>
+<td>13</td>
+<td>6.0%</td>
+<td>7.8%</td>
+</tr>
+<tr>
+<td>2026-05</td>
+<td>147</td>
+<td>59</td>
+<td>40.1%</td>
+<td>12</td>
+<td>8.2%</td>
+<td>11.6%</td>
+</tr>
+<tr>
+<td>2026-06</td>
+<td>138</td>
+<td>54</td>
+<td>39.1%</td>
+<td>8</td>
+<td>5.8%</td>
+<td>10.1%</td>
+</tr>
+<tr>
+<td>2026-07</td>
+<td>126</td>
+<td>46</td>
+<td>36.5%</td>
+<td>7</td>
+<td>5.6%</td>
+<td>8.7%</td>
+</tr>
+<tr>
+<td>2026-08</td>
+<td>97</td>
+<td>58</td>
+<td>59.8%</td>
+<td>11</td>
+<td>11.3%</td>
+<td>17.5%</td>
+</tr>
+<tr>
+<td>2026-09</td>
+<td>132</td>
+<td>68</td>
+<td>51.5%</td>
+<td>21</td>
+<td>15.9%</td>
+<td>19.7%</td>
+</tr>
+<tr>
+<td>2026-10</td>
+<td>611</td>
+<td>428</td>
+<td>70.0%</td>
+<td>31</td>
+<td>5.1%</td>
+<td>8.0%</td>
+</tr>
+<tr>
+<td>2026-11</td>
+<td>725</td>
+<td>473</td>
+<td>65.2%</td>
+<td>59</td>
+<td>8.1%</td>
+<td>8.3%</td>
+</tr>
+</tbody>
+</table>
+<p>Recent months are not mature (a 2026-11 user has had at most 21 days). Compare 7-day conversion, which is mature for all months through 2026-11-15.
+What this means: Oct and Nov 2026 bring many more sign-ups and a higher approval rate, but the share who buy within a week is not higher than in earlier months.</p>
+<h2>4. Biggest leaks and recoverable users (arithmetic shown)</h2>
+<h3>Leak 1. Registered but KYC not finished</h3>
+<ul>
+<li>Observed: 41,139 of 64,274 (64.0%) never reached a KYC result. Last 13 registration months (2025-11 to 2026-11): 1,438 of 3,564 (40.3%).</li>
+<li>Observed: Jan-Sep 2026 cohorts left 892 of 1,800 (49.6%) unfinished; the Oct 2026 cohort (booth month) left 138 of 611 (22.6%). Difference significant (z = -11.6).</li>
+<li>Estimate: if Jan-Sep cohorts had finished like Oct, 892 - 1,800 x 138/611 = 485 more users reach KYC result. At the Jan-Sep investor-per-approved rate (233 / 723 = 32.2% ever) that is about 156 investors; at the Oct verified-to-buy-within-7-days rate (33 / 430 = 7.7%) about 37. Assumption: the Oct pattern is reproducible outside booths (not tested).</li>
+<li>What this means: booth sign-ups finish KYC far more often than earlier sign-ups, so the KYC step can be fixed, but finishing KYC alone did not turn into many buyers (see Leak 2).</li>
+</ul>
+<h3>Leak 2. Approved but never buys (largest in user count)</h3>
+<ul>
+<li>Observed: 13,385 of 16,981 approved users (78.8%) never made a paid buy. Approved from 2025-11 on: 1,386 of 1,828 (75.8%) never bought (includes Nov 2026 approvals that have had little time to buy).</li>
+<li>Observed: users approved in Oct 2026 bought within 7 days at 33 / 430 = 7.7% (5.5-10.6%) vs Jan-Sep 2026 197 / 730 = 27.0% (23.9-30.3%); z = -8.0. More approvals did not bring more buyers.</li>
+<li>Observed (<code>84_oct_lag.sql</code>, approvals 1 Oct-14 Nov, each with 7 full days before cutoff; all approved decisions, no GA-link requirement): 75 / 714 = 10.5% (8.5-13.0%) bought within 7 days vs Jul-Sep 42 / 145 = 29.0% (22.2-36.8%); z = -5.9. Same gap on a longer window, so the drop is not a short-term blip. (Different base from the calendar-month figures above, so do not compare the two sets of percentages directly.)</li>
+<li>Estimate: Oct approvals at the Jan-Sep rate would be 430 x 197/730 = 116 buyers within 7 days; observed 33; shortfall 83 investors. Late buying narrows but does not close it: the 30-day figure for Oct approvals is 49 of 430 (11.4%) vs Jan-Sep 223 of 730 (30.5%), so the 30-day shortfall is 82.</li>
+<li>Pool: each +1 percentage point of the 1,386 recent never-buyers = 14 investors.</li>
+<li>Observed (<code>52_oct_split.sql</code> cut of the Oct 2026 cohort, 611 registered): with a sales code 363 registered, 273 approved, 29 bought ever = 8.0%; without 219 registered, 131 approved, 17 bought = 7.8%. Both are low, so the Oct drop is not only a booth effect. Cause not identified; Phase 3 should look at what the booth sign-up flow asks users to do after KYC.</li>
+<li>What this means: most approved users never buy, and the 2026 Oct-Nov approval wave is buying much less often than earlier approvals; this is the biggest pool of recoverable users.</li>
+</ul>
+<h3>Leak 3. First-time investors who do not come back (churn)</h3>
+<ul>
+<li>Observed: 3,008 of 3,617 investors are silent for more than 90 days (83.2%); 2,753 for more than 180 d. 1,475 (40.8%) bought on only one day. See <code>churn_profile.md</code>.</li>
+<li>Estimate: each +10% of churned users reactivated = 301 users (Proposed; no observed reactivation campaign rate in data yet).</li>
+<li>What this means: about 5 in 6 investors have stopped using the app, and about 2 in 5 bought on a single day only.</li>
+</ul>
+<h3>Leak 4. KYC rejection</h3>
+<ul>
+<li>Observed: 6,150 rejected of 23,131 submitted (26.6%); last 13 months 329 of 2,126 (15.5%). Rejection reasons are not in BigQuery (data request).</li>
+<li>Estimate (Proposed): halving the last-13-month rejection count recovers 164 approved users, about 35 investors at the all-time investor-per-approved rate (21.3%).</li>
+<li>What this means: rejection is the smallest leak; fixing it adds few buyers.</li>
+</ul>
+<h2>5. Verified-to-buy by month of approval (<code>46_leak.sql</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Approval month</th>
+<th>Approved</th>
+<th>Bought within 7 d</th>
+<th>%</th>
+<th>Never bought (to date)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2025-10</td>
+<td>229</td>
+<td>39</td>
+<td>17.0%</td>
+<td>178</td>
+</tr>
+<tr>
+<td>2025-11</td>
+<td>96</td>
+<td>46</td>
+<td>47.9%</td>
+<td>44</td>
+</tr>
+<tr>
+<td>2025-12</td>
+<td>83</td>
+<td>31</td>
+<td>37.3%</td>
+<td>43</td>
+</tr>
+<tr>
+<td>2026-01</td>
+<td>149</td>
+<td>55</td>
+<td>36.9%</td>
+<td>86</td>
+</tr>
+<tr>
+<td>2026-02</td>
+<td>92</td>
+<td>27</td>
+<td>29.3%</td>
+<td>58</td>
+</tr>
+<tr>
+<td>2026-03</td>
+<td>120</td>
+<td>29</td>
+<td>24.2%</td>
+<td>84</td>
+</tr>
+<tr>
+<td>2026-04</td>
+<td>77</td>
+<td>16</td>
+<td>20.8%</td>
+<td>60</td>
+</tr>
+<tr>
+<td>2026-05</td>
+<td>56</td>
+<td>14</td>
+<td>25.0%</td>
+<td>38</td>
+</tr>
+<tr>
+<td>2026-06</td>
+<td>60</td>
+<td>10</td>
+<td>16.7%</td>
+<td>44</td>
+</tr>
+<tr>
+<td>2026-07</td>
+<td>47</td>
+<td>8</td>
+<td>17.0%</td>
+<td>36</td>
+</tr>
+<tr>
+<td>2026-08</td>
+<td>55</td>
+<td>12</td>
+<td>21.8%</td>
+<td>41</td>
+</tr>
+<tr>
+<td>2026-09</td>
+<td>74</td>
+<td>26</td>
+<td>35.1%</td>
+<td>44</td>
+</tr>
+<tr>
+<td>2026-10</td>
+<td>430</td>
+<td>33</td>
+<td>7.7%</td>
+<td>380</td>
+</tr>
+<tr>
+<td>2026-11</td>
+<td>489</td>
+<td>60</td>
+<td>12.3%</td>
+<td>428</td>
+</tr>
+</tbody>
+</table>
+<p>Within-7-day count includes the few users who bought before <code>verified_at</code> (data quality #10). 2026-11 is partial: approvals after 2026-11-15 have had fewer than 7 days, so its % is understated and its "never bought" is overstated.
+What this means: the share of approved users who buy within a week fell from about 1 in 4 (27.0%) in Jan-Sep 2026 to 7.7% in Oct 2026; the partial Nov figure (12.3%) is higher but still below the Jan-Sep level.</p>

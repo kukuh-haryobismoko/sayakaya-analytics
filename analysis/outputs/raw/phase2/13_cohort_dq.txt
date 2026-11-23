@@ -1,0 +1,12 @@
+## buy_vs_register_cohort
+[{"buys":47527,"buyers":3736,"buy_before_register":267,"buyer_no_verified_at":28778,"buyer_not_verified":21,"buy_before_verified_at":34}]
+## raiz_buy_vs_register
+[{"buys":257035,"buyers":256513,"buy_before_register":39325,"buyer_not_verified":256160}]
+## cohort_verification
+[{"verification_status":"verified","n":17100,"has_sid":17026,"has_verified_at":12999},{"verification_status":"failed","n":6150,"has_sid":2,"has_verified_at":3},{"verification_status":"unverified","n":41143,"has_sid":22,"has_verified_at":0},{"verification_status":"pending_verification","n":12,"has_sid":0,"has_verified_at":0}]
+## profile_completeness
+[{"verification_status":"verified","n":17100,"has_idnum":17049,"has_selfie":16976,"has_sign":11942,"has_risk":10814},{"verification_status":"failed","n":6150,"has_idnum":6142,"has_selfie":6150,"has_sign":5372,"has_risk":4285},{"verification_status":"unverified","n":41143,"has_idnum":1448,"has_selfie":3343,"has_sign":17,"has_risk":817},{"verification_status":"pending_verification","n":12,"has_idnum":12,"has_selfie":12,"has_sign":12,"has_risk":4}]
+## cohort_sid_dups
+[{"sid_code":"IDD210786191964","c":2},{"sid_code":"IDD2707AI153039","c":2},{"sid_code":"IDD2407CFRJ3547","c":2}]
+## cohort_test_accounts
+[{"internal_syky":27,"sayakaya_id":84,"institution":39}]

@@ -1,0 +1,179 @@
+<h1>Data quality (Phase 1)</h1>
+<p>Refreshed 2026-11-22 (data cutoff 2026-11-22; GA4 window 2026-10-01 to 2026-11-21, 52 days). Scripts: <code>scripts/10_dq_users.sql</code>, <code>11_dq_txn.sql</code>, <code>13_cohort_dq.sql</code>, <code>15_hnwi.sql</code>, <code>22_churn_ga.sql</code> (run with <code>scripts/run_many.py</code>); table sizes and referrer values from <code>30_facts.sql</code>. All counts are over all users unless marked "cohort" (cohort = after RAIZ/RAIZKAYA exclusion, before HNWI exclusion; n = 64,393; "cohort C" = also without HNWI, n = 64,274).</p>
+<p>Rows 1-15, 17-18, 21-22 were re-run on 2026-11-22 (<code>raw/phase2/10_dq_users.txt</code>, <code>11_dq_txn.txt</code>, <code>13_cohort_dq.txt</code>). The query <code>dup_email_sid</code> in <code>10_dq_users.sql</code> fails to parse in BigQuery (reserved word <code>GROUPS</code>); the duplicate check comes from the same query in <code>11_dq_txn.sql</code>. Totals here (users 321,099; transactions 387,840) were read later on 2026-11-22 than the funnel run (users 321,087), so they are 12 users higher. Rows 20 and 23 (status list, snapshot start date) were not re-run and keep their 2026-11-09 labels.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Issue</th>
+<th>Count</th>
+<th>Handling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Duplicate user id / email</td>
+<td>0 / 0 (321,099 users)</td>
+<td>None needed</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Duplicate <code>sid_code</code></td>
+<td>3 SIDs, 6 users overall; the same 3 SIDs (6 users) are in the cohort</td>
+<td>Keep. SID is not a join key for the funnel; use <code>user_id</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Users with no <code>sid_code</code></td>
+<td>47,362 overall. Cohort: 47,343 of 64,393 (17,026 of 17,100 verified have a SID; 2 of 6,150 failed; 22 of 41,143 unverified; 0 of 12 pending)</td>
+<td>Expected: SID is issued after KYC. Not an error</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>verified</code> but no <code>sid_code</code></td>
+<td>74 (cohort: 17,100 verified, 74 without SID)</td>
+<td>Keep as verified; SID only matters for the HNWI join</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>verified</code> but <code>verified_at</code> NULL</td>
+<td>All users 4,118. Cohort B: 4,101 (17,100 verified, 12,999 with date). Cohort C: 4,023 (16,981 verified, 12,958 with date; <code>41_timing.sql</code>)</td>
+<td>Do not use <code>verified_at</code> alone for old users. Use <code>verification_status</code> for state and <code>verified_at</code> only for timing, state n</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Not verified but <code>verified_at</code> set</td>
+<td>3 (cohort: failed with date)</td>
+<td>Ignore the date, use status</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>user_status_logs</code> coverage</td>
+<td>1,423 rows, from 2026-07-21 to 2026-11-22 (was 1,000 rows on 2026-11-09). Still no logs before 2026-07-21. Jul 2026: 17 of 48 verifications had a log; Aug to Nov: every verification has one (57/57, 127/127, 435/435, 493/493)</td>
+<td>Cannot build KYC timing/rejection-reason funnel before 2026-07-21. Use logs only from Aug 2026</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>has_completed_first_subscription</code> unreliable</td>
+<td>727 true vs 260,249 users with a real buy in all users (561 of the 727 have a real buy)</td>
+<td>Do not use this flag. Derive Investor from <code>transactions</code></td>
+</tr>
+<tr>
+<td>9</td>
+<td>Buy before the user's <code>created_at</code></td>
+<td>39,592 buys overall (39,325 are RAIZ users, bulk migration); cohort B 267 of 47,527 buys. Cohort C by user: 19 of 3,617 investors have a first buy before <code>created_at</code> (<code>41_timing.sql</code>)</td>
+<td>Keep the buy, use the buy date as first investment. Report as timestamp anomaly; Phase 2 measures funnel timing with and without them</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Buy before <code>verified_at</code></td>
+<td>448 overall; cohort B 34. Cohort C by user: 10 of 2,399 investors with a <code>verified_at</code> have a first buy before it (<code>41_timing.sql</code>)</td>
+<td>Same as #9</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Buyers whose status is not <code>verified</code></td>
+<td>256,181 buys overall (RAIZ migrated users). Cohort B: 21 investors; cohort C: 21 (<code>40_funnel.sql</code>)</td>
+<td>Investor definition does not require status <code>verified</code></td>
+</tr>
+<tr>
+<td>12</td>
+<td>Transactions with null <code>transaction_number</code></td>
+<td>27,719 (liquidation 25,022 + reinvestment 88 etc.). Transactions: 387,840</td>
+<td>Not a join key; ignore</td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>amount</code> &lt;= 0</td>
+<td>30</td>
+<td>Excluded from any amount totals in Phase 2 (count kept for events)</td>
+</tr>
+<tr>
+<td>14</td>
+<td><code>completed_at</code> / <code>paid_at</code> before <code>created_at</code></td>
+<td>2 / 4</td>
+<td>Immaterial; use <code>created_at</code> for dates</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Settled status without <code>completed_at</code></td>
+<td>114</td>
+<td>Use <code>created_at</code> as the activity date</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Bonus transactions (<code>payment_method</code> <code>bonus</code> / <code>manual_bonus</code>)</td>
+<td>11,557</td>
+<td>Excluded from Investor and churn activity (not paid by the user)</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Referrer values</td>
+<td>NULL 58,008; empty string 8; <code>RAIZKAYA</code> 255,195; <code>RAIZ</code> 1,499; 668 distinct values; 0 case or whitespace variants</td>
+<td>Exclusion expression from <code>00_rules.md</code> used as is; empty string stays in the cohort</td>
+</tr>
+<tr>
+<td>18</td>
+<td>Internal / test accounts</td>
+<td>27 in <code>main.internal_syky</code> (table still 27 rows, all 27 in cohort); 85 emails at @sayakaya.id/.com (84 in cohort); 57 emails matching test/dummy/demo (pattern only, not checked)</td>
+<td>Kept in the cohort, as the rules do not exclude them (27 = 0.04% of 64,274). Open question 2 in <code>progress.md</code></td>
+</tr>
+<tr>
+<td>19</td>
+<td>Institutions (<code>is_institution</code>)</td>
+<td>39 overall; cohort C: 15 (5 investors)</td>
+<td>Kept. Open question 3 in <code>progress.md</code></td>
+</tr>
+<tr>
+<td>20</td>
+<td>Inconsistent status values</td>
+<td><code>users.verification_status</code>: unverified / verified / failed only; <code>pending_verification</code> exists only as <code>origin_status</code> in logs (as of 2026-11-09, not refreshed). Transactions: completed 382,192; expired 2,849; cancelled 2,690; completed_payment 61; verified 40; pending_payment 1. <code>verified_by_operational</code> had 75 rows on 2026-11-09 and is absent from the status list now (not investigated)</td>
+<td>Successful = completed, completed_payment, verified, verified_by_operational</td>
+</tr>
+<tr>
+<td>21</td>
+<td>Unverified users with KYC data</td>
+<td>Cohort B unverified 41,143: 1,448 have ID number, 3,343 have selfie</td>
+<td>These are in-progress or abandoned KYC; not counted as submitted until resolved (see definitions.md)</td>
+</tr>
+<tr>
+<td>22</td>
+<td>Orphans</td>
+<td><code>user_profiles</code> rows 321,099 = <code>users</code> rows 321,099 (1:1). Orphan profiles, users without profile, transactions without user: 0 (portfolio orphans: 0)</td>
+<td>None needed</td>
+</tr>
+<tr>
+<td>23</td>
+<td>Snapshot AUM table</td>
+<td><code>portfolio_with_code</code> has about 235,750 rows per day (235,753 / 235,755 / 235,748 / 235,748 on 2026-11-19 to 2026-11-22); latest partition 2026-11-22, first partition 2026-01-14 (as of 2026-11-09, not refreshed); <code>created_at</code> is one day after the AUM day it represents (as of 2026-11-09, not refreshed)</td>
+<td>HNWI uses the table by <code>created_at</code> date as is (consistent with the dashboard HNWI tab)</td>
+</tr>
+<tr>
+<td>24</td>
+<td>Timezone DB vs GA</td>
+<td>DB: <code>users.created_at</code>, <code>verified_at</code> are naive DATETIME in UTC (latest <code>users.created_at</code> 2026-11-22 11:22 UTC = 18:22 WIB); <code>transactions</code> and logs are TIMESTAMP UTC. GA: <code>event_date</code> is already WIB (table <code>events_20261105</code> spans 2026-11-04 17:02Z to 2026-11-05 16:59Z, re-checked for one day)</td>
+<td>DB: convert with <code>DATETIME_ADD(x, INTERVAL 7 HOUR)</code> / <code>DATE(ts,'Asia/Jakarta')</code>. GA: use <code>event_date</code> as is</td>
+</tr>
+<tr>
+<td>25</td>
+<td>GA <code>user_id</code> coverage</td>
+<td>Only set after login. 3,577 of 4,031 devices (88.7%) have rows without <code>user_id</code> in 2026-10-01 to 2026-11-21; <code>first_open</code> has 0 users (1,729 events, 1,729 devices). 2,764 of 2,767 GA <code>user_id</code>s match <code>main.users.id</code></td>
+<td>Pre-login steps can only be counted by device (<code>user_pseudo_id</code>); device-to-user mapping only after login. Funnel stages before login are device-level</td>
+</tr>
+<tr>
+<td>26</td>
+<td>GA exclusion mapping</td>
+<td>2,767 GA users (2026-10-01 to 2026-11-21): 3 not in DB, 155 RAIZ/RAIZKAYA, 78 HNWI, 2,531 kept</td>
+<td>Exclusion applied through <code>user_id</code>; non-login devices cannot be excluded (see #25)</td>
+</tr>
+<tr>
+<td>27</td>
+<td>GA vs DB, first look (not like-for-like)</td>
+<td>GA <code>register_success</code> 1,239 users (all users) vs DB registered 1,298 (cohort B), 2026-10-01 to 2026-11-21. GA <code>kyc_success</code> 962 users vs DB verified 906</td>
+<td>Not comparable: GA side is not yet excluded. <code>ga_vs_db.md</code> redoes it with the same exclusion on both sides (cohort C: 1,229 vs 1,297 registered; 955 vs 905 approved)</td>
+</tr>
+</tbody>
+</table>
+<p>What this means: the core tables are clean (no duplicate users, no orphans at the last full check), but several date fields are unreliable for old users, so use status for "who is verified" and dates only for timing. Most pre-login GA activity cannot be tied to a person (88.7% of devices), so GA is good for trends and the DB is the source for exact counts.</p>
+<p>Not checked this phase: email/notification logs (in Supabase, not BigQuery), refreshed freshness of the scheduled copies of <code>main.*</code>, <code>kalcer</code>, <code>dormant</code> and <code>ml.churn_features</code> datasets.</p>

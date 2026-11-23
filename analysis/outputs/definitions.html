@@ -1,0 +1,183 @@
+<h1>Definitions (Phase 1)</h1>
+<blockquote>
+<p><strong>Terms used in this document.</strong>
+<strong>Repeat</strong> = the user bought on 2 or more different days (WIB), counting valid non-bonus purchases only.
+<strong>Mature</strong> = first purchase at least 120 days before the data pull (2026-11-22; first purchase on or before 2026-07-25), so every user had the same time to buy again. Mature repeat = % of mature investors who are repeat. Rates on non-mature users are not comparable.
+<strong>Data window</strong> = all registrations and transactions up to 2026-11-22 unless a section states another window (GA4 events: 2026-10-01 to 2026-11-21, 52 days).</p>
+</blockquote>
+<p>Timezone: Asia/Jakarta everywhere. "Successful" transaction status = <code>completed</code>, <code>completed_payment</code>, <code>verified</code>, <code>verified_by_operational</code>. Bonus payments (<code>payment_method</code> <code>bonus</code>/<code>manual_bonus</code>) never count as user action.</p>
+<h2>Cohort</h2>
+<p>Analysis cohort = <code>main.users</code> where <code>(referrer_code IS NULL OR UPPER(TRIM(referrer_code)) NOT IN ('RAIZ','RAIZKAYA'))</code> AND the user is not HNWI.</p>
+<h2>Stage counts, before and after exclusion</h2>
+<p>Source: <code>scripts/20_cohort_stages.sql</code>, refreshed 2026-11-22. Investor = first successful non-bonus <code>buy</code> (below). Window: all time, to 2026-11-22.</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Registered</th>
+<th>KYC verified</th>
+<th>KYC failed</th>
+<th>Investors</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A. Raw</td>
+<td>321,087</td>
+<td>17,536</td>
+<td>6,256</td>
+<td>260,249</td>
+</tr>
+<tr>
+<td>B. Minus RAIZ/RAIZKAYA (256,694 users)</td>
+<td>64,393</td>
+<td>17,100</td>
+<td>6,150</td>
+<td>3,736</td>
+</tr>
+<tr>
+<td>C. Minus HNWI (analysis cohort)</td>
+<td>64,274</td>
+<td>16,981</td>
+<td>6,150</td>
+<td>3,617</td>
+</tr>
+<tr>
+<td>HNWI removed from B</td>
+<td>119</td>
+<td>119</td>
+<td>0</td>
+<td>119</td>
+</tr>
+<tr>
+<td>HNWI that were also RAIZ</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Institutions still in C</td>
+<td>15</td>
+<td>15</td>
+<td>0</td>
+<td>5</td>
+</tr>
+</tbody>
+</table>
+<p>Reading: 79.9% of registered users are RAIZ/RAIZKAYA migrations, so ignoring the exclusion would inflate the register-to-investor funnel (81.1% raw vs 5.6% in cohort C). Observed.</p>
+<p>What this means: four in five accounts are migrated from RAIZ, not new sign-ups, so counting them would make the funnel look far better than it is.</p>
+<h2>Register</h2>
+<p>A row in <code>main.users</code> (<code>created_at</code>, WIB = UTC+7). GA counterpart: <code>register_success</code> (by <code>user_id</code>).</p>
+<h2>KYC</h2>
+<ul>
+<li><strong>Submitted:</strong> <code>verification_status</code> in (<code>verified</code>, <code>failed</code>). Cohort C: 16,981 + 6,150 = 23,131. Unresolved: unverified users that hold a selfie (3,322 in cohort B, as of 2026-11-09, not refreshed) are in progress or abandoned; they are reported separately as "started, not finished", not as submitted. GA counterpart: <code>kyc_start</code> (opened) and <code>kyc_success</code> (submitted).</li>
+<li><strong>Approved:</strong> <code>verification_status = 'verified'</code>. Timing from <code>verified_at</code> (missing for 4,023 verified users in cohort C; 4,118 in all users as of 2026-11-09, not refreshed; DQ #5). Logs for the timing only from 2026-07-21.</li>
+<li><strong>Rejected:</strong> <code>verification_status = 'failed'</code>. Rejection reasons are not in the tables read in Phase 1 (data request below).</li>
+</ul>
+<h2>Investor</h2>
+<p>First successful <code>buy</code> that is not a bonus (<code>type='buy'</code>, successful status, <code>payment_method</code> not in <code>bonus</code>/<code>manual_bonus</code>). Investor date = <code>MIN(created_at)</code> of those, WIB. Does not require <code>verification_status='verified'</code>; cohort C has 21 investors whose status is not verified (DQ #11). GA counterpart: <code>payment_complete</code>.</p>
+<h2>Churned</h2>
+<p>Activity = successful non-bonus <code>buy</code>, <code>sell</code>, <code>SWITCH_IN</code>, one per Jakarta day (<code>scripts/21_churn_final.sql</code>, <code>23_gap_dist.sql</code>, cohort C). A user is <strong>churned</strong> when they have no activity for more than <strong>90 days</strong> (observed at the refresh date, 2026-11-22). Not churned yet if the last activity is within 90 days.</p>
+<p>Distribution of gaps between consecutive active days (40,875 gaps, 3,193 users with at least two active days):</p>
+<table>
+<thead>
+<tr>
+<th>Gap days</th>
+<th>Gaps</th>
+<th>Share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0-7</td>
+<td>15,604</td>
+<td>38.2%</td>
+</tr>
+<tr>
+<td>8-14</td>
+<td>6,395</td>
+<td>15.6%</td>
+</tr>
+<tr>
+<td>15-30</td>
+<td>8,066</td>
+<td>19.7%</td>
+</tr>
+<tr>
+<td>31-60</td>
+<td>5,152</td>
+<td>12.6%</td>
+</tr>
+<tr>
+<td>61-90</td>
+<td>1,801</td>
+<td>4.4%</td>
+</tr>
+<tr>
+<td>91-120</td>
+<td>998</td>
+<td>2.4%</td>
+</tr>
+<tr>
+<td>121-180</td>
+<td>946</td>
+<td>2.3%</td>
+</tr>
+<tr>
+<td>181-270</td>
+<td>723</td>
+<td>1.8%</td>
+</tr>
+<tr>
+<td>271-365</td>
+<td>368</td>
+<td>0.9%</td>
+</tr>
+<tr>
+<td>&gt;365</td>
+<td>822</td>
+<td>2.0%</td>
+</tr>
+</tbody>
+</table>
+<p>Percentiles of the gap: p50 13, p75 32, p90 86, p95 168, p99 525 days.</p>
+<p>Of gaps longer than T days, the share of users who came back (returned / (returned + still silent)):</p>
+<table>
+<thead>
+<tr>
+<th>T</th>
+<th>30</th>
+<th>60</th>
+<th>90</th>
+<th>120</th>
+<th>150</th>
+<th>180</th>
+<th>270</th>
+<th>365</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Came back</td>
+<td>75.1%</td>
+<td>62.3%</td>
+<td>53.7%</td>
+<td>46.9%</td>
+<td>41.9%</td>
+<td>38.5%</td>
+<td>29.7%</td>
+<td>25.7%</td>
+</tr>
+</tbody>
+</table>
+<p>Why 90: the p90 of normal gaps is 86 days, so 90 days sits just above 90% of the observed gaps; and beyond 90 days returning is below 54% and falls slowly (no sharp drop to pick a different cutoff). The dashboard's win-back view uses 179 days; 90 days is the stricter, earlier-warning line. Sensitivity (180 days) will be shown in Phase 2. Inferred: 90 vs 180 changes who counts as churned, not the shape of the funnel.</p>
+<p>Result at the refresh date, cohort C (3,617 investors, buy dates only): 3,163 (87.4%) silent for more than 90 days; 3,026 (83.7%) for more than 180; 454 active within 90 days; 1,475 (40.8%) bought on only one day. Observed. Churn measured from buys only here, while the gap table also counts sells and switches (3,951 users have such activity, 334 more than the 3,617 investors: Inferred: bonus-only holders or sell/switch without a non-bonus buy; not checked). With the single activity definition used in Phase 2 (buy, sell, switch-in), 3,008 investors are churned (more than 90 days) and 609 are active.</p>
+<p>What this means: about 7 in 8 investors have not bought, sold or switched in the last 90 days, and 4 in 10 bought on one day only, so most first-time investors do not come back.</p>
+<h2>HNWI</h2>
+<p><strong>HNWI = a user whose SID had total AUM of at least Rp500,000,000 on any daily snapshot of <code>mi_fee_logs.portfolio_with_code</code> (from 2026-01-14; first partition date as of 2026-11-09, not refreshed).</strong> AUM per SID = sum of <code>amount</code> over the SID's rows per <code>DATE(created_at)</code>.</p>
+<p>Why: (1) the HNWI bonus program in <code>public/hnwi-bonus-config.js</code> uses <code>minAum: 500000000</code>; (2) there is no HNWI flag on the user table. Counts: 119 users ever (all verified, all investors, none RAIZ). On the latest snapshot (2026-11-22) 65 SIDs are at or above the line (7 are institutions); distribution of SIDs by AUM on that day: &lt;1 jt 231,562; 1-10 jt 486; 10-100 jt 339; 100-500 jt 154; 500 jt-1 M 32; &gt;=1 M 33 (232,606 SIDs with a positive balance). "Ever" is used so a user whose AUM fell later is not pulled back into the retail cohort. Alternative not used: static table <code>mi_fee_logs.data_hnwi</code> (115 rows, with PII columns; refresh date unknown; as of 2026-11-09, not refreshed). Inferred: this threshold matches the company's own program, not a legal definition; confirm with the business (open question 1).</p>
+<p>What this means: HNWI are a small group (119 of 64,393 users) with very large balances, so they are kept out of the retail averages.</p>
+<p>Script: <code>scripts/16_hnwi_ever.sql</code> (3.16 GB scanned as of 2026-11-09, not refreshed), <code>scripts/15_hnwi.sql</code> (snapshot 2026-11-22).</p>
+<h2>Timezone</h2>
+<p>DB <code>DATETIME</code>/<code>TIMESTAMP</code> are UTC; shift +7h. GA export <code>event_date</code> is already WIB (re-checked on one day, DQ #24).</p>

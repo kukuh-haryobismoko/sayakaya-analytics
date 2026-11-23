@@ -1,6 +1,6 @@
 ## bonus_status
-[{"bonus_users_ok_status":6128,"never_paid":3629,"idr_never_paid":"469400000"}]
+[{"bonus_users_ok_status":6132,"never_paid":3632,"idr_never_paid":"469200000"}]
 ## bonus_status_all
-[{"status":"completed","n":11378},{"status":"cancelled","n":166}]
+[{"status":"completed","n":11391},{"status":"cancelled","n":166}]
 ## first_buy_amt
-[{"grp":"none","n":2096,"lt100k":468,"median_amt":200000},{"grp":"referrer_code","n":1259,"lt100k":126,"median_amt":500000},{"grp":"sales_code","n":232,"lt100k":19,"median_amt":125950}]
+[{"grp":"none","n":2100,"lt100k":470,"median_amt":200000},{"grp":"referrer_code","n":1262,"lt100k":126,"median_amt":500000},{"grp":"sales_code","n":255,"lt100k":25,"median_amt":150000}]

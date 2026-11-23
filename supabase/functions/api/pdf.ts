@@ -149,21 +149,39 @@ export interface Column { key: string; label: string; width: number; align?: str
 // deno-lint-ignore no-explicit-any
 function table(doc: any, columns: Column[], rows: Record<string, unknown>[], {
   rowHeight = 16, fontSize = 8, headerFill = '#f4f2ec', headerText = INDIGO, zebraFill = null as string | null,
-  cellColor = null as ((key: string, raw: unknown) => string | null) | null,
+  cellColor = null as ((key: string, raw: unknown) => string | null) | null, fitTo = 0,
 } = {}) {
   const left = doc.page.margins.left;
   const bottom = doc.page.height - doc.page.margins.bottom;
+  // fitTo: squeeze this table into one page instead of spilling a few rows onto
+  // an orphan page (long holdings lists, every fund type in one NAV table).
+  let padY = 4;
+  if (fitTo > 0) {
+    // Shrink the font, then the padding, then the row height until the whole
+    // table fits above `bottom` — never spills a stray row onto a new page.
+    const limit = fitTo * 0.995;
+    const need = (fs: number, rh: number, pad: number) => estimateTableHeight(doc, columns, rows, fs, rh, pad * 2);
+    search: for (const pad of [4, 1, 0.5, 0.25]) {
+      for (let fs = fontSize; fs >= 3.5; fs -= 0.25) {
+        const rh = Math.max(fs + 1.5, 4.5);
+        if (need(fs, rh, pad) <= limit) { padY = pad; fontSize = fs; rowHeight = rh; break search; }
+      }
+      let rh = 5;
+      while (rh > 2.5 && need(3.5, rh, pad) > limit) rh -= 0.25;
+      padY = pad; fontSize = 3.5; rowHeight = rh;
+    }
+  }
   const totalWidth = columns.reduce((s, c) => s + c.width, 0);
 
   // Row height grows when a cell wraps (long fund names, two-line headers).
   // Caller must have the row's font set before measuring.
   const measure = (texts: string[]) => Math.max(rowHeight,
-    8 + Math.max(...texts.map((t, i) => doc.heightOfString(t, { width: columns[i].width - 8 }) as number)));
+    padY * 2 + Math.max(...texts.map((t, i) => doc.heightOfString(t, { width: columns[i].width - 8 }) as number)));
   const drawCells = (texts: string[], y: number, colorFn?: ((key: string) => string | null) | null) => {
     let x = left;
     columns.forEach((c, i) => {
       if (colorFn) doc.fillColor(colorFn(c.key) || INK);
-      doc.text(texts[i], x + 4, y + 4, { width: c.width - 8, align: c.align || 'left' });
+      doc.text(texts[i], x + 4, y + padY, { width: c.width - 8, align: c.align || 'left' });
       x += c.width;
     });
   };
@@ -302,9 +320,9 @@ function perfReportHeader(doc: any, title: string, dateStr: string) {
 // fontSize inputs must produce the same result there) so picking a font
 // size here reliably predicts whether table() will need a second page.
 // deno-lint-ignore no-explicit-any
-function estimateTableHeight(doc: any, columns: Column[], rows: Record<string, unknown>[], fontSize: number, rowHeight: number): number {
+function estimateTableHeight(doc: any, columns: Column[], rows: Record<string, unknown>[], fontSize: number, rowHeight: number, pad = 8): number {
   const measure = (texts: string[]) => Math.max(rowHeight,
-    8 + Math.max(...texts.map((t, i) => doc.heightOfString(t, { width: columns[i].width - 8 }) as number)));
+    pad + Math.max(...texts.map((t, i) => doc.heightOfString(t, { width: columns[i].width - 8 }) as number)));
   doc.font('Helvetica-Bold').fontSize(fontSize);
   let total = measure(columns.map((c) => c.label));
   doc.font('Helvetica').fontSize(fontSize);
@@ -351,6 +369,50 @@ function perfSheetPage(doc: any, sheet: PerfSheet, width: number) {
   } else {
     doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No NAV data for this fund type.');
   }
+}
+
+// Lowercased names of the funds in `entries` — the NAV page keeps only these.
+function heldFundNames(entries: { holdings?: Record<string, unknown>[] }[]): Set<string> {
+  const names = new Set<string>();
+  entries.forEach((e) => (e.holdings || []).forEach((h) => { const n = h?.fund; if (n) names.add(String(n).trim().toLowerCase()); }));
+  return names;
+}
+
+// All fund-type NAV sheets on ONE landscape page: the portfolio PDF stays two
+// pages (holdings + NAV) instead of one page per fund type. Font auto-shrinks
+// and the table is squeezed (fitTo) so it never spills.
+// deno-lint-ignore no-explicit-any
+// fundNames: names the investor actually holds — the NAV page lists only those,
+// so a 22-fund portfolio stays readable on one landscape page.
+function perfSheetsPage(doc: any, sheets: PerfSheet[], width: number, fundNames?: Set<string>) {
+  const asOf = sheets.map((s) => s.asOf).filter(Boolean).sort().pop();
+  perfReportHeader(doc, 'Reksa Dana Update', formatDateStrID(asOf) || formatDateID());
+  const rows: Record<string, unknown>[] = [];
+  const keep = fundNames && fundNames.size
+    ? (name: unknown) => fundNames.has(String(name || '').trim().toLowerCase())
+    : () => true;
+  sheets.forEach((s) => s.rows.forEach((r) => { if (keep(r.Fund)) rows.push({ ...r, __type: s.name }); }));
+  if (!rows.length) sheets.forEach((s) => s.rows.forEach((r) => rows.push({ ...r, __type: s.name })));
+  rows.forEach((r, i) => { r.__no = i + 1; });
+  if (!rows.length) {
+    doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No NAV data for this fund type.');
+    return;
+  }
+  const noW = width * 0.035;
+  const typeW = width * 0.075;
+  const base = PERF_COLS(width - noW - typeW);
+  const cols = [
+    { key: '__no', label: 'No', width: noW, align: 'center' },
+    base[0],
+    { key: '__type', label: 'Jenis', width: typeW, format: fundTypeLabel },
+    ...base.slice(1),
+  ];
+  const available = (doc.page.height - doc.page.margins.bottom) - doc.y;
+  const fontSize = fitFontSize(doc, cols, rows, available);
+  table(doc, cols, rows, {
+    headerFill: TABLE_HEADER, headerText: '#ffffff', zebraFill: ZEBRA, cellColor: perfCellColor,
+    fontSize, rowHeight: fontSize + 8, fitTo: available,
+  });
 }
 
 // sheets: [{ name: fundType, rows: [{ Fund, NAV, '1D': pct, ... }] }] — from
@@ -428,8 +490,12 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings: rawHoldings }:
   printLetterhead(doc, { left, width, contact, title: 'CUSTOMER PORTFOLIO', dateLabel: 'CLOSE NAV', dateValue: statementDate(holdings) });
 
   const cols = filterCols(HOLDINGS_COLS(width), width, options.columns);
+  const sum = portfolioSummaryLines(rawHoldings, options.fx, options.mode);
   if (holdings.length) {
-    table(doc, cols, holdings, { fontSize: 7 });
+    // Every fund on page 1: leave room for the total row, Ringkasan and the disclaimer.
+    const bottom = doc.page.height - doc.page.margins.bottom;
+    const reserve = (holdings.length > 1 ? 30 : 0) + (sum.length ? 12 + sum.length * 10 : 0) + 44;
+    table(doc, cols, holdings, { fontSize: 7, fitTo: bottom - doc.y - reserve });
   } else {
     doc.font('Helvetica').fontSize(9).fillColor(MUTED).text('No active holdings.');
     doc.moveDown(0.8);
@@ -471,7 +537,6 @@ function drawPortfolioHoldingsPage(doc: any, { contact, holdings: rawHoldings }:
     doc.x = left;
   }
 
-  const sum = portfolioSummaryLines(rawHoldings, options.fx, options.mode);
   if (sum.length) {
     doc.font('Helvetica-Bold').fontSize(8).fillColor(INK).text('Ringkasan', left, doc.y, { width });
     doc.font('Helvetica').fontSize(7.5);
@@ -497,15 +562,13 @@ export async function portfolioReport(
   if (options.username) doc.info.Author = options.username;
   drawPortfolioHoldingsPage(doc, { contact, holdings }, options);
 
-  // One page per fund type: NAV % change table, "Reksa Dana Update" style.
-  // Landscape, same as the standalone Fund Performance PDF — needs the extra
-  // width for all 13 columns. Each addPage() switches layout for just that
-  // page; page 1 above stays portrait since it's a different, narrower table.
-  performanceSheets.forEach((sheet) => {
+  // One landscape page for every fund type's NAV % change table ("Reksa Dana
+  // Update" style), so a portfolio PDF is 2 pages: holdings, then NAV.
+  if (performanceSheets.length) {
     doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
     const perfWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    perfSheetPage(doc, sheet, perfWidth);
-  });
+    perfSheetsPage(doc, performanceSheets, perfWidth, heldFundNames([{ holdings }]));
+  }
 
   return bufferDoc(doc);
 }
@@ -526,11 +589,12 @@ export async function portfolioReportBatch(
     if (i > 0) doc.addPage({ size: 'A4', margin: 40 });
     drawPortfolioHoldingsPage(doc, entry, options);
   });
-  performanceSheets.forEach((sheet) => {
+  const batchNames = heldFundNames(entries);
+  if (performanceSheets.length) {
     doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
     const perfWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    perfSheetPage(doc, sheet, perfWidth);
-  });
+    perfSheetsPage(doc, performanceSheets, perfWidth, batchNames);
+  }
   return bufferDoc(doc);
 }
 

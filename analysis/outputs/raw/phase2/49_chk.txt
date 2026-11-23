@@ -1,0 +1,1 @@
+[{"k":"buy_only_churn","n":3163},{"k":"act_churn","n":3008},{"k":"buy_churn_but_act_recent","n":155},{"k":"investors_in_L","n":3617}]

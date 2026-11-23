@@ -1,0 +1,4 @@
+## mature_repeat
+[{"grp":"none","mature_inv":2114,"repeat_inv":1293},{"grp":"referrer_code","mature_inv":1247,"repeat_inv":839},{"grp":"sales_code","mature_inv":204,"repeat_inv":88}]
+## bonus_before_paid
+[{"bonus_users":6214,"never_paid":3632,"bonus_idr_never_paid":"469200000","bonus_before_first_paid":414,"bonus_after_first_paid":2168}]

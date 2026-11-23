@@ -1,0 +1,379 @@
+<h1>Findings — Marketing</h1>
+<blockquote>
+<p><strong>Terms used in this document.</strong>
+<strong>Repeat</strong> = the user bought on 2 or more different days (WIB), counting valid non-bonus purchases only.
+<strong>Mature</strong> = first purchase at least 120 days before the data pull (2026-11-22), so every user had the same time to buy again. Mature repeat = % of mature investors who are repeat. Rates on non-mature users are not comparable.
+<strong>Data window</strong> = all registrations and transactions up to 2026-11-22 unless a section states another window (GA4 events: 2026-10-01 to 2026-11-21, 52 days).</p>
+</blockquote>
+<p>Built 2026-11-22 WIB from <code>outputs/raw/</code> (BigQuery read-only) and Supabase <code>dashboard_email_log</code>/<code>dashboard_email_events</code>.</p>
+<p>Cohort = Phase 1/2 (no RAIZ/RAIZKAYA referrer, no HNWI): 64,274 registrations, 3,617 investors. Data pulled 2026-11-22.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Confidence</th>
+<th>Impact</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M1</td>
+<td>Sales-code sign-up: conversion on par with referral, worst mature retention</td>
+<td>17.9% investor/reg vs 20.6% referral, 3.7% none; mature repeat 43.2% vs 60.8%</td>
+<td>High (observational)</td>
+<td>High</td>
+<td>M</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>M2</td>
+<td>Credit bonus to 6,134 users, 59.2% never made a paid purchase</td>
+<td>Rp469,200,000 credit to 3,632 non-payers</td>
+<td>High</td>
+<td>High</td>
+<td>S (policy)</td>
+<td>P0</td>
+</tr>
+<tr>
+<td>M3</td>
+<td>Promo on first purchase correlates with lower repeat</td>
+<td>52.8% vs 61.4%</td>
+<td>Medium (confounded)</td>
+<td>Medium</td>
+<td>S</td>
+<td>P2</td>
+</tr>
+<tr>
+<td>M4</td>
+<td>Lifecycle email not measurable; batch throttled, 0 clicks</td>
+<td>93/743 failed (454), all resent; 0 click events; open 497/497 within 2 hours (as of 2026-11-09, not refreshed)</td>
+<td>High</td>
+<td>Medium</td>
+<td>S</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>M5</td>
+<td>Push reaches non-investors, post-click conversion not measurable</td>
+<td>351 approved-not-yet-purchased clicked; click→purchase test only 26 users</td>
+<td>Low</td>
+<td>Medium</td>
+<td>M</td>
+<td>P2</td>
+</tr>
+<tr>
+<td>M6</td>
+<td>Three stuck pools without lifecycle messaging</td>
+<td>13,385 approved-not-yet-purchased; 245 unverified &lt;30 d; 101 investors dormant 60-90 d</td>
+<td>High</td>
+<td>High</td>
+<td>M</td>
+<td>P1</td>
+</tr>
+</tbody>
+</table>
+<h2>M1 — Sales code: conversion on par with referral, worst mature retention</h2>
+<p><strong>Pain point.</strong> Sign-ups with a sales code (booth/agent) produce investors at almost 5x the organic group, but have the lowest mature repeat rate and the smallest first ticket.</p>
+<p><strong>Evidence (Observed).</strong> Full cohort, registrations through 2026-11-22.</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Registrations</th>
+<th>KYC submit</th>
+<th>Approved</th>
+<th>Investors</th>
+<th>Investor/reg</th>
+<th>Approved/submit</th>
+<th>Investor/approved</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sales_code</td>
+<td>1,428</td>
+<td>1,125 (78.8%)</td>
+<td>1,011 (70.8%)</td>
+<td>255</td>
+<td>17.9%</td>
+<td>89.9%</td>
+<td>25.2%</td>
+</tr>
+<tr>
+<td>referrer_code</td>
+<td>6,130</td>
+<td>3,490 (56.9%)</td>
+<td>3,224 (52.6%)</td>
+<td>1,262</td>
+<td>20.6%</td>
+<td>92.4%</td>
+<td>39.1%</td>
+</tr>
+<tr>
+<td>none</td>
+<td>56,716</td>
+<td>18,516 (32.6%)</td>
+<td>12,746 (22.5%)</td>
+<td>2,100</td>
+<td>3.7%</td>
+<td>68.8%</td>
+<td>16.5%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Sales code vs none, investor/reg: 17.9% (95% CI 16.0-19.9%) vs 3.7% (95% CI 3.6-3.9%); z=26.8, p&lt;0.0001.</p>
+</li>
+<li>
+<p>Sales code vs none, approved/submit: 89.9% (95% CI 88.0-91.5%) vs 68.8% (95% CI 68.2-69.5%); z=15.0, p&lt;0.0001.</p>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Investors</th>
+<th>Repeat (2+ purchase days)</th>
+<th>Mature (purchase-1 ≥120 d)</th>
+<th>Mature repeat</th>
+<th>Mature churn &gt;90 d</th>
+<th>Median ticket-1</th>
+<th>Ticket-1 &lt;Rp100k</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sales_code</td>
+<td>255</td>
+<td>32.5%</td>
+<td>192</td>
+<td>43.2%</td>
+<td>89.6%</td>
+<td>Rp150,000</td>
+<td>9.8%</td>
+</tr>
+<tr>
+<td>referrer_code</td>
+<td>1,262</td>
+<td>63.9%</td>
+<td>1,197</td>
+<td>67.4%</td>
+<td>86.7%</td>
+<td>Rp500,000</td>
+<td>10.0%</td>
+</tr>
+<tr>
+<td>none</td>
+<td>2,100</td>
+<td>59.6%</td>
+<td>2,059</td>
+<td>60.8%</td>
+<td>87.2%</td>
+<td>Rp200,000</td>
+<td>22.4%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Mature repeat, sales code vs none: 43.2% (95% CI 36.4-50.3%) vs 60.8% (95% CI 58.7-62.9%); z=-4.7, p&lt;0.0001. Vs referral: 67.4%.</p>
+</li>
+<li>
+<p>Churn is computed on mature investors only; raw churn across all investors is misleading because the sales-code cohort is younger.</p>
+</li>
+<li>
+<p>Median first ticket Rp150,000 vs Rp500,000 (referral) and Rp200,000 (none). The ticket gap is an acquisition-mix effect (agent minimum), not evidence of a churn cause.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, medium confidence).</strong> Sales-code investors enter with a small, agent-assisted ticket and stay dependent on the agent rather than self-driven, so they repeat less often. Not yet tested: agent follow-up after the first purchase; whether the code is used for a one-off purchase during a promo.</p>
+<p><strong>Expected impact (arithmetic).</strong> 192 mature investors x 17.6 pp repeat gap = 34 additional repeat investors if the gap closes fully. Closing 30% via agent follow-up on day 7 and day 30 = 10 users. Assumption: the gap is fixable, not selection.</p>
+<p><strong>Effort.</strong> M (agent workflow + CRM task, no product change).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> Mature repeat rate per acquisition group, monthly. Before/after test of agent follow-up on day 7 and day 30 on the new sales-code cohort; target +5 pp within 90 days.</p>
+<p><strong>What this means.</strong> Sales-code brings in more investors per registration than organic, but those investors rarely buy again without the agent. The gap (43% vs 61% mature repeat) is real and worth fixing.</p>
+<h2>M2 — Credit bonus is the largest marketing spend leak</h2>
+<p><strong>Pain point.</strong> 3,632 of 6,134 bonus recipients never made a paid purchase; Rp469,200,000 credit went to non-payers.</p>
+<p><strong>Evidence (Observed).</strong> All data through 2026-11-22. Bonus = purchase transaction with <code>payment_method</code> in ('manual_bonus','bonus'); paid = successful purchase outside those methods.</p>
+<ul>
+<li>
+<p>Bonus recipients 6,134 (valid status 6,132); never paid 3,632 = 59.2% (95% CI 58.0-60.4%); value to non-payers Rp469,200,000.</p>
+</li>
+<li>
+<p>Recipient payment status: already a payer before credit 2,094 (34.1% — bonus works as a reward); got credit before a paid purchase 408 (6.7% — the only group readable as acquisition); never made a paid purchase 3,632 (59.2%).</p>
+</li>
+<li>
+<p>Bonus transaction status: completed 11,391; cancelled 166.</p>
+</li>
+<li>
+<p>Approved users with bonus 6,134: investor 40.8%, repeat 25.8%. Without bonus 10,847: investor 10.1%, repeat 5.2%. The bonus group is post-hoc selected (2,094 got bonus after paying); this is correlation, not a lift estimate.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, medium confidence).</strong> Only 408 recipients (6.7%) received credit before a paid purchase, so the program is not an acquisition engine; it is a reward for existing payers. The problem is that 3,632 recipients (59.2%) never produced any paid payment at all, and their Rp469,200,000 credit created no revenue. Program rules are not in the data; confirm with the bonus configuration owner.</p>
+<p><strong>Expected impact (arithmetic).</strong> Average credit per non-payer Rp129,185. Converting 10% of 3,632 = 363 users; at the none-group median ticket-1 of Rp200,000 = Rp72,600,000 first tickets. Alternative: require credit on first paid purchase, cutting the Rp469,200,000 exposure.</p>
+<p><strong>Effort.</strong> S (policy/configuration: who gets credit and when).</p>
+<p><strong>Priority.</strong> P0 (largest value, smallest effort).</p>
+<p><strong>KPI / validation.</strong> Share of bonus recipients who make a paid purchase within 30 days; bonus cost per converted user. Test cohort credit-at-first-purchase vs credit-at-signup.</p>
+<p><strong>What this means.</strong> Most bonus money goes to people who never buy anything. Only 1 in 15 got credit before their first paid purchase — this is a reward program, not an acquisition tool.</p>
+<h2>M3 — Promo on first purchase correlates with lower repeat (confounded)</h2>
+<p><strong>Pain point.</strong> Investors whose first purchase used a promo repeat 52.8% vs 61.4% without promo.</p>
+<p><strong>Evidence (Observed).</strong> First purchase with promo n=927: repeat 489 = 52.8% (95% CI 49.5-55.9%), churn90 85.2%. Without promo n=2,690: repeat 61.4%, churn90 82.5%. z=-4.6, p&lt;0.0001.</p>
+<ul>
+<li>Contradiction: counting promo on any purchase flips the sign. Promo users 72.5% repeat (n=1,615) vs 48.5% (n=2,002). Promo use is a result of frequent buying, so this cut must not be read as lift.</li>
+</ul>
+<p><strong>Root cause (Inferred, low confidence).</strong> Promo likely attracts price-sensitive one-off buyers, but first-purchase promos are also targeted at this group. Selection cannot be separated without random exposure.</p>
+<p><strong>Expected impact.</strong> Not quantified. Gap 8.6 pp x 927 promo investors = 80 repeat investors is only an upper bound if the gap is fully causal; the data cannot show that.</p>
+<p><strong>Effort.</strong> S (analysis: random holdout).</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> 90-day repeat for new promo-eligible users, randomized promo vs no promo (10% holdout).</p>
+<p><strong>What this means.</strong> First-purchase promo users repeat less, but that's likely because promos target one-off buyers, not because the promo causes churn. Needs a random test to know for sure.</p>
+<h2>M4 — Lifecycle email: throttle, no click tracking, lift not measurable</h2>
+<p><strong>Pain point.</strong> The only email batch in the log (<code>fund_performance</code>/<code>batch</code>) has 93 failed sends due to throttle, 0 click events, and 650 sends without <code>user_id</code>, so post-click conversion cannot be measured.</p>
+<p><strong>Evidence (Observed).</strong> Supabase <code>dashboard_email_log</code>/<code>dashboard_email_events</code>, pulled 2026-11-09 (as of 2026-11-09, not refreshed). Batch per day: 2026-10-13 = 150, 2026-10-26 = 497, 2026-11-03 = 3.</p>
+<ul>
+<li>
+<p>Failed 93 (all 2026-10-26), error <code>454 Throttling failure: Maximum sending rate exceeded.</code>. All 93 recipients were sent later, no permanent loss.</p>
+</li>
+<li>
+<p>Tracking coverage: 500/650 sent logs have events; the 2026-10-13 batch (150 sends) has zero events.</p>
+</li>
+<li>
+<p>Open: 497/500 logs with events have an Open (99.4%), 993 open events. All opens arrived within two hours of sending (2026-10-26 07:00Z: 478, 2026-10-26 08:00Z: 201), a sign of mail-app prefetch/security scanning, not reading. Do not report as engagement.</p>
+</li>
+<li>
+<p>Click events: 0 (the only types present are Open/Delivery/Send). Post-click conversion: <strong>not available</strong>.</p>
+</li>
+<li>
+<p>Other categories in the log: fund_performance/batch sent 650; fund_performance/batch failed 93; statement/schedule sent 93; statement/manual sent 13; fund_performance/manual sent 12; fund_performance/schedule sent 10; schedule_otp/system sent 3; password_reset/system sent 1. No onboarding, KYC-stuck, not-yet-invested, or reactivation categories.</p>
+</li>
+<li>
+<p>Suppression 0 rows; scheduled jobs 9; queue 753.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, high confidence for the mechanics).</strong> The batch was sent all at once past the provider rate limit (454) and events were only recorded for later batches, so the reporting pipeline starts from the 2026-10-26 sends. Whether lifecycle email exists outside this dashboard is unknown.</p>
+<p><strong>Expected impact.</strong> Cannot be quantified without <code>user_id</code> per send and click/open linked to investment outcomes. A throughput fix only protects delivery: 93 of 743 batch sends (12.5%) needed retry.</p>
+<p><strong>Effort.</strong> S (add <code>user_id</code> + click events; spread batch sends).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> % of batch sends with <code>user_id</code>; click rate per category/segment; then holdout test on a reactivation batch.</p>
+<p><strong>What this means.</strong> Email system is broken for measurement — no user IDs, no clicks, throttling. Can't tell if email drives any investment.</p>
+<h2>M5 — Push reaches non-investors, click-to-purchase not measurable</h2>
+<p><strong>Pain point.</strong> Push reaches approved-not-yet-purchased and not-yet-approved users, but the click-to-purchase test covers only 26 clickers with no control group; no lift claim.</p>
+<p><strong>Evidence (Observed).</strong> GA4, 2026-10-01..2026-11-21 (52 days).</p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Users with receive</th>
+<th>Users receive+click</th>
+<th>Click/receiver (Android)</th>
+<th>Receive events</th>
+<th>Click/open events</th>
+<th>Click/open per receive</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>investor</td>
+<td>707</td>
+<td>218</td>
+<td>30.8%</td>
+<td>49,598</td>
+<td>1,266</td>
+<td>2.6%</td>
+</tr>
+<tr>
+<td>approved, not yet purchased</td>
+<td>560</td>
+<td>149</td>
+<td>26.6%</td>
+<td>18,930</td>
+<td>607</td>
+<td>3.2%</td>
+</tr>
+<tr>
+<td>not yet approved</td>
+<td>262</td>
+<td>30</td>
+<td>11.5%</td>
+<td>7,640</td>
+<td>42</td>
+<td>0.5%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Receive 76,168 vs dismiss 42,320 events (55.6% dismiss per event). iOS does not record receive/dismiss, so iOS delivery is not measurable.</p>
+</li>
+<li>
+<p>Clickers: 843 users clicked (combined click+open); 445 already investors, 351 approved-not-yet-purchased, 47 not yet approved.</p>
+</li>
+<li>
+<p>Click-to-purchase test (Android, approved before 2026-10-01, not yet purchased): 26 users who clicked produced 3 purchases; 79 who did not click produced 0. <strong>Click cell n&lt;30; not tested.</strong></p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, low confidence).</strong> Push content is generic (no campaign/segment id in GA), so nothing links the message to behavior.</p>
+<p><strong>Expected impact.</strong> Not quantified. The only valid claim: 560 approved-not-yet-purchased users received notifications in 52 days.</p>
+<p><strong>Effort.</strong> M (campaign id + segment param in notification events; set up holdout).</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> First purchase within 7 days post-click vs 10% no-push holdout, per campaign id.</p>
+<p><strong>What this means.</strong> Push reaches the right people (non-investors), but we can't measure if clicks turn into purchases. Need campaign IDs and holdout tests.</p>
+<h2>M6 — Three stuck pools without lifecycle messaging</h2>
+<p><strong>Pain point.</strong> Email and push only cover statements, fund performance, OTP, and one-off notifications. The largest stuck pools have no targeted recurring message in the log.</p>
+<p><strong>Evidence (Observed).</strong> <code>stuck_sizes</code> + email categories, 2026-11-22.</p>
+<table>
+<thead>
+<tr>
+<th>Pool</th>
+<th>Size</th>
+<th>What exists now</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Approved, not yet purchased</td>
+<td>13,385 (approved last 30 days: 560)</td>
+<td>no first-investment email category; push exists (M5)</td>
+</tr>
+<tr>
+<td>Registered, not yet verified (30 days)</td>
+<td>245</td>
+<td>no KYC reminder category; push exists</td>
+</tr>
+<tr>
+<td>KYC failed (all time)</td>
+<td>6,150 (registered 30 days: 87)</td>
+<td>no rejection email category; reason not stored (O3)</td>
+</tr>
+<tr>
+<td>Investors dormant 60-90 days</td>
+<td>101 (of 609 not yet churned)</td>
+<td>no reactivation category</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Root cause (Inferred, medium confidence).</strong> Messaging is triggered by product/events (statement, performance, OTP), not lifecycle status.</p>
+<p><strong>Expected impact (arithmetic).</strong> Latest approvals (n=560) purchase within 7 days 10.5% now vs 29.0% Jul-Sep (V1). A first-investment nudge that closes 10% of the gap: 560 x 0.0185 = 10 investors per 30 days. Assumption: the 10% gap can be recovered via messaging; not yet tested.</p>
+<p><strong>Effort.</strong> M (three trigger-based sequences + holdout).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> First purchase in 7 days, nudged vs holdout, per pool; re-KYC rate of the failed pool.</p>
+<p><strong>What this means.</strong> Three large groups get no automated message: approved-not-bought (13k), unverified registrants (245), dormant investors (101). The approved-not-bought gap vs July-September is 18.5 pp.</p>
+<h2>Data requests (Marketing)</h2>
+<ul>
+<li>
+<p>No campaign id in push/email; GA registration source is empty for most of the window (Phase 2). Add <code>campaign_id</code> to <code>notification_*</code> events and <code>dashboard_email_log</code>.</p>
+</li>
+<li>
+<p><code>dashboard_email_log</code> batch rows have <code>user_id</code> NULL (650/650); without it there is no email-to-investment join.</p>
+</li>
+<li>
+<p>No click event type in <code>dashboard_email_events</code>.</p>
+</li>
+<li>
+<p>Bonus program rules (who, when, how much) are not in BigQuery; needed to measure M2 properly.</p>
+</li>
+</ul>

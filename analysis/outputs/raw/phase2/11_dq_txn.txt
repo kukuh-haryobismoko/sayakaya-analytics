@@ -1,0 +1,18 @@
+## dup_email_sid
+[{"k":"dup_email","grp":0,"n_rows":null},{"k":"dup_sid","grp":3,"n_rows":6}]
+## status_logs
+[{"status":"failed","origin_status":"pending_verification","n":291,"u":217,"mn":{"value":"2026-07-21T06:14:21.546558000Z"},"mx":{"value":"2026-11-22T10:49:40.609804000Z"}},{"status":"unverified","origin_status":null,"n":1,"u":1,"mn":{"value":"2026-09-04T09:12:20.688448000Z"},"mx":{"value":"2026-09-04T09:12:20.688448000Z"}},{"status":"verified","origin_status":"pending_verification","n":1130,"u":1127,"mn":{"value":"2026-07-21T05:09:34.574497000Z"},"mx":{"value":"2026-11-22T10:47:35.746010000Z"}},{"status":"verified","origin_status":"failed","n":1,"u":1,"mn":{"value":"2026-07-21T08:29:23.064391000Z"},"mx":{"value":"2026-07-21T08:29:23.064391000Z"}}]
+## verified_by_month
+[{"m":"2026-11","verified_users":493,"with_log":493},{"m":"2026-10","verified_users":435,"with_log":435},{"m":"2026-09","verified_users":127,"with_log":127},{"m":"2026-08","verified_users":57,"with_log":57},{"m":"2026-07","verified_users":48,"with_log":17},{"m":"2026-06","verified_users":73,"with_log":0},{"m":"2026-05","verified_users":70,"with_log":0},{"m":"2026-04","verified_users":93,"with_log":0},{"m":"2026-03","verified_users":129,"with_log":0},{"m":"2026-02","verified_users":106,"with_log":0},{"m":"2026-01","verified_users":165,"with_log":0},{"m":"2025-12","verified_users":131,"with_log":0},{"m":"2025-11","verified_users":126,"with_log":0},{"m":"2025-10","verified_users":237,"with_log":0}]
+## txn_basic
+[{"n":387840,"ids":387840,"tn":360121,"null_tn":27719,"null_user":0,"orphan_user":0,"amount_le0":30,"completed_before_created":2,"paid_before_created":4,"settled_no_completed_at":114,"mn":{"value":"2021-11-30T00:00:00.000Z"},"mx":{"value":"2026-11-22T15:39:33.435Z"}}]
+## buy_before_register
+[{"buys_before_user_created":39592}]
+## buy_before_kyc
+[{"buys":304562,"buyer_no_verified_at":285081,"buyer_not_verified":256181,"buy_before_verified_at":448}]
+## pm_blank
+[{"type":"liquidation","status":"completed","n":25022,"amt":"1022578613"},{"type":"reinvestment","status":"completed","n":88,"amt":"336698"}]
+## has_completed_flag
+[{"f":false,"n":320372,"has_real_buy":259688},{"f":true,"n":727,"has_real_buy":561}]
+## portfolio_dup
+[{"n":236203,"ids":236203,"deleted":0,"unit_pos":236203,"orphan":0}]

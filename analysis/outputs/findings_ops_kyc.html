@@ -1,0 +1,289 @@
+<h1>Findings — Operations &amp; KYC</h1>
+<p>Refreshed to data cutoff 2026-11-22 from <code>outputs/raw/</code> (BigQuery <code>main.user_status_logs</code>, GA4 2026-10-01..2026-11-21, 52 days). Read-only. HNWI excluded (retail cohort).</p>
+<p>Basis: decision rows in <code>main.user_status_logs</code> with <code>origin_status='pending_verification'</code> (status verified/failed), joined to the Phase 1/2 cohort. <code>user_status_logs</code> only exists since 2026-07-21 and GA does not carry pre-login <code>user_id</code>, so submit time is taken from the GA <code>kyc_success</code> event (this event fires on submit, see Phase 2 reconciliation).</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Confidence</th>
+<th>Impact</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O1</td>
+<td>Decision tail: P90 15.4 hours; submits outside working hours and on weekends wait longest</td>
+<td>857 verified decisions, 30 &gt;24 hours; weekend P90 16.6 hours vs 8.1 hours on workdays</td>
+<td>High</td>
+<td>Medium</td>
+<td>S</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>O2</td>
+<td>Review is concentrated in one account and runs in batches</td>
+<td>1 actor = 67.4% of 1,339 decisions; 3 actors = 96.9%; 28.8% of decisions at hour 10</td>
+<td>High</td>
+<td>High</td>
+<td>M</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>O3</td>
+<td>Rejected users rarely resubmit; rejection reason is not stored</td>
+<td>Failed since 1 Oct: 12/105 resubmitted; 50/71 of those who ended up verified resubmitted</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>M</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>O4</td>
+<td>Faster decisions do not correlate with higher purchases</td>
+<td>&lt;2 hours 5.9% vs 2-24 hours 11.3% bought within 14 days, all cells small</td>
+<td>Low</td>
+<td>Low</td>
+<td>S</td>
+<td>P2</td>
+</tr>
+</tbody>
+</table>
+<h2>O1 — SLA problem is in the tail, not the median</h2>
+<p><strong>Pain point.</strong> Median submit to decision is about 9 minutes, but P90 is 15.4 hours and 30 verified decisions took more than 24 hours.</p>
+<p><strong>Evidence (Observed).</strong> GA submits 2026-10-01..2026-11-21, decision &gt;= submit.</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>n</th>
+<th>P50</th>
+<th>P90</th>
+<th>&gt;24 hours</th>
+<th>&gt;72 hours</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>verified</td>
+<td>857</td>
+<td>0.15 hours</td>
+<td>15.43 hours</td>
+<td>30</td>
+<td>5</td>
+</tr>
+<tr>
+<td>failed</td>
+<td>158</td>
+<td>0.13 hours</td>
+<td>15.15 hours</td>
+<td>4</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Weekend submits: n=239, &gt;4 hours 100 = 41.8% (95% CI 35.8-48.2%), &gt;24 hours 13. Workdays: n=711, &gt;4 hours 79 = 11.1% (95% CI 9.0-13.6%), &gt;24 hours 9. z=10.5, p&lt;0.0001.</p>
+</li>
+<li>
+<p>P90 submit to decision: weekend 16.6 hours (n=239) vs workdays 8.1 hours (n=711). The gap widened since the 2026-11-09 cutoff (was 17.2 vs 11.9): workdays got faster, weekends did not.</p>
+</li>
+<li>
+<p>Submits outside 09:00-20:00 WIB: n=142, &gt;4 hours 79 (55.6%, 95% CI 47.4-63.6%), &gt;12 hours 42 (29.6%). Within working hours: n=808, &gt;4 hours 100 (12.4%, 95% CI 10.3-14.8%), &gt;12 hours 100 (12.4%). z=12.2, p&lt;0.0001. (Weekend and outside-hours groups overlap; the weekend/workday split and this split are different cuts of the same 950 submits.)</p>
+</li>
+<li>
+<p>Key clue: every working-hours case that passes 4 hours also passes 12 hours (100/100). Meaning it is queued to the next workday, not processed slowly.</p>
+</li>
+<li>
+<p>Decision hour (all decisions, n=1,339): peak at 10:00 WIB = 386 (28.8%); 21:00-08:59 only 40 (3.0%). Saturday 108 + Sunday 144 decisions = 252 (18.8%).</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence: High).</strong> Decisions are executed as a morning batch (hour 10) by one operator; submits after the batch wait for the next workday morning. The night and weekend tail is queue time, not processing time.</p>
+<p><strong>Expected impact (arithmetic).</strong> 34 decisions &gt;24 hours in 52 days = 20/month in the tail. If one evening/weekend review slot moves 10 of the 30 verified cases within 24 hours, and they buy within 7 days of approval at the approved population rate (10.5% for October approvals, 75/714; 29.0% for Jul-Sep approvals, 42/145; <code>84_oct_lag</code>), recovered investors = 10 x 0.105 = 1.1 to 10 x 0.29 = 2.9. Small: the main value is SLA credibility and rejection-cycle speed, not investor volume.</p>
+<p><strong>What this means:</strong> Most requests are decided in minutes, but a request sent at night or on a weekend usually waits until the next working morning, and that wait is getting relatively worse on weekends.</p>
+<p><strong>Effort.</strong> S (change roster/queue, no code).</p>
+<p><strong>Priority.</strong> P1 (cheap and visible, small investor impact; ranked below O2).</p>
+<p><strong>KPI / validation.</strong> P90 submit to decision and count of &gt;24 hours, weekly; before/after the extra slot.</p>
+<h2>O2 — One reviewer and one batch hour carry almost all decisions</h2>
+<p><strong>Pain point.</strong> 67.4% of decisions come from one actor; three actors cover 96.9%. Decisions pile up at hour 10 (28.8%). Concentration eased since the 2026-11-09 cutoff (was 75.9% and 34.5%) as actors 2 and 3 took more, but it is still a key-person risk on a regulated step.</p>
+<p><strong>Evidence (Observed).</strong> <code>user_status_logs.auth_user_id</code> over cohort decisions, all data since 2026-07-21.</p>
+<table>
+<thead>
+<tr>
+<th>Actor rank</th>
+<th>Decisions</th>
+<th>Share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>903</td>
+<td>67.4%</td>
+</tr>
+<tr>
+<td>2</td>
+<td>212</td>
+<td>15.8%</td>
+</tr>
+<tr>
+<td>3</td>
+<td>183</td>
+<td>13.7%</td>
+</tr>
+<tr>
+<td>4</td>
+<td>26</td>
+<td>1.9%</td>
+</tr>
+<tr>
+<td>5</td>
+<td>6</td>
+<td>0.4%</td>
+</tr>
+<tr>
+<td>6</td>
+<td>5</td>
+<td>0.4%</td>
+</tr>
+<tr>
+<td>7</td>
+<td>4</td>
+<td>0.3%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Actors per status: verified 7 actors (1,065 decisions), failed 6 actors (274 decisions); decisions without actor 0.</p>
+</li>
+<li>
+<p>Decisions per month: 2026-07 verified 16 / failed 8; 2026-08 verified 55 / failed 16; 2026-09 verified 74 / failed 19; 2026-10 verified 432 / failed 91; 2026-11 (to 22 Nov) verified 488 / failed 140.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence: Medium).</strong> One operations account handles the majority (likely automated, or a shared login used by one team member), with the second and third accounts covering the rest. The data cannot distinguish automatic approval from a human logged into a shared account.</p>
+<p><strong>Expected impact.</strong> Cannot be quantified directly; the risk is a stalled queue. Concrete exposure: the 10:00 batch hour alone holds 386 decisions (28.8%). If that account is unavailable for one workday, all non-batch submits wait at least 24 hours; the tail already observed shows the cost.</p>
+<p><strong>What this means:</strong> One account still does two-thirds of all approvals and rejections, so if it is unavailable the queue stalls; the load is spreading, but slowly.</p>
+<p><strong>Effort.</strong> M (second reviewer / documented delegation + queue age alert).</p>
+<p><strong>Priority.</strong> P1 (high operational risk, medium effort).</p>
+<p><strong>KPI / validation.</strong> Share of decisions per actor (target: no actor &gt;50%); queue age alert at 12 hours.</p>
+<h2>O3 — Rejection is almost final, and the reason is not recorded</h2>
+<p><strong>Pain point.</strong> Of users rejected since 1 Oct who are still failed, 12 of 105 resubmitted; those who did not resubmit are lost with no recorded reason.</p>
+<p><strong>Evidence (Observed).</strong> Failures from 2026-10-01 to cutoff, GA events 2026-10-01..2026-11-21. Rows labelled "Since 1 Oct" are users whose first failure was on or after 2026-10-01 (<code>77_final</code> resub_oct); resubmit = a later <code>kyc_success</code> more than 5 minutes after the failure. "Window" is all first failures seen in <code>user_status_logs</code> (<code>71_ops_kyc</code> resubmit_after_fail).</p>
+<table>
+<thead>
+<tr>
+<th>Cut</th>
+<th>Failed users</th>
+<th>Resubmitted</th>
+<th>Rate</th>
+<th>Ended up verified</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Since 1 Oct, still failed</td>
+<td>105</td>
+<td>12</td>
+<td>11.4% (95% CI 6.7-18.9%)</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Since 1 Oct, ended up verified</td>
+<td>71</td>
+<td>50</td>
+<td>70.4% (95% CI 59.0-79.8%)</td>
+<td>71</td>
+</tr>
+<tr>
+<td>Window, still failed</td>
+<td>121</td>
+<td>15</td>
+<td>12.4% (95% CI 7.7-19.4%)</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Window, ended up verified</td>
+<td>82</td>
+<td>65</td>
+<td>79.3% (95% CI 69.3-86.6%)</td>
+<td>82</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Resubmission separates outcomes sharply: Since 1 Oct, those who ended up verified resubmitted 70.4% (50/71), those still failed 11.4% (12/105). Correlational: resubmitters are a more persistent, self-selected group.</p>
+</li>
+<li>
+<p>October decisions: 432 verified, 91 failed = 17.4% of decision rows failed. November to 22 Nov: 488 verified, 140 failed = 22.3% (partial month). Phase 2 rejected share (user level, all time) 26.6% (6,150 of 23,131 decided); decision rows differ from users.</p>
+</li>
+<li>
+<p>Rejection reason: <strong>not available</strong>. No reason/note column in <code>user_status_logs</code> or <code>user_problems</code>. GA has rejection screens (<code>BankRejectedScreen</code>, <code>OccupationRejectedScreen</code>) but with no reason param.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence: Medium).</strong> No post-rejection nudge: no email or push for users with failed KYC (see M6), so the 88.6% of still-failed users who did not resubmit (93 of 105) are never contacted. Unrecorded reason blocks targeted fixes.</p>
+<p><strong>Expected impact (arithmetic).</strong> Moving 10% of the 105 still-failed users since 1 Oct to resubmission = about 10 users; at resubmit-to-verified rate 70.4% = 7.0 verified; at approved-to-investor rate 21.3% (3,617 of 16,981 verified, Phase 2) = 1.5 investors over 52 days, about 0.9/month. The earlier version used 73.2%, which does not match the approved-to-investor rate in the raw files (73.4% is the approved share of decided users). Small but cheap.</p>
+<p><strong>What this means:</strong> Almost nobody who is rejected tries again, and we do not know why they were rejected, so we cannot help them; those who do retry mostly get approved.</p>
+<p><strong>Effort.</strong> M (store reason + trigger-based resubmission email/push).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> Resubmission rate within 14 days after rejection (Proposed target 15% from 11.4%); rejected to approved conversion.</p>
+<h2>O4 — Wait time does not correlate with purchase</h2>
+<p><strong>Pain point.</strong> The common assumption that faster KYC approval raises investment is not supported by this data; the point estimate even goes the opposite way.</p>
+<p><strong>Evidence (Observed).</strong> Approved decisions up to 2026-10-25 with GA submit time in the window, n=291.</p>
+<table>
+<thead>
+<tr>
+<th>Wait submit to approved</th>
+<th>n</th>
+<th>Bought within 14 days</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a&lt;2h</td>
+<td>221</td>
+<td>13 (5.9%)</td>
+</tr>
+<tr>
+<td>b2-24h</td>
+<td>53</td>
+<td>6 (11.3%)</td>
+</tr>
+<tr>
+<td>c&gt;=24h</td>
+<td>17</td>
+<td>3 (17.6%) ⚠n&lt;30</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>&lt;2 hours vs &gt;=2 hours: 5.9% vs 12.9% (z=-1.92, p=0.054, not significant). Only the &gt;=24 hours bucket has n&lt;30.</p>
+</li>
+<li>
+<p>Selection: fast decisions come from submits in the morning batch, who may be users with complete documents during working hours. n is too small to control for it.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence: Low).</strong> No causal effect detected; the drop in approved to purchase within 7 days, October approvals vs Jul-Sep approvals (10.5% = 75/714 vs 29.0% = 42/145, z=-5.9, p&lt;0.0001; approvals capped at 2026-11-15), is not explained by wait time: it persists in the approved-within-1-day-of-registration bucket (10.7% = 69/646 vs 29.5% = 28/95; <code>84_oct_lag</code>). The October rate is higher than the 7.7% reported at the 2026-11-09 cutoff (different cut: all approvals, longer window), but the drop is still large. Note: wait-time buckets above use submit to approval; the 1-day bucket here uses registration to approval.</p>
+<p><strong>Expected impact.</strong> No claim. Do not justify an SLA program by investor growth; use it for compliance and experience.</p>
+<p><strong>What this means:</strong> We cannot say that approving faster makes people buy; the sample is too small and the gap is not statistically significant.</p>
+<p><strong>Effort.</strong> S.</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> Repeat with a larger window (n&gt;100 per bucket) before any claim.</p>
+<h2>Data requests (Ops &amp; KYC)</h2>
+<ul>
+<li>
+<p>Rejection reason / reviewer note per failed decision (needed for O3).</p>
+</li>
+<li>
+<p>KYC submit timestamp in the DB (the GA join loses users without <code>user_id</code>; <code>user_status_logs</code> starts 2026-07-21).</p>
+</li>
+<li>
+<p>Distinction between automatic vs manual decisions (<code>auth_user_id</code> may be a shared account or a bot).</p>
+</li>
+</ul>

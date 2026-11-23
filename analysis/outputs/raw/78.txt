@@ -1,4 +1,4 @@
 ## gate_outcome
-[{"abandoned":false,"users":69,"ordered_after":41},{"abandoned":true,"users":28,"ordered_after":13}]
+[{"abandoned":false,"users":93,"ordered_after":57},{"abandoned":true,"users":34,"ordered_after":15}]
 ## pay_fail_cohort
-[{"pm":"virtual_account","orders":3782,"failed":420},{"pm":"bank_transfer","orders":2279,"failed":250},{"pm":"QRIS","orders":765,"failed":170},{"pm":"INSTANT_PAYMENT","orders":264,"failed":5}]
+[{"pm":"virtual_account","orders":3811,"failed":427},{"pm":"bank_transfer","orders":2427,"failed":283},{"pm":"QRIS","orders":834,"failed":183},{"pm":"INSTANT_PAYMENT","orders":264,"failed":5}]

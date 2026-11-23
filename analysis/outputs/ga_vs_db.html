@@ -1,0 +1,115 @@
+<h1>GA vs DB reconciliation (Phase 2)</h1>
+<p>Run 2026-11-22 WIB. Window 2026-10-01 to 2026-11-21 (52 days; Asia/Jakarta; GA <code>event_date</code> is already WIB, DB timestamps shifted +7 h). DB is source of truth. Same exclusion on both sides: GA mapped through <code>user_id</code> to cohort C; devices without <code>user_id</code> cannot be excluded or counted. Scripts: <code>45_ga_db.sql</code>, <code>22_churn_ga.sql</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>GA metric</th>
+<th>GA</th>
+<th>DB metric</th>
+<th>DB</th>
+<th>GA / DB</th>
+<th>Likely cause (Inferred unless stated)</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Register</td>
+<td><code>register_success</code>, users in cohort C</td>
+<td>1,229</td>
+<td>users with <code>created_at</code> in window</td>
+<td>1,297</td>
+<td>94.8%</td>
+<td>Missing events: 70 DB registrations (5.4%) have no GA <code>register_success</code> for the same user_id (Observed). Possible: event not sent offline/ad-block/consent, web or non-app registration path</td>
+<td>Log register server-side; check whether web sign-up exists</td>
+</tr>
+<tr>
+<td>Register (duplicates)</td>
+<td><code>register_success</code> events vs users, all users</td>
+<td>1,281 events</td>
+<td>distinct users</td>
+<td>1,239</td>
+<td>3.4% extra events</td>
+<td>Event fires more than once per user (Observed)</td>
+<td>Fire once per user_id; dedupe in reports</td>
+</tr>
+<tr>
+<td>KYC</td>
+<td><code>kyc_success</code>, users in cohort C</td>
+<td>955</td>
+<td>KYC approved (<code>verified_at</code> in window)</td>
+<td>905</td>
+<td>105.5%</td>
+<td>GA fires on submission, not approval: 97 GA users are not approved in the DB (Observed). DB approved matched in GA 855 of 905 (94.5%)</td>
+<td>Rename to <code>kyc_submitted</code>; add <code>kyc_approved</code> from the server</td>
+</tr>
+<tr>
+<td>KYC (compare to submitted)</td>
+<td><code>kyc_success</code>, users in cohort C</td>
+<td>955</td>
+<td>registered in window, status verified or failed</td>
+<td>988</td>
+<td>96.7%</td>
+<td>Closer match supports "GA = submission". Windows differ (registered in window vs event date), so approximate</td>
+<td></td>
+</tr>
+<tr>
+<td>KYC start</td>
+<td><code>kyc_start</code>, users in cohort C</td>
+<td>1,157</td>
+<td>no DB equivalent</td>
+<td>n/a</td>
+<td></td>
+<td>Not available: DB records no 'started' state</td>
+<td></td>
+</tr>
+<tr>
+<td>Order</td>
+<td><code>order_created</code>, users in cohort C</td>
+<td>347</td>
+<td>users with a buy transaction (any status, not bonus)</td>
+<td>365</td>
+<td>95.1%</td>
+<td>Missing events (Observed gap 18 users)</td>
+<td>Same as register</td>
+</tr>
+<tr>
+<td>Paid</td>
+<td><code>payment_complete</code>, users in cohort C</td>
+<td>299</td>
+<td>users with successful buy</td>
+<td>332</td>
+<td>90.1%</td>
+<td>DB successful buyers matched in GA: 294 of 332 (88.6%). Status <code>verified</code> (set by operations, 7 users) is not triggered in the app, so GA cannot see it; no <code>verified_by_operational</code> buyers in this window</td>
+<td>Server-side purchase event on status change</td>
+</tr>
+<tr>
+<td>Paid (events)</td>
+<td><code>payment_complete</code> events, cohort C</td>
+<td>674</td>
+<td>successful buy transactions</td>
+<td>826</td>
+<td>81.6%</td>
+<td>Fewer events than transactions; payment on a different day than creation also shifts counts (window by event date vs <code>created_at</code>)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>What this means: GA sees roughly 9 in 10 of the registrations, orders and payments in the DB, so use GA for trends and the DB for exact counts; <code>kyc_success</code> in GA means "KYC submitted", not "approved".</p>
+<h2>Other checks (Observed)</h2>
+<ul>
+<li><code>user_id</code> is set only after login: <code>first_open</code> has 0 users with <code>user_id</code> (Phase 1 DQ #25, as of 2026-11-09, not refreshed), and 3,577 of 4,031 devices (88.7%) have rows without it (<code>22_churn_ga.sql</code>). Pre-login steps (install, open, sign-up start) can only be counted per device.</li>
+<li>GA to DB mapping: 2,764 of 2,767 GA user_ids exist in <code>main.users</code>. Of 2,767 GA users: 155 are RAIZ/RAIZKAYA, 78 HNWI, 2,531 kept (<code>22_churn_ga.sql</code>).</li>
+<li>Timezone: GA <code>event_date</code> is WIB; DB <code>created_at</code> is UTC and shifted +7 h. Checked on one day only (as of 2026-11-09, not refreshed).</li>
+<li>Not tested: bot traffic (no bot flag in the export), consent mode / ad-block (no consent field read), consent rate.</li>
+<li>What this means: most visitors are anonymous until they log in, so GA cannot follow one person from install to first buy.</li>
+</ul>
+<h2>Fix list (Proposed, order by value)</h2>
+<ol>
+<li>Server-side events for register, KYC approved, order created, payment complete (closes 70 register and 38 paid user gaps in this window).</li>
+<li>Rename or split <code>kyc_success</code> into submitted and approved.</li>
+<li>Dedupe <code>register_success</code>.</li>
+<li>Send <code>user_id</code> (or a hashed id) from the first screen so pre-login funnel steps can be tied to users.</li>
+<li>Fill <code>campaign</code>/<code>source</code> consistently (campaign is empty for most registrations).</li>
+</ol>

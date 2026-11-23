@@ -1,16 +1,23 @@
-# Temuan lintas tim — Fase 3
+# Cross-team findings — Phase 3
 
-Dibangun 2026-11-09 20:13 WIB dari `outputs/raw/`. Angka turunan langsung dari file mentah; tidak ada yang diketik manual.
+> **Terms used in this document.**
+> **Repeat** = the user bought on 2 or more different days (WIB), counting valid non-bonus purchases only.
+> **Mature** = first purchase at least 120 days before the data pull (2026-11-22), so every user had the same time to buy again. Mature repeat = % of mature investors who are repeat. Rates on non-mature users are not comparable.
+> **Data window** = all registrations and transactions up to 2026-11-22 unless a section states another window (GA4 events: 2026-10-01 to 2026-11-21, 52 days).
 
-## V1 — Approved ke beli jatuh di Oktober, dan ini bukan soal waktu tunggu
+Built 2026-11-22 WIB from `outputs/raw/`. Figures derived directly from raw files; none typed by hand.
 
-**Pain point.** User approved Oktober membeli dalam 7 hari pada 7.5%, vs 29.2% untuk approval Juli-September. Ini penurunan terbesar yang ditemukan di seluruh Fase 3.
+## V1 — Approved-to-purchase drops in October, and it is not about wait time
 
-**Evidence (Observed).** Keputusan verified dengan submit GA di window, dipecah bulan approval dan jeda registrasi ke approval. Pembelian = order sukses dalam 7 hari setelah approval.
+**Pain point.** Users approved in October purchased within 7 days at 10.5%, vs 29.0% for July-September approvals. This is the largest drop found in all of Phase 3.
 
-- Juli-September (jeda <=30 hari): 40/137 = 29.2% (95% CI 22.2-37.3%). Oktober: 31/416 = 7.5% (95% CI 5.3-10.4%). z=-6.6, p<0.0001.
+**Evidence (Observed).** Verified decisions split by approval month and registration-to-approval lag. Purchase = successful order within 7 days after approval. Approvals capped at 2026-11-15 (so every approval has 7 full days before cutoff).
 
-| Minggu approval | Approved | Beli <=7 hari | Rate |
+- July-September (lag <=30 days): 40/137 = 29.2% (95% CI 22.2-37.3%). October: 73/700 = 10.4% (95% CI 8.4-12.9%). z=-5.9, p<0.0001.
+
+- Full October (lag all): 75/714 = 10.5% (95% CI 8.5-13.0%). July-September full: 42/145 = 29.0% (95% CI 22.2-36.8%).
+
+| Approval week | Approved | Purchased <=7 days | Rate |
 |---|---|---|---|
 | 2026-08-03 | 18 | 5 | 27.8% ⚠n<30 |
 | 2026-08-10 | 16 | 2 | 12.5% ⚠n<30 |
@@ -24,60 +31,64 @@ Dibangun 2026-11-09 20:13 WIB dari `outputs/raw/`. Angka turunan langsung dari f
 | 2026-10-05 | 31 | 1 | 3.2% |
 | 2026-10-12 | 97 | 5 | 5.2% |
 | 2026-10-19 | 183 | 12 | 6.6% |
-| 2026-10-26 | 105 | 13 | 12.4% |
+| 2026-10-26 | 115 | 15 | 13.0% |
+| 2026-11-02 | 132 | 27 | 20.5% |
+| 2026-11-09 | 142 | 13 | 9.2% |
 
-- Jeda bukan penjelas: pada bucket approval hari yang sama (jeda <=1 hari), Juli-September 29.5% (28/95) vs Oktober 7.4% (28/377). Penurunan sama besar di dalam bucket tercepat, jadi bukan efek antrean (O1/O4).
+- Lag does not explain it: in the same-day approval bucket (lag <=1 day), July-September 29.5% (28/95) vs October 10.7% (69/646). The drop is just as large inside the fastest bucket, so it is not a queue effect (O1/O4).
 
-- Waktu tunggu juga tidak menjelaskan: O4 menunjukkan tidak ada korelasi tunggu ke beli, dan penurunan tetap ada di bucket hari yang sama.
+- Wait time does not explain it either: O4 shows no correlation between wait and purchase, and the drop persists in the same-day bucket.
 
-**Root cause (Inferred, keyakinan rendah).** Tiga penjelasan yang sejalan dengan temuan lain, semuanya belum diuji: (a) bauran akuisisi berubah ke kanal dengan niat rendah (lihat M1: sales code tumbuh, repeat mature 39,3%); (b) kolam approved menumpuk tanpa messaging lifecycle (M6) dan tanpa jalur kembali ke investasi (T3); (c) ada perubahan produk atau operasi pada minggu 2026-10-05. Data tidak bisa memilih di antara ketiganya.
+**Root cause (Inferred, Confidence Low).** Three explanations consistent with other findings, none tested: (a) acquisition mix shifted to low-intent channels (see M1: sales code grew, mature repeat 43.2%); (b) the approved pool piled up without lifecycle messaging (M6) and without a path back to investing (T3); (c) a product or operations change in the week of 2026-10-05. The data cannot choose among the three.
 
-**Expected impact (aritmetika).** Bila Oktober berjalan pada rate Juli-September: 416 x 29.2% = 121 pembeli, vs 31 aktual = 90 pembeli hilang di Oktober saja.
+**Expected impact (arithmetic).** If October ran at the July-September rate: 714 x 29.0% = 207 buyers, vs 75 actual = 132 buyers lost in October alone.
 
-**Effort.** M (diagnosis: uji bauran kanal vs perubahan produk pada kohort Oktober).
-
-**Priority.** P0.
-
-**KPI / validation.** Approved ke beli 7 hari per bulan approval, dan per kanal akuisisi di dalam bulan itu. Uji ulang November dengan data lengkap.
-
-## V2 — Kolam approved yang menumpuk adalah satu masalah dengan tiga wajah
-
-**Pain point.** Marketing melihatnya sebagai tidak ada lifecycle (M6), engineering sebagai tidak ada jalur kembali (T3), operasi sebagai antrean yang tidak memicu apa pun (O1/O2). Semuanya merujuk ke 13,093 user approved-belum-beli.
-
-**Evidence (Observed).** 13,093 user approved tanpa pembelian selesai; 476 approved dalam 30 hari terakhir; 257 dari kolam itu terlihat di GA dalam 39 hari, 43 membuka buy sheet, 8 membuat order.
-
-**Root cause (Inferred, keyakinan sedang).** Approval adalah akhir dari proses, bukan awal dari proses berikutnya. Tidak ada trigger (CRM), tidak ada permukaan (produk), tidak ada antrean (operasi) yang membawa user approved ke investasi pertama. Ini kegagalan koordinasi, bukan kegagalan satu tim.
-
-**Expected impact (aritmetika).** Titik acuan konservatif: 10% dari 257 user GA-visible terkonversi ke order pada rate order ke pembayaran 84.3% = 22 investor per 39 hari (206/tahun). Skenario penuh memakai 13,093 user; jangan dilaporkan sebelum diukur.
-
-**Effort.** M (satu program: trigger approval ke CRM + permukaan di aplikasi + antrean operasi dengan due date).
+**Effort.** M (diagnosis: test channel mix vs product change on the October cohort).
 
 **Priority.** P0.
 
-**KPI / validation.** Approved ke investasi pertama 7/30 hari, satu dashboard lintas tim; target +10 pp dari basis Oktober.
+**KPI / validation.** Approved-to-purchase within 7 days per approval month, and per acquisition channel within that month. Retest November with complete data.
 
-## Ringkasan prioritas
+**What this means.** October first-investment rate dropped 18.5 pp vs July-September (29% → 10.5%). Same-day approvals fell from 29.5% to 10.7%, so it's not a wait-time problem. Early November shows partial recovery (20.5% then 9.2%).
 
-| Prioritas | Temuan | Alasan |
+## V2 — The piled-up approved pool is one problem with three faces
+
+**Pain point.** Marketing sees it as no lifecycle (M6), engineering as no path back (T3), operations as a queue that triggers nothing (O1/O2). All point to the same 13,385 approved-not-purchased users.
+
+**Evidence (Observed).** 13,385 approved users without a completed purchase; 560 approved in the last 30 days; 317 from that pool seen in GA within 52 days, 56 opened the buy sheet, 14 created an order.
+
+**Root cause (Inferred, Confidence Medium).** Approval is the end of a process, not the start of the next one. No trigger (CRM), no surface (product), no queue (operations) carries approved users to a first investment. This is a coordination failure, not a failure of one team.
+
+**Expected impact (arithmetic).** Conservative baseline: 10% of 317 GA-visible users convert to an order at an order-to-payment rate of 86.2% = 27 investors per 52 days (192/year). The full scenario uses 13,385 users; do not report it before it is measured.
+
+**Effort.** M (one program: approval trigger to CRM + in-app surface + operations queue with due date).
+
+**Priority.** P0.
+
+**KPI / validation.** Approved-to-first-investment within 7/30 days, one cross-team dashboard; Target +10 pp from the October baseline.
+
+**What this means.** 13k approved users never bought. Only 317 showed up in GA, 56 opened the buy sheet, 14 ordered. No system connects approval to first investment.
+
+## Priority summary
+
+| Priority | Finding | Reason |
 |---|---|---|
-| P0 | V1 / V2 / T3 (kolam approved), M2 (bonus ke non-pembayar), T1 (funnel KYC) | Dampak terbesar, angka bisa dihitung, sebagian besar bisa dikendalikan produk/kebijakan |
-| P1 | M1 (retensi sales code), M4 (email tak terukur), M6 (lifecycle), O1/O2/O3 (SLA, key-person, penolakan), T2 (QRIS) | Dampak sedang, usaha kecil-menengah |
-| P2 | M3 (promo), M5 (push), O4 (wait), T4 (gate), T5 (error) | Bukti lemah atau bersifat korelasi |
+| P0 | V1 / V2 / T3 (approved pool), M2 (bonus to non-payers), T1 (KYC funnel) | Largest Impact, figures computable, mostly controllable by product/policy |
+| P1 | M1 (sales code retention), M4 (unmeasured email), M6 (lifecycle), O1/O2/O3 (SLA, key-person, rejection), T2 (QRIS) | Medium Impact, small-to-medium Effort |
+| P2 | M3 (promo), M5 (push), O4 (wait), T4 (gate), T5 (error) | Weak Evidence or correlational |
 
-## Semua angka yang belum bisa diuji
+## All figures not yet testable
 
-- Lift bonus (M2), promo (M3), push (M5), messaging lifecycle (M6), dan permukaan pasca-approval (T3/V2) adalah estimasi aritmetika dari korelasi. Tidak ada eksperimen acak di data ini.
+- Bonus lift (M2), promo (M3), push (M5), lifecycle messaging (M6), and post-approval surface (T3/V2) are arithmetic estimates from correlation. No randomized experiment exists in this data.
 
-- T1 dan T4: n kecil di bucket tertentu; flag `n<30` ditandai di tabel.
+- T1 and T4: small n in certain buckets; the `n<30` flag is marked in the table.
 
-- V1: penyebab belum diidentifikasi; tiga hipotesis terbuka, semuanya butuh data bauran kanal Oktober.
+- V1: cause not yet identified; three open hypotheses, all needing October channel mix data.
 
+## Phase 2 follow-ups answered here
 
-## Follow-up Fase 2 yang terjawab di sini
+- Approved-not-purchased (Phase 2: 78.8%) deepened: 317 seen in GA, 56 opened buy sheet, 14 orders (T3), and the October drop measured (V1).
 
-- Approved-belum-beli (Fase 2: 78,6%) diperdalam: 257 terlihat di GA, 43 buka buy sheet, 8 order (T3), dan penurunan Oktober diukur (V1).
+- Phase 2 question 'what happens after KYC': the flow stops with no trigger, no surface, no queue (V2).
 
-- Pertanyaan Fase 2 'apa yang terjadi setelah KYC': alur berhenti tanpa trigger, tanpa permukaan, tanpa antrean (V2).
-
-- Pertanyaan Fase 2 soal bauran booth: sales code berkontribusi pada bauran berintensi rendah tetapi bukan penjelas tunggal (M1).
-
+- Phase 2 question on booth mix: sales code contributes to a low-intent mix but is not the sole explanation (M1).

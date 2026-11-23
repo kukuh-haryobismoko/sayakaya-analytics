@@ -1,6 +1,6 @@
 ## distinct_steps
-[{"event_name":"hfm_ready","users":1071},{"event_name":"kyc_start","users":746},{"event_name":"hfm_ready_unverified","users":643},{"event_name":"kyc_success","users":617},{"event_name":"buy_bottom_sheet","users":343},{"event_name":"order_button","users":290},{"event_name":"order_created","users":287},{"event_name":"payment_complete","users":242},{"event_name":"risk_profile_gate_triggered","users":97},{"event_name":"risk_profile_gate_abandoned","users":28}]
+[{"event_name":"hfm_ready","users":1214},{"event_name":"kyc_start","users":1157},{"event_name":"hfm_ready_unverified","users":991},{"event_name":"kyc_success","users":955},{"event_name":"buy_bottom_sheet","users":423},{"event_name":"order_button","users":351},{"event_name":"order_created","users":347},{"event_name":"payment_complete","users":299},{"event_name":"risk_profile_gate_triggered","users":127},{"event_name":"risk_profile_gate_abandoned","users":34}]
 ## kyc_platform
-[{"pf":"ANDROID","started":485,"started_and_submitted":386},{"pf":"IOS","started":261,"started_and_submitted":230}]
+[{"pf":"ANDROID","started":745,"started_and_submitted":600},{"pf":"IOS","started":412,"started_and_submitted":354}]
 ## acq_funnel
-[{"grp":"none","reg":56618,"submitted":18466,"approved":12700,"inv":2096},{"grp":"referrer_code","reg":6109,"submitted":3472,"approved":3206,"inv":1259},{"grp":"sales_code","reg":1068,"submitted":835,"approved":753,"inv":232}]
+[{"grp":"none","reg":56716,"submitted":18516,"approved":12746,"inv":2100},{"grp":"referrer_code","reg":6130,"submitted":3490,"approved":3224,"inv":1262},{"grp":"sales_code","reg":1428,"submitted":1125,"approved":1011,"inv":255}]

@@ -112,11 +112,13 @@ analysis/
 ```
 
 No duplicate `analysis/` or `outputs/` folders found. All paths in `MASTER_PROMPT.md` and `00_rules.md` are correct relative to project root.
-## Penyelarasan P&T 2027 (2026-11-12)
+## Product & Tech 2027 alignment (2026-11-12)
 
-- Input: PDF *Product & Tech 2027 — Targets, Direction, Objectives*. Angka PDF = Target, bukan Observed. Tidak ada kueri dijalankan.
-- `outputs/raker_preparation.md`: bagian 0 baru (rencana, cakupan, objective, Fakta vs Target, roadmap), catatan O2 di bagian 2-3, keputusan 6-7, agenda.
-- `outputs/SayaKaya_Funnel_Analysis.md`: 1 paragraf keselarasan, tabel pemetaan temuan ke objective P&T, 1 kalimat di roadmap. Angka tidak berubah.
-- `.html`/`.docx` dibuat ulang. Provenance: bagian "Penyelarasan P&T 2027" di `data_provenance_log.md`.
-- PERINGATAN: `scripts/build_phase4.py` menimpa kedua `.md` dari file sumber dan akan menghapus penyelarasan ini. Jangan dijalankan ulang tanpa memasukkan perubahan ke builder.
-- Gap: tidak ada data O1 (non-reksa dana), kanal RM/B2B2C/SBN, revenue, ketepatan rilis, baseline bulanan "new funded customer", retensi AUM.
+- Input: PDF *Product & Tech 2027 — Targets, Direction, Objectives*. PDF numbers are Targets, not Observed. No queries run.
+- `outputs/raker_preparation.md`: new section 0 (plan, scope, objectives, Fact vs Target, roadmap), O2 notes in sections 2-3, decisions 6-7, agenda.
+- `outputs/SayaKaya_Funnel_Analysis.md`: one alignment paragraph, finding-to-objective table, one roadmap sentence. Numbers unchanged.
+- 2026-11-13: all `outputs/*.md` translated to English; every `.html` and `.docx` rebuilt. Provenance: section "Product & Tech 2027 alignment" in `data_provenance_log.md`.
+- WARNING: `scripts/build_phase3.py` and `build_phase4.py` emit Indonesian and overwrite the `.md` files; re-running undoes the alignment and translation. Do not re-run without porting the changes.
+- Gaps: no data for O1 (non-mutual-fund products), RM/B2B2C/SBN channels, revenue, release punctuality, monthly "new funded customer" baseline, AUM retention.
+- 2026-11-15: `raker_preparation.md` aligned to the 2027 PDF (-2/-3, identical text) with HNWI in scope: new 0.2 HNWI funnel table (63,912 / 22,890 / 16,776 / 3,706), 3.1 KR-to-objective map, KR5-KR10 with derived targets, objective-grouped one-pager, decisions 8-9. No queries run. `.html`/`.docx` rebuilt (docx via new `scripts/md2docx.py`; `textutil -convert docx` produced a corrupt file on 2026-11-15 and is no longer used).
+- Open: KR1-KR6 baselines still exclude HNWI; a read-only re-run without the HNWI filter is pending approval.

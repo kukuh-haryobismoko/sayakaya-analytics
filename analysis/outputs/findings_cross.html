@@ -1,0 +1,195 @@
+<h1>Cross-team findings — Phase 3</h1>
+<blockquote>
+<p><strong>Terms used in this document.</strong>
+<strong>Repeat</strong> = the user bought on 2 or more different days (WIB), counting valid non-bonus purchases only.
+<strong>Mature</strong> = first purchase at least 120 days before the data pull (2026-11-22), so every user had the same time to buy again. Mature repeat = % of mature investors who are repeat. Rates on non-mature users are not comparable.
+<strong>Data window</strong> = all registrations and transactions up to 2026-11-22 unless a section states another window (GA4 events: 2026-10-01 to 2026-11-21, 52 days).</p>
+</blockquote>
+<p>Built 2026-11-22 WIB from <code>outputs/raw/</code>. Figures derived directly from raw files; none typed by hand.</p>
+<h2>V1 — Approved-to-purchase drops in October, and it is not about wait time</h2>
+<p><strong>Pain point.</strong> Users approved in October purchased within 7 days at 10.5%, vs 29.0% for July-September approvals. This is the largest drop found in all of Phase 3.</p>
+<p><strong>Evidence (Observed).</strong> Verified decisions split by approval month and registration-to-approval lag. Purchase = successful order within 7 days after approval. Approvals capped at 2026-11-15 (so every approval has 7 full days before cutoff).</p>
+<ul>
+<li>
+<p>July-September (lag &lt;=30 days): 40/137 = 29.2% (95% CI 22.2-37.3%). October: 73/700 = 10.4% (95% CI 8.4-12.9%). z=-5.9, p&lt;0.0001.</p>
+</li>
+<li>
+<p>Full October (lag all): 75/714 = 10.5% (95% CI 8.5-13.0%). July-September full: 42/145 = 29.0% (95% CI 22.2-36.8%).</p>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Approval week</th>
+<th>Approved</th>
+<th>Purchased &lt;=7 days</th>
+<th>Rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-08-03</td>
+<td>18</td>
+<td>5</td>
+<td>27.8% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-08-10</td>
+<td>16</td>
+<td>2</td>
+<td>12.5% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-08-17</td>
+<td>4</td>
+<td>0</td>
+<td>0.0% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-08-24</td>
+<td>11</td>
+<td>2</td>
+<td>18.2% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-08-31</td>
+<td>23</td>
+<td>9</td>
+<td>39.1% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-09-07</td>
+<td>22</td>
+<td>11</td>
+<td>50.0% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-09-14</td>
+<td>8</td>
+<td>2</td>
+<td>25.0% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-09-21</td>
+<td>19</td>
+<td>2</td>
+<td>10.5% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-09-28</td>
+<td>22</td>
+<td>6</td>
+<td>27.3% ⚠n&lt;30</td>
+</tr>
+<tr>
+<td>2026-10-05</td>
+<td>31</td>
+<td>1</td>
+<td>3.2%</td>
+</tr>
+<tr>
+<td>2026-10-12</td>
+<td>97</td>
+<td>5</td>
+<td>5.2%</td>
+</tr>
+<tr>
+<td>2026-10-19</td>
+<td>183</td>
+<td>12</td>
+<td>6.6%</td>
+</tr>
+<tr>
+<td>2026-10-26</td>
+<td>115</td>
+<td>15</td>
+<td>13.0%</td>
+</tr>
+<tr>
+<td>2026-11-02</td>
+<td>132</td>
+<td>27</td>
+<td>20.5%</td>
+</tr>
+<tr>
+<td>2026-11-09</td>
+<td>142</td>
+<td>13</td>
+<td>9.2%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Lag does not explain it: in the same-day approval bucket (lag &lt;=1 day), July-September 29.5% (28/95) vs October 10.7% (69/646). The drop is just as large inside the fastest bucket, so it is not a queue effect (O1/O4).</p>
+</li>
+<li>
+<p>Wait time does not explain it either: O4 shows no correlation between wait and purchase, and the drop persists in the same-day bucket.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence Low).</strong> Three explanations consistent with other findings, none tested: (a) acquisition mix shifted to low-intent channels (see M1: sales code grew, mature repeat 43.2%); (b) the approved pool piled up without lifecycle messaging (M6) and without a path back to investing (T3); (c) a product or operations change in the week of 2026-10-05. The data cannot choose among the three.</p>
+<p><strong>Expected impact (arithmetic).</strong> If October ran at the July-September rate: 714 x 29.0% = 207 buyers, vs 75 actual = 132 buyers lost in October alone.</p>
+<p><strong>Effort.</strong> M (diagnosis: test channel mix vs product change on the October cohort).</p>
+<p><strong>Priority.</strong> P0.</p>
+<p><strong>KPI / validation.</strong> Approved-to-purchase within 7 days per approval month, and per acquisition channel within that month. Retest November with complete data.</p>
+<p><strong>What this means.</strong> October first-investment rate dropped 18.5 pp vs July-September (29% → 10.5%). Same-day approvals fell from 29.5% to 10.7%, so it's not a wait-time problem. Early November shows partial recovery (20.5% then 9.2%).</p>
+<h2>V2 — The piled-up approved pool is one problem with three faces</h2>
+<p><strong>Pain point.</strong> Marketing sees it as no lifecycle (M6), engineering as no path back (T3), operations as a queue that triggers nothing (O1/O2). All point to the same 13,385 approved-not-purchased users.</p>
+<p><strong>Evidence (Observed).</strong> 13,385 approved users without a completed purchase; 560 approved in the last 30 days; 317 from that pool seen in GA within 52 days, 56 opened the buy sheet, 14 created an order.</p>
+<p><strong>Root cause (Inferred, Confidence Medium).</strong> Approval is the end of a process, not the start of the next one. No trigger (CRM), no surface (product), no queue (operations) carries approved users to a first investment. This is a coordination failure, not a failure of one team.</p>
+<p><strong>Expected impact (arithmetic).</strong> Conservative baseline: 10% of 317 GA-visible users convert to an order at an order-to-payment rate of 86.2% = 27 investors per 52 days (192/year). The full scenario uses 13,385 users; do not report it before it is measured.</p>
+<p><strong>Effort.</strong> M (one program: approval trigger to CRM + in-app surface + operations queue with due date).</p>
+<p><strong>Priority.</strong> P0.</p>
+<p><strong>KPI / validation.</strong> Approved-to-first-investment within 7/30 days, one cross-team dashboard; Target +10 pp from the October baseline.</p>
+<p><strong>What this means.</strong> 13k approved users never bought. Only 317 showed up in GA, 56 opened the buy sheet, 14 ordered. No system connects approval to first investment.</p>
+<h2>Priority summary</h2>
+<table>
+<thead>
+<tr>
+<th>Priority</th>
+<th>Finding</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P0</td>
+<td>V1 / V2 / T3 (approved pool), M2 (bonus to non-payers), T1 (KYC funnel)</td>
+<td>Largest Impact, figures computable, mostly controllable by product/policy</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>M1 (sales code retention), M4 (unmeasured email), M6 (lifecycle), O1/O2/O3 (SLA, key-person, rejection), T2 (QRIS)</td>
+<td>Medium Impact, small-to-medium Effort</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>M3 (promo), M5 (push), O4 (wait), T4 (gate), T5 (error)</td>
+<td>Weak Evidence or correlational</td>
+</tr>
+</tbody>
+</table>
+<h2>All figures not yet testable</h2>
+<ul>
+<li>
+<p>Bonus lift (M2), promo (M3), push (M5), lifecycle messaging (M6), and post-approval surface (T3/V2) are arithmetic estimates from correlation. No randomized experiment exists in this data.</p>
+</li>
+<li>
+<p>T1 and T4: small n in certain buckets; the <code>n&lt;30</code> flag is marked in the table.</p>
+</li>
+<li>
+<p>V1: cause not yet identified; three open hypotheses, all needing October channel mix data.</p>
+</li>
+</ul>
+<h2>Phase 2 follow-ups answered here</h2>
+<ul>
+<li>
+<p>Approved-not-purchased (Phase 2: 78.8%) deepened: 317 seen in GA, 56 opened buy sheet, 14 orders (T3), and the October drop measured (V1).</p>
+</li>
+<li>
+<p>Phase 2 question 'what happens after KYC': the flow stops with no trigger, no surface, no queue (V2).</p>
+</li>
+<li>
+<p>Phase 2 question on booth mix: sales code contributes to a low-intent mix but is not the sole explanation (M1).</p>
+</li>
+</ul>

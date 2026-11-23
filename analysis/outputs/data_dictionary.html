@@ -1,0 +1,195 @@
+<h1>Data dictionary (Phase 1)</h1>
+<p>Source of truth: BigQuery project <code>sayakaya</code>, location asia-southeast2. Run read-only with the repo service-account key (<code>analysis/scripts/bq.js</code>, SELECT only).
+<code>main.*</code> are scheduled copies (<code>-sc</code>) of the production Postgres, not live reads. Refreshed 2026-11-22. Freshness: <code>users.created_at</code> max 2026-11-22 11:22 UTC and <code>transactions.created_at</code> max 2026-11-22 10:50 UTC at run time; copy schedule not re-verified in this phase.</p>
+<h2>Tables</h2>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Rows</th>
+<th>Key columns</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>main.users</code></td>
+<td>321,087</td>
+<td><code>id</code>, <code>email</code>, <code>created_at</code> (DATETIME, UTC), <code>verification_status</code> (<code>unverified</code>/<code>verified</code>/<code>failed</code>), <code>verified_at</code> (DATETIME, UTC), <code>sid_code</code>, <code>referrer_code</code>, <code>sales_code</code>, <code>referral_code</code>, <code>is_institution</code>, <code>has_completed_first_subscription</code> (unreliable, see data_quality)</td>
+<td>Register, KYC state, cohort exclusion</td>
+</tr>
+<tr>
+<td><code>main.user_profiles</code></td>
+<td>321,087 (1:1 with users)</td>
+<td><code>user_id</code>, <code>id_number</code>, <code>selfie_with_id_photo_url</code>, <code>signature_image_url</code>, <code>risk_level</code>, <code>birthdate</code>, <code>monthly_income</code>, <code>occupation</code></td>
+<td>KYC form completeness (never output PII)</td>
+</tr>
+<tr>
+<td><code>main.user_status_logs</code></td>
+<td>1,420</td>
+<td><code>user_id</code>, <code>origin_status</code>, <code>status</code>, <code>created_at</code> (TIMESTAMP)</td>
+<td>KYC transitions, only since 2026-07-21</td>
+</tr>
+<tr>
+<td><code>main.transactions</code></td>
+<td>387,833</td>
+<td><code>user_id</code>, <code>type</code> (buy/sell/liquidation/reinvestment/SWITCH_IN/SWITCH_OUT), <code>status</code>, <code>payment_method</code>, <code>amount</code>, <code>final_amount</code>, <code>promo_code</code>, <code>fund_id</code>, <code>created_at</code>/<code>completed_at</code>/<code>paid_at</code> (TIMESTAMP, UTC), <code>transaction_number</code></td>
+<td>Investor, activity, churn</td>
+</tr>
+<tr>
+<td><code>main.portfolios</code></td>
+<td>236,203</td>
+<td><code>user_id</code>, <code>fund_id</code>, <code>unit</code>, <code>created_at</code></td>
+<td>Current holdings</td>
+</tr>
+<tr>
+<td><code>main.bonus_portfolios</code></td>
+<td>n/a</td>
+<td><code>user_id</code>, <code>promo_code</code>, <code>status</code></td>
+<td>Bonus units (not real investment)</td>
+</tr>
+<tr>
+<td><code>main.funds</code></td>
+<td>50 columns</td>
+<td><code>id</code>, <code>type</code>, <code>listing_status</code>, <code>latest_nav_value</code>, <code>currency</code></td>
+<td>Fund attributes</td>
+</tr>
+<tr>
+<td><code>main.campaigns</code></td>
+<td>n/a</td>
+<td><code>promo_code</code>, <code>campaign_type</code>, <code>start_date</code>, <code>end_date</code>, <code>bonus_amount</code></td>
+<td>Promo / voucher</td>
+</tr>
+<tr>
+<td><code>main.user_referrals</code></td>
+<td>n/a</td>
+<td><code>user_id</code>, <code>referrer_id</code></td>
+<td>Referral edge</td>
+</tr>
+<tr>
+<td><code>main.internal_syky</code></td>
+<td>27</td>
+<td><code>email</code></td>
+<td>Internal accounts list</td>
+</tr>
+<tr>
+<td><code>mi_fee_logs.portfolio_with_code</code></td>
+<td>about 235,750 rows per daily snapshot (235,748 to 235,755 on 2026-11-19 to 2026-11-22)</td>
+<td><code>sid_code</code>, <code>fund</code>, <code>amount</code>, <code>created_at</code> (TIMESTAMP)</td>
+<td>AUM per SID; partitions 2026-01-14 (as of 2026-11-09, not refreshed) to 2026-11-22. <code>created_at</code> is a day ahead of the AUM date it represents</td>
+</tr>
+<tr>
+<td><code>analytics_266759216.events_YYYYMMDD</code></td>
+<td>836 tables, 2026-02-04 to 2026-11-08 (as of 2026-11-09, not refreshed; this run read the tables up to 2026-11-21, so the table count is not re-counted)</td>
+<td><code>event_name</code>, <code>user_id</code> (= <code>main.users.id</code>, set at login), <code>user_pseudo_id</code> (device), <code>event_params</code>, <code>platform</code> (ANDROID/IOS), <code>event_timestamp</code></td>
+<td>GA4 BigQuery export</td>
+</tr>
+<tr>
+<td><code>adjust_analytics.events</code></td>
+<td>n/a</td>
+<td></td>
+<td>Install attribution (not used yet)</td>
+</tr>
+</tbody>
+</table>
+<p>Not in the warehouse: notification and email send logs. Email logs live in the dashboard's Supabase project (<code>dashboard_*</code> tables, e.g. <code>dashboard_email_tracking</code>), not in BigQuery. Push events (<code>notification_receive/open/click/dismiss</code>) are in GA4. Supabase MCP is read-only; not queried in this phase.</p>
+<h2>Cohort fields</h2>
+<ul>
+<li><strong>referrer_code</strong>: <code>main.users.referrer_code</code>. Exclusion expression from <code>00_rules.md</code>. Values: NULL 57,997; empty string 8; <code>RAIZKAYA</code> 255,195; <code>RAIZ</code> 1,499; 668 distinct raw codes in total (<code>30_facts.sql</code>); case or whitespace variants: none (as of 2026-11-09, not refreshed).</li>
+<li><strong>HNWI</strong>: no flag on the user table. Rule derived from <code>mi_fee_logs.portfolio_with_code</code> (see definitions.md). <code>is_institution</code> is a separate flag (39 users) and is not HNWI. HNWI ever: 119 users; on the 2026-11-22 snapshot 65 SIDs at or above Rp500 million (7 institutions).</li>
+<li><strong>Promo / voucher</strong>: <code>transactions.promo_code</code>, <code>campaigns.promo_code</code>, <code>bonus_portfolios.promo_code</code>. Bonus units arrive as <code>payment_method</code> <code>bonus</code> or <code>manual_bonus</code> (11,557 transactions), not as paid investment.</li>
+</ul>
+<h2>GA4 events mapped to funnel stages (window 2026-10-01 to 2026-11-21, 52 days, all users, before exclusion; <code>30_facts.sql</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Event</th>
+<th>Events</th>
+<th>Users (user_id)</th>
+<th>Devices</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Install</td>
+<td><code>first_open</code></td>
+<td>1,729</td>
+<td>0 (pre-login)</td>
+<td>1,729</td>
+</tr>
+<tr>
+<td>Register intent</td>
+<td><code>register_click</code> (param <code>method</code>, 3 values), <code>continue_with_google_click</code></td>
+<td>1,088 / 1,528</td>
+<td>12 / 31</td>
+<td>723 / 1,014</td>
+</tr>
+<tr>
+<td>Register</td>
+<td><code>register_success</code>, <code>continue_with_google_success</code></td>
+<td>1,281 / 1,138</td>
+<td>1,239 / 21</td>
+<td>1,259 / 877</td>
+</tr>
+<tr>
+<td>OTP</td>
+<td><code>otp_on_submit</code></td>
+<td>2,951</td>
+<td>39</td>
+<td>1,604</td>
+</tr>
+<tr>
+<td>KYC start</td>
+<td><code>kyc_start</code></td>
+<td>2,277</td>
+<td>1,174</td>
+<td>1,197</td>
+</tr>
+<tr>
+<td>KYC submitted</td>
+<td><code>kyc_success</code></td>
+<td>1,099</td>
+<td>962</td>
+<td>972</td>
+</tr>
+<tr>
+<td>Verified user opens app</td>
+<td><code>hfm_view</code> (verified home), <code>hfm_ready_unverified</code> (unverified home)</td>
+<td>17,955 / 1,725</td>
+<td>2,059 / 1,011</td>
+<td>2,438 / 1,035</td>
+</tr>
+<tr>
+<td>Order</td>
+<td><code>buy_bottom_sheet</code>, <code>order_button</code>, <code>order_created</code></td>
+<td>1,861 / 1,188 / 1,329</td>
+<td>457 / 382 / 377</td>
+<td>487 / 403 / 394</td>
+</tr>
+<tr>
+<td>First investment / payment</td>
+<td><code>payment_complete</code></td>
+<td>777</td>
+<td>325</td>
+<td>333</td>
+</tr>
+<tr>
+<td>Activity</td>
+<td><code>session_start</code>, <code>screen_view</code>, <code>user_engagement</code>, <code>redeem_click</code>, <code>confirm_redeem_click</code>, <code>switch_click</code></td>
+<td>see raw</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Passive (not activity)</td>
+<td><code>notification_receive</code>, <code>notification_dismiss</code>, <code>app_remove</code>, <code>os_update</code>, <code>app_update</code></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Params: the funnel events carry almost no custom params (only <code>engaged_session_event</code>, and <code>method</code> on <code>register_click</code>). Order amount and fund are not in GA params, so GA cannot size revenue; use the DB. <code>app_remove</code> is Android only.
+Source script: <code>analysis/scripts/04_ga_events.sql</code>, <code>15_hnwi.sql</code> (ga_funnel_params), <code>30_facts.sql</code> (event counts).</p>
+<p>What this means: the app records sign-up, KYC and purchase steps, but only after the user logs in, so install and sign-up-start counts are devices, not people; and GA has no amounts, so money figures must come from the database.</p>

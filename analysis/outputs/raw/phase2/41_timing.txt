@@ -1,0 +1,1 @@
+[{"k":"reg_to_verified","n":12958,"neg":0,"p50":0.6,"p90":3.58},{"k":"verified_to_first_buy","n":2399,"neg":10,"p50":1.02,"p90":85.15},{"k":"reg_to_first_buy","n":3617,"neg":19,"p50":5.47,"p90":240.03}]

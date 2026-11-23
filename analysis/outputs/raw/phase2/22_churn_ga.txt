@@ -1,0 +1,10 @@
+## churn_now
+[{"investors":3617,"one_buy_day":1475,"silent_gt90":3163,"silent_gt180":3026,"active_le90":454}]
+## ga_exclusion
+[{"ga_users":2767,"not_in_db":3,"raiz":155,"hnwi":78,"kept":2531}]
+## ga_first_open_and_null_uid
+[{"devices":4031,"devices_never_uid_rows":3577}]
+## ga_platform
+[{"platform":"ANDROID","n":189016,"devices":2392},{"platform":"IOS","n":85124,"devices":699}]
+## db_vs_ga_stage_octnov
+[{"k":"ga_kyc_success_users","n":962},{"k":"db_verified_cohortB","n":906},{"k":"ga_register_success_users","n":1239},{"k":"db_registered_cohortB","n":1298}]

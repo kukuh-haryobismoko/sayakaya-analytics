@@ -1,0 +1,642 @@
+<h1>Segment cuts (Phase 2)</h1>
+<p>Refreshed 2026-11-22 (cutoff). Cohort C, all-time. Scripts: <code>44_segments.sql</code> (DB), <code>48_ga_seg.sql</code> (GA, 2026-10-01 to 2026-11-21, 52 days), <code>51_ga_src.sql</code>. Cells under 10 are hidden (<code>&lt;10</code>) and rows with n &lt; 30 are marked low-confidence. 95% CI = Wilson. All Correlation.</p>
+<p>Profile fields (gender, age, occupation, income, city) are filled only after KYC, so for those cuts the useful denominator is approved users. For approved users the 'Investor % of approved' column is the fair comparison; the <code>(null)</code> rows are users who never reached the profile step.
+Monthly income and city are not analysed: income is empty for all 64,274 users (Observed, <code>44_segments.sql</code>); city has 505 values, most cells under 10.</p>
+<h2>Acquisition: referrer code (DB)</h2>
+<ul>
+<li>Observed: with a referrer code (not RAIZ/RAIZKAYA): 6,330 registered, 3,356 approved, 1,328 investors = 21.0% of registered (20.0-22.0%). No code (NULL or empty): 57,944 registered, 13,625 approved, 2,289 investors = 4.0% of registered (3.8-4.1%). z = 55.8. Referral codes: 660 distinct.</li>
+<li>What this means: users who sign up with a referral code are five times more likely to become investors than users without one. Most of the effect comes from a few codes (below), not from referral codes in general.</li>
+<li>Top codes by registered users (personal-looking codes are pseudonymised):</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved % (95% CI)</th>
+<th>Investors</th>
+<th>Investor % of approved (95% CI)</th>
+<th>Investor % of registered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(none)</td>
+<td>57,944</td>
+<td>13,625</td>
+<td>23.5% (23.2-23.9%)</td>
+<td>2,289</td>
+<td>16.8% (16.2-17.4%)</td>
+<td>4.0%</td>
+</tr>
+<tr>
+<td>personal-code-01</td>
+<td>402</td>
+<td>310</td>
+<td>77.1% (72.8-81.0%)</td>
+<td>251</td>
+<td>81.0% (76.2-84.9%)</td>
+<td>62.4%</td>
+</tr>
+<tr>
+<td>personal-code-02</td>
+<td>370</td>
+<td>48</td>
+<td>13.0% (9.9-16.8%)</td>
+<td>&lt;10</td>
+<td>14.6% (7.2-27.2%)</td>
+<td>1.9%</td>
+</tr>
+<tr>
+<td>personal-code-03</td>
+<td>339</td>
+<td>46</td>
+<td>13.6% (10.3-17.6%)</td>
+<td>&lt;10</td>
+<td>13.0% (6.1-25.7%)</td>
+<td>1.8%</td>
+</tr>
+<tr>
+<td>personal-code-04</td>
+<td>299</td>
+<td>47</td>
+<td>15.7% (12.0-20.3%)</td>
+<td>&lt;10</td>
+<td>19.1% (10.4-32.5%)</td>
+<td>3.0%</td>
+</tr>
+<tr>
+<td>personal-code-05</td>
+<td>242</td>
+<td>26</td>
+<td>10.7% (7.4-15.3%)</td>
+<td>&lt;10</td>
+<td>15.4% (6.1-33.5%)</td>
+<td>1.7%</td>
+</tr>
+<tr>
+<td>personal-code-06</td>
+<td>236</td>
+<td>28</td>
+<td>11.9% (8.3-16.6%)</td>
+<td>&lt;10</td>
+<td>17.9% (7.9-35.6%)</td>
+<td>2.1%</td>
+</tr>
+<tr>
+<td>UPNVJT</td>
+<td>218</td>
+<td>167</td>
+<td>76.6% (70.6-81.7%)</td>
+<td>13</td>
+<td>7.8% (4.6-12.9%)</td>
+<td>6.0%</td>
+</tr>
+<tr>
+<td>UBAYA</td>
+<td>200</td>
+<td>165</td>
+<td>82.5% (76.6-87.1%)</td>
+<td>20</td>
+<td>12.1% (8.0-18.0%)</td>
+<td>10.0%</td>
+</tr>
+<tr>
+<td>BEMITS</td>
+<td>183</td>
+<td>156</td>
+<td>85.2% (79.4-89.7%)</td>
+<td>14</td>
+<td>9.0% (5.4-14.5%)</td>
+<td>7.7%</td>
+</tr>
+<tr>
+<td>CMCUNESA</td>
+<td>179</td>
+<td>152</td>
+<td>84.9% (78.9-89.4%)</td>
+<td>15</td>
+<td>9.9% (6.1-15.6%)</td>
+<td>8.4%</td>
+</tr>
+<tr>
+<td>personal-code-07</td>
+<td>173</td>
+<td>146</td>
+<td>84.4% (78.2-89.0%)</td>
+<td>&lt;10</td>
+<td>4.8% (2.3-9.6%)</td>
+<td>4.0%</td>
+</tr>
+<tr>
+<td>personal-code-08</td>
+<td>163</td>
+<td>&lt;10</td>
+<td>2.5% (1.0-6.1%)</td>
+<td>&lt;10</td>
+<td>n/a (n/a)</td>
+<td>0.6%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Inferred: code <code>personal-code-01</code> converts at a very different rate from other personal codes with similar volume (1.7-3.0% investors per registered for codes 02-06 vs 62.4%); the high-volume personal codes register many users who do not finish KYC. A reward tied to registration instead of first buy could explain it; not tested. Phase 3 should use this for the incentive rule.</li>
+</ul>
+<h2>Sales code (booth / sales rep)</h2>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved % (95% CI)</th>
+<th>Investors</th>
+<th>Investor % of approved (95% CI)</th>
+<th>Investor % of registered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>no</td>
+<td>62,846</td>
+<td>15,970</td>
+<td>25.4% (25.1-25.8%)</td>
+<td>3,362</td>
+<td>21.1% (20.4-21.7%)</td>
+<td>5.3%</td>
+</tr>
+<tr>
+<td>yes</td>
+<td>1,428</td>
+<td>1,011</td>
+<td>70.8% (68.4-73.1%)</td>
+<td>255</td>
+<td>25.2% (22.6-28.0%)</td>
+<td>17.9%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Observed: users with a sales code reach investor at 17.9% of registered vs 5.3%; approval 70.8% vs 25.4%. Investor per approved: 25.2% vs 21.1% (z = 3.1). Selection: sales-code users were helped through KYC, so approval is not comparable.</li>
+<li>Changed vs the 2026-11-09 run: the investor-per-approved edge of sales-code users shrank (30.8% vs 21.1%, z = 6.3 then; now 25.2% vs 21.1%, z = 3.1). Likely reason (Inferred): 258 more sales-code users were approved since 2026-11-09 (753 to 1,011) and many have not had time to buy yet.</li>
+<li>What this means: booth sign-ups get through KYC much more often, but their later buying is only a little better than other users, and the gap is smaller than we reported on 2026-11-09.</li>
+</ul>
+<h2>Registration period</h2>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved % (95% CI)</th>
+<th>Investors</th>
+<th>Investor % of approved (95% CI)</th>
+<th>Investor % of registered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>before 2026-10</td>
+<td>62,938</td>
+<td>16,080</td>
+<td>25.5% (25.2-25.9%)</td>
+<td>3,508</td>
+<td>21.8% (21.2-22.5%)</td>
+<td>5.6%</td>
+</tr>
+<tr>
+<td>2026-10+ (booth era)</td>
+<td>1,336</td>
+<td>901</td>
+<td>67.4% (64.9-69.9%)</td>
+<td>109</td>
+<td>12.1% (10.1-14.4%)</td>
+<td>8.2%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Observed: Oct 2026 onward (booth event) approval 67.4% vs 25.5% before. Investor rate is not comparable yet because the Oct-Nov cohort is young; use the 7-day columns in <code>funnel_overview.md</code> (Oct 2026: 5.1% within 7 d vs Jan-Sep 9.4%; z = -3.3; <code>42_cohorts.sql</code>).</li>
+<li>What this means: the booth event brought many more approved users, but a smaller share of them buy.</li>
+</ul>
+<h2>Demographics (approved users only are comparable)</h2>
+<p>Gender:</p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved % (95% CI)</th>
+<th>Investors</th>
+<th>Investor % of approved (95% CI)</th>
+<th>Investor % of registered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(null)</td>
+<td>37,121</td>
+<td>65</td>
+<td>0.2% (0.1-0.2%)</td>
+<td>20</td>
+<td>30.8% (20.9-42.8%)</td>
+<td>0.1%</td>
+</tr>
+<tr>
+<td>male</td>
+<td>18,107</td>
+<td>10,535</td>
+<td>58.2% (57.5-58.9%)</td>
+<td>1,990</td>
+<td>18.9% (18.2-19.6%)</td>
+<td>11.0%</td>
+</tr>
+<tr>
+<td>female</td>
+<td>9,046</td>
+<td>6,381</td>
+<td>70.5% (69.6-71.5%)</td>
+<td>1,607</td>
+<td>25.2% (24.1-26.3%)</td>
+<td>17.8%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Observed: female approved users invest at 25.2% vs male 18.9%; z = 9.7. Evidence: High (large n), Correlation.</li>
+<li>What this means: women who pass KYC are more likely to buy than men who pass KYC.</li>
+</ul>
+<p>Age (at registration):</p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved % (95% CI)</th>
+<th>Investors</th>
+<th>Investor % of approved (95% CI)</th>
+<th>Investor % of registered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(null)</td>
+<td>37,121</td>
+<td>65</td>
+<td>0.2% (0.1-0.2%)</td>
+<td>20</td>
+<td>30.8% (20.9-42.8%)</td>
+<td>0.1%</td>
+</tr>
+<tr>
+<td>25-34</td>
+<td>9,174</td>
+<td>5,954</td>
+<td>64.9% (63.9-65.9%)</td>
+<td>1,663</td>
+<td>27.9% (26.8-29.1%)</td>
+<td>18.1%</td>
+</tr>
+<tr>
+<td>&lt;25</td>
+<td>7,622</td>
+<td>4,450</td>
+<td>58.4% (57.3-59.5%)</td>
+<td>721</td>
+<td>16.2% (15.1-17.3%)</td>
+<td>9.5%</td>
+</tr>
+<tr>
+<td>35-44</td>
+<td>6,529</td>
+<td>4,089</td>
+<td>62.6% (61.4-63.8%)</td>
+<td>761</td>
+<td>18.6% (17.4-19.8%)</td>
+<td>11.7%</td>
+</tr>
+<tr>
+<td>45-54</td>
+<td>3,028</td>
+<td>1,921</td>
+<td>63.4% (61.7-65.1%)</td>
+<td>320</td>
+<td>16.7% (15.1-18.4%)</td>
+<td>10.6%</td>
+</tr>
+<tr>
+<td>55+</td>
+<td>800</td>
+<td>502</td>
+<td>62.8% (59.3-66.0%)</td>
+<td>132</td>
+<td>26.3% (22.6-30.3%)</td>
+<td>16.5%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>What this means: users aged 25-34 and 55+ buy most often after approval; under-25 and 45-54 least often.</li>
+</ul>
+<p>Occupation:</p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered</th>
+<th>Approved</th>
+<th>Approved % (95% CI)</th>
+<th>Investors</th>
+<th>Investor % of approved (95% CI)</th>
+<th>Investor % of registered</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(null)</td>
+<td>37,168</td>
+<td>66</td>
+<td>0.2% (0.1-0.2%)</td>
+<td>20</td>
+<td>30.3% (20.6-42.2%)</td>
+<td>0.1%</td>
+</tr>
+<tr>
+<td>pegawai swasta</td>
+<td>9,632</td>
+<td>6,698</td>
+<td>69.5% (68.6-70.5%)</td>
+<td>1,621</td>
+<td>24.2% (23.2-25.2%)</td>
+<td>16.8%</td>
+</tr>
+<tr>
+<td>lainnya</td>
+<td>5,458</td>
+<td>3,017</td>
+<td>55.3% (54.0-56.6%)</td>
+<td>569</td>
+<td>18.9% (17.5-20.3%)</td>
+<td>10.4%</td>
+</tr>
+<tr>
+<td>pelajar/mahasiswa</td>
+<td>4,533</td>
+<td>2,750</td>
+<td>60.7% (59.2-62.1%)</td>
+<td>451</td>
+<td>16.4% (15.1-17.8%)</td>
+<td>9.9%</td>
+</tr>
+<tr>
+<td>pengusaha</td>
+<td>3,036</td>
+<td>1,959</td>
+<td>64.5% (62.8-66.2%)</td>
+<td>369</td>
+<td>18.8% (17.2-20.6%)</td>
+<td>12.2%</td>
+</tr>
+<tr>
+<td>ibu rumah tangga</td>
+<td>2,782</td>
+<td>1,401</td>
+<td>50.4% (48.5-52.2%)</td>
+<td>289</td>
+<td>20.6% (18.6-22.8%)</td>
+<td>10.4%</td>
+</tr>
+<tr>
+<td>pns</td>
+<td>982</td>
+<td>651</td>
+<td>66.3% (63.3-69.2%)</td>
+<td>180</td>
+<td>27.6% (24.4-31.2%)</td>
+<td>18.3%</td>
+</tr>
+<tr>
+<td>guru/dosen</td>
+<td>372</td>
+<td>259</td>
+<td>69.6% (64.8-74.1%)</td>
+<td>80</td>
+<td>30.9% (25.6-36.8%)</td>
+<td>21.5%</td>
+</tr>
+<tr>
+<td>pensiunan</td>
+<td>164</td>
+<td>92</td>
+<td>56.1% (48.4-63.5%)</td>
+<td>31</td>
+<td>33.7% (24.9-43.8%)</td>
+<td>18.9%</td>
+</tr>
+<tr>
+<td>tentara/polisi</td>
+<td>145</td>
+<td>86</td>
+<td>59.3% (51.2-67.0%)</td>
+<td>&lt;10</td>
+<td>8.1% (4.0-15.9%)</td>
+<td>4.8%</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Observed: <code>tentara/polisi</code> &lt;10 investors of 86 approved (8.1%), far below <code>pegawai swasta</code> (24.2%); <code>pensiunan</code>, <code>guru/dosen</code>, <code>pns</code> are highest. Occupation and age overlap (Simpson risk): not separated here.</li>
+<li>What this means: some jobs buy more often after approval, but age and job are mixed together, so do not target on job alone.</li>
+</ul>
+<p>Other: bank_account_skipped = true: 653 registered, 237 approved, &lt;10 investors; institutions: 15 registered, 15 approved, &lt;10 investors (n=15 low-confidence).</p>
+<h2>Acquisition source, device and region (GA, Oct 1 - Nov 21, 2026, users who registered and logged in)</h2>
+<p>Source / medium (GA first-touch of the device):</p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered (GA, cohort C)</th>
+<th>KYC success</th>
+<th>KYC % (95% CI)</th>
+<th>Payment complete</th>
+<th>Payment % (95% CI)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>google-play / organic</td>
+<td>749</td>
+<td>552</td>
+<td>73.7% (70.4-76.7%)</td>
+<td>49</td>
+<td>6.5% (5.0-8.5%)</td>
+</tr>
+<tr>
+<td>(direct) / (none)</td>
+<td>459</td>
+<td>365</td>
+<td>79.5% (75.6-83.0%)</td>
+<td>51</td>
+<td>11.1% (8.6-14.3%)</td>
+</tr>
+<tr>
+<td>card / offline (low n)</td>
+<td>10</td>
+<td>10</td>
+<td>100.0% (72.2-100.0%)</td>
+<td>&lt;10</td>
+<td>0.0% (0.0-27.8%)</td>
+</tr>
+</tbody>
+</table>
+<p>OS:</p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered (GA, cohort C)</th>
+<th>KYC success</th>
+<th>KYC % (95% CI)</th>
+<th>Payment complete</th>
+<th>Payment % (95% CI)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Android</td>
+<td>799</td>
+<td>591</td>
+<td>74.0% (70.8-76.9%)</td>
+<td>54</td>
+<td>6.8% (5.2-8.7%)</td>
+</tr>
+<tr>
+<td>iOS</td>
+<td>430</td>
+<td>343</td>
+<td>79.8% (75.7-83.3%)</td>
+<td>46</td>
+<td>10.7% (8.1-14.0%)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Observed: iOS KYC 79.8% vs Android 74.0% (z = 2.3, significant); payment complete 10.7% vs 6.8% (z = 2.4, significant).</li>
+<li>Changed vs the 2026-11-09 run: iOS payment completion was not significantly different then (10.4% vs 7.5%, z = 1.4); with the longer window it is. The Android disadvantage now appears at both KYC and payment.</li>
+<li>What this means: Android users finish KYC and pay less often than iOS users, so Android fixes pay off twice.</li>
+</ul>
+<p>App version:</p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered (GA, cohort C)</th>
+<th>KYC success</th>
+<th>KYC % (95% CI)</th>
+<th>Payment complete</th>
+<th>Payment % (95% CI)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2.28.2</td>
+<td>794</td>
+<td>610</td>
+<td>76.8% (73.8-79.6%)</td>
+<td>77</td>
+<td>9.7% (7.8-12.0%)</td>
+</tr>
+<tr>
+<td>2.29.0</td>
+<td>412</td>
+<td>308</td>
+<td>74.8% (70.3-78.7%)</td>
+<td>21</td>
+<td>5.1% (3.4-7.7%)</td>
+</tr>
+<tr>
+<td>2.28.1 (low n)</td>
+<td>21</td>
+<td>16</td>
+<td>76.2% (54.9-89.4%)</td>
+<td>&lt;10</td>
+<td>9.5% (2.7-28.9%)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Observed: version 2.29.0 pays at 5.1% vs 9.7% on 2.28.2 (z = -2.8); KYC 74.8% vs 76.8% (z = -0.8, not significant). Inferred: 2.29.0 users registered later, so many have not paid yet; cannot separate version from registration date here.</li>
+<li>What this means: do not blame the new version yet; its users are newer.</li>
+</ul>
+<p>Region (GA geo):</p>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Registered (GA, cohort C)</th>
+<th>KYC success</th>
+<th>KYC % (95% CI)</th>
+<th>Payment complete</th>
+<th>Payment % (95% CI)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jakarta</td>
+<td>781</td>
+<td>613</td>
+<td>78.5% (75.5-81.2%)</td>
+<td>65</td>
+<td>8.3% (6.6-10.5%)</td>
+</tr>
+<tr>
+<td>West Java</td>
+<td>141</td>
+<td>109</td>
+<td>77.3% (69.7-83.4%)</td>
+<td>14</td>
+<td>9.9% (6.0-16.0%)</td>
+</tr>
+<tr>
+<td>Banten</td>
+<td>84</td>
+<td>61</td>
+<td>72.6% (62.3-81.0%)</td>
+<td>&lt;10</td>
+<td>3.6% (1.2-10.0%)</td>
+</tr>
+<tr>
+<td>East Java</td>
+<td>34</td>
+<td>25</td>
+<td>73.5% (56.9-85.4%)</td>
+<td>&lt;10</td>
+<td>20.6% (10.3-36.8%)</td>
+</tr>
+<tr>
+<td>North Sumatra (low n)</td>
+<td>29</td>
+<td>21</td>
+<td>72.4% (54.3-85.3%)</td>
+<td>&lt;10</td>
+<td>10.3% (3.6-26.4%)</td>
+</tr>
+<tr>
+<td>Lampung (low n)</td>
+<td>25</td>
+<td>15</td>
+<td>60.0% (40.7-76.6%)</td>
+<td>&lt;10</td>
+<td>0.0% (0.0-13.3%)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>What this means: Jakarta is almost two thirds of GA registrations (63.5%, 781 of 1,229); other regions are too small to compare.</li>
+</ul>
+<p>Campaign: GA campaign is <code>(null)</code> or <code>(direct)</code> for 1,215 of 1,229 registered users: not usable for campaign analysis (Data Request).
+- Observed (GA, devices, not users, <code>51_ga_src.sql</code>): <code>google / cpc</code> shows 135 devices in the window with 0 first_open, 1 registrations and 3 devices with payment_complete. Inferred: ad-attributed devices are mostly installs from before Oct 1, or the attribution field is stale; cannot judge ad performance from this table. Data Request.
+- Caveats: GA attributes only users who logged in (user_id); versions 2.28.2 and 2.29.0 together hold 98.1% of users, so almost all users are on these two builds; 2.29.0 is the newer one, so version and registration date overlap.</p>

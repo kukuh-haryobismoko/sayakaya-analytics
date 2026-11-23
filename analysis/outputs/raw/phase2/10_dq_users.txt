@@ -1,0 +1,12 @@
+## users_basic
+[{"n":321099,"ids":321099,"emails":321099,"null_email":0,"null_created":0,"sids":273734,"null_sid":47362,"verified_no_sid":74,"verified_no_verified_at":4118,"notverified_has_verified_at":3,"verified_before_created":0,"future_created":0,"min_created":{"value":"2021-11-19T03:47:13.523000"},"max_created":{"value":"2026-11-22T14:33:01.675000"},"email_verified":283621,"phone_verified":29633}]
+## dup_email_sid
+ERROR Syntax error: Expected end of input but got keyword GROUPS at [2:32]
+## test_internal
+[{"sayakaya_domain":85,"test_like":57,"in_internal_syky":27,"internal_rows":27}]
+## referrer_values
+[{"rc":"RAIZKAYA","n":255195},{"rc":"<NULL>","n":58008},{"rc":"RAIZ","n":1499},{"rc":"","n":8}]
+## referrer_summary
+[{"null_rc":58008,"empty_rc":8,"raiz_norm":256694,"raiz_exact":256694,"rc_case_or_space_variants":0,"distinct_rc":668}]
+## profiles
+[{"profiles":321099,"distinct_profile_users":321099,"orphan_profiles":0,"users_without_profile":0,"verified_without_profile":0}]

@@ -1,151 +1,160 @@
-# Temuan — Product & Engineering
+# Findings — Product & Engineering
 
-Dibangun 2026-11-09 20:13 WIB dari GA4 `analytics_266759216.events_*` (2026-10-01..2026-11-08) dan `main.transactions`. Read-only.
+Refreshed 2026-11-22 (cutoff) from GA4 `analytics_266759216.events_*` (2026-10-01..2026-11-21) and `main.transactions`. Read-only.
 
-| # | Temuan | Bukti | Keyakinan | Dampak | Usaha | Prioritas |
+| # | Finding | Evidence | Confidence | Impact | Effort | Priority |
 |---|---|---|---|---|---|---|
-| T1 | KYC putus di dalam aplikasi: identity ke selfie −11,3%, Android 8,5 pp di bawah iOS | 745 identity ke 661 selfie; submit Android 79,6% vs iOS 88,1% | Tinggi | Tinggi | M | P0 |
-| T2 | QRIS gagal dua kali lebih sering dari metode lain | 170/765 (22,2%) vs 11,0-11,1% VA/bank | Tinggi | Sedang | S | P1 |
-| T3 | User approved yang belum beli tidak pernah kembali ke alur beli | dari 257 yang terlihat pasca-approval, 43 buka buy sheet, 8 buat order | Tinggi | Tinggi | M | P0 |
-| T4 | Gate risk profile ditinggalkan 28,9%, tanpa kerugian hilir yang signifikan | 28/97 abandon; 46,4% abandoner tetap order vs 59,4% | Sedang | Rendah | S | P2 |
-| T5 | Error klien tercatat di GA, tanpa crash/ANR dan tanpa alert | 45 `continue_with_google_failed`, 10 `app_exception`, tanpa monitoring | Tinggi | Rendah | S | P2 |
+| T1 | KYC drop-off inside the app: identity to selfie −11.4%, Android 5.4 pp below iOS | 1,156 identity to 1,024 selfie; submit Android 80.5% vs iOS 85.9% | High | High | M | P0 |
+| T2 | QRIS fails twice as often as VA or bank transfer | 183/834 (21.9%) vs 11.2% VA, 11.7% BT | High | Medium | S | P1 |
+| T3 | Approved users who haven't bought never return to the buy flow | of 317 visible post-approval, 56 open the buy sheet, 14 create an order | High | High | M | P0 |
+| T4 | Risk profile gate abandoned 26.8%; downstream loss borderline (p=0.084), weaker than before | 34/127 abandon; 44.1% of abandoners order vs 61.3% | Medium | Low | S | P2 |
+| T5 | Client errors logged in GA, with no crash/ANR and no alert | 63 `continue_with_google_failed`, 12 `app_exception`, no monitoring | High | Low | S | P2 |
 
-## T1 — Alur KYC kehilangan user di dalam aplikasi, terburuk di Android pada langkah selfie
+## T1 — KYC flow loses users inside the app, worst on Android at the selfie step
 
-**Pain point.** KYC dimulai 746 kali, hanya 617 user sampai submit (82.7%). Setelah submit, alur investasi kehilangan 47% lagi sebelum order. Di dalam KYC, penurunan terbesar yang bisa dilokalisasi ke satu layar adalah identity verification ke selfie camera, dan Android 8,5 pp lebih buruk dari iOS.
+**Pain point.** KYC started 1,157 times, only 955 users reached submit (82.5%). After submit, the investment flow loses another 63.7% before order (347 of 955 create one). Within KYC, the biggest drop attributable to a single screen is identity verification to selfie camera, and Android is 5.4 pp worse than iOS.
 
-**Evidence (Observed).** GA4 user per event, 2026-10-01..2026-11-08.
+**Evidence (Observed).** GA4 users per event, 2026-10-01..2026-11-21 (52 days).
 
-| Langkah | User | Perubahan |
+| Step | Users | Change |
 |---|---|---|
-| `kyc_start` | 746 | - |
-| `kyc_success` (submit) | 617 | -129 (-17.3%) |
+| `kyc_start` | 1,157 | - |
+| `kyc_success` (submit) | 955 | -202 (-17.5%) |
 
-Funnel investasi di window yang sama (populasi user, bukan kohort): `buy_bottom_sheet` 343 ke `order_button` 290 (-15.5%) ke `order_created` 287 (-1.0%) ke `payment_complete` 242 (84.3% dari order).
+Investment funnel in the same window (user population, not a cohort): `buy_bottom_sheet` 423 to `order_button` 351 (-17.0%) to `order_created` 347 (-1.1%) to `payment_complete` 299 (86.2% of orders).
 
-| Platform | KYC dimulai | Submit | Submit rate |
+| Platform | KYC started | Submit | Submit rate |
 |---|---|---|---|
-| ANDROID | 485 | 386 | 79.6% (95% CI 75.8-82.9%) |
-| IOS | 261 | 230 | 88.1% (95% CI 83.6-91.5%) |
+| ANDROID | 745 | 600 | 80.5% (95% CI 77.5-83.2%) |
+| IOS | 412 | 354 | 85.9% (95% CI 82.2-88.9%) |
 
-- Android vs iOS: 79.6% vs 88.1% (z=-2.93, p<0.0001). Selisih absolut: 99 user Android tidak selesai vs 31 iOS.
+- Android vs iOS: 80.5% vs 85.9% (z=-2.31, p=0.021). Absolute difference: 145 Android users did not finish vs 58 on iOS. The gap shrank from 8.5 pp (cutoff 2026-11-09) to 5.4 pp and is now only borderline significant: the conclusion still holds, but it is weaker.
 
-- Abandonment per layar (user yang melihat): `IntroScreen` 816 ke `IdentityVerificationScreen` 745 (-71, -8.7%); `IdentityVerificationScreen` ke `SelfieCameraScreen` 661 (-84, -11.3%). Setelah selfie semua layar tetap di atas 617, jadi kehilangan terkonsentrasi sebelum selfie diambil.
+- Abandonment per screen (users who saw it): `VerificationIntroScreen` 1,260 to `IdentityVerificationScreen` 1,156 (-104, -8.3%); `IdentityVerificationScreen` to `SelfieCameraScreen` 1,024 (-132, -11.4%). After selfie every screen stays above 950, so the loss is concentrated before the selfie is taken.
 
-- `IdentityCameraScreen` hanya 440 user, padahal layar sebelumnya 745. Kemungkinan besar event hanya menyala untuk sebagian user (bukan semua yang membuka kamera), atau ada drop nyata di capture dokumen. Tidak bisa dibedakan dari data ini.
+- `IdentityCameraScreen` has only 670 users, although the previous screen has 1,156. Most likely the event fires for only some users (not everyone who opens the camera), or there is a real drop at document capture. Cannot be distinguished from this data.
 
-- Versi 2.28.2 memuat 577 dari 619 submit KYC (93.2%). Versi 2.29.0: 76.9% start ke submit (n=26) vs 82.9% pada 2.28.2. Arahnya lebih buruk di build terbaru tetapi n<30, tidak signifikan.
+- Version 2.28.2: 620 users submitted, version 2.29.0: 316 (a user on two versions counts in both). Start to submit: 2.29.0 81.0% (316/390) vs 2.28.2 83.1% (620/746), z=-0.88, p=0.38. The old "latest build looks worse" signal (n=26) does not hold with the larger sample: no version difference.
 
-**Root cause (Inferred, keyakinan sedang).** Dua hipotesis, keduanya belum diuji: (a) izin/capture kamera selfie gagal atau membingungkan di perangkat Android; (b) capture dokumen identitas adalah penghalang sebenarnya dan user keluar sebelum selfie. `kyc_screen_view` tidak memisahkan 'melihat lalu keluar' dari 'capture lalu gagal'; butuh data level perangkat.
+**Root cause (Inferred, Confidence Medium).** Two hypotheses, neither tested: (a) selfie camera permission/capture fails or confuses on Android devices; (b) identity document capture is the real barrier and users leave before the selfie. `kyc_screen_view` does not separate 'viewed then left' from 'captured then failed'; device-level data needed.
 
-**Expected impact (aritmetika).** Menutup separuh gap Android-iOS: 485 start x gap 8.5 pp / 2 = 21 submit tambahan per 39 hari. Pada share approved/submit 73.2% dan approved ke investor 21.5%: 3.3 investor per 39 hari = 31/tahun. Asumsi: gap berasal dari friksi produk, bukan bauran perangkat/demografi.
+**What this means:** Many users quit KYC just before the selfie, a bit more on Android; fixing that step is worth about 22 extra investors a year.
 
-**Effort.** M (instrumentasi tiap layar KYC dengan event hasil: izin diberikan, capture dicoba, capture gagal, back ditekan).
+**Expected impact (arithmetic).** Closing half the Android-iOS gap: 745 starts x 5.4 pp gap / 2 = 20 extra submits per 52 days. At approved/submit share 73.4% (DB: 16,981 approved / 23,131 submitted, `40_funnel.sql`) and approved to investor 21.3% (3,617/16,981): 3.1 investors per 52 days = 22/year. Assumption: the gap comes from product friction, not device/demographic mix.
 
-**Priority.** P0 (kebocoran funnel terbesar yang bisa dikendalikan produk).
+**Effort.** M (instrument every KYC screen with outcome events: permission granted, capture attempted, capture failed, back pressed).
 
-**KPI / validation.** KYC start ke submit per platform dan per layar; target Android dalam 3 pp dari iOS.
+**Priority.** P0 (largest funnel leak that product can control).
 
-## T2 — Pembayaran: QRIS gagal dua kali lebih sering dari VA atau transfer bank
+**KPI / validation.** KYC start to submit per platform and per screen; target Android within 3 pp of iOS.
 
-**Pain point.** QRIS memegang 10.8% order dan gagal 22.2%, vs 11.1% virtual account dan 11.0% transfer bank. Instant payment hanya 1.9%.
+## T2 — Payments: QRIS fails twice as often as VA or bank transfer
 
-**Evidence (Observed).** `main.transactions`, order pada kohort, seluruh data s.d. 2026-11-09.
+**Pain point.** QRIS holds 11.4% of orders (834 of 7,336) and fails 21.9%, vs 11.2% virtual account and 11.7% bank transfer. Instant payment is only 1.9%.
 
-| Metode | Order | Gagal/expired | Fail rate |
+**Evidence (Observed).** `main.transactions`, orders in the cohort created 2026-01-01..2026-11-22 (`78_gate_pay.sql`).
+
+| Method | Orders | Failed/expired | Fail rate |
 |---|---|---|---|
-| virtual_account | 3,782 | 420 | 11.1% (95% CI 10.1-12.1%) |
-| bank_transfer | 2,279 | 250 | 11.0% (95% CI 9.8-12.3%) |
-| QRIS | 765 | 170 | 22.2% (95% CI 19.4-25.3%) |
+| virtual_account | 3,811 | 427 | 11.2% (95% CI 10.2-12.2%) |
+| bank_transfer | 2,427 | 283 | 11.7% (95% CI 10.4-13.0%) |
+| QRIS | 834 | 183 | 21.9% (95% CI 19.3-24.9%) |
 | INSTANT_PAYMENT | 264 | 5 | 1.9% (95% CI 0.8-4.4%) |
 
-- QRIS vs VA: z=8.3, p<0.0001.
+- QRIS vs VA: z=8.32, p<0.0001.
 
-- Percobaan order: 1,016 user membuat order; 36 (3.5%) punya order gagal dan tidak pernah menyelesaikan satu pun. Itu inti yang bisa dipulihkan; 304 user pernah gagal tetapi 268 di antaranya berhasil dengan cara lain.
+- Order attempts: 1,054 users created orders; 42 (4.0%) have a failed order and never completed one. That is the recoverable core; 321 users failed at some point but 279 of them succeeded another way.
 
-**Root cause (Inferred, keyakinan rendah).** Kegagalan QRIS kemungkinan besar expiry/timeout (user scan lalu pergi), bukan reject teknis; data hanya berisi status, tanpa kode error provider. Verifikasi kode error gateway sebelum mengubah apa pun.
+**Root cause (Inferred, Confidence Low).** QRIS failures are most likely expiry/timeout (user scans then leaves), not technical rejects; the data holds only status, no provider error code. Verify gateway error codes before changing anything.
 
-**Expected impact (aritmetika).** Menurunkan QRIS ke fail rate VA menyelamatkan (22.2% − 11.1%) x 765 order QRIS = 85 order yang sekarang mati (batas atas, karena sebagian user mengulang dengan metode lain).
+**What this means:** One in five QRIS payments fails, twice the rate of other methods; at most about 90 orders this year would have gone through at the VA rate.
 
-**Effort.** S (tampilkan kode error provider; tambah pengingat expiry di layar pembayaran).
+**Expected impact (arithmetic).** Bringing QRIS down to the VA fail rate saves (21.9% − 11.2%) x 834 QRIS orders = 90 orders that are dead today (upper bound, since some users retry with another method).
+
+**Effort.** S (surface provider error code; add expiry reminder on the payment screen).
 
 **Priority.** P1.
 
-**KPI / validation.** Fail rate per metode dan per kode error provider, mingguan; target QRIS <15%.
+**KPI / validation.** Fail rate per method and per provider error code, weekly; target QRIS <15%.
 
-## T3 — User approved yang belum beli tidak kembali ke alur beli
+## T3 — Approved users who haven't bought do not return to the buy flow
 
-**Pain point.** Dari 13,093 user approved-belum-beli, hanya 257 yang terlihat di GA (window 39 hari, cakupan `user_id` parsial), dan dari jumlah itu 43 membuka buy sheet; 8 sampai membuat order.
+**Pain point.** Of 13,385 approved-not-bought users (78.8% of approved), only 317 are visible in GA (52-day window, partial `user_id` coverage), and of those 56 open the buy sheet; 14 reach order creation.
 
-**Evidence (Observed).** GA4, user dengan keputusan verified dan tanpa pembelian selesai, 2026-10-01..2026-11-08.
+**Evidence (Observed).** GA4, users with verified decision and no completed purchase, 2026-10-01..2026-11-21.
 
-- Approved-belum-beli terlihat di GA: 257; buka `buy_bottom_sheet` 43 (16.7% (95% CI 12.7-21.8%)); buat order 8 (3.1%).
+- Approved-not-bought visible in GA: 317; opened `buy_bottom_sheet` 56 (17.7% (95% CI 13.9-22.2%)); created order 14 (4.4%).
 
-- Bandingkan dengan user yang submit KYC di window yang sama: 617 submit vs 287 user membuat order (46.5%). Dua populasi berbeda (bukan funnel), tetapi skalanya menunjukkan alur beli bekerja untuk user yang baru submit, dan tidak bekerja untuk kolam pasca-approval.
+- Compare with users who submitted KYC in the same window: 954 submits vs 347 users creating an order (36.3%). Two different populations (not a funnel), but the scale shows the buy flow works for users who just submitted, and does not work for the post-approval pool.
 
-- Funnel investasi keseluruhan: `kyc_success` 617 ke `buy_bottom_sheet` 343 (55.6%) ke `order_created` 287 (83.7%) ke `payment_complete` 242 (84.3%). Order ke pembayaran selesai 84.3%.
+- Overall investment funnel: `kyc_success` 954 to `buy_bottom_sheet` 423 (44.3%) to `order_created` 347 (82.0%) to `payment_complete` 299 (86.2%). Order to completed payment 86.2%.
 
-- Gate risk profile 28 user di kohort ini, 8 ditinggalkan (28.6%).
+- Risk profile gate 36 users in this cohort, 12 abandoned (33.3%).
 
-**Root cause (Inferred, keyakinan sedang).** Aplikasi tidak punya jalur kembali ke investasi setelah approval: approval berakhir sebagai notifikasi, dan entry point beli tidak ditonjolkan saat user kembali. Ini sejalan dengan M6 (tanpa messaging lifecycle) dan V1 (penurunan pasca-Oktober): tiga sudut pandang atas gap yang sama.
+**Root cause (Inferred, Confidence Medium).** The app has no path back to investing after approval: approval ends as a notification, and the buy entry point is not prominent when the user returns. This is consistent with M6 (no lifecycle messaging) and V1 (post-October decline): three views of the same gap.
 
-**Expected impact (aritmetika).** Bila buy sheet ditampilkan ke user approved saat membuka aplikasi, dan 10% dari 257 user GA-visible itu terkonversi pada rate order ke pembayaran 84.3%: 22 investor per 39 hari. Skala ke seluruh 13,093 user (asumsi perilaku setara, belum diuji) jauh lebih besar; jangan pakai angka itu sebelum diukur.
+**What this means:** Approved users who come back to the app rarely see or use the buy button; a clear buy entry for them is worth about 190 investors a year (rough, untested).
 
-**Effort.** M (state pendaratan pasca-approval + entry point buy sheet).
+**Expected impact (arithmetic).** If the buy sheet is shown to approved users when they open the app, and 10% of those 317 GA-visible users convert to an order at the order-to-payment rate 86.2%: 317 x 10% x 86.2% = 27 investors per 52 days = 192/year. Scaled to all 13,385 users (assuming equal behavior, untested) it is far larger; do not use that number before measuring.
+
+**Effort.** M (post-approval landing state + buy sheet entry point).
 
 **Priority.** P0.
 
-**KPI / validation.** % user approved yang membuka buy sheet dalam 7/30 hari; rate order ke pembayaran kohort pasca-approval.
+**KPI / validation.** % of approved users who open the buy sheet within 7/30 days; order-to-payment rate of the post-approval cohort.
 
-## T4 — Gate risk profile: tidak ada kerugian hilir yang terukur
+## T4 — Risk profile gate: downstream loss not yet proven
 
-**Pain point.** 28 dari 97 user yang memicu gate risk profile meninggalkannya, tetapi abandoner tetap berkonversi pada rate yang tidak berbeda signifikan.
+**Pain point.** 34 of 127 users who triggered the risk profile gate left it, but abandoners still convert at a rate not significantly different.
 
-**Evidence (Observed).** GA `risk_profile_gate_triggered`/`abandoned`, 2026-10-01..2026-11-08.
+**Evidence (Observed).** GA `risk_profile_gate_triggered`/`abandoned`, 2026-10-01..2026-11-21.
 
-- Trigger 97, abandon 28 (28.9%). Order setelahnya: abandoner 13/28 (46.4%), non-abandoner 41/69 (59.4%). z=-1.17, p=0.243.
+- Trigger 127, abandon 34 (26.8%). Orders afterward: abandoners 15/34 (44.1%), non-abandoners 57/93 (61.3%). z=-1.73, p=0.084.
 
-**Root cause (Inferred, keyakinan rendah).** Abandonment nyata tetapi sementara; gate ditampilkan ulang belakangan. Dengan n<100 di kedua sisi, ini bisa jadi kurang bertenaga, bukan benar-benar tidak berbahaya.
+**Root cause (Inferred, Confidence Low).** Abandonment is real but temporary; the gate is shown again later. With n<100 on both sides, this may be underpowered, not truly harmless. The conclusion weakened: the gap grew from 13.0 pp (p=0.24) to 17.2 pp (p=0.084), close to significant, so a real downstream loss is now plausible.
 
-**Expected impact.** Tidak ada klaim; hanya 75 user per 30 hari. Instrumentasi dulu, jangan desain ulang.
+**What this means:** Users who leave the risk quiz order less often, but the sample is still too small to be sure; measure before changing it.
+
+**Expected impact.** No claim; only 73 users per 30 days (127 in 52 days). Instrument first, do not redesign.
 
 **Effort.** S.
 
 **Priority.** P2.
 
-**KPI / validation.** Gate abandonment rate dan rate order 7 hari, bulanan, dengan n>=100.
+**KPI / validation.** Gate abandonment rate and 7-day order rate, monthly, with n>=100.
 
-## T5 — Error klien tercatat, tanpa crash/ANR dan tanpa alert
+## T5 — Client errors logged, with no crash/ANR and no alert
 
-**Pain point.** `continue_with_google_failed` 45 event di 9+ perangkat, `app_exception` 10 event, tanpa alert atau SLA. Tidak ada data crash/ANR sama sekali.
+**Pain point.** `continue_with_google_failed` 63 events across 10+ devices, `app_exception` 12 events across 6+ devices, no alert or SLA. No crash/ANR data at all.
 
-**Evidence (Observed).** GA4, 2026-10-01..2026-11-08.
+**Evidence (Observed).** GA4, 2026-10-01..2026-11-21.
 
-| Event | Event | Perangkat | Android | iOS |
+| Event | Events | Devices | Android | iOS |
 |---|---|---|---|---|
-| `continue_with_google_failed` | 45 | 9+ | 38 | 7 |
-| `app_exception` | 10 | 5+ | 9 | 1 |
+| `continue_with_google_failed` | 63 | 10+ | 56 | 7 |
+| `app_exception` | 12 | 6+ | 11 | 1 |
 
-- Volume kecil, tetapi berada di jalur registrasi (`continue_with_google_failed`) dan tanpa jejak tumpukan. Fase 2 sudah menunjukkan event registrasi tidak andal, jadi ini indikatif, bukan sensus.
+- Devices = largest per-version count (lower bound; the raw file splits devices by app version). Small volume, but on the registration path (`continue_with_google_failed`) and with no stack trace. Phase 2 already showed registration events are unreliable, so this is indicative, not a census.
 
-**Root cause (Inferred, keyakinan rendah).** Tidak ada data crash/ANR di GA (Crashlytics tidak diekspor), dan `app_exception` adalah event serba-guna tanpa stack trace di export. Severity tidak bisa diperingkat.
+**Root cause (Inferred, Confidence Low).** No crash/ANR data in GA (Crashlytics not exported), and `app_exception` is a catch-all event with no stack trace in the export. Severity cannot be ranked.
 
-**Expected impact.** Tidak bisa dikuantifikasi tanpa stack trace. Alasan memperbaiki adalah proses: error di jalur signup dan pembayaran harus memicu alert, bukan menumpuk.
+**What this means:** Login and app errors happen with nobody alerted; error volume is small but invisible to the team.
 
-**Effort.** S (alert pada rate `continue_with_google_failed` dan `app_exception`; ekspor Crashlytics).
+**Expected impact.** Cannot be quantified without stack traces. The reason to fix is process: errors on the signup and payment paths must trigger alerts, not pile up.
+
+**Effort.** S (alert on rate of `continue_with_google_failed` and `app_exception`; export Crashlytics).
 
 **Priority.** P2.
 
-**KPI / validation.** Rate event error per 1.000 sesi, mingguan, dengan ambang alert.
+**KPI / validation.** Error event rate per 1,000 sessions, weekly, with alert threshold.
 
 
 ## Data requests (Product & Engineering)
 
-- Event hasil per layar KYC (capture dicoba/gagal, izin ditolak, back ditekan): memblokir T1.
+- Outcome events per KYC screen (capture attempted/failed, permission denied, back pressed): blocks T1.
 
-- Kode error provider pada transaksi gagal: memblokir sizing T2.
+- Provider error code on failed transactions: blocks T2 sizing.
 
-- Ekspor Crashlytics/ANR: memblokir severity T5.
+- Crashlytics/ANR export: blocks T5 severity.
 
-- `user_id` pada event GA pra-login, dan id kampanye pada event notifikasi.
-
+- `user_id` on pre-login GA events, and campaign id on notification events.

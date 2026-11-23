@@ -1,0 +1,273 @@
+<h1>Findings — Product &amp; Engineering</h1>
+<p>Refreshed 2026-11-22 (cutoff) from GA4 <code>analytics_266759216.events_*</code> (2026-10-01..2026-11-21) and <code>main.transactions</code>. Read-only.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Confidence</th>
+<th>Impact</th>
+<th>Effort</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T1</td>
+<td>KYC drop-off inside the app: identity to selfie −11.4%, Android 5.4 pp below iOS</td>
+<td>1,156 identity to 1,024 selfie; submit Android 80.5% vs iOS 85.9%</td>
+<td>High</td>
+<td>High</td>
+<td>M</td>
+<td>P0</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>QRIS fails twice as often as VA or bank transfer</td>
+<td>183/834 (21.9%) vs 11.2% VA, 11.7% BT</td>
+<td>High</td>
+<td>Medium</td>
+<td>S</td>
+<td>P1</td>
+</tr>
+<tr>
+<td>T3</td>
+<td>Approved users who haven't bought never return to the buy flow</td>
+<td>of 317 visible post-approval, 56 open the buy sheet, 14 create an order</td>
+<td>High</td>
+<td>High</td>
+<td>M</td>
+<td>P0</td>
+</tr>
+<tr>
+<td>T4</td>
+<td>Risk profile gate abandoned 26.8%; downstream loss borderline (p=0.084), weaker than before</td>
+<td>34/127 abandon; 44.1% of abandoners order vs 61.3%</td>
+<td>Medium</td>
+<td>Low</td>
+<td>S</td>
+<td>P2</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>Client errors logged in GA, with no crash/ANR and no alert</td>
+<td>63 <code>continue_with_google_failed</code>, 12 <code>app_exception</code>, no monitoring</td>
+<td>High</td>
+<td>Low</td>
+<td>S</td>
+<td>P2</td>
+</tr>
+</tbody>
+</table>
+<h2>T1 — KYC flow loses users inside the app, worst on Android at the selfie step</h2>
+<p><strong>Pain point.</strong> KYC started 1,157 times, only 955 users reached submit (82.5%). After submit, the investment flow loses another 63.7% before order (347 of 955 create one). Within KYC, the biggest drop attributable to a single screen is identity verification to selfie camera, and Android is 5.4 pp worse than iOS.</p>
+<p><strong>Evidence (Observed).</strong> GA4 users per event, 2026-10-01..2026-11-21 (52 days).</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Users</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kyc_start</code></td>
+<td>1,157</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>kyc_success</code> (submit)</td>
+<td>955</td>
+<td>-202 (-17.5%)</td>
+</tr>
+</tbody>
+</table>
+<p>Investment funnel in the same window (user population, not a cohort): <code>buy_bottom_sheet</code> 423 to <code>order_button</code> 351 (-17.0%) to <code>order_created</code> 347 (-1.1%) to <code>payment_complete</code> 299 (86.2% of orders).</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>KYC started</th>
+<th>Submit</th>
+<th>Submit rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ANDROID</td>
+<td>745</td>
+<td>600</td>
+<td>80.5% (95% CI 77.5-83.2%)</td>
+</tr>
+<tr>
+<td>IOS</td>
+<td>412</td>
+<td>354</td>
+<td>85.9% (95% CI 82.2-88.9%)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>Android vs iOS: 80.5% vs 85.9% (z=-2.31, p=0.021). Absolute difference: 145 Android users did not finish vs 58 on iOS. The gap shrank from 8.5 pp (cutoff 2026-11-09) to 5.4 pp and is now only borderline significant: the conclusion still holds, but it is weaker.</p>
+</li>
+<li>
+<p>Abandonment per screen (users who saw it): <code>VerificationIntroScreen</code> 1,260 to <code>IdentityVerificationScreen</code> 1,156 (-104, -8.3%); <code>IdentityVerificationScreen</code> to <code>SelfieCameraScreen</code> 1,024 (-132, -11.4%). After selfie every screen stays above 950, so the loss is concentrated before the selfie is taken.</p>
+</li>
+<li>
+<p><code>IdentityCameraScreen</code> has only 670 users, although the previous screen has 1,156. Most likely the event fires for only some users (not everyone who opens the camera), or there is a real drop at document capture. Cannot be distinguished from this data.</p>
+</li>
+<li>
+<p>Version 2.28.2: 620 users submitted, version 2.29.0: 316 (a user on two versions counts in both). Start to submit: 2.29.0 81.0% (316/390) vs 2.28.2 83.1% (620/746), z=-0.88, p=0.38. The old "latest build looks worse" signal (n=26) does not hold with the larger sample: no version difference.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence Medium).</strong> Two hypotheses, neither tested: (a) selfie camera permission/capture fails or confuses on Android devices; (b) identity document capture is the real barrier and users leave before the selfie. <code>kyc_screen_view</code> does not separate 'viewed then left' from 'captured then failed'; device-level data needed.</p>
+<p><strong>What this means:</strong> Many users quit KYC just before the selfie, a bit more on Android; fixing that step is worth about 22 extra investors a year.</p>
+<p><strong>Expected impact (arithmetic).</strong> Closing half the Android-iOS gap: 745 starts x 5.4 pp gap / 2 = 20 extra submits per 52 days. At approved/submit share 73.4% (DB: 16,981 approved / 23,131 submitted, <code>40_funnel.sql</code>) and approved to investor 21.3% (3,617/16,981): 3.1 investors per 52 days = 22/year. Assumption: the gap comes from product friction, not device/demographic mix.</p>
+<p><strong>Effort.</strong> M (instrument every KYC screen with outcome events: permission granted, capture attempted, capture failed, back pressed).</p>
+<p><strong>Priority.</strong> P0 (largest funnel leak that product can control).</p>
+<p><strong>KPI / validation.</strong> KYC start to submit per platform and per screen; target Android within 3 pp of iOS.</p>
+<h2>T2 — Payments: QRIS fails twice as often as VA or bank transfer</h2>
+<p><strong>Pain point.</strong> QRIS holds 11.4% of orders (834 of 7,336) and fails 21.9%, vs 11.2% virtual account and 11.7% bank transfer. Instant payment is only 1.9%.</p>
+<p><strong>Evidence (Observed).</strong> <code>main.transactions</code>, orders in the cohort created 2026-01-01..2026-11-22 (<code>78_gate_pay.sql</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Orders</th>
+<th>Failed/expired</th>
+<th>Fail rate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>virtual_account</td>
+<td>3,811</td>
+<td>427</td>
+<td>11.2% (95% CI 10.2-12.2%)</td>
+</tr>
+<tr>
+<td>bank_transfer</td>
+<td>2,427</td>
+<td>283</td>
+<td>11.7% (95% CI 10.4-13.0%)</td>
+</tr>
+<tr>
+<td>QRIS</td>
+<td>834</td>
+<td>183</td>
+<td>21.9% (95% CI 19.3-24.9%)</td>
+</tr>
+<tr>
+<td>INSTANT_PAYMENT</td>
+<td>264</td>
+<td>5</td>
+<td>1.9% (95% CI 0.8-4.4%)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p>QRIS vs VA: z=8.32, p&lt;0.0001.</p>
+</li>
+<li>
+<p>Order attempts: 1,054 users created orders; 42 (4.0%) have a failed order and never completed one. That is the recoverable core; 321 users failed at some point but 279 of them succeeded another way.</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence Low).</strong> QRIS failures are most likely expiry/timeout (user scans then leaves), not technical rejects; the data holds only status, no provider error code. Verify gateway error codes before changing anything.</p>
+<p><strong>What this means:</strong> One in five QRIS payments fails, twice the rate of other methods; at most about 90 orders this year would have gone through at the VA rate.</p>
+<p><strong>Expected impact (arithmetic).</strong> Bringing QRIS down to the VA fail rate saves (21.9% − 11.2%) x 834 QRIS orders = 90 orders that are dead today (upper bound, since some users retry with another method).</p>
+<p><strong>Effort.</strong> S (surface provider error code; add expiry reminder on the payment screen).</p>
+<p><strong>Priority.</strong> P1.</p>
+<p><strong>KPI / validation.</strong> Fail rate per method and per provider error code, weekly; target QRIS &lt;15%.</p>
+<h2>T3 — Approved users who haven't bought do not return to the buy flow</h2>
+<p><strong>Pain point.</strong> Of 13,385 approved-not-bought users (78.8% of approved), only 317 are visible in GA (52-day window, partial <code>user_id</code> coverage), and of those 56 open the buy sheet; 14 reach order creation.</p>
+<p><strong>Evidence (Observed).</strong> GA4, users with verified decision and no completed purchase, 2026-10-01..2026-11-21.</p>
+<ul>
+<li>
+<p>Approved-not-bought visible in GA: 317; opened <code>buy_bottom_sheet</code> 56 (17.7% (95% CI 13.9-22.2%)); created order 14 (4.4%).</p>
+</li>
+<li>
+<p>Compare with users who submitted KYC in the same window: 954 submits vs 347 users creating an order (36.3%). Two different populations (not a funnel), but the scale shows the buy flow works for users who just submitted, and does not work for the post-approval pool.</p>
+</li>
+<li>
+<p>Overall investment funnel: <code>kyc_success</code> 954 to <code>buy_bottom_sheet</code> 423 (44.3%) to <code>order_created</code> 347 (82.0%) to <code>payment_complete</code> 299 (86.2%). Order to completed payment 86.2%.</p>
+</li>
+<li>
+<p>Risk profile gate 36 users in this cohort, 12 abandoned (33.3%).</p>
+</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence Medium).</strong> The app has no path back to investing after approval: approval ends as a notification, and the buy entry point is not prominent when the user returns. This is consistent with M6 (no lifecycle messaging) and V1 (post-October decline): three views of the same gap.</p>
+<p><strong>What this means:</strong> Approved users who come back to the app rarely see or use the buy button; a clear buy entry for them is worth about 190 investors a year (rough, untested).</p>
+<p><strong>Expected impact (arithmetic).</strong> If the buy sheet is shown to approved users when they open the app, and 10% of those 317 GA-visible users convert to an order at the order-to-payment rate 86.2%: 317 x 10% x 86.2% = 27 investors per 52 days = 192/year. Scaled to all 13,385 users (assuming equal behavior, untested) it is far larger; do not use that number before measuring.</p>
+<p><strong>Effort.</strong> M (post-approval landing state + buy sheet entry point).</p>
+<p><strong>Priority.</strong> P0.</p>
+<p><strong>KPI / validation.</strong> % of approved users who open the buy sheet within 7/30 days; order-to-payment rate of the post-approval cohort.</p>
+<h2>T4 — Risk profile gate: downstream loss not yet proven</h2>
+<p><strong>Pain point.</strong> 34 of 127 users who triggered the risk profile gate left it, but abandoners still convert at a rate not significantly different.</p>
+<p><strong>Evidence (Observed).</strong> GA <code>risk_profile_gate_triggered</code>/<code>abandoned</code>, 2026-10-01..2026-11-21.</p>
+<ul>
+<li>Trigger 127, abandon 34 (26.8%). Orders afterward: abandoners 15/34 (44.1%), non-abandoners 57/93 (61.3%). z=-1.73, p=0.084.</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence Low).</strong> Abandonment is real but temporary; the gate is shown again later. With n&lt;100 on both sides, this may be underpowered, not truly harmless. The conclusion weakened: the gap grew from 13.0 pp (p=0.24) to 17.2 pp (p=0.084), close to significant, so a real downstream loss is now plausible.</p>
+<p><strong>What this means:</strong> Users who leave the risk quiz order less often, but the sample is still too small to be sure; measure before changing it.</p>
+<p><strong>Expected impact.</strong> No claim; only 73 users per 30 days (127 in 52 days). Instrument first, do not redesign.</p>
+<p><strong>Effort.</strong> S.</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> Gate abandonment rate and 7-day order rate, monthly, with n&gt;=100.</p>
+<h2>T5 — Client errors logged, with no crash/ANR and no alert</h2>
+<p><strong>Pain point.</strong> <code>continue_with_google_failed</code> 63 events across 10+ devices, <code>app_exception</code> 12 events across 6+ devices, no alert or SLA. No crash/ANR data at all.</p>
+<p><strong>Evidence (Observed).</strong> GA4, 2026-10-01..2026-11-21.</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Events</th>
+<th>Devices</th>
+<th>Android</th>
+<th>iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>continue_with_google_failed</code></td>
+<td>63</td>
+<td>10+</td>
+<td>56</td>
+<td>7</td>
+</tr>
+<tr>
+<td><code>app_exception</code></td>
+<td>12</td>
+<td>6+</td>
+<td>11</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Devices = largest per-version count (lower bound; the raw file splits devices by app version). Small volume, but on the registration path (<code>continue_with_google_failed</code>) and with no stack trace. Phase 2 already showed registration events are unreliable, so this is indicative, not a census.</li>
+</ul>
+<p><strong>Root cause (Inferred, Confidence Low).</strong> No crash/ANR data in GA (Crashlytics not exported), and <code>app_exception</code> is a catch-all event with no stack trace in the export. Severity cannot be ranked.</p>
+<p><strong>What this means:</strong> Login and app errors happen with nobody alerted; error volume is small but invisible to the team.</p>
+<p><strong>Expected impact.</strong> Cannot be quantified without stack traces. The reason to fix is process: errors on the signup and payment paths must trigger alerts, not pile up.</p>
+<p><strong>Effort.</strong> S (alert on rate of <code>continue_with_google_failed</code> and <code>app_exception</code>; export Crashlytics).</p>
+<p><strong>Priority.</strong> P2.</p>
+<p><strong>KPI / validation.</strong> Error event rate per 1,000 sessions, weekly, with alert threshold.</p>
+<h2>Data requests (Product &amp; Engineering)</h2>
+<ul>
+<li>
+<p>Outcome events per KYC screen (capture attempted/failed, permission denied, back pressed): blocks T1.</p>
+</li>
+<li>
+<p>Provider error code on failed transactions: blocks T2 sizing.</p>
+</li>
+<li>
+<p>Crashlytics/ANR export: blocks T5 severity.</p>
+</li>
+<li>
+<p><code>user_id</code> on pre-login GA events, and campaign id on notification events.</p>
+</li>
+</ul>

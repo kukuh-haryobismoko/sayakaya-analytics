@@ -11,4 +11,4 @@ SELECT COUNT(*) n, MIN(created_at) mn, MAX(created_at) mx FROM `sayakaya.main.us
 -- Q:rows
 SELECT 'profiles' t, COUNT(*) n FROM `sayakaya.main.user_profiles` UNION ALL SELECT 'portfolios', COUNT(*) FROM `sayakaya.main.portfolios` UNION ALL SELECT 'internal', COUNT(*) FROM `sayakaya.main.internal_syky`
 -- Q:ga_events
-SELECT event_name, COUNT(*) n, COUNT(DISTINCT user_id) users, COUNT(DISTINCT user_pseudo_id) devices FROM `sayakaya.analytics_266759216.events_*` WHERE _TABLE_SUFFIX>='20261001' AND _TABLE_SUFFIX<='20261108' AND event_date BETWEEN '20261001' AND '20261108' GROUP BY 1 ORDER BY n DESC LIMIT 45
+SELECT event_name, COUNT(*) n, COUNT(DISTINCT user_id) users, COUNT(DISTINCT user_pseudo_id) devices FROM `sayakaya.analytics_266759216.events_*` WHERE _TABLE_SUFFIX>='20261001' AND _TABLE_SUFFIX<='20261121' AND event_date BETWEEN '20261001' AND '20261121' GROUP BY 1 ORDER BY n DESC LIMIT 45

@@ -1,4 +1,4 @@
 ## paid_users_2026
-[{"u_paid_2026":964,"paid_orders":6242}]
+[{"u_paid_2026":996,"paid_orders":6437}]
 ## inv_total
-[{"inv":3587}]
+[{"inv":3617}]

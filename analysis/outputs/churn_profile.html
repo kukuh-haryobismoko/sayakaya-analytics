@@ -1,0 +1,369 @@
+<h1>Churn profile (Phase 2)</h1>
+<blockquote>
+<p><strong>Terms used in this document.</strong>
+<strong>Repeat</strong> = the user bought on 2 or more different days (WIB), counting valid non-bonus purchases only.
+<strong>Mature</strong> = first purchase at least 120 days before the data pull (2026-11-22; first purchase on or before 2026-07-25), so every user had the same time to buy again. Mature repeat = % of mature investors who are repeat. Rates on non-mature users are not comparable.
+<strong>Data window</strong> = all registrations and transactions up to 2026-11-22 unless a section states another window (GA4 events: 2026-10-01 to 2026-11-21).
+Run 2026-11-22 WIB. Cohort C investors (n = 3,617). Churned = no buy/sell/SWITCH_IN for more than 90 days at 2026-11-22 (<code>definitions.md</code>). Scripts: <code>43_dur.sql</code>, <code>50_indicators.sql</code>, <code>49_chk.sql</code>, <code>build_phase2.py</code>.</p>
+</blockquote>
+<h2>Who and when (Observed)</h2>
+<ul>
+<li>3,008 of 3,617 investors churned (83.2%). To avoid counting young accounts, tables below use the 3,465 investors whose first buy is more than 90 days ago (3,008 churned = 86.8%).</li>
+<li>Among churned users, last activity falls: same day as first buy 11.6%; within 7 days 14.3%; within 30 days 23.7%; median 203 days after first buy; p75 583 days.</li>
+<li>What this means: about 5 in 6 investors have gone quiet for over 3 months; roughly 1 in 4 of them were gone within a month of their first buy.</li>
+</ul>
+<h2>Survival curve (Kaplan-Meier, share of investors not yet churned, days since first buy)</h2>
+<p>Churn is dated 90 days after the last activity; users still active or inside the window are censored at their age.</p>
+<table>
+<thead>
+<tr>
+<th>Days since first buy</th>
+<th>90</th>
+<th>120</th>
+<th>180</th>
+<th>270</th>
+<th>365</th>
+<th>450</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Not churned</td>
+<td>90.0%</td>
+<td>79.4%</td>
+<td>68.1%</td>
+<td>58.3%</td>
+<td>50.7%</td>
+<td>46.2%</td>
+</tr>
+</tbody>
+</table>
+<p>Reading: 10% churn before day 90 (they never came back after the first buy day); half are gone by about one year. This chart is dominated by the 2022-2025 buyers (older buyers outnumber recent ones, see "By first-buy half-year").
+What this means: after one year only about half of investors are still active; the biggest losses come in the first 6 months.</p>
+<h2>After what behaviour (Observed, correlation)</h2>
+<p>Active days in first life (all activity days, users with first buy over 90 d ago):</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Users</th>
+<th>Churned</th>
+<th>Churn %</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>348</td>
+<td>348</td>
+<td>100.0%</td>
+<td>98.9-100.0%</td>
+</tr>
+<tr>
+<td>2-3</td>
+<td>1,229</td>
+<td>1,189</td>
+<td>96.7%</td>
+<td>95.6-97.6%</td>
+</tr>
+<tr>
+<td>4-9</td>
+<td>871</td>
+<td>799</td>
+<td>91.7%</td>
+<td>89.7-93.4%</td>
+</tr>
+<tr>
+<td>10+</td>
+<td>1,017</td>
+<td>672</td>
+<td>66.1%</td>
+<td>63.1-68.9%</td>
+</tr>
+</tbody>
+</table>
+<p>Read: all 348 one-day users churned by definition (one active day cannot be followed by a return), so this table mostly says "repeat buyers survive". Not independent of the definition.</p>
+<p>Leading indicators measured at first buy / first 30 days (users with first buy at least 120 days ago, so every user has had the same observation time; churn = silent &gt; 90 d now; n = 3,448). Indicators are measured before churn, so they are usable for early warning, but these are Correlation, not Causal:</p>
+<p>Activity in the 30 days after first buy (count of active days):</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Users</th>
+<th>Churned</th>
+<th>Churn %</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>1,642</td>
+<td>1,496</td>
+<td>91.1%</td>
+<td>89.6-92.4%</td>
+</tr>
+<tr>
+<td>1</td>
+<td>979</td>
+<td>853</td>
+<td>87.1%</td>
+<td>84.9-89.1%</td>
+</tr>
+<tr>
+<td>2-3</td>
+<td>625</td>
+<td>506</td>
+<td>81.0%</td>
+<td>77.7-83.8%</td>
+</tr>
+<tr>
+<td>4+</td>
+<td>202</td>
+<td>150</td>
+<td>74.3%</td>
+<td>67.8-79.8%</td>
+</tr>
+</tbody>
+</table>
+<p>z-test 0 vs 4+ days: 7.3. Evidence: High (large n, big gap).
+What this means: investors who do nothing in their first month are much more likely to leave for good.</p>
+<p>Size of the first buy:</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Users</th>
+<th>Churned</th>
+<th>Churn %</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>&lt;100k</td>
+<td>597</td>
+<td>572</td>
+<td>95.8%</td>
+<td>93.9-97.1%</td>
+</tr>
+<tr>
+<td>100-500k</td>
+<td>1,248</td>
+<td>1,118</td>
+<td>89.6%</td>
+<td>87.8-91.2%</td>
+</tr>
+<tr>
+<td>0.5-5jt</td>
+<td>953</td>
+<td>780</td>
+<td>81.8%</td>
+<td>79.3-84.2%</td>
+</tr>
+<tr>
+<td>5jt+</td>
+<td>650</td>
+<td>535</td>
+<td>82.3%</td>
+<td>79.2-85.0%</td>
+</tr>
+</tbody>
+</table>
+<p>z-test &lt;100k vs 0.5-5jt: 8.0. Evidence: Med (could reflect testers or bonus-triggered tiny buys).
+What this means: very small first buys (under Rp100k) are the least likely to stay.</p>
+<p>Fund type of the first buy:</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Users</th>
+<th>Churned</th>
+<th>Churn %</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EQUITY</td>
+<td>602</td>
+<td>548</td>
+<td>91.0%</td>
+<td>88.5-93.1%</td>
+</tr>
+<tr>
+<td>FIXED_INCOME</td>
+<td>908</td>
+<td>762</td>
+<td>83.9%</td>
+<td>81.4-86.2%</td>
+</tr>
+<tr>
+<td>MIXED</td>
+<td>862</td>
+<td>743</td>
+<td>86.2%</td>
+<td>83.7-88.3%</td>
+</tr>
+<tr>
+<td>MONEY_MARKET</td>
+<td>1,036</td>
+<td>921</td>
+<td>88.9%</td>
+<td>86.8-90.7%</td>
+</tr>
+<tr>
+<td>PROTECTED</td>
+<td>40</td>
+<td>31</td>
+<td>77.5%</td>
+<td>62.5-87.7%</td>
+</tr>
+</tbody>
+</table>
+<p>Payment method of the first buy:</p>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Users</th>
+<th>Churned</th>
+<th>Churn %</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>INSTANT_PAYMENT</td>
+<td>40</td>
+<td>37</td>
+<td>92.5%</td>
+<td>80.1-97.4%</td>
+</tr>
+<tr>
+<td>QRIS</td>
+<td>67</td>
+<td>60</td>
+<td>89.6%</td>
+<td>80.0-94.8%</td>
+</tr>
+<tr>
+<td>bank_transfer</td>
+<td>2,441</td>
+<td>2,113</td>
+<td>86.6%</td>
+<td>85.2-87.9%</td>
+</tr>
+<tr>
+<td>virtual_account</td>
+<td>900</td>
+<td>795</td>
+<td>88.3%</td>
+<td>86.1-90.3%</td>
+</tr>
+</tbody>
+</table>
+<p>Types or methods with fewer than 10 users are shown as <code>&lt;10</code>; PROTECTED n = 40 is low-confidence.
+What this means: fund type and payment method differ only a little in churn; first-buy size and first-month activity matter more.</p>
+<h2>By first-buy half-year (Simpson / survivorship check)</h2>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Users</th>
+<th>Churned</th>
+<th>Churn %</th>
+<th>95% CI</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2021-H2</td>
+<td>25</td>
+<td>19</td>
+<td>76.0%</td>
+<td>56.6-88.5%</td>
+</tr>
+<tr>
+<td>2022-H1</td>
+<td>977</td>
+<td>829</td>
+<td>84.9%</td>
+<td>82.5-87.0%</td>
+</tr>
+<tr>
+<td>2022-H2</td>
+<td>367</td>
+<td>328</td>
+<td>89.4%</td>
+<td>85.8-92.1%</td>
+</tr>
+<tr>
+<td>2023-H1</td>
+<td>193</td>
+<td>162</td>
+<td>83.9%</td>
+<td>78.1-88.4%</td>
+</tr>
+<tr>
+<td>2023-H2</td>
+<td>219</td>
+<td>192</td>
+<td>87.7%</td>
+<td>82.7-91.4%</td>
+</tr>
+<tr>
+<td>2024-H1</td>
+<td>247</td>
+<td>221</td>
+<td>89.5%</td>
+<td>85.0-92.7%</td>
+</tr>
+<tr>
+<td>2024-H2</td>
+<td>250</td>
+<td>219</td>
+<td>87.6%</td>
+<td>82.9-91.1%</td>
+</tr>
+<tr>
+<td>2025-H1</td>
+<td>642</td>
+<td>604</td>
+<td>94.1%</td>
+<td>92.0-95.7%</td>
+</tr>
+<tr>
+<td>2025-H2</td>
+<td>313</td>
+<td>267</td>
+<td>85.3%</td>
+<td>81.0-88.8%</td>
+</tr>
+<tr>
+<td>2026-H1</td>
+<td>203</td>
+<td>157</td>
+<td>77.3%</td>
+<td>71.1-82.6%</td>
+</tr>
+<tr>
+<td>2026-H2</td>
+<td>29</td>
+<td>10</td>
+<td>34.5%</td>
+<td>19.9-52.7%</td>
+</tr>
+</tbody>
+</table>
+<p>Newer cohorts show lower churn mainly because they have had less time to churn (right-censoring), so do not read 2026-H1 as an improvement without the survival curve. 2026-H2 (n = 29) is low-confidence.
+What this means: newer groups look better only because they are younger.</p>
+<h2>Leading indicator summary</h2>
+<ul>
+<li>Observed: no follow-up activity in the 30 days after the first buy -&gt; 91.1% churn vs 74.3% with 4+ active days.</li>
+<li>Observed: first buy under Rp100k -&gt; 95.8% churn vs 81.8% for Rp0.5-5 million.</li>
+<li>Inferred: a 30-day reactivation push after first buy is the earliest lever; first buy size under Rp100k marks low commitment. Proposed for Phase 3.</li>
+<li>Not available: churn by marketing source/device (the DB has no acquisition field; GA user mapping covers only Oct-Nov 2026). Added to Data Requests.</li>
+<li>What this means: the cheapest moment to keep an investor is the first 30 days after the first buy.</li>
+</ul>

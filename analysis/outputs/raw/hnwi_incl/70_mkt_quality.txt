@@ -1,0 +1,10 @@
+## retention_by_acq
+[{"grp":"none","inv":2156,"churn90":1818,"repeat_inv":1307,"mature":2114,"mature_churn":1818},{"grp":"referrer_code","inv":1312,"churn90":1061,"repeat_inv":857,"mature":1247,"mature_churn":1059},{"grp":"sales_code","inv":268,"churn90":174,"repeat_inv":95,"mature":204,"mature_churn":173}]
+## promo_first_buy
+[{"promo_on_first_buy":false,"inv":2789,"repeat_inv":1750,"churn90":2261},{"promo_on_first_buy":true,"inv":947,"repeat_inv":509,"churn90":792}]
+## promo_any_paid
+[{"used_promo_paid":false,"inv":2046,"repeat_inv":1013,"churn90":1772},{"used_promo_paid":true,"inv":1690,"repeat_inv":1246,"churn90":1281}]
+## bonus_exposure
+[{"got_bonus":false,"users":10886,"inv":1133,"repeat_inv":598,"churn90":885},{"got_bonus":true,"users":6214,"inv":2582,"repeat_inv":1661,"churn90":2147}]
+## stuck_sizes
+[{"k":"registered_unverified_30d","n":245},{"k":"failed_kyc_total","n":6150},{"k":"failed_kyc_30d_reg","n":87},{"k":"approved_never_bought","n":13385},{"k":"approved_never_bought_ver_last_30d","n":560},{"k":"investors_active_60_90d_silent","n":113},{"k":"investors_not_churned","n":683}]
