@@ -157,21 +157,18 @@ function table(doc: any, columns: Column[], rows: Record<string, unknown>[], {
   // an orphan page (long holdings lists, every fund type in one NAV table).
   let padY = 4;
   if (fitTo > 0) {
-    // Shrink the font, then the padding, then the row height until the whole
-    // table fits above `bottom` — never spills a stray row onto a new page.
+    // Prefer tighter cell padding over smaller type, and never go below 7pt:
+    // past that the table just flows onto the next page (header repeats).
     const limit = fitTo * 0.995;
     const need = (fs: number, rh: number, pad: number) => estimateTableHeight(doc, columns, rows, fs, rh, pad * 2);
-    search: for (const pad of [4, 1, 0.5, 0.25]) {
-      for (let fs = fontSize; fs >= 3.5; fs -= 0.25) {
-        const rh = Math.max(fs + 1.5, 4.5);
+    search: for (let fs = fontSize; fs >= 7; fs -= 0.25) {
+      const rh = Math.max(fs + 3, 10);
+      for (const pad of [4, 1, 0.5, 0.25]) {
         if (need(fs, rh, pad) <= limit) { padY = pad; fontSize = fs; rowHeight = rh; break search; }
       }
-      let rh = 5;
-      while (rh > 2.5 && need(3.5, rh, pad) > limit) rh -= 0.25;
-      padY = pad; fontSize = 3.5; rowHeight = rh;
     }
   }
-  const totalWidth = columns.reduce((s, c) => s + c.width, 0);
+const totalWidth = columns.reduce((s, c) => s + c.width, 0);
 
   // Row height grows when a cell wraps (long fund names, two-line headers).
   // Caller must have the row's font set before measuring.
