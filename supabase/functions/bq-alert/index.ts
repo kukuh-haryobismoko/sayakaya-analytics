@@ -62,6 +62,11 @@ export function attachment(j: Job, rate: number) {
   return { color: j.err ? '#d32f2f' : cost >= WARN_USD ? '#f9a825' : '#2e7d32', text: lines.join('\n'), mrkdwn_in: ['text'] };
 }
 
+// Only user operations reach Slack: writes, failures, expensive requests and portfolio/export/ask/SQL.
+// Page-load reads (overview, charts, filters) and unlabelled jobs would be hundreds of messages a day.
+export const userOp = (g: Job[]) =>
+  !!g[0].dash_user && (!/^get_/.test(g[0].dash_route || '') || g.some((j) => j.err) || /portfolio|export|sql|ask|investor|statement/.test(g[0].dash_route || '') || usd({ billed: g.reduce((n, j) => n + (j.billed || 0), 0) }) >= 0.01);
+
 export function requestAttachment(g: Job[], rate: number) {
   const bytes = g.reduce((n, j) => n + (j.billed || 0), 0), cost = usd({ billed: bytes });
   const fails = g.filter((j) => j.err);
@@ -140,10 +145,10 @@ async function tick(dry: boolean, sinceOverride: string | null) {
   // interleaved by time with the audit-log events (login, export, view_portfolio, ask, ...).
   const audit: Audit[] = await sb(`/dashboard_audit_log?created_at=gt.${enc(since!)}&created_at=lte.${enc(until)}&order=created_at&select=username,action,detail,created_at`) || [];
   const reqs = new Map<string, Job[]>();
-  for (const j of by.dashboard) reqs.set(j.dash_req || j.job_id, [...(reqs.get(j.dash_req || j.job_id) || []), j]);
+  for (const j of by.dashboard) if (j.dash_req) reqs.set(j.dash_req, [...(reqs.get(j.dash_req) || []), j]);
   const items: { t: string; m: unknown }[] = [
-    ...audit.map((a) => ({ t: a.created_at, m: { attachments: [auditAttachment(a)] } })),
-    ...[...reqs.values()].map((g) => ({ t: g[g.length - 1].end_time, m: { attachments: [requestAttachment(g, fx)] } })),
+    ...audit.filter((a) => a.action !== 'api_request').map((a) => ({ t: a.created_at, m: { attachments: [auditAttachment(a)] } })),
+    ...[...reqs.values()].filter(userOp).map((g) => ({ t: g[g.length - 1].end_time, m: { attachments: [requestAttachment(g, fx)] } })),
   ].sort((a, b) => a.t.localeCompare(b.t));
   out.dashboard = items.slice(-MAX_POST).map((i) => i.m);
   if (items.length > MAX_POST) out.dashboard.unshift({ text: `${items.length - MAX_POST} earlier dashboard events not shown` });
