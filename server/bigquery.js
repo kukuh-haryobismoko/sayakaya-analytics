@@ -1,6 +1,9 @@
 'use strict';
 
 const { BigQuery } = require('@google-cloud/bigquery');
+const { AsyncLocalStorage } = require('async_hooks');
+// Per-request BigQuery job labels (user + route), read by the bq-alert function.
+const bqLabels = new AsyncLocalStorage();
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || 'sayakaya';
 const LOCATION = process.env.BQ_LOCATION || 'asia-southeast2';
@@ -57,6 +60,7 @@ async function runQuery(sql, params = {}, { maxBytes = MAX_BYTES_BILLED, redact 
     query: sql,
     params,
     location: LOCATION,
+    labels: bqLabels.getStore(),
     maximumBytesBilled: maxBytes,
     // Result cache left on: BigQuery drops it as soon as a referenced table
     // changes (see supabase/functions/api/bigquery.ts), so repeat loads are
@@ -75,6 +79,7 @@ async function dryRun(sql, params = {}) {
     query: sql,
     params,
     location: LOCATION,
+    labels: bqLabels.getStore(),
     dryRun: true,
   });
   const bytes = Number(job.metadata.statistics.totalBytesProcessed || 0);
@@ -131,6 +136,7 @@ function capRows(sql, limit = 5000) {
 
 module.exports = {
   bq,
+  bqLabels,
   PROJECT_ID,
   LOCATION,
   MAX_BYTES_BILLED,

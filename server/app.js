@@ -7,8 +7,9 @@ const express = require('express');
 const cors = require('cors');
 
 const {
-  runQuery, dryRun, validateAdHoc, capRows, PROJECT_ID, MAX_BYTES_BILLED,
+  runQuery, dryRun, validateAdHoc, capRows, PROJECT_ID, MAX_BYTES_BILLED, bqLabels,
 } = require('./bigquery');
+const crypto = require('crypto');
 const Q = require('./queries');
 const { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } = require('./export');
 const { ask, askEnabled, TABLES, suggestChart, explainResult } = require('./ask');
@@ -192,7 +193,17 @@ function createApp({ serveStatic = true } = {}) {
       const user = await Auth.findUserByToken(token);
       if (!user) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
       req.user = user;
-      next();
+      // Label BigQuery jobs with user + route and audit every request no handler logged itself (mirrors supabase/functions/api/index.ts).
+      const lab = (v) => String(v).toLowerCase().replace(/[^a-z0-9_-]+/g, '_').slice(0, 63);
+      const labels = { dashboard_user: lab(user.username || user.email || 'unknown'), dashboard_route: lab(`${req.method}_${req.baseUrl}${req.path}`), dashboard_req: crypto.randomUUID().slice(0, 8) };
+      const ctx = { logged: false }, t0 = Date.now();
+      res.on('finish', () => {
+        const line = `${req.method} ${req.originalUrl.slice(0, 250)} → ${res.statusCode} in ${Date.now() - t0}ms`;
+        const who = [user.id, user.username || user.email];
+        if (res.statusCode >= 400) Auth.logEvent(...who, 'api_error', line);
+        else if (!ctx.logged && req.path !== '/auth/me') Auth.logEvent(...who, req.method === 'GET' ? 'api_request' : 'api_write', line);
+      });
+      return Auth.auditCtx.run(ctx, () => bqLabels.run(labels, next));
     } catch (err) {
       console.error('[auth]', err.message);
       res.status(500).json({ error: 'Auth check failed.' });

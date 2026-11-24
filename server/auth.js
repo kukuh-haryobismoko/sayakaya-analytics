@@ -9,6 +9,9 @@
 // (supabase/functions/api/auth.ts) — an account created on one works on both.
 
 const crypto = require('crypto');
+const { AsyncLocalStorage } = require('async_hooks');
+// Per-request flag: did a handler already write its own audit row? If not, the router logs a generic one.
+const auditCtx = new AsyncLocalStorage();
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -230,6 +233,7 @@ async function consumePasswordReset(token) {
 // username is stored as a plain snapshot (not just a join through user_id)
 // so the record survives the account later being deleted.
 async function logEvent(userId, username, action, detail) {
+  const c = auditCtx.getStore(); if (c) c.logged = true;
   try {
     await rest('/dashboard_audit_log', {
       method: 'POST',
@@ -283,6 +287,6 @@ module.exports = {
   listUsers, countSuperusers, createUser, updateUser, deleteUser,
   createSession, findUserByToken, deleteSessionByToken, deleteSessionsByUser,
   createPasswordReset, consumePasswordReset, INVITE_TTL_MS,
-  logEvent, listAuditLog,
+  logEvent, listAuditLog, auditCtx,
   publicUser, userCan,
 };
