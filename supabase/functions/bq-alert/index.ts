@@ -27,10 +27,12 @@ type Job = {
 
 type Audit = { username: string | null; action: string; detail: string | null; created_at: string };
 const enc = encodeURIComponent;
-const RED = new Set(['login_failure', 'admin_user_delete', 'admin_user_update', 'admin_user_create', 'sql_run']);
+// Blue = reads, yellow = writes / sensitive actions, red = failures.
+const YELLOW = /^(sql_run|ask|export|email_|schedule_|exclusion_|admin_|password_|username_set|ml_retrain|api_write)/;
+const RED = /fail|error/;
 export function auditAttachment(a: Audit) {
   const text = `*${esc(a.username || '?')}* · \`${a.action}\` · ${wib(a.created_at)}` + (a.detail ? `\n${esc(a.detail.slice(0, 500))}` : '');
-  return { color: a.action === 'login_failure' ? '#d32f2f' : RED.has(a.action) ? '#f9a825' : '#1976d2', text, mrkdwn_in: ['text'] };
+  return { color: RED.test(a.action) ? '#d32f2f' : YELLOW.test(a.action) ? '#f9a825' : '#1976d2', text, mrkdwn_in: ['text'] };
 }
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const usd = (j: { billed: number | null }) => ((j.billed || 0) / 2 ** 40) * USD_PER_TIB;

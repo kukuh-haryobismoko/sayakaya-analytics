@@ -19,4 +19,8 @@ assert(au.text.includes('kukuh') && au.text.includes('14:00:00 WIB') && au.text.
 assertEquals(au.color, '#d32f2f');
 const ra = requestAttachment([{ ...j, dts: null, dash_user: 'kukuh', dash_route: 'get__api_portfolio__sid', dash_req: 'r1' }, { ...j, dts: null, err: 'boom', dash_user: 'kukuh', dash_route: 'x', dash_req: 'r1' }], 18000);
 assert(ra.text.includes('kukuh') && ra.text.includes('GET ') && ra.text.includes('Queries* 2 (1 failed)') && ra.text.includes('main.x') && ra.text.includes('2048.000 GB'), ra.text);
+const col = (action: string) => auditAttachment({ username: 'u', action, detail: null, created_at: '2026-11-24T07:00:00Z' }).color;
+assertEquals([col('view_portfolio'), col('api_request'), col('login_success')], ['#1976d2', '#1976d2', '#1976d2']);
+assertEquals([col('sql_run'), col('export'), col('ask'), col('api_write'), col('admin_user_delete')], Array(5).fill('#f9a825'));
+assertEquals([col('login_failure'), col('api_error')], ['#d32f2f', '#d32f2f']);
 console.log('bq-alert check ok');
