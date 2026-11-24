@@ -1,6 +1,6 @@
 # Dokumentasi Sayakaya Analytics
 
-> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `2f67261 (2026-11-23)`.
+> File ini dibuat otomatis oleh `scripts/generate-docs.js` setiap kali `npm run docs` atau `npm run deploy:all` dijalankan. Jangan mengedit file ini langsung: ubah kodenya, teks di `docs/content.js`, atau teks tab Documentation di aplikasi, lalu jalankan ulang. Isi ini sesuai kode pada commit `46df345 (2026-11-24)`.
 
 ## Cara membaca dokumen ini
 
@@ -449,7 +449,7 @@ Feed transaksi dari S-INVEST (KSEI), sistem kustodian. Sumber independen untuk m
 
 ### 5.2 Tabel, view, dan fungsi Supabase
 
-Dibuat oleh migrasi di `supabase/migrations/` (18 file).
+Dibuat oleh migrasi di `supabase/migrations/` (19 file).
 
 | Nama | Isi |
 |---|---|
@@ -468,6 +468,7 @@ Dibuat oleh migrasi di `supabase/migrations/` (18 file).
 | `dashboard_schedule_workers` | Fungsi: jumlah runner yang dijalankan pg_cron tiap 10 detik (5 bila ada antrean, 1 bila ada jadwal jatuh tempo, 0 bila kosong). |
 | `dashboard_schedule_progress` | View: jumlah email per jadwal yang terkirim, menunggu, gagal, dan dilewati (kolom Emails). |
 | `dashboard_send_exclusions` | Daftar pengecualian kiriman email (opt-out): email/SID, cakupan, alasan, penambah. |
+| `bq_alert_state` | (Belum ada deskripsi.) |
 
 ### 5.3 Menghubungkan aktivitas aplikasi dengan database
 
@@ -1836,6 +1837,7 @@ Endpoint yang tidak terikat pada satu tab: login dan akun, admin, ekspor, jadwal
 
 Bagian berikut belum lengkap saat dokumen ini dibuat:
 
+- Tabel Supabase "bq_alert_state" belum punya deskripsi di docs/content.js SUPABASE_TABLES.
 - Tab "Booth event": panel "Journey: registration to purchase" di TAB_DETAILS tidak ditemukan di halaman.
 - Tab "Booth event": panel "Welcome bonus (new customers)" di TAB_DETAILS tidak ditemukan di halaman.
 - Tab "Booth event": panel "Nabung rutin bonus" di TAB_DETAILS tidak ditemukan di halaman.
