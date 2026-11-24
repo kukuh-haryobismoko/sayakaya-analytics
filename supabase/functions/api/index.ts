@@ -2,7 +2,7 @@
 // the routing itself is re-architected around Deno.serve() + URLPattern —
 // every individual route's logic (query building, response shape, error
 // handling) is otherwise unchanged from server/app.js.
-import { runQuery, dryRun, validateAdHoc, capRows, PROJECT_ID, MAX_BYTES_BILLED } from './bigquery.ts';
+import { runQuery, dryRun, validateAdHoc, capRows, PROJECT_ID, MAX_BYTES_BILLED, bqLabels } from './bigquery.ts';
 import * as Q from './queries.ts';
 import { toCsv, toTxt, toXlsxBuffer, toXlsxMultiSheet } from './export.ts';
 import { ask, askEnabled, TABLES, suggestChart, explainResult } from './ask.ts';
@@ -2586,7 +2586,10 @@ Deno.serve(async (req) => {
       const params = Object.fromEntries(
         Object.entries(match.pathname.groups).filter(([, v]) => v !== undefined),
       ) as Record<string, string>;
-      return withCors(await r.handler(req, params, url, user));
+      // Label every BigQuery job with the dashboard user + route; label values allow [a-z0-9_-], 63 chars.
+      const lab = (v: string) => v.toLowerCase().replace(/[^a-z0-9_-]+/g, '_').slice(0, 63);
+      const labels = { dashboard_user: lab(user?.username || user?.email || 'cron'), dashboard_route: lab(`${req.method}_${r.pattern.pathname}`), dashboard_req: crypto.randomUUID().slice(0, 8) };
+      return withCors(await bqLabels.run(labels, () => r.handler(req, params, url, user)));
     } catch (err) {
       console.error(`[${req.method} ${pathname}]`, (err as Error).message);
       // BigQuery/Supabase messages carry project, table and SQL text. Only the

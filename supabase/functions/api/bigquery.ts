@@ -10,6 +10,10 @@
 // Deno's built-in Web Crypto API. Same external behavior as server/bigquery.js,
 // different implementation.
 
+import { AsyncLocalStorage } from 'node:async_hooks';
+// Per-request BigQuery job labels (who + which route), read by the bq-alert function.
+export const bqLabels = new AsyncLocalStorage<Record<string, string>>();
+
 const PROJECT_ID = Deno.env.get('GCP_PROJECT_ID') || 'sayakaya';
 const LOCATION = Deno.env.get('BQ_LOCATION') || 'asia-southeast2';
 const MAX_BYTES_BILLED = String(Deno.env.get('MAX_BYTES_BILLED') || 2_000_000_000);
@@ -172,7 +176,7 @@ async function bqFetch(path: string, body: Record<string, unknown>) {
   const res = await fetch(`https://bigquery.googleapis.com/bigquery/v2/${path}`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, labels: bqLabels.getStore() }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message || `BigQuery error ${res.status}`);

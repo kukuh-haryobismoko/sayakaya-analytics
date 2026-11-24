@@ -420,3 +420,6 @@ enabled = true
 # even reach the function.
 [functions.api]
 verify_jwt = false
+
+[functions.bq-alert]
+verify_jwt = false

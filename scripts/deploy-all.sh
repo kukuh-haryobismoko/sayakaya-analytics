@@ -40,6 +40,7 @@ supabase db push --linked --yes
 
 echo "== 4/6 Supabase api function"
 supabase functions deploy api --project-ref "$PROJECT_REF"
+supabase functions deploy bq-alert --project-ref "$PROJECT_REF"
 
 echo "== 5/6 Push origin (GitHub Pages) and kantor"
 # Each remote with its own gh account; the macOS keychain credential works
