@@ -1,6 +1,6 @@
 // Self-check, no network: deno run -A supabase/functions/bq-alert/check.ts
 import { assert, assertEquals } from 'jsr:@std/assert';
-const { attachment, summary, kind, route, auditAttachment, requestAttachment, userOp } = await import('./index.ts');
+const { attachment, summary, kind, route, auditAttachment, requestAttachment, groupDashboard } = await import('./index.ts');
 const j = { job_id: 'j1', user_email: 'a@b.id', project_id: 'sayakaya', end_time: '2026-11-24T07:00:10Z', start_time: '2026-11-24T07:00:00Z', err: null,
   cache_hit: false, statement_type: 'SELECT', billed: 2 ** 40, processed: 2 ** 40, slot_ms: 5000, query: 'select 1 <x>', dest: 'main.t', dts: 'cfg', requestor: null, refs: ['main.x'], dash_user: null, dash_route: null, dash_req: null };
 const a = attachment(j, 18000);
@@ -25,12 +25,22 @@ assertEquals([col('sql_run'), col('export'), col('ask'), col('api_write'), col('
 assertEquals([col('login_failure'), col('api_error')], ['#d32f2f', '#d32f2f']);
 console.log('bq-alert check ok');
 
-// userOp: page-load reads are dropped, user operations and unlabelled jobs handled
+// groupDashboard: only jobs carrying a dashboard user, reads merged per user, ops kept per route
 {
-  const g = (route: string | null, user: string | null, billed = 0, err: string | null = null) => [{ dash_route: route, dash_user: user, billed, err }] as never;
-  assert(!userOp(g('get_api_overview', 'kukuh')));
-  assert(userOp(g('post_api_export', 'kukuh')));
-  assert(userOp(g('get_api_portfolio_main', 'kukuh')));
-  assert(userOp(g('get_api_overview', 'kukuh', 0, 'boom')));
-  assert(!userOp(g('post_api_export', null)));
+  const mk = (user: string | null, route: string | null, req: string, billed = 0) => ({ ...j, dts: null, dash_user: user, dash_route: route, dash_req: req, billed });
+  const groups = groupDashboard([
+    mk('kukuh', 'get__api_overview', 'r1'), mk('kukuh', 'get__api_trends', 'r2'), mk('kukuh', 'post__api_export', 'r3'),
+    mk('sari', 'get__api_overview', 'r4'), mk(null, 'get__api_funds_list', 'r5'), mk('kukuh', null, 'r6'),
+  ]);
+  assertEquals(groups.length, 4, JSON.stringify(groups.map((g) => [g.user, g.reads, g.jobs.length])));
+  const reads = groups.find((g) => g.user === 'kukuh' && g.reads)!;
+  assertEquals(reads.jobs.length, 2);
+  assert(groups.some((g) => g.user === 'kukuh' && !g.reads && g.jobs[0].dash_route === 'post__api_export'));
+  assert(groups.some((g) => g.user === 'sari' && g.reads));
+  assert(!groups.some((g) => g.user === null));
+  const readMsg = requestAttachment(reads.jobs, 18000, true);
+  assert(readMsg.text.includes('*kukuh*') && readMsg.text.includes('2 page loads') && readMsg.text.includes('2 routes'), readMsg.text);
+  assert(readMsg.text.includes('`GET /api/overview`') && readMsg.text.includes('`GET /api/trends`'), readMsg.text);
+  assertEquals(readMsg.color, '#1976d2');
+  assertEquals(requestAttachment(reads.jobs.map((x) => ({ ...x, dash_route: 'post_api_export' })), 1).text.split('·')[1].trim(), '`POST /api/export`');
 }

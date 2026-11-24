@@ -2588,7 +2588,9 @@ Deno.serve(async (req) => {
       ) as Record<string, string>;
       // Label every BigQuery job with the dashboard user + route; label values allow [a-z0-9_-], 63 chars.
       const lab = (v: string) => v.toLowerCase().replace(/[^a-z0-9_-]+/g, '_').slice(0, 63);
-      const labels = { dashboard_user: lab(user?.username || user?.email || 'cron'), dashboard_route: lab(`${req.method}_${r.pattern.pathname}`), dashboard_req: crypto.randomUUID().slice(0, 8) };
+      // No user, no user label: anonymous jobs must not show up as a fake "cron" user in the Slack alerts.
+      const labels: Record<string, string> = { dashboard_route: lab(`${req.method}_${r.pattern.pathname}`), dashboard_req: crypto.randomUUID().slice(0, 8) };
+      if (user) labels.dashboard_user = lab((user.username || user.email || '').toLowerCase());
       // Audit every authenticated request. Handlers that log their own event (view_portfolio, export, ...) keep it;
       // everything else gets a generic api_request / api_write row, and any failure an api_error row.
       const ctx = { logged: false }, t0 = Date.now();

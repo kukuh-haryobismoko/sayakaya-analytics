@@ -62,28 +62,47 @@ export function attachment(j: Job, rate: number) {
   return { color: j.err ? '#d32f2f' : cost >= WARN_USD ? '#f9a825' : '#2e7d32', text: lines.join('\n'), mrkdwn_in: ['text'] };
 }
 
-// Only user operations reach Slack: writes, failures, expensive requests and portfolio/export/ask/SQL.
-// Page-load reads (overview, charts, filters) and unlabelled jobs would be hundreds of messages a day.
-export const userOp = (g: Job[]) =>
-  !!g[0].dash_user && (!/^get_/.test(g[0].dash_route || '') || g.some((j) => j.err) || /portfolio|export|sql|ask|investor|statement/.test(g[0].dash_route || '') || usd({ billed: g.reduce((n, j) => n + (j.billed || 0), 0) }) >= 0.01);
+// Dashboard channel: one message per user per tick. Page-load reads (GET) of a user are merged into
+// one "page loads" message; writes, exports, asks and SQL runs keep their own message.
+export function groupDashboard(jobs: Job[]) {
+  const m = new Map<string, { user: string; reads: boolean; jobs: Job[] }>();
+  for (const j of jobs) {
+    if (!j.dash_user) continue; // the dashboard SA also runs background/warm-up queries: not user activity
+    const reads = /^get_/.test(j.dash_route || '');
+    const k = `${j.dash_user}\u0000${reads ? '' : j.dash_route || '?'}`;
+    const g = m.get(k) || { user: j.dash_user, reads, jobs: [] };
+    g.jobs.push(j);
+    m.set(k, g);
+  }
+  return [...m.values()];
+}
 
-export function requestAttachment(g: Job[], rate: number) {
+const pretty = (r: string | null) => (r || '?').replace(/^(get|post|put|patch|delete)_/, (m) => m.slice(0, -1).toUpperCase() + ' ').replace(/_+/g, '/').replace(/^((?:GET|POST|PUT|PATCH|DELETE)) (?!\/)/, '$1 /');
+
+export function requestAttachment(g: Job[], rate: number, reads = false) {
   const bytes = g.reduce((n, j) => n + (j.billed || 0), 0), cost = usd({ billed: bytes });
   const fails = g.filter((j) => j.err);
   const tables = [...new Set(g.flatMap((j) => j.refs))];
-  const first = g[0], last = g[g.length - 1];
-  const route = (first.dash_route || '?').replace(/^(get|post|put|patch|delete)_/, (m) => m.slice(0, -1).toUpperCase() + ' ');
-  const qs = g.slice(0, 5).map((j) => {
+  const routes = [...new Set(g.map((j) => pretty(j.dash_route)))].sort();
+  const reqs = new Set(g.map((j) => j.dash_req)).size;
+  const shown = [...g].sort((a, b) => usd(b) - usd(a)).slice(0, reads ? 3 : 5);
+  const qs = shown.map((j) => {
     const link = `https://console.cloud.google.com/bigquery?project=${j.project_id}&j=bq:${LOCATION}:${j.job_id}&page=queryresults`;
-    return `${j.err ? ':x:' : '•'} ${((j.billed || 0) / GB).toFixed(3)} GB · $${usd(j).toFixed(4)}${j.cache_hit ? ' (cache)' : ''} · <${link}|job>${j.err ? ` · ${esc(j.err.slice(0, 150))}` : ''}\n\`\`\`${esc(j.query.replace(/`{3}/g, "'''").replace(/\s+/g, ' ').trim().slice(0, 300))}\`\`\``;
+    const sql = esc(j.query.replace(/`{3}/g, "'''").replace(/\s+/g, ' ').trim().slice(0, 300));
+    return `${j.err ? ':x:' : '•'} \`${pretty(j.dash_route)}\` ${((j.billed || 0) / GB).toFixed(3)} GB · $${usd(j).toFixed(4)}${j.cache_hit ? ' (cache)' : ''} · <${link}|job>${j.err ? ` · ${esc(j.err.slice(0, 150))}` : ''}\n\`\`\`${sql}\`\`\``;
   });
+  const head = reads
+    ? `${reqs} page load${reqs === 1 ? '' : 's'} · ${routes.length} route${routes.length === 1 ? '' : 's'}`
+    : `\`${routes[0]}\``;
   const lines = [
-    `${fails.length ? ':x:' : ':bar_chart:'} *${esc(first.dash_user || 'dashboard')}* · \`${route}\` · ${wib(last.end_time)}`,
+    `${fails.length ? ':x:' : reads ? ':eyes:' : ':bar_chart:'} *${esc(g[0].dash_user || '?')}* · ${head} · ${wib(g[g.length - 1].end_time)}`,
     `*Queries* ${g.length}${fails.length ? ` (${fails.length} failed)` : ''} · *Billed* ${(bytes / GB).toFixed(3)} GB · *Cost* $${cost.toFixed(4)} ≈ ${fmtIdr(cost * rate)}`,
+    ...(reads ? [`*Routes* ${routes.slice(0, 8).map((r) => `\`${r}\``).join(', ')}${routes.length > 8 ? ` +${routes.length - 8}` : ''}`] : []),
     ...(tables.length ? [`*Tables* ${tables.slice(0, 10).map((t) => `\`${t}\``).join(', ')}${tables.length > 10 ? ` +${tables.length - 10}` : ''}`] : []),
-    ...qs, ...(g.length > 5 ? [`+${g.length - 5} more queries`] : []),
+    ...qs,
+    ...(g.length > shown.length ? [`+${g.length - shown.length} more queries`] : []),
   ];
-  return { color: fails.length ? '#d32f2f' : cost >= WARN_USD ? '#f9a825' : '#6a1b9a', text: lines.join('\n'), mrkdwn_in: ['text'] };
+  return { color: fails.length ? '#d32f2f' : cost >= WARN_USD ? '#f9a825' : reads ? '#1976d2' : '#2e7d32', text: lines.join('\n'), mrkdwn_in: ['text'] };
 }
 
 export function summary(jobs: Job[], rate: number, label: string): string | null {
@@ -144,11 +163,10 @@ async function tick(dry: boolean, sinceOverride: string | null) {
   // Dashboard: one message per web request (all its queries grouped by the dashboard_req label),
   // interleaved by time with the audit-log events (login, export, view_portfolio, ask, ...).
   const audit: Audit[] = await sb(`/dashboard_audit_log?created_at=gt.${enc(since!)}&created_at=lte.${enc(until)}&order=created_at&select=username,action,detail,created_at`) || [];
-  const reqs = new Map<string, Job[]>();
-  for (const j of by.dashboard) if (j.dash_req) reqs.set(j.dash_req, [...(reqs.get(j.dash_req) || []), j]);
+  const groups = groupDashboard(by.dashboard);
   const items: { t: string; m: unknown }[] = [
     ...audit.filter((a) => a.action !== 'api_request').map((a) => ({ t: a.created_at, m: { attachments: [auditAttachment(a)] } })),
-    ...[...reqs.values()].filter(userOp).map((g) => ({ t: g[g.length - 1].end_time, m: { attachments: [requestAttachment(g, fx)] } })),
+    ...groups.map((g) => ({ t: g.jobs[g.jobs.length - 1].end_time, m: { attachments: [requestAttachment(g.jobs, fx, g.reads)] } })),
   ].sort((a, b) => a.t.localeCompare(b.t));
   out.dashboard = items.slice(-MAX_POST).map((i) => i.m);
   if (items.length > MAX_POST) out.dashboard.unshift({ text: `${items.length - MAX_POST} earlier dashboard events not shown` });
