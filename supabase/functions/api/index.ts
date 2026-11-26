@@ -2591,19 +2591,11 @@ Deno.serve(async (req) => {
       // No user, no user label: anonymous jobs must not show up as a fake "cron" user in the Slack alerts.
       const labels: Record<string, string> = { dashboard_route: lab(`${req.method}_${r.pattern.pathname}`), dashboard_req: crypto.randomUUID().slice(0, 8) };
       if (user) labels.dashboard_user = lab((user.username || user.email || '').toLowerCase());
-      // Audit every authenticated request. Handlers that log their own event (view_portfolio, export, ...) keep it;
-      // everything else gets a generic api_request / api_write row, and any failure an api_error row.
-      const ctx = { logged: false }, t0 = Date.now();
-      const res = await A.auditCtx.run(ctx, () => bqLabels.run(labels, () => Promise.resolve(r.handler(req, params, url, user))));
-      if (user) {
-        const line = `${req.method} ${pathname}${url.search.slice(0, 200)} → ${res.status} in ${Date.now() - t0}ms`;
-        if (res.status >= 400) await A.logEvent(user.id, user.username || user.email, 'api_error', line);
-        else if (!ctx.logged && req.method !== 'GET') await A.logEvent(user.id, user.username || user.email, 'api_write', line); // plain reads are not feature use: not logged
-      }
+      // Handlers log feature use themselves (view_portfolio, export, ...); no generic per-request audit rows.
+      const res = await bqLabels.run(labels, () => Promise.resolve(r.handler(req, params, url, user)));
       return withCors(res);
     } catch (err) {
       console.error(`[${req.method} ${pathname}]`, (err as Error).message);
-      if (user) await A.logEvent(user.id, user.username || user.email, 'api_error', `${req.method} ${pathname}${url.search.slice(0, 200)} → threw: ${(err as Error).message.slice(0, 200)}`);
       // BigQuery/Supabase messages carry project, table and SQL text. Only the
       // SQL lab and Ask need them, to fix a query; everything else gets a generic line.
       return withCors(json({ error: (err as { expose?: boolean }).expose || /^\/api\/(sql|ask|ai)/.test(pathname) ? (err as Error).message || 'Query failed.' : 'Request failed. Try again, or check the server log.' }, 500));

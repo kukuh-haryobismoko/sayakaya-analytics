@@ -7,9 +7,7 @@
 
 import crypto from 'node:crypto';
 import { Buffer } from 'node:buffer';
-import { AsyncLocalStorage } from 'node:async_hooks';
 // Per-request flag: did a handler already write its own audit row? If not, the router logs a generic one.
-export const auditCtx = new AsyncLocalStorage<{ logged: boolean }>();
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -258,7 +256,6 @@ export interface AuditLogRow {
 // username is stored as a plain snapshot (not just a join through user_id) so
 // the record survives the account later being deleted.
 export async function logEvent(userId: string | null, username: string | null, action: string, detail?: string | null): Promise<void> {
-  const c = auditCtx.getStore(); if (c) c.logged = true;
   try {
     await rest('/dashboard_audit_log', {
       method: 'POST',
