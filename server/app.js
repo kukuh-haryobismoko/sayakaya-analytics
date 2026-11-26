@@ -201,7 +201,7 @@ function createApp({ serveStatic = true } = {}) {
         const line = `${req.method} ${req.originalUrl.slice(0, 250)} → ${res.statusCode} in ${Date.now() - t0}ms`;
         const who = [user.id, user.username || user.email];
         if (res.statusCode >= 400) Auth.logEvent(...who, 'api_error', line);
-        else if (!ctx.logged && req.path !== '/auth/me') Auth.logEvent(...who, req.method === 'GET' ? 'api_request' : 'api_write', line);
+        else if (!ctx.logged && req.method !== 'GET') Auth.logEvent(...who, 'api_write', line);
       });
       return Auth.auditCtx.run(ctx, () => bqLabels.run(labels, next));
     } catch (err) {

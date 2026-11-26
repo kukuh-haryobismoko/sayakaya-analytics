@@ -62,15 +62,15 @@ export function attachment(j: Job, rate: number) {
   return { color: j.err ? '#d32f2f' : cost >= WARN_USD ? '#f9a825' : '#2e7d32', text: lines.join('\n'), mrkdwn_in: ['text'] };
 }
 
-// Dashboard channel: one message per user per tick. Page-load reads (GET) of a user are merged into
-// one "page loads" message; writes, exports, asks and SQL runs keep their own message.
+// Dashboard channel: one message per user per route. Plain GET page loads are not feature use and are skipped;
+// only portfolio views (GET, but a feature: they also write a view_portfolio audit row) plus writes, exports, asks and SQL runs count.
 export function groupDashboard(jobs: Job[]) {
-  const m = new Map<string, { user: string; reads: boolean; jobs: Job[] }>();
+  const m = new Map<string, { user: string; jobs: Job[] }>();
   for (const j of jobs) {
     if (!j.dash_user) continue; // the dashboard SA also runs background/warm-up queries: not user activity
-    const reads = /^get_/.test(j.dash_route || '');
-    const k = `${j.dash_user}\u0000${reads ? '' : j.dash_route || '?'}`;
-    const g = m.get(k) || { user: j.dash_user, reads, jobs: [] };
+    if (/^get_/.test(j.dash_route || '') && !/^get__api_portfolio/.test(j.dash_route || '')) continue;
+    const k = `${j.dash_user}\u0000${j.dash_route || '?'}`;
+    const g = m.get(k) || { user: j.dash_user, jobs: [] };
     g.jobs.push(j);
     m.set(k, g);
   }
@@ -166,7 +166,7 @@ async function tick(dry: boolean, sinceOverride: string | null) {
   const groups = groupDashboard(by.dashboard);
   const items: { t: string; m: unknown }[] = [
     ...audit.filter((a) => a.action !== 'api_request').map((a) => ({ t: a.created_at, m: { attachments: [auditAttachment(a)] } })),
-    ...groups.map((g) => ({ t: g.jobs[g.jobs.length - 1].end_time, m: { attachments: [requestAttachment(g.jobs, fx, g.reads)] } })),
+    ...groups.map((g) => ({ t: g.jobs[g.jobs.length - 1].end_time, m: { attachments: [requestAttachment(g.jobs, fx)] } })),
   ].sort((a, b) => a.t.localeCompare(b.t));
   out.dashboard = items.slice(-MAX_POST).map((i) => i.m);
   if (items.length > MAX_POST) out.dashboard.unshift({ text: `${items.length - MAX_POST} earlier dashboard events not shown` });

@@ -2598,7 +2598,7 @@ Deno.serve(async (req) => {
       if (user) {
         const line = `${req.method} ${pathname}${url.search.slice(0, 200)} → ${res.status} in ${Date.now() - t0}ms`;
         if (res.status >= 400) await A.logEvent(user.id, user.username || user.email, 'api_error', line);
-        else if (!ctx.logged && pathname !== '/api/auth/me') await A.logEvent(user.id, user.username || user.email, req.method === 'GET' ? 'api_request' : 'api_write', line);
+        else if (!ctx.logged && req.method !== 'GET') await A.logEvent(user.id, user.username || user.email, 'api_write', line); // plain reads are not feature use: not logged
       }
       return withCors(res);
     } catch (err) {
